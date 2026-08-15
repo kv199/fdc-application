@@ -34,7 +34,7 @@ const tireVisualElements = {
   rr: document.getElementById('tire-shape-rr')
 }
 
-const WS_URL = window.HudConnection.resolveCoDriverWebSocketUrl(window.location.search)
+const WS_URL = window.HudConnection.resolveCoDriverWebSocketUrl()
 const STEERING_WHEEL_ASSET = 'assets/steering-wheels/default.svg'
 const STEERING_WHEEL_RANGE_DEGREES = 90
 const RECONNECT_MS = 1000

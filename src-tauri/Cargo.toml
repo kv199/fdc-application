@@ -11,7 +11,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
 
-[profile.develop]
+[profile.preview]
 inherits = "release"
 codegen-units = 16
 debug = 1

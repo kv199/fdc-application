@@ -6,6 +6,10 @@ The application renders tire temperatures, throttle and brake input, steering,
 the current gear, and input history over the game. It consumes the local
 WebSocket telemetry stream exposed by [co-driver](https://github.com/Ojansen/co-driver).
 
+This directory is the HUD application inside Forza Horizon 6 Suite. It remains
+self-contained so it can be exported and published as a standalone repository,
+while the Suite root owns local runtime startup and end-to-end workflow.
+
 ## Driver Coach MVP
 
 The Coach card includes a neutral observed Driver Coach phase indicator:
@@ -125,35 +129,29 @@ To preview the short post-lap state in a browser, add `lapSummary=1`, for exampl
 
 ## Development workflow
 
-- `develop` is the default working and integration branch. Normal tasks are
-  committed directly to it as focused, validated commits.
-- Testable development executables are built from `develop` so changes can be
-  evaluated before release.
-- `main` contains only accepted, verified versions. `develop` is merged into
-  `main` only after explicit approval, and stable gaming executables are built
-  from `main`.
-- A short-lived feature branch is created from `develop` only after a change has
-  been discussed and judged large, risky, or long-running enough to need
-  isolation.
+- Suite development and end-to-end commits use the monorepo `main` branch.
+- `preview` is the fast optimized Cargo profile for local testing.
+- `release` is the stable optimized Cargo profile for an explicitly requested
+  gaming build.
+- Both profiles use the same local provider endpoint; profiles are build modes,
+  not Git branches or runtime channels.
 
 ## Local dependency
 
-Run the matching co-driver channel before starting the HUD. The production HUD
-connects to `ws://127.0.0.1:3000/_ws`; the `develop` HUD connects to
+Start the Suite provider before starting the HUD. Every HUD build connects to
 `ws://127.0.0.1:3001/_ws`. The overlay does not duplicate co-driver's UDP
-parsing or storage.
+parsing, analysis, or storage.
 
-For local development, start the non-main co-driver channel with:
+From the Suite root:
 
 ```powershell
-cd C:\Install\co-driver
-.\scripts\start-develop.cmd
+.\scripts\up.ps1
 ```
 
-The browser preview can select the same channel explicitly:
+The live browser preview uses the same endpoint without a channel parameter:
 
 ```text
-http://127.0.0.1:8765/index.html?channel=develop
+http://127.0.0.1:8765/index.html
 ```
 
 For a visual-only layout check, use:
@@ -176,30 +174,25 @@ require changes to telemetry or the Tauri layer.
 
 ## Build
 
-Development build from the `develop` branch:
+Testable preview build from the Suite root:
 
 ```powershell
-cd src-tauri
-cargo check --profile develop --locked
-cargo build --profile develop --locked
+.\scripts\build-hud.ps1
 ```
-
-The development executable selects the `3001` WebSocket channel automatically.
 
 The executable is written to:
 
 ```text
-src-tauri/target/develop/forza-horizon-6-hud.exe
+src-tauri/target/preview/forza-horizon-6-hud.exe
 ```
 
-Stable build from the `main` branch after an approved merge:
+Stable release build from the Suite root:
 
 ```powershell
-cd src-tauri
-cargo build --release --locked
+.\scripts\build-hud.ps1 -Release
 ```
 
-The production executable selects the `3000` WebSocket channel.
+Both executables select `ws://127.0.0.1:3001/_ws`.
 
 The executable is written to:
 
@@ -207,5 +200,5 @@ The executable is written to:
 src-tauri/target/release/forza-horizon-6-hud.exe
 ```
 
-Cargo's standard `target/debug` output is reserved for technical diagnostics and
-is not the normal development build handed off for game testing.
+Cargo's standard `target/debug` output is reserved for technical diagnostics
+and is not the normal preview build handed off for game testing.

@@ -5,11 +5,6 @@ use tauri::{
     tray::TrayIconBuilder,
 };
 
-const HUD_CHANNEL: &str = match option_env!("HUD_CHANNEL") {
-    Some(channel) => channel,
-    None => "production",
-};
-
 fn set_window_interaction<R: Runtime>(
     window: &WebviewWindow<R>,
     enabled: bool,
@@ -52,16 +47,6 @@ fn main() {
                     monitor_position.x,
                     monitor_position.y,
                 ))?;
-            }
-
-            if HUD_CHANNEL == "develop" {
-                window.eval(
-                    "const params = new URLSearchParams(window.location.search); \
-                     if (params.get('channel') !== 'develop') { \
-                       params.set('channel', 'develop'); \
-                       window.location.replace(window.location.pathname + '?' + params.toString()); \
-                     }",
-                )?;
             }
 
             let menu = MenuBuilder::new(app)
