@@ -1,0 +1,27 @@
+[package]
+name = "forza-horizon-6-hud"
+version = "0.1.0"
+description = "Real-time telemetry HUD for Forza Horizon 6"
+edition = "2024"
+rust-version = "1.85"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+
+[profile.develop]
+inherits = "release"
+codegen-units = 16
+debug = 1
+incremental = true
+lto = false
+strip = "none"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
