@@ -538,6 +538,10 @@ function queueReference(payload) {
       latestReference = reference
     }
   } else {
+    // co-driver makes the reference unavailable after the final matched zone.
+    // Start from the cached valid frame even if the preceding corner_state
+    // transition was coalesced or arrived after this message.
+    if (!summary) beginLapSummary()
     latestReference = reference
   }
   scheduleTelemetryRender()
