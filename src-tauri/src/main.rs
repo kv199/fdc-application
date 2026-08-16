@@ -38,7 +38,7 @@ fn main() {
                 .get_webview_window("main")
                 .expect("main overlay window must exist");
 
-            if let Some(monitor) = window.primary_monitor()? {
+            if let Some(monitor) = app.primary_monitor()? {
                 let monitor_position = monitor.position();
                 let monitor_size = monitor.size();
 

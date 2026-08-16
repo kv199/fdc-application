@@ -131,6 +131,9 @@ To preview the short post-lap state in a browser, add `lapSummary=1`, for exampl
 
 - Suite development and end-to-end commits use the monorepo `main` branch.
 - `release` is the single supported Cargo profile for runnable HUD builds.
+- Do not add custom `develop` or `preview` Cargo profiles. Use browser demo mode
+  for visual previews and Cargo's standard `debug` profile only for temporary
+  diagnostics.
 - The release build uses the same local provider endpoint; build profiles are
   not Git branches or runtime channels.
 
@@ -186,5 +189,8 @@ The executable is written to:
 src-tauri/target/release/forza-horizon-6-hud.exe
 ```
 
-Cargo's standard `target/debug` output is reserved for technical diagnostics
-and is not the build handed off for game testing.
+Cargo's standard `target/debug` output is reserved for temporary technical
+diagnostics. Only `target/release/forza-horizon-6-hud.exe` is handed off for
+game testing; generated target output is never committed. Before handoff,
+launch that exact release executable and confirm it remains alive for at least
+five seconds—a successful Cargo build alone does not validate Tauri startup.
