@@ -130,10 +130,8 @@ To preview the short post-lap state in a browser, add `lapSummary=1`, for exampl
 ## Development workflow
 
 - Suite development and end-to-end commits use the monorepo `main` branch.
-- `preview` is the fast optimized Cargo profile for local testing.
-- `release` is the stable optimized Cargo profile for an explicitly requested
-  gaming build.
-- Both profiles use the same local provider endpoint; profiles are build modes,
+- `release` is the single supported Cargo profile for runnable HUD builds.
+- The release build uses the same local provider endpoint; build profiles are
   not Git branches or runtime channels.
 
 ## Local dependency
@@ -174,25 +172,13 @@ require changes to telemetry or the Tauri layer.
 
 ## Build
 
-Testable preview build from the Suite root:
+Optimized HUD build from the Suite root:
 
 ```powershell
 .\scripts\build-hud.ps1
 ```
 
-The executable is written to:
-
-```text
-src-tauri/target/preview/forza-horizon-6-hud.exe
-```
-
-Stable release build from the Suite root:
-
-```powershell
-.\scripts\build-hud.ps1 -Release
-```
-
-Both executables select `ws://127.0.0.1:3001/_ws`.
+The executable selects `ws://127.0.0.1:3001/_ws`.
 
 The executable is written to:
 
@@ -201,4 +187,4 @@ src-tauri/target/release/forza-horizon-6-hud.exe
 ```
 
 Cargo's standard `target/debug` output is reserved for technical diagnostics
-and is not the normal preview build handed off for game testing.
+and is not the build handed off for game testing.
