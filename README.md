@@ -41,14 +41,13 @@ The Reference Coach can be previewed without Forza in demo mode:
 ?demo=1&reference=good
 ```
 
-The Driver Coach and lap-delta strip are shown only when a matching reference is
-available. When a lap changes, the last available Coach state and lap delta are
-held as a `LAP COMPLETE` summary for four seconds, then cleared. Without a
-reference, the HUD keeps the ordinary telemetry and corner readout without
-inventing coaching advice. The same summary is captured when co-driver reports
-that the current reference is no longer available, when the HUD detects the
-transition after the final template corner, or when recording becomes idle,
-so the final corner cannot erase the last useful result before the lap transition.
+The Driver Coach card is shown when a matching reference is available or when a
+completed-lap result is being held. A provider `lap_complete` message anchors
+the final delta to the game's lap boundary; the HUD keeps the `LAP COMPLETE`
+card and final lap delta until the next live lap or recording. Without a
+reference, the HUD keeps ordinary telemetry and corner readout without
+inventing coaching advice. The older short summary fallback remains for
+transitions where no finish result was received.
 
 The RPM preview can be combined with a reference state, for example
 `?demo=1&signal=shift&reference=brake-late`. In demo mode, keys `1`–`3` select
@@ -94,6 +93,25 @@ The HUD accepts an optional WebSocket message with this envelope:
 }
 ```
 
+At a game-reported lap boundary, co-driver sends the immutable finish result
+separately:
+
+```json
+{
+  "type": "lap_complete",
+  "lapComplete": {
+    "lapNumber": 11,
+    "lapTimeMs": 51250,
+    "referenceTimeMs": 50000,
+    "deltaMs": 1250,
+    "sourceSessionId": 29
+  }
+}
+```
+
+This `deltaMs` is against the stored reference lap, not the game's displayed
+Rival time.
+
 Supported cue kinds are `brake_late`, `brake_early`, `release_late`,
 `apex_too_fast`, `apex_too_slow`, `throttle_late`, `throttle_early`, and
 `good`. If `available` is not `true` and no short post-lap summary is active,
@@ -117,8 +135,9 @@ covers the same states:
 When reference data is available, the separate strip shows only `lapDeltaMs`:
 positive values are slower and move left into the red zone; negative values are
 faster and move right into the green zone. The visual range is limited to ±1 s,
-and missing deltas stay neutral. The Coach border uses the local `deltaMs` for a
-small color accent, but does not display it as a second large number. `targets`
+and missing live deltas stay neutral. A `lap_complete.deltaMs` value replaces
+the rolling value after the finish. The Coach border uses the local `deltaMs`
+for a small color accent, but does not display it as a second large number. `targets`
 and `observed` are displayed by the HUD and are not recomputed from telemetry.
 
 To preview the short post-lap state in a browser, add `lapSummary=1`, for example:

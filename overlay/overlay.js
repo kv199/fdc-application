@@ -73,6 +73,7 @@ let lapSummaryExpiresAt = 0
 let lapSummaryTimer = null
 let pendingReference = null
 let lastAvailableReference = null
+let finalLapSummaryReference = null
 
 const steeringWheelImage = new Image()
 steeringWheelImage.addEventListener('load', () => {
@@ -177,7 +178,23 @@ function beginLapSummary() {
   return true
 }
 
+function queueLapComplete(payload) {
+  const lapComplete = window.ReferenceCoach.normalizeLapCompletePayload(payload)
+  if (!lapComplete) return
+
+  finalLapSummaryReference = {
+    ...window.ReferenceCoach.createEmptyReference(),
+    available: true,
+    lapDeltaMs: lapComplete.deltaMs
+  }
+  latestReference = window.ReferenceCoach.createEmptyReference()
+  lastAvailableReference = null
+  clearLapSummary({ promotePending: false })
+  scheduleTelemetryRender()
+}
+
 function getDisplayedReference() {
+  if (finalLapSummaryReference) return { reference: finalLapSummaryReference, isSummary: true }
   const summary = getActiveLapSummary()
   if (summary) return { reference: summary, isSummary: true }
   return {
@@ -489,6 +506,7 @@ function queueCornerTemplate(template) {
   referenceDeltaState = 'neutral'
   lapDeltaState = 'neutral'
   if (!isRecordingIdle) {
+    finalLapSummaryReference = null
     lastAvailableReference = null
     clearLapSummary({ promotePending: false })
   }
@@ -530,6 +548,9 @@ function queueReference(payload) {
   const reference = window.ReferenceCoach.normalizeReferencePayload(payload)
   const summary = getActiveLapSummary()
   if (reference.available) {
+    if (finalLapSummaryReference && latestTelemetry?.isRaceOn === true) {
+      finalLapSummaryReference = null
+    }
     lastAvailableReference = reference
     if (summary) {
       pendingReference = reference
@@ -569,6 +590,7 @@ function connect() {
       if (message.type === 'corner_template') queueCornerTemplate(message.template)
       if (message.type === 'corner_state') queueCornerState(message.cornerState)
       if (message.type === 'coach_reference') queueReference(message.reference)
+      if (message.type === 'lap_complete') queueLapComplete(message.lapComplete)
       if (message.type === 'recording_state' && message.state === 'idle') {
         beginLapSummary()
         resetCornerState({ preserveLapSummary: true })

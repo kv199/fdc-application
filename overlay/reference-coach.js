@@ -130,6 +130,23 @@
     }
   }
 
+  function normalizeLapCompletePayload(payload) {
+    const rawPayload = payload && typeof payload === 'object' ? payload : {}
+    const lapNumber = finite(rawPayload.lapNumber)
+    const lapTimeMs = finite(rawPayload.lapTimeMs)
+    if (lapNumber === null || lapTimeMs === null || lapTimeMs <= 0) return null
+
+    return {
+      sessionId: finite(rawPayload.sessionId),
+      eventId: finite(rawPayload.eventId),
+      lapNumber: Math.trunc(lapNumber),
+      lapTimeMs,
+      referenceTimeMs: finite(rawPayload.referenceTimeMs),
+      deltaMs: finite(rawPayload.deltaMs),
+      sourceSessionId: finite(rawPayload.sourceSessionId)
+    }
+  }
+
   function createEmptyReference() {
     return {
       available: false,
@@ -182,7 +199,7 @@
 
     const rounded = Math.round(milliseconds)
     if (rounded === 0) return '0 ms'
-    const sign = rounded > 0 ? '+' : '−'
+    const sign = rounded > 0 ? '+' : '-'
     return `${sign}${Math.abs(rounded)} ms`
   }
 
@@ -192,7 +209,7 @@
 
     const seconds = Math.abs(milliseconds) / 1000
     if (milliseconds === 0) return '0.00 s'
-    return `${milliseconds > 0 ? '+' : '−'}${seconds.toFixed(2)} s`
+    return `${milliseconds > 0 ? '+' : '-'}${seconds.toFixed(2)} s`
   }
 
   function formatPedalPoint(value, prefix) {
@@ -344,6 +361,7 @@
     formatSignedMilliseconds,
     getActivePedalPoint,
     normalizeCue,
+    normalizeLapCompletePayload,
     normalizePhase,
     normalizeReferencePayload,
     normalizeSummary,

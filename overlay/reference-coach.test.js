@@ -12,6 +12,7 @@ const {
   formatSummary,
   formatSignedMilliseconds,
   getActivePedalPoint,
+  normalizeLapCompletePayload,
   normalizeReferencePayload,
   selectPrimaryCue
 } = require('./reference-coach.js')
@@ -38,7 +39,7 @@ test('classifies pace deltas with null safety and hysteresis', () => {
 })
 
 test('formats signed milliseconds and pedal points for the Coach card', () => {
-  assert.equal(formatSignedMilliseconds(-38), '−38 ms')
+  assert.equal(formatSignedMilliseconds(-38), '-38 ms')
   assert.equal(formatSignedMilliseconds(42), '+42 ms')
   assert.equal(formatSignedMilliseconds(null), '')
   assert.equal(formatPedalPoint(560, 'REF'), 'REF 560 m')
@@ -47,7 +48,7 @@ test('formats signed milliseconds and pedal points for the Coach card', () => {
 
 test('formats the lap delta with the correct faster/slower sign', () => {
   assert.equal(formatLapDelta(420), '+0.42 s')
-  assert.equal(formatLapDelta(-180), '−0.18 s')
+  assert.equal(formatLapDelta(-180), '-0.18 s')
   assert.equal(formatLapDelta(0), '0.00 s')
   assert.equal(formatLapDelta(null), '')
 })
@@ -60,7 +61,7 @@ test('maps lap delta to the strip direction and color state', () => {
   })
   assert.deepEqual(createLapDeltaView(-500), {
     state: 'green',
-    text: '−0.50 s',
+    text: '-0.50 s',
     positionPercent: 75
   })
   assert.deepEqual(createLapDeltaView(null), {
@@ -135,4 +136,25 @@ test('provides deterministic demo references for each MVP state', () => {
   assert.equal(createDemoReference('throttle-late').cue.kind, 'throttle_late')
   assert.equal(createDemoReference('good').cue.kind, 'good')
   assert.equal(createDemoReference('summary').summary.deltaMs, 180)
+})
+
+test('normalizes a finish-anchored lap result', () => {
+  assert.deepEqual(normalizeLapCompletePayload({
+    sessionId: 32,
+    eventId: 13,
+    lapNumber: 11,
+    lapTimeMs: 51250,
+    referenceTimeMs: 50000,
+    deltaMs: 1250,
+    sourceSessionId: 29
+  }), {
+    sessionId: 32,
+    eventId: 13,
+    lapNumber: 11,
+    lapTimeMs: 51250,
+    referenceTimeMs: 50000,
+    deltaMs: 1250,
+    sourceSessionId: 29
+  })
+  assert.equal(normalizeLapCompletePayload({ lapNumber: 1, lapTimeMs: 0 }), null)
 })
