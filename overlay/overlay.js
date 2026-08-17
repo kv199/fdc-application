@@ -74,6 +74,7 @@ let lapSummaryTimer = null
 let pendingReference = null
 let lastAvailableReference = null
 let finalLapSummaryReference = null
+let finalLapSummaryLapNumber = null
 
 const steeringWheelImage = new Image()
 steeringWheelImage.addEventListener('load', () => {
@@ -187,6 +188,7 @@ function queueLapComplete(payload) {
     available: true,
     lapDeltaMs: lapComplete.deltaMs
   }
+  finalLapSummaryLapNumber = lapComplete.lapNumber
   latestReference = window.ReferenceCoach.createEmptyReference()
   lastAvailableReference = null
   clearLapSummary({ promotePending: false })
@@ -464,6 +466,17 @@ function renderTelemetry() {
 }
 
 function queueTelemetry(telemetry) {
+  const telemetryLapNumber = finiteStateNumber(telemetry?.lap?.number)
+  if (
+    finalLapSummaryReference
+    && finalLapSummaryLapNumber !== null
+    && telemetryLapNumber !== null
+    && telemetryLapNumber !== finalLapSummaryLapNumber
+  ) {
+    finalLapSummaryReference = null
+    finalLapSummaryLapNumber = null
+  }
+
   // The game may finish/leave the active lap before co-driver emits its idle
   // state. Preserve the last useful Coach frame during that transition.
   const endedLiveFrame = latestTelemetry?.isRaceOn === true && telemetry?.isRaceOn === false
@@ -507,6 +520,7 @@ function queueCornerTemplate(template) {
   lapDeltaState = 'neutral'
   if (!isRecordingIdle) {
     finalLapSummaryReference = null
+    finalLapSummaryLapNumber = null
     lastAvailableReference = null
     clearLapSummary({ promotePending: false })
   }
@@ -516,19 +530,11 @@ function queueCornerTemplate(template) {
 function queueCornerState(state) {
   if (!state || typeof state !== 'object') return
 
-  const previousLapNumber = finiteStateNumber(latestCornerState?.lapNumber)
-  const nextLapNumber = finiteStateNumber(state.lapNumber)
   const previousCornerIndex = finiteStateNumber(latestCornerState?.cornerIndex)
   const nextCornerIndex = finiteStateNumber(state.cornerIndex)
-  const changedLap = previousLapNumber !== null
-    && nextLapNumber !== null
-    && previousLapNumber !== nextLapNumber
   const changedCorner = previousCornerIndex !== null
     && nextCornerIndex !== null
     && previousCornerIndex !== nextCornerIndex
-  if (changedLap) beginLapSummary()
-  if (window.CornerState.isFinalCornerExit(latestCornerState, state, latestCornerTemplate)) beginLapSummary()
-
   const referenceCorner = latestReference.corner
   const nextDirection = String(state.direction || '').toUpperCase()
   const nextIdentity = nextCornerIndex !== null
@@ -548,9 +554,6 @@ function queueReference(payload) {
   const reference = window.ReferenceCoach.normalizeReferencePayload(payload)
   const summary = getActiveLapSummary()
   if (reference.available) {
-    if (finalLapSummaryReference && latestTelemetry?.isRaceOn === true) {
-      finalLapSummaryReference = null
-    }
     lastAvailableReference = reference
     if (summary) {
       pendingReference = reference
@@ -560,10 +563,10 @@ function queueReference(payload) {
     }
   } else {
     // co-driver makes the reference unavailable after the final matched zone.
-    // Start from the cached valid frame even if the preceding corner_state
-    // transition was coalesced or arrived after this message.
-    if (!summary) beginLapSummary()
-    latestReference = reference
+    // Keep the last valid frame until the explicit lap_complete message arrives
+    // instead of turning the live delta into a premature final summary.
+    if (!summary && lastAvailableReference?.available === true) latestReference = lastAvailableReference
+    else if (!summary) latestReference = reference
   }
   scheduleTelemetryRender()
 }
