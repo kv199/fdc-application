@@ -6,6 +6,7 @@ const {
   createLapDeltaView,
   createDemoReference,
   formatCue,
+  formatCoachStatus,
   formatLapDelta,
   formatLapTime,
   formatPhaseAction,
@@ -144,6 +145,24 @@ test('formats the live lap time from telemetry seconds', () => {
   assert.equal(formatLapTime(50.376), '0:50.376')
   assert.equal(formatLapTime(65.004), '1:05.004')
   assert.equal(formatLapTime(null), '--:--.---')
+})
+
+test('shows TO FINISH when the live reference has no active corner', () => {
+  assert.equal(formatCoachStatus({
+    available: true,
+    corner: '',
+    phase: 'between',
+    cue: null,
+    lapDeltaMs: 420
+  }), 'TO FINISH')
+  assert.equal(formatCoachStatus({
+    available: true,
+    corner: 'T3 LEFT',
+    phase: 'between',
+    cue: null,
+    lapDeltaMs: 420
+  }), 'NEXT CORNER')
+  assert.equal(formatCoachStatus({}, true), 'LAP COMPLETE')
 })
 
 test('normalizes a finish-anchored lap result', () => {

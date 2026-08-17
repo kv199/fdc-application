@@ -249,6 +249,18 @@
     return PHASE_GUIDANCE[normalizePhase(phase)]?.action || ''
   }
 
+  function formatCoachStatus(reference, isSummary = false) {
+    if (isSummary) return 'LAP COMPLETE'
+
+    const normalized = normalizeReferencePayload(reference)
+    if (!normalized.available) return ''
+
+    const cueText = formatCue(normalized.cue)
+    if (cueText) return cueText
+    if (normalized.phase === 'between' && !normalized.corner) return 'TO FINISH'
+    return formatPhaseAction(normalized.phase)
+  }
+
   function getActivePedalPoint(phase, targets, observed) {
     const guidance = PHASE_GUIDANCE[normalizePhase(phase)]
     if (!guidance?.targetKey) return null
@@ -380,6 +392,7 @@
     createEmptyReference,
     createLapDeltaView,
     formatCornerReadout,
+    formatCoachStatus,
     formatCue,
     formatLapDelta,
     formatLapTime,

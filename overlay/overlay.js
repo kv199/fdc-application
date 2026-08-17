@@ -229,8 +229,6 @@ function renderCoach(reference, isSummary = false) {
   }
 
   const phase = reference.phase || 'between'
-  const cue = isSummary ? null : reference.cue
-  const cueText = window.ReferenceCoach.formatCue(cue)
   const deltaState = isSummary
     ? 'neutral'
     : window.ReferenceCoach.classifyDelta(reference.deltaMs, referenceDeltaState)
@@ -247,10 +245,8 @@ function renderCoach(reference, isSummary = false) {
   lapDeltaValue.setAttribute('aria-label', isSummary ? 'Final lap delta' : 'Current lap delta')
 
   coachStatus.dataset.phase = isSummary ? 'summary' : phase
-  coachStatus.dataset.cueKind = cue?.kind || ''
-  coachStatus.textContent = isSummary
-    ? 'LAP COMPLETE'
-    : cueText || window.ReferenceCoach.formatPhaseAction(phase) || '\u2014'
+  coachStatus.dataset.cueKind = reference.cue?.kind || ''
+  coachStatus.textContent = window.ReferenceCoach.formatCoachStatus(reference, isSummary) || '\u2014'
 
   const target = isSummary
     ? null
