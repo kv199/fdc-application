@@ -40,9 +40,12 @@
     <div class="hud-frame">
       <div class="hud-stack">
         <section id="delta-strip" class="delta-strip" aria-label="Lap delta">
-          <div class="delta-strip__labels" aria-hidden="true">
-            <span>SLOWER</span>
-            <span>FASTER</span>
+          <div class="delta-strip__topline">
+            <output id="current-lap-time" class="delta-strip__lap-time" aria-label="Current lap time">LAP --:--.---</output>
+            <div class="delta-strip__labels" aria-hidden="true">
+              <span>SLOWER</span>
+              <span>FASTER</span>
+            </div>
           </div>
           <div class="delta-strip__track">
             <span class="delta-strip__zone delta-strip__zone--slow" aria-hidden="true"></span>

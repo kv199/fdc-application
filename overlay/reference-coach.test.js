@@ -7,11 +7,13 @@ const {
   createDemoReference,
   formatCue,
   formatLapDelta,
+  formatLapTime,
   formatPhaseAction,
   formatPedalPoint,
   formatSummary,
   formatSignedMilliseconds,
   getActivePedalPoint,
+  isRaceRestart,
   normalizeLapCompletePayload,
   normalizeReferencePayload,
   selectPrimaryCue
@@ -138,6 +140,12 @@ test('provides deterministic demo references for each MVP state', () => {
   assert.equal(createDemoReference('summary').summary.deltaMs, 180)
 })
 
+test('formats the live lap time from telemetry seconds', () => {
+  assert.equal(formatLapTime(50.376), '0:50.376')
+  assert.equal(formatLapTime(65.004), '1:05.004')
+  assert.equal(formatLapTime(null), '--:--.---')
+})
+
 test('normalizes a finish-anchored lap result', () => {
   assert.deepEqual(normalizeLapCompletePayload({
     sessionId: 32,
@@ -157,4 +165,18 @@ test('normalizes a finish-anchored lap result', () => {
     sourceSessionId: 29
   })
   assert.equal(normalizeLapCompletePayload({ lapNumber: 1, lapTimeMs: 0 }), null)
+})
+
+test('detects a new race when race time and lap number reset', () => {
+  assert.equal(isRaceRestart(
+    { lap: { raceTime: 336.7, number: 6 } },
+    { lap: { raceTime: 0.1, number: 0 } }
+  ), true)
+})
+
+test('does not treat a normal lap transition as a race restart', () => {
+  assert.equal(isRaceRestart(
+    { lap: { raceTime: 50.2, number: 3 } },
+    { lap: { raceTime: 50.3, number: 4 } }
+  ), false)
 })

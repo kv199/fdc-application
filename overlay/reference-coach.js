@@ -40,6 +40,24 @@
     return text.length > 0 ? text : ''
   }
 
+  function isRaceRestart(previousTelemetry, telemetry) {
+    const previousRaceTimeS = finite(previousTelemetry?.lap?.raceTime)
+    const currentRaceTimeS = finite(telemetry?.lap?.raceTime)
+    const previousLapNumber = finite(previousTelemetry?.lap?.number)
+    const currentLapNumber = finite(telemetry?.lap?.number)
+    if (
+      previousRaceTimeS === null
+      || currentRaceTimeS === null
+      || previousLapNumber === null
+      || currentLapNumber === null
+    ) return false
+
+    const lapWentBack = currentLapNumber < previousLapNumber
+    const clockWentBack = currentRaceTimeS + 5 < previousRaceTimeS
+    const clockIsNearStart = currentRaceTimeS <= 5
+    return lapWentBack && (clockWentBack || clockIsNearStart)
+  }
+
   function normalizePhase(value) {
     const phase = normalizeText(value).toLowerCase()
     return PHASES.includes(phase) ? phase : null
@@ -212,6 +230,15 @@
     return `${milliseconds > 0 ? '+' : '-'}${seconds.toFixed(2)} s`
   }
 
+  function formatLapTime(secondsValue) {
+    const seconds = finite(secondsValue)
+    if (seconds === null || seconds < 0) return '--:--.---'
+
+    const minutes = Math.floor(seconds / 60)
+    const remainder = (seconds - minutes * 60).toFixed(3).padStart(6, '0')
+    return `${minutes}:${remainder}`
+  }
+
   function formatPedalPoint(value, prefix) {
     const distance = finite(value)
     if (distance === null) return `${prefix} —`
@@ -355,11 +382,13 @@
     formatCornerReadout,
     formatCue,
     formatLapDelta,
+    formatLapTime,
     formatPhaseAction,
     formatPedalPoint,
     formatSummary,
     formatSignedMilliseconds,
     getActivePedalPoint,
+    isRaceRestart,
     normalizeCue,
     normalizeLapCompletePayload,
     normalizePhase,

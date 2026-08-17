@@ -663,7 +663,23 @@ body.is-editing .coachbar {
   display: none;
 }
 
+.delta-strip__topline {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.delta-strip__lap-time {
+  flex: 0 0 auto;
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .delta-strip__labels {
+  flex: 1 1 auto;
   display: flex;
   justify-content: space-between;
   color: #a1a1aa;

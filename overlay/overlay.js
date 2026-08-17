@@ -19,6 +19,7 @@ const coachTargetLabel = document.getElementById('coach-target-label')
 const coachTargetRef = document.getElementById('coach-target-ref')
 const coachTargetObserved = document.getElementById('coach-target-observed')
 const deltaStrip = document.getElementById('delta-strip')
+const currentLapTime = document.getElementById('current-lap-time')
 const lapDeltaMarker = document.getElementById('lap-delta-marker')
 const lapDeltaValue = document.getElementById('lap-delta-value')
 const tireElements = {
@@ -52,6 +53,7 @@ const LAP_SUMMARY_DURATION_MS = 4000
 const DEMO_LAP_SUMMARY_FROM_URL = new URLSearchParams(window.location.search).get('lapSummary') === '1'
 
 let latestTelemetry = null
+let latestLiveLapTimeSeconds = null
 let latestSteer = 0
 let renderScheduled = false
 let reconnectTimer = null
@@ -431,6 +433,7 @@ function renderTelemetry() {
   renderScheduled = false
   const displayedReference = getDisplayedReference()
   const telemetry = latestTelemetry
+  currentLapTime.textContent = `LIVE LAP ${window.ReferenceCoach.formatLapTime(latestLiveLapTimeSeconds)}`
   if (!telemetry) {
     renderCoach(displayedReference.reference, displayedReference.isSummary)
     renderCorner(latestCornerTemplate, latestCornerState, displayedReference.reference, displayedReference.isSummary)
@@ -466,6 +469,12 @@ function renderTelemetry() {
 }
 
 function queueTelemetry(telemetry) {
+  const raceRestart = window.ReferenceCoach.isRaceRestart(latestTelemetry, telemetry)
+  const lapCurrentSeconds = finiteStateNumber(telemetry?.lap?.current)
+  if (telemetry?.isRaceOn === true && lapCurrentSeconds !== null && lapCurrentSeconds >= 0) {
+    latestLiveLapTimeSeconds = lapCurrentSeconds
+  }
+
   const telemetryLapNumber = finiteStateNumber(telemetry?.lap?.number)
   if (
     finalLapSummaryReference
@@ -475,6 +484,12 @@ function queueTelemetry(telemetry) {
   ) {
     finalLapSummaryReference = null
     finalLapSummaryLapNumber = null
+  }
+
+  if (raceRestart) {
+    finalLapSummaryReference = null
+    finalLapSummaryLapNumber = null
+    resetCornerState({ preserveLapSummary: false, promotePending: false })
   }
 
   // The game may finish/leave the active lap before co-driver emits its idle
@@ -706,8 +721,10 @@ function startDemo() {
     gear: 5,
     rpm: 6420,
     rpmMax: 8000,
+    lap: { current: 50.123 },
     tireTempC: { fl: 79, fr: 84, rl: 77, rr: 77 }
   }
+  latestLiveLapTimeSeconds = latestTelemetry.lap.current
   setDemoCorner(demoCorner, false)
   setDemoReference(demoReference, false)
   if (DEMO_LAP_SUMMARY_FROM_URL) {
