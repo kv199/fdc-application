@@ -236,9 +236,13 @@ h1 {
 }
 
 .layout-row__chevron {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
   color: #a1a1aa;
-  font-size: 20px;
-  line-height: 1;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translate(-2px, -2px);
   transition: transform 140ms ease, color 140ms ease;
 }
 
@@ -248,7 +252,7 @@ h1 {
 }
 
 .layout-row__expand[aria-expanded='true'] .layout-row__chevron {
-  transform: rotate(180deg);
+  transform: rotate(225deg) translate(-2px, -2px);
 }
 
 .accordion-panel {
@@ -286,33 +290,57 @@ h1 {
 }
 
 .visibility-toggle {
-  min-width: 70px;
-  padding: 8px 10px;
-  border: 1px solid rgb(105 232 63 / 60%);
-  border-radius: 3px;
-  color: #69e83f;
-  background: rgb(105 232 63 / 8%);
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0.14em;
+  width: 58px;
+  height: 30px;
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 1px solid rgb(105 232 63 / 65%);
+  border-radius: 999px;
+  background: rgb(105 232 63 / 16%);
   cursor: pointer;
 }
 
 .visibility-toggle:hover,
 .visibility-toggle:focus-visible {
-  background: rgb(105 232 63 / 16%);
+  border-color: #69e83f;
   outline: none;
 }
 
+.visibility-toggle__track {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.visibility-toggle__thumb {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f8fafc;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 45%);
+  transform: translateX(0);
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.visibility-toggle[data-state='on'] .visibility-toggle__thumb {
+  background: #69e83f;
+  transform: translateX(27px);
+}
+
 .visibility-toggle[data-state='off'] {
-  border-color: rgb(255 130 125 / 60%);
-  color: #ff827d;
-  background: rgb(255 49 43 / 8%);
+  border-color: rgb(113 113 122 / 70%);
+  background: rgb(113 113 122 / 18%);
 }
 
 .visibility-toggle[data-state='off']:hover,
 .visibility-toggle[data-state='off']:focus-visible {
-  background: rgb(255 49 43 / 16%);
+  border-color: #a1a1aa;
+  background: rgb(161 161 170 / 18%);
 }
 
 .settings-button[hidden] {

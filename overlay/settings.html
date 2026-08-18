@@ -34,9 +34,11 @@
             <p>Move the coaching card to your preferred sight line.</p>
           </div>
           <div class="layout-row__actions">
-            <button class="visibility-toggle" type="button" data-overlay-toggle="coach" aria-pressed="true">ON</button>
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
             <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="visibility-toggle" type="button" data-overlay-toggle="coach" aria-label="Toggle Driver Coach" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
           </div>
         </article>
 
@@ -46,9 +48,11 @@
             <p>Place the live lap time and delta strip independently.</p>
           </div>
           <div class="layout-row__actions">
-            <button class="visibility-toggle" type="button" data-overlay-toggle="delta" aria-pressed="true">ON</button>
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
             <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="visibility-toggle" type="button" data-overlay-toggle="delta" aria-label="Toggle Lap Delta" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
           </div>
         </article>
 
@@ -59,12 +63,14 @@
                 <strong>Telemetry HUD</strong>
                 <small>Move the compact telemetry panel as one block.</small>
               </span>
-              <span class="layout-row__chevron" aria-hidden="true">⌄</span>
+              <span class="layout-row__chevron" aria-hidden="true"></span>
             </button>
             <div class="layout-row__actions">
-              <button class="visibility-toggle" type="button" data-overlay-toggle="hud" aria-pressed="true">ON</button>
               <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
               <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+              <button class="visibility-toggle" type="button" data-overlay-toggle="hud" aria-label="Toggle Telemetry HUD" aria-pressed="true">
+                <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+              </button>
             </div>
           </div>
 

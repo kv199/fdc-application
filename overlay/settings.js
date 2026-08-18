@@ -78,7 +78,6 @@
   }
 
   function updateOverlayToggle(button, visible) {
-    button.textContent = visible ? 'ON' : 'OFF'
     button.setAttribute('aria-pressed', String(visible))
     button.dataset.state = visible ? 'on' : 'off'
   }
