@@ -290,19 +290,20 @@ h1 {
 }
 
 .visibility-toggle {
-  width: 96px;
-  height: 34px;
+  width: 70px;
+  height: 31px;
   flex: 0 0 auto;
   padding: 4px;
-  border: 1px solid rgb(105 232 63 / 70%);
-  border-radius: 2px;
-  background: rgb(105 232 63 / 16%);
+  border: 1px solid rgb(226 232 240 / 28%);
+  border-radius: 3px;
+  background: rgb(226 232 240 / 6%);
   cursor: pointer;
 }
 
 .visibility-toggle:hover,
 .visibility-toggle:focus-visible {
-  border-color: #69e83f;
+  border-color: rgb(226 232 240 / 58%);
+  background: rgb(226 232 240 / 14%);
   outline: none;
 }
 
@@ -311,6 +312,9 @@ h1 {
   position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgb(226 232 240 / 12%);
 }
 
 .visibility-toggle__thumb {
@@ -318,8 +322,8 @@ h1 {
   position: absolute;
   top: 0;
   left: 0;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 21px;
   border-radius: 0;
   background: #f8fafc;
   box-shadow: 0 1px 4px rgb(0 0 0 / 45%);
@@ -329,23 +333,27 @@ h1 {
 
 .visibility-toggle[data-state='on'] .visibility-toggle__thumb {
   background: #f8fafc;
-  transform: translateX(62px);
+  transform: translateX(40px);
 }
 
 .visibility-toggle[data-state='on'] {
-  border-color: #008f00;
-  background: #008f00;
+  border-color: rgb(105 232 63 / 60%);
+  background: rgb(105 232 63 / 8%);
+}
+
+.visibility-toggle[data-state='on'] .visibility-toggle__track {
+  background: rgb(105 232 63 / 48%);
 }
 
 .visibility-toggle[data-state='off'] {
-  border-color: rgb(113 113 122 / 70%);
-  background: rgb(113 113 122 / 18%);
+  border-color: rgb(226 232 240 / 28%);
+  background: rgb(226 232 240 / 6%);
 }
 
 .visibility-toggle[data-state='off']:hover,
 .visibility-toggle[data-state='off']:focus-visible {
-  border-color: #a1a1aa;
-  background: rgb(161 161 170 / 18%);
+  border-color: rgb(226 232 240 / 58%);
+  background: rgb(226 232 240 / 14%);
 }
 
 .settings-button[hidden] {
