@@ -133,7 +133,6 @@
       if (!hudRect.width || !hudRect.height) return
       elements.hud.style.width = `${Math.round(hudRect.width)}px`
       elements.hud.style.height = `${Math.round(hudRect.height)}px`
-      elements.delta.style.width = `${Math.round(hudRect.width)}px`
     }
 
     function getFallbackSize(name, viewport) {

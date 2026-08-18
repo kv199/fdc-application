@@ -744,6 +744,13 @@ body.is-editing .coachbar {
   height: 100%;
 }
 
+/* The visibility preference is authoritative even when a section has a display rule. */
+.hud-frame[hidden],
+.hud[hidden],
+.hud > section[hidden] {
+  display: none !important;
+}
+
 .delta-strip {
   position: absolute;
   top: auto;
