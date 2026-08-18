@@ -10,7 +10,13 @@
 <body>
   <main class="settings-shell">
     <header class="settings-header">
-      <p class="settings-eyebrow">FORZA HORIZON 6</p>
+      <div class="settings-header__topline">
+        <p class="settings-eyebrow">FORZA HORIZON 6</p>
+        <div id="telemetry-status" class="telemetry-status" data-state="offline" role="status" aria-live="polite">
+          <span class="telemetry-status__dot" aria-hidden="true"></span>
+          <span id="telemetry-status-label">TELEMETRY OFFLINE</span>
+        </div>
+      </div>
       <h1>HUD SETTINGS</h1>
       <p class="settings-copy">Edit each overlay position and choose which telemetry blocks stay visible.</p>
     </header>
@@ -23,82 +29,90 @@
 
       <div class="layout-list">
         <article class="layout-row" data-layout-target="coach">
-          <div>
+          <div class="layout-row__content">
             <h3>Driver Coach</h3>
             <p>Move the coaching card to your preferred sight line.</p>
           </div>
           <div class="layout-row__actions">
+            <button class="visibility-toggle" type="button" data-overlay-toggle="coach" aria-pressed="true">ON</button>
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
             <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
           </div>
         </article>
 
         <article class="layout-row" data-layout-target="delta">
-          <div>
+          <div class="layout-row__content">
             <h3>Lap Delta</h3>
             <p>Place the live lap time and delta strip independently.</p>
           </div>
           <div class="layout-row__actions">
+            <button class="visibility-toggle" type="button" data-overlay-toggle="delta" aria-pressed="true">ON</button>
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
             <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
           </div>
         </article>
 
-        <article class="layout-row" data-layout-target="hud">
-          <div>
-            <h3>Telemetry HUD</h3>
-            <p>Move the compact telemetry panel as one block.</p>
+        <article class="layout-row layout-row--accordion" data-layout-target="hud">
+          <div class="layout-row__header">
+            <button class="layout-row__expand" type="button" data-accordion-toggle="hud" aria-expanded="false" aria-controls="hud-content-panel">
+              <span class="layout-row__content">
+                <strong>Telemetry HUD</strong>
+                <small>Move the compact telemetry panel as one block.</small>
+              </span>
+              <span class="layout-row__chevron" aria-hidden="true">⌄</span>
+            </button>
+            <div class="layout-row__actions">
+              <button class="visibility-toggle" type="button" data-overlay-toggle="hud" aria-pressed="true">ON</button>
+              <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
+              <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            </div>
           </div>
-          <div class="layout-row__actions">
-            <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
-            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+
+          <div id="hud-content-panel" class="accordion-panel" data-accordion-panel="hud" hidden>
+            <div class="settings-section__heading">
+              <h2>HUD CONTENT</h2>
+              <span>VISIBLE BLOCKS</span>
+            </div>
+
+            <div class="visibility-list">
+              <label class="visibility-row">
+                <span>
+                  <strong>Tires</strong>
+                  <small>Temperature and tire shapes</small>
+                </span>
+                <input type="checkbox" data-hud-component="tires">
+              </label>
+              <label class="visibility-row">
+                <span>
+                  <strong>Throttle &amp; Brake</strong>
+                  <small>Pedal input meters</small>
+                </span>
+                <input type="checkbox" data-hud-component="pedals">
+              </label>
+              <label class="visibility-row">
+                <span>
+                  <strong>Steering</strong>
+                  <small>Steering wheel indicator</small>
+                </span>
+                <input type="checkbox" data-hud-component="steering">
+              </label>
+              <label class="visibility-row">
+                <span>
+                  <strong>Gear / Speed / RPM</strong>
+                  <small>Drivetrain and speed data</small>
+                </span>
+                <input type="checkbox" data-hud-component="gear">
+              </label>
+              <label class="visibility-row">
+                <span>
+                  <strong>Input Graph</strong>
+                  <small>Throttle and brake history</small>
+                </span>
+                <input type="checkbox" data-hud-component="history">
+              </label>
+            </div>
           </div>
         </article>
-      </div>
-    </section>
-
-    <section class="settings-section" aria-labelledby="visibility-title">
-      <div class="settings-section__heading">
-        <h2 id="visibility-title">HUD CONTENT</h2>
-        <span>VISIBLE BLOCKS</span>
-      </div>
-
-      <div class="visibility-list">
-        <label class="visibility-row">
-          <span>
-            <strong>Tires</strong>
-            <small>Temperature and tire shapes</small>
-          </span>
-          <input type="checkbox" data-hud-component="tires">
-        </label>
-        <label class="visibility-row">
-          <span>
-            <strong>Throttle &amp; Brake</strong>
-            <small>Pedal input meters</small>
-          </span>
-          <input type="checkbox" data-hud-component="pedals">
-        </label>
-        <label class="visibility-row">
-          <span>
-            <strong>Steering</strong>
-            <small>Steering wheel indicator</small>
-          </span>
-          <input type="checkbox" data-hud-component="steering">
-        </label>
-        <label class="visibility-row">
-          <span>
-            <strong>Gear / Speed / RPM</strong>
-            <small>Drivetrain and speed data</small>
-          </span>
-          <input type="checkbox" data-hud-component="gear">
-        </label>
-        <label class="visibility-row">
-          <span>
-            <strong>Input Graph</strong>
-            <small>Throttle and brake history</small>
-          </span>
-          <input type="checkbox" data-hud-component="history">
-        </label>
       </div>
     </section>
 

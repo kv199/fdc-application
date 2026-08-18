@@ -38,6 +38,9 @@ fn show_settings<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
     window.show()?;
     window.set_focus()?;
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.eval("window.HudOverlay?.syncConnectionState?.()");
+    }
     Ok(())
 }
 
@@ -118,13 +121,46 @@ fn set_hud_visibility(app: AppHandle, component: String, visible: bool) -> Resul
     eval_main(&app, &script)
 }
 
+#[tauri::command]
+fn set_overlay_visibility(app: AppHandle, component: String, visible: bool) -> Result<(), String> {
+    let safe_component = match component.as_str() {
+        "coach" | "delta" | "hud" => component,
+        _ => return Err("unknown overlay component".to_string()),
+    };
+    let value = if visible { "true" } else { "false" };
+    let script = format!(
+        "window.HudPreferences?.setOverlayVisibility?.('{}', {})",
+        safe_component, value
+    );
+    eval_main(&app, &script)
+}
+
+#[tauri::command]
+fn notify_connection_state(app: AppHandle, state: String) -> Result<(), String> {
+    if !["is-live", "is-waiting", "is-offline"].contains(&state.as_str()) {
+        return Err("unknown telemetry connection state".to_string());
+    }
+
+    let script = format!(
+        "window.SettingsController?.setTelemetryState?.('{}')",
+        state
+    );
+    if let Some(settings) = app.get_webview_window("settings") {
+        settings.eval(&script).map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             set_window_edit_mode,
             notify_layout_state,
             layout_action,
-            set_hud_visibility
+            set_hud_visibility,
+            set_overlay_visibility,
+            notify_connection_state
         ])
         .on_window_event(|window, event| {
             if window.label() != "settings" {

@@ -2,7 +2,9 @@
   'use strict'
 
   const STORAGE_KEY = 'forza-horizon-6-hud.hud-visibility.v1'
+  const OVERLAY_STORAGE_KEY = 'forza-horizon-6-hud.overlay-visibility.v1'
   const COMPONENTS = ['tires', 'pedals', 'steering', 'gear', 'history']
+  const OVERLAY_COMPONENTS = ['coach', 'delta', 'hud']
   const COLUMN_WIDTHS = {
     tires: '72px',
     pedals: '46px',
@@ -11,6 +13,10 @@
     history: '342px'
   }
   const DEFAULT_STATE = COMPONENTS.reduce((state, name) => {
+    state[name] = true
+    return state
+  }, {})
+  const DEFAULT_OVERLAY_STATE = OVERLAY_COMPONENTS.reduce((state, name) => {
     state[name] = true
     return state
   }, {})
@@ -36,10 +42,35 @@
     }
   }
 
+  function readOverlayState() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(OVERLAY_STORAGE_KEY) || 'null')
+      if (!stored || typeof stored !== 'object') return { ...DEFAULT_OVERLAY_STATE }
+      return OVERLAY_COMPONENTS.reduce((state, name) => {
+        state[name] = stored[name] !== false
+        return state
+      }, {})
+    } catch {
+      return { ...DEFAULT_OVERLAY_STATE }
+    }
+  }
+
+  function saveOverlayState(state) {
+    try {
+      localStorage.setItem(OVERLAY_STORAGE_KEY, JSON.stringify(state))
+    } catch {
+      // A restricted webview may not expose persistent storage.
+    }
+  }
+
   function createPreferences() {
     const hud = document.getElementById('hud')
     const hudFrame = document.getElementById('hud-frame')
-    if (!hud || !hudFrame) return null
+    const overlayElements = {
+      coach: document.getElementById('coach-card'),
+      delta: document.getElementById('delta-strip')
+    }
+    if (!hud || !hudFrame || Object.values(overlayElements).some(element => !element)) return null
 
     const sections = {
       tires: document.getElementById('hud-tires'),
@@ -51,6 +82,7 @@
     if (Object.values(sections).some(section => !section)) return null
 
     let state = readState()
+    let overlayState = readOverlayState()
 
     function apply(nextState = state) {
       state = COMPONENTS.reduce((result, name) => {
@@ -65,13 +97,21 @@
         .map(name => COLUMN_WIDTHS[name])
       const hasVisibleContent = visibleColumns.length > 0
       hud.hidden = !hasVisibleContent
-      hudFrame.hidden = !hasVisibleContent
+      hudFrame.hidden = !overlayState.hud || !hasVisibleContent
       if (hasVisibleContent) {
         hud.style.gridTemplateColumns = visibleColumns.join(' ')
         hud.style.width = `${visibleColumns.reduce((total, column) => total + Number.parseFloat(column), 0)}px`
       }
       saveState(state)
+      saveOverlayState(overlayState)
       globalScope.HudLayout?.refreshLayout?.()
+    }
+
+    function applyOverlayVisibility() {
+      if (!overlayState.coach) overlayElements.coach.hidden = true
+      if (!overlayState.delta) overlayElements.delta.hidden = true
+      apply(state)
+      globalScope.HudOverlay?.refresh?.()
     }
 
     apply()
@@ -79,19 +119,35 @@
     const api = {
       components: COMPONENTS,
       getState: () => ({ ...state }),
+      getOverlayState: () => ({ ...overlayState }),
+      isOverlayVisible: name => overlayState[name] !== false,
       setVisibility: (name, visible) => {
         if (!COMPONENTS.includes(name)) return
         apply({ ...state, [name]: visible === true })
       },
+      setOverlayVisibility: (name, visible) => {
+        if (!OVERLAY_COMPONENTS.includes(name)) return
+        overlayState = {
+          ...overlayState,
+          [name]: visible === true
+        }
+        saveOverlayState(overlayState)
+        apply(state)
+        globalScope.HudOverlay?.refresh?.()
+      },
       apply
     }
+    applyOverlayVisibility()
     return api
   }
 
   const api = {
     components: COMPONENTS,
     defaultState: () => ({ ...DEFAULT_STATE }),
-    readState
+    readState,
+    overlayComponents: OVERLAY_COMPONENTS,
+    defaultOverlayState: () => ({ ...DEFAULT_OVERLAY_STATE }),
+    readOverlayState
   }
 
   if (typeof document !== 'undefined') {

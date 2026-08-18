@@ -59,6 +59,7 @@ let renderScheduled = false
 let reconnectTimer = null
 let socket = null
 let forzaConnected = false
+let lastConnectionState = null
 let historySamples = []
 let steeringWheelImageReady = false
 let demoSignal = DEMO_SIGNALS.includes(DEMO_SIGNAL_FROM_URL) ? DEMO_SIGNAL_FROM_URL : 'normal'
@@ -128,8 +129,18 @@ function tireColor(tempC) {
 }
 
 function setConnection(state) {
+  if (state === lastConnectionState) return
+  lastConnectionState = state
   hud.classList.remove('is-live', 'is-waiting', 'is-offline')
   hud.classList.add(state)
+  notifyConnectionState(state)
+}
+
+function notifyConnectionState(state) {
+  const invoke = window.__TAURI_INTERNALS__?.invoke
+  if (typeof invoke === 'function') {
+    Promise.resolve(invoke('notify_connection_state', { state })).catch(() => {})
+  }
 }
 
 function setRpmSignal(signal) {
@@ -210,9 +221,11 @@ function getDisplayedReference() {
 function renderCoach(reference, isSummary = false) {
   const hasReference = reference?.available === true
   const isCoachEditing = window.HudLayout?.isEditing?.('coach') === true
+  const isCoachVisible = window.HudPreferences?.isOverlayVisible?.('coach') !== false
+  const isDeltaVisible = window.HudPreferences?.isOverlayVisible?.('delta') !== false
   coachCard.dataset.hasReference = hasReference ? 'true' : 'false'
-  coachCard.hidden = !hasReference && !isCoachEditing
-  deltaStrip.hidden = false
+  coachCard.hidden = !isCoachEditing && (!isCoachVisible || !hasReference)
+  deltaStrip.hidden = !isDeltaVisible
 
   if (!hasReference) {
     coachbar.dataset.deltaState = 'neutral'
@@ -758,6 +771,13 @@ window.addEventListener('resize', () => {
   drawHistory()
   drawSteering(clampSteer(latestTelemetry?.steer))
 })
+
+window.HudOverlay = {
+  refresh: scheduleTelemetryRender,
+  syncConnectionState: () => {
+    if (lastConnectionState) notifyConnectionState(lastConnectionState)
+  }
+}
 
 if (DEMO_MODE) startDemo()
 else connect()

@@ -30,7 +30,10 @@ the primary monitor. Settings is the only layout entry point in the native HUD.
 Settings also controls the five HUD content blocks: tires, throttle and brake,
 steering, gear/speed/RPM, and input history. Disabled blocks disappear and the
 remaining HUD grid contracts; disabling every block hides the telemetry HUD.
-Visibility choices are stored locally. In a browser preview, use
+The three top-level overlay targets also have independent visibility toggles;
+the Telemetry HUD row expands to reveal its five child blocks. Settings shows
+the current telemetry connection state in the upper-right corner. Visibility
+choices are stored locally. In a browser preview, use
 `?demo=1&corner=entry&edit=1` to edit the Coach.
 
 The Reference Coach can be previewed without Forza in demo mode:
