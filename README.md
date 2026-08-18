@@ -19,17 +19,20 @@ and steering, not a quality score or a claim that trail braking was correct.
 After a turn, the HUD briefly shows accumulated `BLEND` and `COAST` time plus
 minimum and exit speed when available.
 
-The Driver Coach is a large, movable card over the game. The telemetry HUD
-stays anchored near the bottom of the primary monitor, while the Coach card
-can be placed at the driver's preferred sight line. The lap-delta strip is
-anchored directly above the main HUD at the same width and is not part of the
-movable Coach card. It remains visible in a neutral state before a reference is
+The Driver Coach, lap-delta strip, and telemetry HUD are independently movable
+overlay targets. The HUD icon's tray menu opens `Settings`; the settings window
+is shown automatically on the first launch and hides to the tray when closed.
+Use `EDIT` in Settings, drag the selected target in the overlay, then press
+`SAVE` in Settings or on the target itself. Closing Settings during an edit
+cancels the uncommitted position. Positions are stored locally and clamped to
+the primary monitor. The legacy tray Coach edit/reset commands remain
 available.
 
-To move the Coach in the Tauri app, open the HUD icon's system-tray menu and
-choose `Edit Coach position`. Drag the card, then press `DONE`. The position is
-stored locally. The same menu can reset the card or exit edit mode. In a browser
-preview, use `?demo=1&corner=entry&edit=1` or press `Ctrl+Shift+E`.
+Settings also controls the five HUD content blocks: tires, throttle and brake,
+steering, gear/speed/RPM, and input history. Disabled blocks disappear and the
+remaining HUD grid contracts; disabling every block hides the telemetry HUD.
+Visibility choices are stored locally. In a browser preview, use
+`?demo=1&corner=entry&edit=1` or press `Ctrl+Shift+E` to edit the Coach.
 
 The Reference Coach can be previewed without Forza in demo mode:
 

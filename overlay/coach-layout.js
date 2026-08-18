@@ -1,7 +1,9 @@
 (function (globalScope) {
   'use strict'
 
-  const STORAGE_KEY = 'forza-horizon-6-hud.coach-position.v2'
+  const STORAGE_KEY = 'forza-horizon-6-hud.layout.v3'
+  const LEGACY_COACH_STORAGE_KEY = 'forza-horizon-6-hud.coach-position.v2'
+  const TARGET_NAMES = ['coach', 'delta', 'hud']
 
   function clamp(value, minimum, maximum) {
     const number = Number(value)
@@ -29,11 +31,11 @@
     }
   }
 
-  function getElementSize(element) {
+  function getElementSize(element, fallback = { width: 0, height: 0 }) {
     const rect = element.getBoundingClientRect()
     return {
-      width: Math.max(0, rect.width),
-      height: Math.max(0, rect.height)
+      width: Math.max(0, rect.width || fallback.width),
+      height: Math.max(0, rect.height || fallback.height)
     }
   }
 
@@ -44,38 +46,41 @@
     }
   }
 
-  function defaultPosition(viewport, elementSize, anchorRect) {
-    const available = getAvailableSize(viewport, elementSize)
-    const left = (viewport.width - elementSize.width) / 2
-    const top = Math.max(12, anchorRect.top - elementSize.height - 18)
-    return {
-      x: available.width > 0 ? clamp(left / available.width, 0, 1) : 0,
-      y: available.height > 0 ? clamp(top / available.height, 0, 1) : 0
-    }
-  }
-
-  function readStoredPosition() {
+  function readStoredPositions() {
     try {
-      return sanitizePosition(JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'))
+      const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
+      const positions = raw && typeof raw === 'object'
+        ? TARGET_NAMES.reduce((result, name) => {
+          const position = sanitizePosition(raw[name])
+          if (position) result[name] = position
+          return result
+        }, {})
+        : {}
+      if (positions.coach) return positions
+
+      const legacyCoach = sanitizePosition(JSON.parse(localStorage.getItem(LEGACY_COACH_STORAGE_KEY) || 'null'))
+      if (legacyCoach) positions.coach = legacyCoach
+      return positions
     } catch {
-      return null
+      return {}
     }
   }
 
-  function savePosition(position) {
+  function saveStoredPositions(positions) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(clampPosition(position)))
-    } catch {
-      // A restricted webview may not expose persistent storage.
-    }
-  }
-
-  function clearStoredPosition() {
-    try {
-      localStorage.removeItem(STORAGE_KEY)
+      const safePositions = TARGET_NAMES.reduce((result, name) => {
+        if (positions[name]) result[name] = clampPosition(positions[name])
+        return result
+      }, {})
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(safePositions))
     } catch {
       // A restricted webview may not expose persistent storage.
     }
+  }
+
+  function removeStoredPosition(positions, name) {
+    delete positions[name]
+    saveStoredPositions(positions)
   }
 
   function setNativeInteraction(enabled) {
@@ -85,166 +90,287 @@
   }
 
   function createLayout() {
-    const coachCard = document.getElementById('coach-card')
-    const hudFrame = document.querySelector('.hud-frame')
-    const editTools = document.getElementById('coach-edit-tools')
-    const resetButton = document.getElementById('coach-reset')
-    const doneButton = document.getElementById('coach-done')
-    if (!coachCard || !hudFrame || !editTools || !resetButton || !doneButton) return null
+    const elements = {
+      coach: document.getElementById('coach-card'),
+      delta: document.getElementById('delta-strip'),
+      hud: document.getElementById('hud-frame')
+    }
+    const hud = document.getElementById('hud')
+    if (!elements.coach || !elements.delta || !elements.hud || !hud) return null
 
-    let position = readStoredPosition()
-    let hasStoredPosition = position !== null
-    let editing = false
+    const tools = {
+      coach: {
+        root: document.getElementById('coach-edit-tools'),
+        reset: document.getElementById('coach-reset'),
+        cancel: document.getElementById('coach-cancel'),
+        save: document.getElementById('coach-save')
+      },
+      delta: {
+        root: document.getElementById('delta-edit-tools'),
+        reset: document.getElementById('delta-reset'),
+        cancel: document.getElementById('delta-cancel'),
+        save: document.getElementById('delta-save')
+      },
+      hud: {
+        root: document.getElementById('hud-edit-tools'),
+        reset: document.getElementById('hud-reset'),
+        cancel: document.getElementById('hud-cancel'),
+        save: document.getElementById('hud-save')
+      }
+    }
+    if (Object.values(tools).some(tool => Object.values(tool).some(value => !value))) return null
+
+    let positions = readStoredPositions()
+    let editingTarget = null
+    let editingSnapshot = null
+    let targetWasHidden = false
     let dragging = false
     let dragOffsetX = 0
     let dragOffsetY = 0
 
-    function getCurrentMetrics() {
+    function syncHudFrameSize() {
+      const hudRect = hud.getBoundingClientRect()
+      if (!hudRect.width || !hudRect.height) return
+      elements.hud.style.width = `${Math.round(hudRect.width)}px`
+      elements.hud.style.height = `${Math.round(hudRect.height)}px`
+      elements.delta.style.width = `${Math.round(hudRect.width)}px`
+    }
+
+    function getFallbackSize(name, viewport) {
+      if (name === 'coach') return { width: Math.min(560, Math.max(0, viewport.width - 24)), height: 132 }
+      if (name === 'delta') return { width: Math.min(1240, Math.max(0, viewport.width - 16)), height: 60 }
+      return { width: Math.min(1240, Math.max(0, viewport.width - 16)), height: 138 }
+    }
+
+    function getDefaultAnchor(name, elementSize, viewport) {
+      const hudRect = elements.hud.getBoundingClientRect()
+      const hudSize = getElementSize(elements.hud, getFallbackSize('hud', viewport))
+      const hudLeft = hudRect.width ? hudRect.left : (viewport.width - hudSize.width) / 2
+      const hudTop = hudRect.height ? hudRect.top : viewport.height - hudSize.height - 28
+
+      if (name === 'hud') return { left: hudLeft, top: hudTop }
+      if (name === 'delta') return { left: hudLeft, top: hudTop - elementSize.height - 10 }
+      return { left: hudLeft, top: hudTop - elementSize.height - 18 }
+    }
+
+    function ensurePosition(name) {
+      if (positions[name]) return positions[name]
+
       const viewport = getViewport()
-      const elementSize = getElementSize(coachCard)
-      return { viewport, elementSize, available: getAvailableSize(viewport, elementSize) }
-    }
-
-    function ensurePosition() {
-      const { viewport, elementSize } = getCurrentMetrics()
-      if (!position || !hasStoredPosition) {
-        const anchorRect = hudFrame.getBoundingClientRect()
-        position = defaultPosition(viewport, elementSize, anchorRect)
-      } else {
-        position = clampPosition(position)
+      const fallback = getFallbackSize(name, viewport)
+      const elementSize = getElementSize(elements[name], fallback)
+      const anchor = getDefaultAnchor(name, elementSize, viewport)
+      const available = getAvailableSize(viewport, elementSize)
+      positions[name] = {
+        x: available.width > 0 ? clamp(anchor.left / available.width, 0, 1) : 0,
+        y: available.height > 0 ? clamp(anchor.top / available.height, 0, 1) : 0
       }
-      return position
+      return positions[name]
     }
 
-    function applyPosition() {
-      const metrics = getCurrentMetrics()
-      position = ensurePosition()
-      const left = metrics.available.width * position.x
-      const top = metrics.available.height * position.y
-      coachCard.style.left = `${Math.round(left)}px`
-      coachCard.style.top = `${Math.round(top)}px`
+    function applyPosition(name) {
+      const element = elements[name]
+      if (element.hidden && name !== editingTarget) return
+
+      const viewport = getViewport()
+      const elementSize = getElementSize(element, getFallbackSize(name, viewport))
+      const available = getAvailableSize(viewport, elementSize)
+      const position = ensurePosition(name)
+      const left = available.width * position.x
+      const top = available.height * position.y
+      element.classList.add('layout-positioned')
+      element.style.left = `${Math.round(left)}px`
+      element.style.top = `${Math.round(top)}px`
     }
 
-    function persistPosition() {
-      hasStoredPosition = true
-      savePosition(position)
+    function refreshLayout() {
+      syncHudFrameSize()
+      applyPosition('hud')
+      syncHudFrameSize()
+      applyPosition('delta')
+      applyPosition('coach')
     }
 
-    function enterEditMode() {
-      if (editing || coachCard.hidden) return
-      applyPosition()
-      editing = true
+    function persistPosition(name) {
+      positions[name] = clampPosition(positions[name])
+      saveStoredPositions(positions)
+    }
+
+    function setToolsVisible(name, visible) {
+      tools[name].root.hidden = !visible
+    }
+
+    function restoreTemporaryVisibility() {
+      if (
+        editingTarget === 'coach'
+        && targetWasHidden
+        && elements.coach.dataset.hasReference !== 'true'
+      ) {
+        elements.coach.hidden = true
+      }
+      targetWasHidden = false
+    }
+
+    function finishEdit() {
+      if (!editingTarget) return
+      const name = editingTarget
+      dragging = false
+      elements[name].classList.remove('is-editing')
+      setToolsVisible(name, false)
+      document.body.classList.remove('is-editing')
+      document.body.removeAttribute('data-editing-target')
+      restoreTemporaryVisibility()
+      editingTarget = null
+      editingSnapshot = null
+      elements[name].setAttribute('aria-grabbed', 'false')
+      setNativeInteraction(false)
+      refreshLayout()
+    }
+
+    function enterEditMode(name = 'coach') {
+      if (!TARGET_NAMES.includes(name)) return
+      if (editingTarget === name) return
+      if (editingTarget) cancelEditMode()
+
+      if (name === 'coach' && elements.coach.hidden) {
+        targetWasHidden = true
+        elements.coach.hidden = false
+      }
+
+      syncHudFrameSize()
+      applyPosition(name)
+      editingTarget = name
+      editingSnapshot = positions[name] ? { ...positions[name] } : null
+      elements[name].classList.add('is-editing')
+      elements[name].setAttribute('aria-grabbed', 'false')
+      setToolsVisible(name, true)
       document.body.classList.add('is-editing')
-      coachCard.classList.add('is-editing')
-      coachCard.setAttribute('aria-grabbed', 'false')
-      editTools.hidden = false
+      document.body.dataset.editingTarget = name
       setNativeInteraction(true)
     }
 
-    function exitEditMode() {
-      if (!editing) return
-      persistPosition()
-      editing = false
-      dragging = false
-      document.body.classList.remove('is-editing')
-      coachCard.classList.remove('is-editing')
-      coachCard.setAttribute('aria-grabbed', 'false')
-      editTools.hidden = true
-      setNativeInteraction(false)
+    function savePosition() {
+      if (!editingTarget) return
+      persistPosition(editingTarget)
+      finishEdit()
     }
 
-    function resetPosition() {
-      clearStoredPosition()
-      hasStoredPosition = false
-      position = null
-      applyPosition()
-      persistPosition()
+    function cancelEditMode() {
+      if (!editingTarget) return
+      const name = editingTarget
+      if (editingSnapshot) positions[name] = { ...editingSnapshot }
+      else delete positions[name]
+      finishEdit()
+      applyPosition(name)
+    }
+
+    function resetPosition(name = editingTarget || 'coach') {
+      if (!TARGET_NAMES.includes(name)) return
+      removeStoredPosition(positions, name)
+      applyPosition(name)
+      if (editingTarget === name) {
+        editingSnapshot = null
+        return
+      }
+      refreshLayout()
     }
 
     function updateFromPointer(clientX, clientY) {
-      const metrics = getCurrentMetrics()
+      if (!editingTarget) return
+      const name = editingTarget
+      const element = elements[name]
+      const viewport = getViewport()
+      const elementSize = getElementSize(element, getFallbackSize(name, viewport))
+      const available = getAvailableSize(viewport, elementSize)
       const left = clientX - dragOffsetX
       const top = clientY - dragOffsetY
-      position = {
-        x: metrics.available.width > 0 ? clamp(left / metrics.available.width, 0, 1) : 0,
-        y: metrics.available.height > 0 ? clamp(top / metrics.available.height, 0, 1) : 0
+      positions[name] = {
+        x: available.width > 0 ? clamp(left / available.width, 0, 1) : 0,
+        y: available.height > 0 ? clamp(top / available.height, 0, 1) : 0
       }
-      applyPosition()
+      applyPosition(name)
     }
 
-    coachCard.addEventListener('pointerdown', event => {
-      if (!editing || event.button !== 0 || event.target.closest('button')) return
-
-      const rect = coachCard.getBoundingClientRect()
+    function startDrag(name, event) {
+      if (editingTarget !== name || event.button !== 0 || event.target.closest('button')) return
+      const rect = elements[name].getBoundingClientRect()
       dragOffsetX = event.clientX - rect.left
       dragOffsetY = event.clientY - rect.top
       dragging = true
-      coachCard.setAttribute('aria-grabbed', 'true')
-      coachCard.setPointerCapture?.(event.pointerId)
+      elements[name].setAttribute('aria-grabbed', 'true')
+      elements[name].setPointerCapture?.(event.pointerId)
       event.preventDefault()
-    })
+    }
 
-    coachCard.addEventListener('pointermove', event => {
+    function moveDrag(event) {
       if (!dragging) return
       updateFromPointer(event.clientX, event.clientY)
-    })
+    }
 
-    coachCard.addEventListener('pointerup', event => {
-      if (!dragging) return
+    function finishDrag(event) {
+      if (!dragging || !editingTarget) return
+      const name = editingTarget
       dragging = false
-      coachCard.setAttribute('aria-grabbed', 'false')
-      coachCard.releasePointerCapture?.(event.pointerId)
-      persistPosition()
-    })
+      elements[name].setAttribute('aria-grabbed', 'false')
+      elements[name].releasePointerCapture?.(event.pointerId)
+    }
 
-    coachCard.addEventListener('pointercancel', () => {
-      dragging = false
-      coachCard.setAttribute('aria-grabbed', 'false')
-    })
-
-    resetButton.addEventListener('click', resetPosition)
-    doneButton.addEventListener('click', exitEditMode)
+    for (const name of TARGET_NAMES) {
+      elements[name].addEventListener('pointerdown', event => startDrag(name, event))
+      elements[name].addEventListener('pointermove', moveDrag)
+      elements[name].addEventListener('pointerup', finishDrag)
+      elements[name].addEventListener('pointercancel', () => {
+        dragging = false
+        elements[name].setAttribute('aria-grabbed', 'false')
+      })
+      tools[name].reset.addEventListener('click', () => resetPosition(name))
+      tools[name].cancel.addEventListener('click', cancelEditMode)
+      tools[name].save.addEventListener('click', savePosition)
+    }
 
     window.addEventListener('resize', () => {
-      applyPosition()
-      if (hasStoredPosition) persistPosition()
+      refreshLayout()
+      if (editingTarget) applyPosition(editingTarget)
     })
 
     const resizeObserver = typeof ResizeObserver === 'undefined'
       ? null
       : new ResizeObserver(() => {
-        if (!dragging) applyPosition()
+        if (!dragging) refreshLayout()
       })
-    resizeObserver?.observe(coachCard)
+    resizeObserver?.observe(hud)
 
     window.addEventListener('keydown', event => {
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'e') {
         event.preventDefault()
-        if (editing) exitEditMode()
-        else enterEditMode()
+        if (editingTarget) cancelEditMode()
+        else enterEditMode('coach')
         return
       }
 
-      if (event.key === 'Escape' && editing) {
+      if (event.key === 'Escape' && editingTarget) {
         event.preventDefault()
-        exitEditMode()
+        cancelEditMode()
       }
     })
 
-    applyPosition()
+    refreshLayout()
 
     const api = {
       enterEditMode,
-      exitEditMode,
+      exitEditMode: savePosition,
+      savePosition,
+      cancelEditMode,
       resetPosition,
-      toggleEditMode: () => (editing ? exitEditMode() : enterEditMode()),
-      isEditing: () => editing,
-      refreshPosition: applyPosition,
-      getPosition: () => ({ ...position })
+      toggleEditMode: () => (editingTarget ? cancelEditMode() : enterEditMode('coach')),
+      isEditing: name => editingTarget === name,
+      refreshPosition: refreshLayout,
+      refreshLayout,
+      getPosition: name => ({ ...(positions[name] || ensurePosition(name)) })
     }
 
     if (new URLSearchParams(window.location.search).get('edit') === '1') {
-      window.requestAnimationFrame(enterEditMode)
+      window.requestAnimationFrame(() => enterEditMode('coach'))
     }
 
     return api

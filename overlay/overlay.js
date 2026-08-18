@@ -209,7 +209,9 @@ function getDisplayedReference() {
 
 function renderCoach(reference, isSummary = false) {
   const hasReference = reference?.available === true
-  coachCard.hidden = !hasReference
+  const isCoachEditing = window.HudLayout?.isEditing?.('coach') === true
+  coachCard.dataset.hasReference = hasReference ? 'true' : 'false'
+  coachCard.hidden = !hasReference && !isCoachEditing
   deltaStrip.hidden = false
 
   if (!hasReference) {

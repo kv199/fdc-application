@@ -24,6 +24,24 @@
         "focusable": false,
         "skipTaskbar": false,
         "visible": false
+      },
+      {
+        "label": "settings",
+        "title": "Forza Horizon 6 HUD Settings",
+        "url": "settings.html",
+        "width": 460,
+        "height": 720,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": true,
+        "transparent": false,
+        "shadow": true,
+        "alwaysOnTop": true,
+        "focus": true,
+        "focusable": true,
+        "skipTaskbar": false,
+        "visible": false
       }
     ],
     "security": {
