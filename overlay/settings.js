@@ -88,6 +88,23 @@
     setStatus('READY')
   }
 
+  function setLayoutEditingState(target, isEditing) {
+    if (!['coach', 'delta', 'hud'].includes(target)) return
+
+    if (isEditing) {
+      editingTarget = target
+      updateLayoutRows()
+      setStatus(`EDITING ${target.toUpperCase()} - DRAG IT IN THE HUD`)
+      return
+    }
+
+    if (editingTarget === target) {
+      editingTarget = null
+      updateLayoutRows()
+      setStatus('POSITION SAVED')
+    }
+  }
+
   for (const row of document.querySelectorAll('[data-layout-target]')) {
     const target = row.dataset.layoutTarget
     row.querySelector('[data-layout-action="edit"]').addEventListener('click', () => selectLayoutTarget(target))
@@ -113,5 +130,5 @@
     })
   }
 
-  globalScope.SettingsController = { cancelEdit }
+  globalScope.SettingsController = { cancelEdit, setLayoutEditingState }
 })(typeof globalThis === 'undefined' ? this : globalThis)

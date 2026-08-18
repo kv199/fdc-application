@@ -14,9 +14,11 @@ fn set_window_interaction<R: Runtime>(
     enabled: bool,
 ) -> tauri::Result<()> {
     if enabled {
-        window.set_focusable(true)?;
+        // Keep Settings above the full-screen overlay while the user drags a target.
+        // The non-focusable window can still receive pointer events when click-through
+        // is disabled, but it cannot steal focus from Settings.
+        window.set_focusable(false)?;
         window.set_ignore_cursor_events(false)?;
-        window.set_focus()?;
     } else {
         window.set_ignore_cursor_events(true)?;
         window.set_focusable(false)?;
@@ -54,6 +56,25 @@ fn set_window_edit_mode(app: AppHandle, enabled: bool) -> tauri::Result<()> {
     };
 
     set_window_interaction(&window, enabled)
+}
+
+#[tauri::command]
+fn notify_layout_state(app: AppHandle, target: String, editing: bool) -> Result<(), String> {
+    if !["coach", "delta", "hud"].contains(&target.as_str()) {
+        return Err("unknown layout target".to_string());
+    }
+
+    let value = if editing { "true" } else { "false" };
+    let script = format!(
+        "window.SettingsController?.setLayoutEditingState?.('{}', {})",
+        target, value
+    );
+
+    if let Some(settings) = app.get_webview_window("settings") {
+        settings.eval(&script).map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -101,6 +122,7 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             set_window_edit_mode,
+            notify_layout_state,
             layout_action,
             set_hud_visibility
         ])
@@ -143,10 +165,6 @@ fn main() {
             let menu = MenuBuilder::new(app)
                 .text("settings", "Settings")
                 .separator()
-                .text("edit-coach", "Edit Coach position")
-                .text("reset-coach", "Reset Coach position")
-                .text("exit-edit", "Exit edit mode")
-                .separator()
                 .text("quit", "Quit")
                 .build()?;
 
@@ -163,19 +181,6 @@ fn main() {
                         let _ = show_settings(app);
                         return;
                     }
-
-                    let Some(window) = app.get_webview_window("main") else {
-                        return;
-                    };
-
-                    let script = match event.id().as_ref() {
-                        "edit-coach" => "window.HudLayout?.enterEditMode?.('coach')",
-                        "reset-coach" => "window.HudLayout?.resetPosition?.('coach')",
-                        "exit-edit" => "window.HudLayout?.exitEditMode?.()",
-                        _ => return,
-                    };
-
-                    let _ = window.eval(script);
                 });
 
             if let Some(icon) = app.default_window_icon().cloned() {

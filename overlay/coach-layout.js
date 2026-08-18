@@ -128,6 +128,12 @@
     let dragOffsetX = 0
     let dragOffsetY = 0
 
+    function notifySettingsEditingState(name, editing) {
+      const invoke = globalScope.__TAURI_INTERNALS__?.invoke
+      if (typeof invoke !== 'function') return Promise.resolve()
+      return Promise.resolve(invoke('notify_layout_state', { target: name, editing })).catch(() => {})
+    }
+
     function syncHudFrameSize() {
       const hudRect = hud.getBoundingClientRect()
       if (!hudRect.width || !hudRect.height) return
@@ -223,6 +229,7 @@
       editingSnapshot = null
       elements[name].setAttribute('aria-grabbed', 'false')
       setNativeInteraction(false)
+      notifySettingsEditingState(name, false)
       refreshLayout()
     }
 
@@ -246,6 +253,7 @@
       document.body.classList.add('is-editing')
       document.body.dataset.editingTarget = name
       setNativeInteraction(true)
+      notifySettingsEditingState(name, true)
     }
 
     function savePosition() {
@@ -340,13 +348,6 @@
     resizeObserver?.observe(hud)
 
     window.addEventListener('keydown', event => {
-      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'e') {
-        event.preventDefault()
-        if (editingTarget) cancelEditMode()
-        else enterEditMode('coach')
-        return
-      }
-
       if (event.key === 'Escape' && editingTarget) {
         event.preventDefault()
         cancelEditMode()
@@ -357,11 +358,9 @@
 
     const api = {
       enterEditMode,
-      exitEditMode: savePosition,
       savePosition,
       cancelEditMode,
       resetPosition,
-      toggleEditMode: () => (editingTarget ? cancelEditMode() : enterEditMode('coach')),
       isEditing: name => editingTarget === name,
       refreshPosition: refreshLayout,
       refreshLayout,

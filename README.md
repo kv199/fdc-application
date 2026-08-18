@@ -25,14 +25,13 @@ is shown automatically on the first launch and hides to the tray when closed.
 Use `EDIT` in Settings, drag the selected target in the overlay, then press
 `SAVE` in Settings or on the target itself. Closing Settings during an edit
 cancels the uncommitted position. Positions are stored locally and clamped to
-the primary monitor. The legacy tray Coach edit/reset commands remain
-available.
+the primary monitor. Settings is the only layout entry point in the native HUD.
 
 Settings also controls the five HUD content blocks: tires, throttle and brake,
 steering, gear/speed/RPM, and input history. Disabled blocks disappear and the
 remaining HUD grid contracts; disabling every block hides the telemetry HUD.
 Visibility choices are stored locally. In a browser preview, use
-`?demo=1&corner=entry&edit=1` or press `Ctrl+Shift+E` to edit the Coach.
+`?demo=1&corner=entry&edit=1` to edit the Coach.
 
 The Reference Coach can be previewed without Forza in demo mode:
 
