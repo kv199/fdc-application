@@ -209,8 +209,13 @@ body {
   color: #ffd400;
 }
 
-.gear__status[data-status='calibrated'] {
+.gear__status[data-status='calibrated'],
+.gear__status[data-status='optimal'] {
   color: var(--gas);
+}
+
+.gear__status[data-status='observed'] {
+  color: #38bdf8;
 }
 
 .hud.is-redline .gear {

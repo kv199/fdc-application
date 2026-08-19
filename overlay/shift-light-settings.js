@@ -8,6 +8,7 @@
     sampleCount: 0,
     carKey: null,
     currentGear: null,
+    method: null,
     gears: []
   }
 
@@ -20,7 +21,9 @@
           gear: gear.gear,
           status: gear.status === 'calibrated' ? 'calibrated' : 'learning',
           shiftRpm: Number.isFinite(gear.shiftRpm) ? Math.round(gear.shiftRpm) : null,
-          sampleCount: Number.isFinite(gear.sampleCount) ? Math.max(0, Math.round(gear.sampleCount)) : 0
+          sampleCount: Number.isFinite(gear.sampleCount) ? Math.max(0, Math.round(gear.sampleCount)) : 0,
+          method: ['observed', 'optimal'].includes(gear.method) ? gear.method : null,
+          ratioDrop: Number.isFinite(gear.ratioDrop) ? gear.ratioDrop : null
         }))
         .sort((left, right) => left.gear - right.gear)
       : []
@@ -34,6 +37,7 @@
       currentGear: Number.isInteger(state.currentGear) && state.currentGear >= 1 && state.currentGear <= 10
         ? state.currentGear
         : null,
+      method: ['observed', 'optimal'].includes(state.method) ? state.method : null,
       gears
     }
   }

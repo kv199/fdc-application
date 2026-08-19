@@ -81,33 +81,50 @@ The provider sends a temporary diagnostic message beside the gear output:
 {
   "type": "shift_light",
   "shiftLight": {
-    "status": "learning",
+    "status": "calibrated",
     "phase": "approach",
-      "shiftRpm": null,
-      "sampleCount": 3,
-      "carKey": "fh6:123:800:8000",
-      "currentGear": 3,
-      "gears": [
-        { "gear": 2, "status": "learning", "shiftRpm": null, "sampleCount": 2 },
-        { "gear": 3, "status": "calibrated", "shiftRpm": 7925, "sampleCount": 5 }
-      ]
-    }
+    "shiftRpm": 7550,
+    "sampleCount": 48,
+    "carKey": "fh6:123:800:8000",
+    "currentGear": 3,
+    "method": "optimal",
+    "gears": [
+      {
+        "gear": 2,
+        "status": "calibrated",
+        "shiftRpm": 7425,
+        "sampleCount": 45,
+        "method": "optimal",
+        "ratioDrop": 0.80
+      },
+      {
+        "gear": 3,
+        "status": "calibrated",
+        "shiftRpm": 7550,
+        "sampleCount": 48,
+        "method": "optimal",
+        "ratioDrop": 0.78
+      }
+    ]
   }
-  ```
+}
+```
 
-  The HUD maps `phase` to its existing normal/redline/shift visual states. The
-  provider learns and persists the target; the HUD never reads the database or
-  derives a car profile locally. `gears` contains only forward gears observed
-  for the current car/tune profile. `status` is intentionally exposed during
-  this MVP and may be removed after live validation.
+The HUD maps `phase` to its existing normal/redline/shift visual states. The
+provider builds a WOT power curve, derives each relative gear ratio from engine
+RPM and driven-wheel rotation, and persists the RPM where the next gear's
+post-shift power overtakes the current gear. `method: "observed"` identifies the
+older five-shift fallback; `method: "optimal"` identifies a validated power
+crossover. A stored optimal row is activated only after its `ratioDrop` matches
+the live gearbox, so a gearbox change cannot silently reuse the wrong target.
 
-  Settings shows this state as a per-gear diagnostic table and can request a
-  reset for the active profile by sending `{"type":"shift_light_reset"}` over
-  the same local WebSocket. The provider owns the database deletion, emits a
-  fresh learning state to all HUD clients, and acknowledges the requesting
-  client with `shift_light_reset_result`. The Settings page queues the command
-  while the socket reconnects. The tray also exposes the reset action without
-  opening or focusing the Settings window, so it does not pause the game.
+Settings shows this state as a per-gear diagnostic table and can request a
+reset for the active profile by sending `{"type":"shift_light_reset"}` over
+the same local WebSocket. The provider owns the database deletion, emits a
+fresh learning state to all HUD clients, and acknowledges the requesting
+client with `shift_light_reset_result`. The Settings page queues the command
+while the socket reconnects. The tray also exposes the reset action without
+opening or focusing the Settings window, so it does not pause the game.
 
 ## Reference Coach contract
 

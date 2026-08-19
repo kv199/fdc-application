@@ -485,6 +485,10 @@ h1 {
   color: #a1a1aa;
 }
 
+.calibration-table tr[data-state='observed'] td:last-child {
+  color: #38bdf8;
+}
+
 .settings-button--danger {
   width: 100%;
   margin-top: 14px;

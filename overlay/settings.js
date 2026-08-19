@@ -119,17 +119,18 @@
 
     shiftLightCarKey.textContent = state.carKey
     shiftLightCurrentTarget.textContent = state.shiftRpm ? `${state.shiftRpm} RPM` : 'FALLBACK'
-    shiftLightState.textContent = `${state.status.toUpperCase()}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
+    const activeState = state.method?.toUpperCase() || state.status.toUpperCase()
+    shiftLightState.textContent = `${activeState}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
     shiftLightGearRows.replaceChildren()
 
     for (const gear of state.gears) {
       const row = document.createElement('tr')
-      row.dataset.state = gear.status
+      row.dataset.state = gear.method || gear.status
       const values = [
         `G${gear.gear}`,
         gear.shiftRpm ? `${gear.shiftRpm} RPM` : '—',
         String(gear.sampleCount),
-        gear.status.toUpperCase()
+        gear.method?.toUpperCase() || gear.status.toUpperCase()
       ]
       for (const value of values) {
         const cell = document.createElement('td')

@@ -72,7 +72,8 @@ let latestShiftLight = {
   phase: 'normal',
   shiftRpm: null,
   sampleCount: 0,
-  carKey: null
+  carKey: null,
+  method: null
 }
 let latestCornerTemplate = null
 let latestCornerState = null
@@ -345,8 +346,10 @@ function queueShiftLight(shiftLight) {
     ? shiftLight.phase
     : 'normal'
   latestShiftLight = { ...latestShiftLight, ...shiftLight, status, phase }
-  shiftStatus.textContent = status.toUpperCase()
-  shiftStatus.dataset.status = status
+  const method = ['observed', 'optimal'].includes(shiftLight.method) ? shiftLight.method : null
+  latestShiftLight.method = method
+  shiftStatus.textContent = method?.toUpperCase() || status.toUpperCase()
+  shiftStatus.dataset.status = method || status
   scheduleTelemetryRender()
 }
 
