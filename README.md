@@ -103,8 +103,11 @@ The provider sends a temporary diagnostic message beside the gear output:
 
   Settings shows this state as a per-gear diagnostic table and can request a
   reset for the active profile by sending `{"type":"shift_light_reset"}` over
-  the same local WebSocket. The provider owns the database deletion and emits
-  a fresh learning state to all HUD clients.
+  the same local WebSocket. The provider owns the database deletion, emits a
+  fresh learning state to all HUD clients, and acknowledges the requesting
+  client with `shift_light_reset_result`. The Settings page queues the command
+  while the socket reconnects. The tray also exposes the reset action without
+  opening or focusing the Settings window, so it does not pause the game.
 
 ## Reference Coach contract
 

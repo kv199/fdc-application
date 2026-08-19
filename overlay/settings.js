@@ -24,6 +24,9 @@
   let editingTarget = null
   let shiftLightSocket = null
   let shiftLightReconnectTimer = null
+  let shiftLightResetQueued = false
+  let shiftLightResetPending = false
+  let latestShiftLightState = null
 
   function setStatus(message, error = false) {
     status.textContent = message
@@ -107,10 +110,11 @@
     const state = typeof normalizeShiftLightState === 'function'
       ? normalizeShiftLightState(value)
       : value
+    latestShiftLightState = state
     const hasProfile = Boolean(state?.carKey)
     shiftLightEmpty.hidden = hasProfile
     shiftLightProfile.hidden = !hasProfile
-    shiftLightReset.disabled = !hasProfile
+    shiftLightReset.disabled = !hasProfile || shiftLightResetQueued || shiftLightResetPending
     if (!hasProfile) return
 
     shiftLightCarKey.textContent = state.carKey
@@ -145,6 +149,32 @@
     }
   }
 
+  function flushShiftLightReset() {
+    if (!shiftLightResetQueued || !shiftLightSocket || shiftLightSocket.readyState !== 1) return
+    try {
+      shiftLightSocket.send(JSON.stringify({ type: 'shift_light_reset' }))
+      shiftLightResetQueued = false
+      shiftLightResetPending = true
+      shiftLightReset.disabled = true
+      setStatus('RESETTING CALIBRATION')
+    } catch {
+      shiftLightResetQueued = true
+      scheduleShiftLightReconnect()
+    }
+  }
+
+  function requestShiftLightReset() {
+    if (shiftLightResetPending || shiftLightResetQueued) return
+    shiftLightResetQueued = true
+    shiftLightReset.disabled = true
+    if (!shiftLightSocket || shiftLightSocket.readyState !== 1) {
+      setStatus('WAITING FOR CALIBRATION SERVICE')
+      connectShiftLight()
+      return
+    }
+    flushShiftLightReset()
+  }
+
   function scheduleShiftLightReconnect() {
     if (shiftLightReconnectTimer !== null) return
     shiftLightReconnectTimer = setTimeout(() => {
@@ -159,10 +189,23 @@
     const url = globalScope.HudConnection?.resolveCoDriverWebSocketUrl?.() || 'ws://127.0.0.1:3001/_ws'
     try {
       shiftLightSocket = new WebSocket(url)
+      shiftLightSocket.addEventListener('open', () => {
+        flushShiftLightReset()
+      })
       shiftLightSocket.addEventListener('message', (event) => {
         try {
           const payload = JSON.parse(event.data)
           if (payload.type === 'shift_light') renderShiftLightState(payload.shiftLight)
+          if (payload.type === 'shift_light_reset_result') {
+            shiftLightResetPending = false
+            if (payload.ok) {
+              shiftLightReset.disabled = !latestShiftLightState?.carKey
+              setStatus('CALIBRATION RESET COMPLETE')
+            } else {
+              shiftLightReset.disabled = !latestShiftLightState?.carKey
+              setStatus(payload.message || 'Unable to reset calibration', true)
+            }
+          }
           if (payload.type === 'forza_status') {
             setTelemetryState(payload.connected ? 'is-live' : 'is-waiting')
           }
@@ -171,6 +214,10 @@
         }
       })
       shiftLightSocket.addEventListener('close', () => {
+        if (shiftLightResetPending) {
+          shiftLightResetPending = false
+          shiftLightResetQueued = true
+        }
         shiftLightSocket = null
         scheduleShiftLightReconnect()
       })
@@ -299,16 +346,16 @@
   }
 
   shiftLightReset.addEventListener('click', () => {
-    if (!shiftLightSocket || shiftLightSocket.readyState !== 1) {
-      setStatus('CALIBRATION SERVICE OFFLINE', true)
-      return
-    }
-    shiftLightSocket.send(JSON.stringify({ type: 'shift_light_reset' }))
-    setStatus('CALIBRATION RESET')
+    requestShiftLightReset()
   })
 
   setTelemetryState('is-offline')
   renderShiftLightState(null)
   connectShiftLight()
-  globalScope.SettingsController = { cancelEdit, setLayoutEditingState, setTelemetryState }
+  globalScope.SettingsController = {
+    cancelEdit,
+    setLayoutEditingState,
+    setTelemetryState,
+    resetShiftLight: requestShiftLightReset
+  }
 })(typeof globalThis === 'undefined' ? this : globalThis)
