@@ -72,8 +72,6 @@ body {
   width: 620px;
   height: 69px;
   overflow: hidden;
-  border: 1px solid var(--rule);
-  border-radius: 2px;
   background: var(--panel);
   transform: scale(var(--hud-scale));
   transform-origin: center;
@@ -192,32 +190,6 @@ body {
   line-height: 1;
 }
 
-.gear__status {
-  position: absolute;
-  top: 50%;
-  right: 3px;
-  padding: 1px 2px;
-  color: #a1a1aa;
-  font-size: 7px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1;
-  transform: translateY(-50%);
-}
-
-.gear__status[data-status='learning'] {
-  color: #ffd400;
-}
-
-.gear__status[data-status='calibrated'],
-.gear__status[data-status='optimal'] {
-  color: var(--gas);
-}
-
-.gear__status[data-status='observed'] {
-  color: #38bdf8;
-}
-
 .hud.is-redline .gear {
   background: rgb(255 49 43 / 24%);
 }
@@ -271,8 +243,6 @@ body {
   min-height: 148px;
   padding: 16px 18px;
   overflow: visible;
-  border: 1px solid var(--rule);
-  border-radius: 4px;
   background: rgb(8 10 12 / 82%);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
@@ -474,7 +444,6 @@ body {
 
 .coachbar.is-editing,
 body.is-editing .coachbar {
-  border-color: #fbbf24;
   outline: 2px dashed rgb(251 191 36 / 80%);
   outline-offset: 5px;
   cursor: grab;
@@ -486,56 +455,40 @@ body.is-editing .coachbar:active {
   cursor: grabbing;
 }
 
-.coachbar:has(.coach__status[data-phase='BRAKE']) {
-  border-color: rgb(255 49 43 / 72%);
-}
-
-.coachbar:has(.coach__status[data-phase='BLEND']) {
-  border-color: rgb(251 191 36 / 72%);
-}
-
-.coachbar:has(.coach__status[data-phase='POWER']) {
-  border-color: rgb(105 232 63 / 72%);
-}
-
 .coachbar:has(.coach__status[data-phase='COAST']) {
-  border-color: rgb(226 232 240 / 58%);
+  background: rgb(8 10 12 / 88%);
 }
 
 .coachbar:has(.coach__status[data-cue-kind='brake_late']),
 .coachbar:has(.coach__status[data-cue-kind='brake_early']) {
-  border-color: rgb(255 49 43 / 72%);
+  background: rgb(103 24 21 / 30%);
 }
 
 .coachbar:has(.coach__status[data-cue-kind='release_late']),
 .coachbar:has(.coach__status[data-cue-kind='apex_too_fast']),
 .coachbar:has(.coach__status[data-cue-kind='apex_too_slow']) {
-  border-color: rgb(251 191 36 / 72%);
+  background: rgb(92 66 15 / 30%);
 }
 
 .coachbar:has(.coach__status[data-cue-kind='throttle_late']),
 .coachbar:has(.coach__status[data-cue-kind='throttle_early']),
 .coachbar:has(.coach__status[data-cue-kind='good']) {
-  border-color: rgb(105 232 63 / 72%);
+  background: rgb(35 83 28 / 34%);
 }
 
 .coachbar[data-delta-state='green'] {
-  border-color: rgb(105 232 63 / 78%);
   background: rgb(35 83 28 / 34%);
 }
 
 .coachbar[data-delta-state='amber'] {
-  border-color: rgb(251 191 36 / 78%);
   background: rgb(92 66 15 / 30%);
 }
 
 .coachbar[data-delta-state='red'] {
-  border-color: rgb(255 49 43 / 78%);
   background: rgb(103 24 21 / 30%);
 }
 
 body.is-editing .coachbar {
-  border-color: #fbbf24;
   background: rgb(8 10 12 / 88%);
 }
 
@@ -675,8 +628,6 @@ body.is-editing .coachbar {
 .delta-strip {
   width: 100%;
   padding: 8px 12px 10px;
-  border: 1px solid rgb(226 232 240 / 34%);
-  border-radius: 4px;
   background: rgb(8 10 12 / 74%);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
@@ -876,13 +827,7 @@ body.is-editing .coachbar {
   cursor: grabbing;
 }
 
-.delta-strip.is-editing,
-.hud-frame.is-editing {
-  border-color: #fbbf24;
-}
-
 body.is-editing .coachbar {
-  border-color: #fbbf24;
   background: rgb(8 10 12 / 88%);
 }
 

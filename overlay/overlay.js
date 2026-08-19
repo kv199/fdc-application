@@ -6,7 +6,6 @@ const brakeTrack = document.getElementById('brake-track')
 const speedValue = document.getElementById('speed-value')
 const gearValue = document.getElementById('gear-value')
 const rpmValue = document.getElementById('rpm-value')
-const shiftStatus = document.getElementById('shift-status')
 const steeringCanvas = document.getElementById('steering-canvas')
 const historyCanvas = document.getElementById('history-canvas')
 const coachCard = document.getElementById('coach-card')
@@ -346,10 +345,6 @@ function queueShiftLight(shiftLight) {
     ? shiftLight.phase
     : 'normal'
   latestShiftLight = { ...latestShiftLight, ...shiftLight, status, phase }
-  const method = ['observed', 'optimal'].includes(shiftLight.method) ? shiftLight.method : null
-  latestShiftLight.method = method
-  shiftStatus.textContent = method?.toUpperCase() || status.toUpperCase()
-  shiftStatus.dataset.status = method || status
   scheduleTelemetryRender()
 }
 
