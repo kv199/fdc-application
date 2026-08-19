@@ -694,3 +694,52 @@ h1 {
 .settings-status.is-error {
   color: #ff827d;
 }
+.source-section {
+  padding: 16px 20px 0;
+}
+
+.source-options {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.source-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid rgb(226 232 240 / 14%);
+  border-radius: 8px;
+  background: rgb(15 23 42 / 45%);
+  cursor: pointer;
+}
+
+.source-option:has(input:checked) {
+  border-color: rgb(105 232 63 / 60%);
+  background: rgb(105 232 63 / 8%);
+}
+
+.source-option input {
+  margin-top: 3px;
+  accent-color: #69e83f;
+}
+
+.source-option strong,
+.source-option small {
+  display: block;
+}
+
+.source-option strong {
+  color: #f8fafc;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.source-option small {
+  margin-top: 4px;
+  color: rgb(226 232 240 / 58%);
+  font-size: 11px;
+  line-height: 1.35;
+}

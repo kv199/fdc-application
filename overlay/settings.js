@@ -22,15 +22,14 @@
   const shiftLightReset = document.getElementById('shift-light-reset')
   const shiftLightHelp = document.getElementById('shift-light-help')
   const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
+  const telemetrySourceInputs = [...document.querySelectorAll('input[name="telemetry-source"]')]
   const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
   const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
   const settingsPanels = [...document.querySelectorAll('[data-settings-panel]')]
   let editingTarget = null
-  let shiftLightSocket = null
-  let shiftLightReconnectTimer = null
-  let shiftLightResetQueued = false
   let shiftLightResetPending = false
   let latestShiftLightState = null
+  let telemetrySource = globalScope.HudConnection?.readTelemetrySource?.() || 'direct'
 
   function selectSettingsTab(tabName) {
     for (const tab of settingsTabs) {
@@ -122,6 +121,29 @@
     telemetryStatusLabel.textContent = display.label
   }
 
+  function applyTelemetrySourceInput() {
+    for (const input of telemetrySourceInputs) input.checked = input.value === telemetrySource
+  }
+
+  async function selectTelemetrySource(source) {
+    const next = globalScope.HudConnection?.normalizeTelemetrySource?.(source) || 'direct'
+    if (next === telemetrySource) return
+    try {
+      await call('set_telemetry_source', { source: next })
+      telemetrySource = next
+      globalScope.HudConnection?.writeTelemetrySource?.(next)
+      applyTelemetrySourceInput()
+      if (next === 'direct') {
+        setStatus('DIRECT FORZA SELECTED')
+      } else {
+        setStatus('CO-DRIVER SUITE SELECTED')
+      }
+    } catch (error) {
+      applyTelemetrySourceInput()
+      setStatus(error.message || 'Unable to change telemetry source', true)
+    }
+  }
+
   function formatRpm(value) {
     return Number.isFinite(value) ? `${Math.round(value)} RPM` : '—'
   }
@@ -152,7 +174,7 @@
     const hasProfile = Boolean(state?.carKey)
     shiftLightEmpty.hidden = hasProfile
     shiftLightProfile.hidden = !hasProfile
-    shiftLightReset.disabled = !hasProfile || shiftLightResetQueued || shiftLightResetPending
+    shiftLightReset.disabled = !hasProfile || shiftLightResetPending
     if (!hasProfile) return
 
     shiftLightCarKey.textContent = state.carKey
@@ -219,84 +241,37 @@
     }
   }
 
-  function flushShiftLightReset() {
-    if (!shiftLightResetQueued || !shiftLightSocket || shiftLightSocket.readyState !== 1) return
-    try {
-      shiftLightSocket.send(JSON.stringify({ type: 'shift_light_reset' }))
-      shiftLightResetQueued = false
-      shiftLightResetPending = true
-      shiftLightReset.disabled = true
-      setStatus('RESETTING CALIBRATION')
-    } catch {
-      shiftLightResetQueued = true
-      scheduleShiftLightReconnect()
-    }
-  }
-
   function requestShiftLightReset() {
-    if (shiftLightResetPending || shiftLightResetQueued) return
-    shiftLightResetQueued = true
-    shiftLightReset.disabled = true
-    if (!shiftLightSocket || shiftLightSocket.readyState !== 1) {
-      setStatus('WAITING FOR CALIBRATION SERVICE')
-      connectShiftLight()
+    if (shiftLightResetPending || !latestShiftLightState?.carKey) return
+    const reset = globalScope.__TAURI_INTERNALS__?.invoke
+    if (typeof reset !== 'function') {
+      setStatus('TAURI COMMANDS ARE UNAVAILABLE', true)
       return
     }
-    flushShiftLightReset()
+    shiftLightResetPending = true
+    shiftLightReset.disabled = true
+    setStatus('RESETTING CALIBRATION')
+    Promise.resolve(reset('reset_shift_light'))
+      .then(() => {
+        shiftLightResetPending = false
+        shiftLightReset.disabled = !latestShiftLightState?.carKey
+        setStatus('CALIBRATION RESET COMPLETE')
+      })
+      .catch(error => {
+        shiftLightResetPending = false
+        shiftLightReset.disabled = !latestShiftLightState?.carKey
+        setStatus(error.message || 'Unable to reset calibration', true)
+      })
   }
 
-  function scheduleShiftLightReconnect() {
-    if (shiftLightReconnectTimer !== null) return
-    shiftLightReconnectTimer = setTimeout(() => {
-      shiftLightReconnectTimer = null
-      connectShiftLight()
-    }, 1500)
-  }
-
-  function connectShiftLight() {
-    if (typeof WebSocket !== 'function') return
-    if (shiftLightSocket && [0, 1].includes(shiftLightSocket.readyState)) return
-    const url = globalScope.HudConnection?.resolveCoDriverWebSocketUrl?.() || 'ws://127.0.0.1:3001/_ws'
-    try {
-      shiftLightSocket = new WebSocket(url)
-      shiftLightSocket.addEventListener('open', () => {
-        flushShiftLightReset()
-      })
-      shiftLightSocket.addEventListener('message', (event) => {
-        try {
-          const payload = JSON.parse(event.data)
-          if (payload.type === 'shift_light') renderShiftLightState(payload.shiftLight)
-          if (payload.type === 'shift_light_reset_result') {
-            shiftLightResetPending = false
-            if (payload.ok) {
-              shiftLightReset.disabled = !latestShiftLightState?.carKey
-              setStatus('CALIBRATION RESET COMPLETE')
-            } else {
-              shiftLightReset.disabled = !latestShiftLightState?.carKey
-              setStatus(payload.message || 'Unable to reset calibration', true)
-            }
-          }
-          if (payload.type === 'forza_status') {
-            setTelemetryState(payload.connected ? 'is-live' : 'is-waiting')
-          }
-        } catch {
-          // Ignore malformed messages from a closing local socket.
-        }
-      })
-      shiftLightSocket.addEventListener('close', () => {
-        if (shiftLightResetPending) {
-          shiftLightResetPending = false
-          shiftLightResetQueued = true
-        }
-        shiftLightSocket = null
-        scheduleShiftLightReconnect()
-      })
-      shiftLightSocket.addEventListener('error', () => {
-        shiftLightSocket?.close()
-      })
-    } catch {
-      scheduleShiftLightReconnect()
-    }
+  async function listenShiftLightEvents() {
+    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+    if (!eventApi || typeof eventApi.listen !== 'function') return
+    await eventApi.listen('hud_shift_light', event => {
+      renderShiftLightState(event.payload)
+      shiftLightResetPending = false
+      shiftLightReset.disabled = !latestShiftLightState?.carKey
+    })
   }
 
   function updateLayoutRows() {
@@ -414,6 +389,11 @@
   }
   selectSettingsTab('hud')
 
+  applyTelemetrySourceInput()
+  for (const input of telemetrySourceInputs) {
+    input.addEventListener('change', () => selectTelemetrySource(input.value))
+  }
+
   shiftLightHelp?.addEventListener('click', () => {
     const expanded = shiftLightHelp.getAttribute('aria-expanded') === 'true'
     shiftLightHelp.setAttribute('aria-expanded', String(!expanded))
@@ -445,11 +425,15 @@
 
   setTelemetryState('is-offline')
   renderShiftLightState(null)
-  connectShiftLight()
+  void listenShiftLightEvents()
   globalScope.SettingsController = {
     cancelEdit,
     setLayoutEditingState,
     setTelemetryState,
-    resetShiftLight: requestShiftLightReset
+    resetShiftLight: requestShiftLightReset,
+    setTelemetrySource: source => {
+      telemetrySource = globalScope.HudConnection?.normalizeTelemetrySource?.(source) || 'direct'
+      applyTelemetrySourceInput()
+    }
   }
 })(typeof globalThis === 'undefined' ? this : globalThis)

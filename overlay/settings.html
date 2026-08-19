@@ -21,6 +21,29 @@
       <p class="settings-copy">Edit each overlay position and choose which telemetry blocks stay visible.</p>
     </header>
 
+    <section class="source-section" aria-labelledby="source-title">
+      <div class="settings-section__heading">
+        <h2 id="source-title">TELEMETRY SOURCE</h2>
+        <span>CHOOSE THE ACTIVE INPUT</span>
+      </div>
+      <div class="source-options">
+        <label class="source-option">
+          <input type="radio" name="telemetry-source" value="direct">
+          <span>
+            <strong>Direct Forza</strong>
+            <small>Receive Data Out directly on UDP 5301. No co-driver required.</small>
+          </span>
+        </label>
+        <label class="source-option">
+          <input type="radio" name="telemetry-source" value="suite">
+          <span>
+            <strong>co-driver Suite</strong>
+            <small>Use the provider WebSocket for Coach, corners and reference laps.</small>
+          </span>
+        </label>
+      </div>
+    </section>
+
     <div class="settings-tabs" role="tablist" aria-label="Settings categories">
       <button id="hud-tab" class="settings-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="hud-panel" data-settings-tab="hud">HUD</button>
       <button id="shift-light-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="shift-light-panel" tabindex="-1" data-settings-tab="shift-light">SHIFT LIGHT</button>
@@ -196,6 +219,7 @@
 
   <script src="connection.js"></script>
   <script src="shift-light-settings.js"></script>
+  <script src="tauri-events.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

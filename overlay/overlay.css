@@ -910,3 +910,7 @@ body.is-editing .coachbar {
     font-size: 15px;
   }
 }
+body[data-telemetry-source='direct'] #coach-card,
+body[data-telemetry-source='direct'] #delta-strip {
+  display: none;
+}

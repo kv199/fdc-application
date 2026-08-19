@@ -36,6 +36,7 @@ const tireVisualElements = {
 }
 
 const WS_URL = window.HudConnection.resolveCoDriverWebSocketUrl()
+let telemetrySource = window.HudConnection.readTelemetrySource()
 const STEERING_WHEEL_ASSET = 'assets/steering-wheels/default.svg'
 const STEERING_WHEEL_RANGE_DEGREES = 90
 const RECONNECT_MS = 1000
@@ -57,6 +58,8 @@ let latestLiveLapTimeSeconds = null
 let latestSteer = 0
 let renderScheduled = false
 let reconnectTimer = null
+let directStartPending = false
+let directEventUnlisteners = []
 let socket = null
 let forzaConnected = false
 let lastConnectionState = null
@@ -149,6 +152,16 @@ function notifyConnectionState(state) {
   if (typeof invoke === 'function') {
     Promise.resolve(invoke('notify_connection_state', { state })).catch(() => {})
   }
+}
+
+function invokeTauri(command, args) {
+  const invoke = window.__TAURI_INTERNALS__?.invoke
+  if (typeof invoke !== 'function') return Promise.reject(new Error('Tauri commands are unavailable'))
+  return Promise.resolve(invoke(command, args))
+}
+
+function applyTelemetrySourcePresentation() {
+  document.body.dataset.telemetrySource = telemetrySource
 }
 
 function setRpmSignal(signal) {
@@ -501,11 +514,14 @@ function renderTelemetry() {
   renderCoach(displayedReference.reference, displayedReference.isSummary)
   renderCorner(latestCornerTemplate, latestCornerState, displayedReference.reference, displayedReference.isSummary)
   if (DEMO_MODE) setConnection(telemetry.isRaceOn ? 'is-live' : 'is-waiting')
+  else if (telemetrySource === 'direct') setConnection(forzaConnected && telemetry.isRaceOn ? 'is-live' : 'is-waiting')
   else if (!socket) setConnection('is-offline')
   else setConnection(forzaConnected && telemetry.isRaceOn ? 'is-live' : 'is-waiting')
 }
 
 function queueTelemetry(telemetry) {
+  const shiftLightState = window.HudShiftLightRuntime?.update?.(telemetry)
+  if (shiftLightState) queueShiftLight(shiftLightState)
   const raceRestart = window.ReferenceCoach.isRaceRestart(latestTelemetry, telemetry)
   const lapCurrentSeconds = finiteStateNumber(telemetry?.lap?.current)
   if (telemetry?.isRaceOn === true && lapCurrentSeconds !== null && lapCurrentSeconds >= 0) {
@@ -558,6 +574,24 @@ function resetCornerState({ preserveLapSummary = false, promotePending = true } 
     clearLapSummary({ promotePending })
   }
   else pendingReference = null
+}
+
+function resetSourcePresentation() {
+  latestTelemetry = null
+  latestLiveLapTimeSeconds = null
+  latestSteer = 0
+  historySamples = []
+  latestShiftLight = {
+    status: 'fallback',
+    phase: 'normal',
+    shiftRpm: null,
+    sampleCount: 0,
+    carKey: null,
+    method: null
+  }
+  window.HudShiftLightRuntime?.update?.(null)
+  setRpmSignal('normal')
+  scheduleTelemetryRender()
 }
 
 function queueCornerTemplate(template) {
@@ -624,15 +658,78 @@ function queueReference(payload) {
 }
 
 function scheduleReconnect() {
-  if (reconnectTimer !== null || DEMO_MODE) return
+  if (reconnectTimer !== null || DEMO_MODE || telemetrySource !== 'suite') return
   reconnectTimer = window.setTimeout(() => {
     reconnectTimer = null
-    connect()
+    connectSuite()
   }, RECONNECT_MS)
 }
 
-function connect() {
-  if (DEMO_MODE || (socket && socket.readyState < WebSocket.CLOSING)) return
+async function listenDirectEvents() {
+  if (directEventUnlisteners.length > 0) return
+  const eventApi = window.HudTauriEvents?.getEventApi?.()
+  if (!eventApi || typeof eventApi.listen !== 'function') {
+    throw new Error('Tauri event API is unavailable')
+  }
+
+  const unlistenTelemetry = await eventApi.listen('direct_telemetry', event => {
+    if (telemetrySource === 'direct' && event.payload) queueTelemetry(event.payload)
+  })
+  const unlistenStatus = await eventApi.listen('direct_status', event => {
+    if (telemetrySource !== 'direct') return
+    const state = event.payload?.state
+    if (state === 'is-live') {
+      forzaConnected = true
+      setConnection('is-live')
+    } else if (state === 'is-waiting') {
+      forzaConnected = false
+      setConnection('is-waiting')
+      scheduleTelemetryRender()
+    } else {
+      forzaConnected = false
+      setConnection('is-offline')
+      scheduleTelemetryRender()
+    }
+  })
+  directEventUnlisteners = [unlistenTelemetry, unlistenStatus]
+}
+
+async function disconnectDirect() {
+  try {
+    await invokeTauri('stop_direct_source')
+  } catch {
+    // The source may already be stopped during application shutdown.
+  }
+  for (const unlisten of directEventUnlisteners) {
+    try {
+      await unlisten()
+    } catch {
+      // Ignore an event listener that was already released.
+    }
+  }
+  directEventUnlisteners = []
+  directStartPending = false
+}
+
+async function connectDirect() {
+  if (DEMO_MODE || directStartPending || telemetrySource !== 'direct') return
+  directStartPending = true
+  forzaConnected = false
+  setConnection('is-waiting')
+  try {
+    await invokeTauri('start_direct_source')
+    await listenDirectEvents()
+  } catch (error) {
+    await disconnectDirect()
+    setConnection('is-offline')
+    console.warn('[hud] unable to start Direct Forza source', error)
+  } finally {
+    directStartPending = false
+  }
+}
+
+function connectSuite() {
+  if (DEMO_MODE || telemetrySource !== 'suite' || (socket && socket.readyState < WebSocket.CLOSING)) return
 
   forzaConnected = false
   setConnection('is-waiting')
@@ -642,7 +739,6 @@ function connect() {
     try {
       const message = JSON.parse(event.data)
       if (message.type === 'telemetry' && message.t) queueTelemetry(message.t)
-      if (message.type === 'shift_light') queueShiftLight(message.shiftLight)
       if (message.type === 'corner_template') queueCornerTemplate(message.template)
       if (message.type === 'corner_state') queueCornerState(message.cornerState)
       if (message.type === 'coach_reference') queueReference(message.reference)
@@ -671,10 +767,34 @@ function connect() {
     resetCornerState({ promotePending: false })
     setConnection('is-offline')
     scheduleTelemetryRender()
-    scheduleReconnect()
+    if (telemetrySource === 'suite') scheduleReconnect()
   })
 
   socket.addEventListener('error', () => socket?.close())
+}
+
+async function setTelemetrySource(source) {
+  const next = window.HudConnection.normalizeTelemetrySource(source)
+  if (next === telemetrySource) return
+
+  telemetrySource = window.HudConnection.writeTelemetrySource(next)
+  applyTelemetrySourcePresentation()
+  if (reconnectTimer !== null) {
+    window.clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+
+  resetSourcePresentation()
+  if (telemetrySource === 'direct') {
+    socket?.close()
+    socket = null
+    resetCornerState({ promotePending: false })
+    await connectDirect()
+  } else {
+    await disconnectDirect()
+    resetCornerState({ promotePending: false })
+    connectSuite()
+  }
 }
 
 function setDemoCorner(corner, schedule = true) {
@@ -801,10 +921,22 @@ window.addEventListener('resize', () => {
 
 window.HudOverlay = {
   refresh: scheduleTelemetryRender,
+  setTelemetrySource,
+  resetShiftLight: async () => {
+    try {
+      await window.HudShiftLightRuntime?.reset?.()
+      return true
+    } catch (error) {
+      console.warn('[hud] unable to reset Shift Light', error)
+      return false
+    }
+  },
   syncConnectionState: () => {
     if (lastConnectionState) notifyConnectionState(lastConnectionState)
   }
 }
 
+applyTelemetrySourcePresentation()
 if (DEMO_MODE) startDemo()
-else connect()
+else if (telemetrySource === 'direct') connectDirect()
+else connectSuite()

@@ -3,8 +3,9 @@
 A lightweight, always-on-top telemetry overlay for Forza Horizon 6.
 
 The application renders tire temperatures, throttle and brake input, steering,
-the current gear, and input history over the game. It consumes the local
-WebSocket telemetry stream exposed by [co-driver](https://github.com/Ojansen/co-driver).
+the current gear, and input history over the game. It can consume the local
+WebSocket telemetry stream exposed by [co-driver](https://github.com/Ojansen/co-driver)
+or receive FH6 Data Out directly over UDP.
 
 This directory is the HUD application inside Forza Horizon 6 Suite. It remains
 self-contained so it can be exported and published as a standalone repository,
@@ -73,68 +74,36 @@ the local WebSocket. `co-driver` remains responsible for matching telemetry to
 track corners; the HUD presents the number, direction, phase, distance, and any
 explicit reference cue supplied by the backend.
 
-## Shift-light calibration contract
+## Telemetry sources and Shift Light
 
-The provider sends a temporary diagnostic message beside the gear output:
+The release executable has one universal build with two explicit source modes
+in Settings:
 
-```json
-{
-  "type": "shift_light",
-  "shiftLight": {
-    "status": "calibrated",
-    "phase": "approach",
-    "shiftRpm": 7550,
-    "sampleCount": 48,
-    "carKey": "fh6:123:800:8000",
-    "currentGear": 3,
-    "method": "optimal",
-    "gears": [
-      {
-        "gear": 2,
-        "status": "calibrated",
-        "shiftRpm": 7425,
-        "sampleCount": 45,
-        "method": "optimal",
-        "ratioDrop": 0.80
-      },
-      {
-        "gear": 3,
-        "status": "calibrated",
-        "shiftRpm": 7550,
-        "sampleCount": 48,
-        "method": "optimal",
-        "ratioDrop": 0.78
-      }
-    ]
-  }
-}
-```
+- `Direct Forza` binds `127.0.0.1:5301`, decodes FH6 Data Out packets locally,
+  and works without Docker or co-driver. It renders the compact telemetry HUD
+  and HUD-owned Shift Light; Coach, reference, corner, and lap-delta surfaces
+  stay hidden because they require the Suite analysis path.
+- `co-driver Suite` connects to `ws://127.0.0.1:3001/_ws` and preserves the
+  existing Coach, reference, corner, and lap-delta behavior. The HUD does not
+  bind UDP in this mode.
 
-The HUD maps `phase` to its existing normal/redline/shift visual states. The
-provider builds a WOT power curve, derives each relative gear ratio from engine
-RPM and driven-wheel rotation, and persists the RPM where the next gear's
-post-shift power overtakes the current gear. `method: "observed"` identifies the
-older five-shift fallback; `method: "optimal"` identifies a validated power
-crossover. A stored optimal row is activated only after its `ratioDrop` matches
-the live gearbox, so a gearbox change cannot silently reuse the wrong target.
+The modes are mutually exclusive: Docker/co-driver must be stopped before
+Direct mode can bind UDP `5301`, and Direct mode must be stopped before the
+provider can use that port. The selected mode is stored in local HUD storage;
+there is no second executable or installer variant.
 
-Settings shows this state as a per-gear diagnostic table and can request a
-reset for the active profile by sending `{"type":"shift_light_reset"}` over
-the same local WebSocket. The provider owns the database deletion, emits a
-fresh learning state to all HUD clients, and acknowledges the requesting
-client with `shift_light_reset_result`. The Settings page queues the command
-while the socket reconnects. The tray also exposes the reset action without
-opening or focusing the Settings window, so it does not pause the game.
+Shift Light is calculated by the HUD in both modes. It learns per-gear targets
+from clean full-throttle upshifts, restores profiles by the
+`fh6:<ordinal>:<pi>:<rpmMax>` identity, and keeps the existing observed and
+optimal diagnostics. Profiles are stored in a HUD-local `hud.sqlite` under the
+Windows AppData directory, never in the provider's `runtime/data` database.
+Settings listens to HUD-local events for the current per-gear table and the
+reset action clears the active local profile. The provider no longer sends a
+`shift_light` WebSocket message or owns Shift Light persistence.
 
-The Settings table also exposes bounded `shiftLight.diagnostics` rows for live
-verification. They include reliable WOT power-curve coverage, current/next
-gear ratio sample counts, target RPM, predicted RPM after the upshift, and
-power before/after the shift. The diagnostic statuses are `OBSERVED` (real
-shift fallback), `OPTIMAL` (validated power crossover), `LEARNING`, `WAITING
-FOR WOT`, `WAITING FOR RATIO`, `CONFIRMING`, and `GEARBOX MISMATCH`. These
-fields are diagnostic only and do not change the existing phase timing. The
-`?` button in Settings opens the same legend without requiring knowledge of
-the WebSocket contract.
+The checked-in `overlay/shift-light-engine.js` is the browser bundle used by
+the standalone HUD; its learner behavior is covered by
+`overlay/shift-light-engine.test.js`.
 
 ## Reference Coach contract
 
@@ -226,9 +195,11 @@ To preview the short post-lap state in a browser, add `lapSummary=1`, for exampl
 
 ## Local dependency
 
-Start the Suite provider before starting the HUD. Every HUD build connects to
-`ws://127.0.0.1:3001/_ws`. The overlay does not duplicate co-driver's UDP
-parsing, analysis, or storage.
+Choose `Direct Forza` in Settings to run without Docker or co-driver. Choose
+`co-driver Suite` to use `ws://127.0.0.1:3001/_ws` and the provider's analysis
+features. Direct and Suite modes cannot bind the same UDP port simultaneously.
+The overlay owns its Shift Light learner and local profile database; it does
+not read the provider database or duplicate provider corner/Coach analysis.
 
 From the Suite root:
 
