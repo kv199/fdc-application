@@ -13,7 +13,17 @@
   const status = document.getElementById('settings-status')
   const telemetryStatus = document.getElementById('telemetry-status')
   const telemetryStatusLabel = document.getElementById('telemetry-status-label')
+  const shiftLightEmpty = document.getElementById('shift-light-empty')
+  const shiftLightProfile = document.getElementById('shift-light-profile')
+  const shiftLightCarKey = document.getElementById('shift-light-car-key')
+  const shiftLightCurrentTarget = document.getElementById('shift-light-current-target')
+  const shiftLightState = document.getElementById('shift-light-state')
+  const shiftLightGearRows = document.getElementById('shift-light-gear-rows')
+  const shiftLightReset = document.getElementById('shift-light-reset')
+  const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
   let editingTarget = null
+  let shiftLightSocket = null
+  let shiftLightReconnectTimer = null
 
   function setStatus(message, error = false) {
     status.textContent = message
@@ -91,6 +101,85 @@
     const display = stateMap[state] || stateMap['is-offline']
     telemetryStatus.dataset.state = display.value
     telemetryStatusLabel.textContent = display.label
+  }
+
+  function renderShiftLightState(value) {
+    const state = typeof normalizeShiftLightState === 'function'
+      ? normalizeShiftLightState(value)
+      : value
+    const hasProfile = Boolean(state?.carKey)
+    shiftLightEmpty.hidden = hasProfile
+    shiftLightProfile.hidden = !hasProfile
+    shiftLightReset.disabled = !hasProfile
+    if (!hasProfile) return
+
+    shiftLightCarKey.textContent = state.carKey
+    shiftLightCurrentTarget.textContent = state.shiftRpm ? `${state.shiftRpm} RPM` : 'FALLBACK'
+    shiftLightState.textContent = `${state.status.toUpperCase()}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
+    shiftLightGearRows.replaceChildren()
+
+    for (const gear of state.gears) {
+      const row = document.createElement('tr')
+      row.dataset.state = gear.status
+      const values = [
+        `G${gear.gear}`,
+        gear.shiftRpm ? `${gear.shiftRpm} RPM` : '—',
+        String(gear.sampleCount),
+        gear.status.toUpperCase()
+      ]
+      for (const value of values) {
+        const cell = document.createElement('td')
+        cell.textContent = value
+        row.append(cell)
+      }
+      shiftLightGearRows.append(row)
+    }
+
+    if (!state.gears.length) {
+      const row = document.createElement('tr')
+      const cell = document.createElement('td')
+      cell.colSpan = 4
+      cell.textContent = 'NO GEAR SAMPLES YET'
+      row.append(cell)
+      shiftLightGearRows.append(row)
+    }
+  }
+
+  function scheduleShiftLightReconnect() {
+    if (shiftLightReconnectTimer !== null) return
+    shiftLightReconnectTimer = setTimeout(() => {
+      shiftLightReconnectTimer = null
+      connectShiftLight()
+    }, 1500)
+  }
+
+  function connectShiftLight() {
+    if (typeof WebSocket !== 'function') return
+    if (shiftLightSocket && [0, 1].includes(shiftLightSocket.readyState)) return
+    const url = globalScope.HudConnection?.resolveCoDriverWebSocketUrl?.() || 'ws://127.0.0.1:3001/_ws'
+    try {
+      shiftLightSocket = new WebSocket(url)
+      shiftLightSocket.addEventListener('message', (event) => {
+        try {
+          const payload = JSON.parse(event.data)
+          if (payload.type === 'shift_light') renderShiftLightState(payload.shiftLight)
+          if (payload.type === 'forza_status') {
+            setTelemetryState(payload.connected ? 'is-live' : 'is-waiting')
+          }
+        } catch {
+          // Ignore malformed messages from a closing local socket.
+        }
+      })
+      shiftLightSocket.addEventListener('close', () => {
+        shiftLightSocket = null
+        scheduleShiftLightReconnect()
+      })
+      shiftLightSocket.addEventListener('error', () => {
+        shiftLightSocket?.close()
+      })
+    } catch {
+      scheduleShiftLightReconnect()
+    }
   }
 
   function updateLayoutRows() {
@@ -209,6 +298,17 @@
     })
   }
 
+  shiftLightReset.addEventListener('click', () => {
+    if (!shiftLightSocket || shiftLightSocket.readyState !== 1) {
+      setStatus('CALIBRATION SERVICE OFFLINE', true)
+      return
+    }
+    shiftLightSocket.send(JSON.stringify({ type: 'shift_light_reset' }))
+    setStatus('CALIBRATION RESET')
+  })
+
   setTelemetryState('is-offline')
+  renderShiftLightState(null)
+  connectShiftLight()
   globalScope.SettingsController = { cancelEdit, setLayoutEditingState, setTelemetryState }
 })(typeof globalThis === 'undefined' ? this : globalThis)

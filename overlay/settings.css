@@ -376,6 +376,135 @@ h1 {
   cursor: pointer;
 }
 
+.calibration-empty,
+.calibration-card {
+  border: 1px solid rgb(226 232 240 / 18%);
+  border-radius: 4px;
+  background: rgb(8 10 12 / 68%);
+}
+
+.calibration-empty {
+  padding: 18px 16px;
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.calibration-card {
+  padding: 16px;
+}
+
+.calibration-card__meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(100px, 0.8fr));
+  gap: 14px;
+  padding-bottom: 14px;
+}
+
+.calibration-card__meta > div {
+  min-width: 0;
+}
+
+.calibration-label {
+  display: block;
+  margin-bottom: 5px;
+  color: #71717a;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.calibration-card output {
+  display: block;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#shift-light-state {
+  color: #69e83f;
+}
+
+.calibration-table-wrap {
+  overflow: hidden;
+  border: 1px solid rgb(226 232 240 / 12%);
+  border-radius: 3px;
+}
+
+.calibration-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #d4d4d8;
+  font-size: 11px;
+}
+
+.calibration-table th,
+.calibration-table td {
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.calibration-table th {
+  color: #71717a;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+}
+
+.calibration-table tbody tr + tr {
+  border-top: 1px solid rgb(226 232 240 / 10%);
+}
+
+.calibration-table td:first-child {
+  color: #f8fafc;
+  font-weight: 750;
+}
+
+.calibration-table td:nth-child(2) {
+  color: #fbbf24;
+  font-variant-numeric: tabular-nums;
+}
+
+.calibration-table td:nth-child(3) {
+  color: #a1a1aa;
+  font-variant-numeric: tabular-nums;
+}
+
+.calibration-table td:last-child {
+  color: #69e83f;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.calibration-table tr[data-state='learning'] td:last-child {
+  color: #a1a1aa;
+}
+
+.settings-button--danger {
+  width: 100%;
+  margin-top: 14px;
+  border-color: rgb(255 49 43 / 45%);
+  color: #ff827d;
+}
+
+.settings-button--danger:hover,
+.settings-button--danger:focus-visible {
+  border-color: rgb(255 49 43 / 75%);
+  background: rgb(255 49 43 / 10%);
+}
+
+.settings-button--danger:disabled {
+  border-color: rgb(226 232 240 / 14%);
+  color: #52525b;
+  background: rgb(226 232 240 / 4%);
+  cursor: not-allowed;
+}
+
 .settings-status {
   margin-top: 18px;
   color: #69e83f;

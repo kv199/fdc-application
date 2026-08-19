@@ -83,17 +83,28 @@ The provider sends a temporary diagnostic message beside the gear output:
   "shiftLight": {
     "status": "learning",
     "phase": "approach",
-    "shiftRpm": null,
-    "sampleCount": 3,
-    "carKey": "fh6:123:800:8000"
+      "shiftRpm": null,
+      "sampleCount": 3,
+      "carKey": "fh6:123:800:8000",
+      "currentGear": 3,
+      "gears": [
+        { "gear": 2, "status": "learning", "shiftRpm": null, "sampleCount": 2 },
+        { "gear": 3, "status": "calibrated", "shiftRpm": 7925, "sampleCount": 5 }
+      ]
+    }
   }
-}
-```
+  ```
 
-The HUD maps `phase` to its existing normal/redline/shift visual states. The
-provider learns and persists the target; the HUD never reads the database or
-derives a car profile locally. `status` is intentionally exposed during this
-MVP and may be removed after live validation.
+  The HUD maps `phase` to its existing normal/redline/shift visual states. The
+  provider learns and persists the target; the HUD never reads the database or
+  derives a car profile locally. `gears` contains only forward gears observed
+  for the current car/tune profile. `status` is intentionally exposed during
+  this MVP and may be removed after live validation.
+
+  Settings shows this state as a per-gear diagnostic table and can request a
+  reset for the active profile by sending `{"type":"shift_light_reset"}` over
+  the same local WebSocket. The provider owns the database deletion and emits
+  a fresh learning state to all HUD clients.
 
 ## Reference Coach contract
 

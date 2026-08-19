@@ -122,9 +122,57 @@
       </div>
     </section>
 
+    <section class="settings-section calibration-section" aria-labelledby="shift-light-title">
+      <div class="settings-section__heading">
+        <h2 id="shift-light-title">SHIFT LIGHT</h2>
+        <span>AUTO CALIBRATION</span>
+      </div>
+
+      <div id="shift-light-empty" class="calibration-empty">
+        WAITING FOR A LIVE CAR PROFILE
+      </div>
+
+      <div id="shift-light-profile" class="calibration-card" hidden>
+        <div class="calibration-card__meta">
+          <div>
+            <span class="calibration-label">CAR PROFILE</span>
+            <output id="shift-light-car-key">—</output>
+          </div>
+          <div>
+            <span class="calibration-label">CURRENT TARGET</span>
+            <output id="shift-light-current-target">—</output>
+          </div>
+          <div>
+            <span class="calibration-label">STATE</span>
+            <output id="shift-light-state">LEARNING</output>
+          </div>
+        </div>
+
+        <div class="calibration-table-wrap">
+          <table class="calibration-table">
+            <thead>
+              <tr>
+                <th scope="col">GEAR</th>
+                <th scope="col">TARGET RPM</th>
+                <th scope="col">SAMPLES</th>
+                <th scope="col">STATUS</th>
+              </tr>
+            </thead>
+            <tbody id="shift-light-gear-rows"></tbody>
+          </table>
+        </div>
+
+        <button id="shift-light-reset" class="settings-button settings-button--danger" type="button" disabled>
+          RESET CURRENT CALIBRATION
+        </button>
+      </div>
+    </section>
+
     <p id="settings-status" class="settings-status" role="status" aria-live="polite">READY</p>
   </main>
 
+  <script src="connection.js"></script>
+  <script src="shift-light-settings.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>
