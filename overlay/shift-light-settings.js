@@ -9,7 +9,22 @@
     carKey: null,
     currentGear: null,
     method: null,
-    gears: []
+    gears: [],
+    diagnostics: []
+  }
+
+  const DIAGNOSTIC_STATUSES = [
+    'observed',
+    'optimal',
+    'learning',
+    'waiting-for-wot',
+    'waiting-for-ratio',
+    'confirming',
+    'gearbox-mismatch'
+  ]
+
+  function finiteOrNull(value) {
+    return Number.isFinite(value) ? value : null
   }
 
   function normalizeShiftLightState(value) {
@@ -27,6 +42,39 @@
         }))
         .sort((left, right) => left.gear - right.gear)
       : []
+    const diagnostics = Array.isArray(state.diagnostics)
+      ? state.diagnostics
+        .filter((diagnostic) => Number.isInteger(diagnostic?.gear) && diagnostic.gear >= 1 && diagnostic.gear <= 10)
+        .map((diagnostic) => ({
+          gear: diagnostic.gear,
+          status: DIAGNOSTIC_STATUSES.includes(diagnostic.status) ? diagnostic.status : 'learning',
+          method: ['observed', 'optimal'].includes(diagnostic.method) ? diagnostic.method : null,
+          powerCurveCoverage: Number.isFinite(diagnostic.powerCurveCoverage)
+            ? Math.max(0, Math.min(1, diagnostic.powerCurveCoverage))
+            : 0,
+          powerBinCount: Number.isFinite(diagnostic.powerBinCount)
+            ? Math.max(0, Math.round(diagnostic.powerBinCount))
+            : 0,
+          peakPowerRpm: finiteOrNull(diagnostic.peakPowerRpm),
+          currentRatio: finiteOrNull(diagnostic.currentRatio),
+          nextRatio: finiteOrNull(diagnostic.nextRatio),
+          ratioDrop: finiteOrNull(diagnostic.ratioDrop),
+          currentRatioSamples: Number.isFinite(diagnostic.currentRatioSamples)
+            ? Math.max(0, Math.round(diagnostic.currentRatioSamples))
+            : 0,
+          nextRatioSamples: Number.isFinite(diagnostic.nextRatioSamples)
+            ? Math.max(0, Math.round(diagnostic.nextRatioSamples))
+            : 0,
+          targetRpm: finiteOrNull(diagnostic.targetRpm),
+          postShiftRpm: finiteOrNull(diagnostic.postShiftRpm),
+          powerAtTarget: finiteOrNull(diagnostic.powerAtTarget),
+          powerAfterShift: finiteOrNull(diagnostic.powerAfterShift),
+          estimateEvidence: Number.isFinite(diagnostic.estimateEvidence)
+            ? Math.max(0, Math.round(diagnostic.estimateEvidence))
+            : 0
+        }))
+        .sort((left, right) => left.gear - right.gear)
+      : []
 
     return {
       status: ['fallback', 'learning', 'calibrated'].includes(state.status) ? state.status : EMPTY_STATE.status,
@@ -38,7 +86,8 @@
         ? state.currentGear
         : null,
       method: ['observed', 'optimal'].includes(state.method) ? state.method : null,
-      gears
+      gears,
+      diagnostics
     }
   }
 

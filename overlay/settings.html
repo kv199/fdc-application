@@ -125,7 +125,24 @@
     <section class="settings-section calibration-section" aria-labelledby="shift-light-title">
       <div class="settings-section__heading">
         <h2 id="shift-light-title">SHIFT LIGHT</h2>
-        <span>AUTO CALIBRATION</span>
+        <div class="calibration-heading__actions">
+          <span>AUTO CALIBRATION</span>
+          <button id="shift-light-help" class="calibration-help-button" type="button" aria-expanded="false" aria-controls="shift-light-help-panel" title="Explain shift-light diagnostics">?</button>
+        </div>
+      </div>
+
+      <div id="shift-light-help-panel" class="calibration-help" hidden>
+        <div class="calibration-help__title">HOW TO READ DIAGNOSTICS</div>
+        <dl>
+          <div><dt>OBSERVED</dt><dd>Fallback target learned from your real upshifts.</dd></div>
+          <div><dt>OPTIMAL</dt><dd>Power crossover is stable and the gearbox ratio is validated.</dd></div>
+          <div><dt>LEARNING</dt><dd>The car or gear has not collected enough usable evidence.</dd></div>
+          <div><dt>WAITING FOR WOT</dt><dd>The power curve needs more full-throttle RPM coverage.</dd></div>
+          <div><dt>WAITING FOR RATIO</dt><dd>The current and next gear need more driven-wheel ratio samples.</dd></div>
+          <div><dt>CONFIRMING</dt><dd>A target was found and is being checked for stability.</dd></div>
+          <div><dt>GEARBOX MISMATCH</dt><dd>The live RPM drop does not match the stored gearbox evidence.</dd></div>
+        </dl>
+        <p>Power is measured at the target RPM before the shift and at the predicted RPM after the shift. The target is not simply the engine's peak-power RPM.</p>
       </div>
 
       <div id="shift-light-empty" class="calibration-empty">
@@ -149,13 +166,14 @@
         </div>
 
         <div class="calibration-table-wrap">
-          <table class="calibration-table">
-            <thead>
+            <table class="calibration-table">
+              <thead>
               <tr>
                 <th scope="col">GEAR</th>
-                <th scope="col">TARGET RPM</th>
-                <th scope="col">EVIDENCE</th>
-                <th scope="col">METHOD</th>
+                <th scope="col">TARGET / AFTER</th>
+                <th scope="col">POWER NOW / NEXT</th>
+                <th scope="col">DATA</th>
+                <th scope="col">STATE</th>
               </tr>
             </thead>
             <tbody id="shift-light-gear-rows"></tbody>

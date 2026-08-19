@@ -126,6 +126,16 @@ client with `shift_light_reset_result`. The Settings page queues the command
 while the socket reconnects. The tray also exposes the reset action without
 opening or focusing the Settings window, so it does not pause the game.
 
+The Settings table also exposes bounded `shiftLight.diagnostics` rows for live
+verification. They include reliable WOT power-curve coverage, current/next
+gear ratio sample counts, target RPM, predicted RPM after the upshift, and
+power before/after the shift. The diagnostic statuses are `OBSERVED` (real
+shift fallback), `OPTIMAL` (validated power crossover), `LEARNING`, `WAITING
+FOR WOT`, `WAITING FOR RATIO`, `CONFIRMING`, and `GEARBOX MISMATCH`. These
+fields are diagnostic only and do not change the existing phase timing. The
+`?` button in Settings opens the same legend without requiring knowledge of
+the WebSocket contract.
+
 ## Reference Coach contract
 
 The HUD accepts an optional WebSocket message with this envelope:

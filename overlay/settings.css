@@ -152,6 +152,35 @@ h1 {
   font-size: 10px;
 }
 
+.calibration-heading__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calibration-help-button {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgb(105 232 63 / 55%);
+  border-radius: 50%;
+  color: #69e83f;
+  background: rgb(105 232 63 / 8%);
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.calibration-help-button:hover,
+.calibration-help-button:focus-visible {
+  border-color: #69e83f;
+  background: rgb(105 232 63 / 18%);
+  outline: none;
+}
+
 .layout-list,
 .visibility-list {
   overflow: hidden;
@@ -395,6 +424,53 @@ h1 {
   padding: 16px;
 }
 
+.calibration-help {
+  margin: -2px 0 10px;
+  padding: 13px 14px;
+  border: 1px solid rgb(105 232 63 / 28%);
+  border-radius: 4px;
+  color: #a1a1aa;
+  background: rgb(105 232 63 / 5%);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.calibration-help__title {
+  margin-bottom: 9px;
+  color: #69e83f;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.calibration-help dl {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.calibration-help dl > div {
+  display: grid;
+  grid-template-columns: 142px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.calibration-help dt {
+  color: #f8fafc;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.calibration-help dd {
+  margin: 0;
+}
+
+.calibration-help p {
+  margin-top: 10px;
+  color: #71717a;
+}
+
 .calibration-card__meta {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(100px, 0.8fr));
@@ -437,9 +513,35 @@ h1 {
 
 .calibration-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   color: #d4d4d8;
   font-size: 11px;
+}
+
+.calibration-table th:nth-child(1),
+.calibration-table td:nth-child(1) {
+  width: 9%;
+}
+
+.calibration-table th:nth-child(2),
+.calibration-table td:nth-child(2) {
+  width: 21%;
+}
+
+.calibration-table th:nth-child(3),
+.calibration-table td:nth-child(3) {
+  width: 21%;
+}
+
+.calibration-table th:nth-child(4),
+.calibration-table td:nth-child(4) {
+  width: 29%;
+}
+
+.calibration-table th:nth-child(5),
+.calibration-table td:nth-child(5) {
+  width: 20%;
 }
 
 .calibration-table th,
@@ -474,11 +576,19 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
+.calibration-table td:nth-child(4) {
+  color: #a1a1aa;
+  font-size: 10px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
 .calibration-table td:last-child {
   color: #69e83f;
   font-size: 10px;
   font-weight: 750;
   letter-spacing: 0.08em;
+  line-height: 1.35;
 }
 
 .calibration-table tr[data-state='learning'] td:last-child {
@@ -487,6 +597,26 @@ h1 {
 
 .calibration-table tr[data-state='observed'] td:last-child {
   color: #38bdf8;
+}
+
+.calibration-table tr[data-state='waiting-for-wot'] td:last-child,
+.calibration-table tr[data-state='waiting-for-ratio'] td:last-child,
+.calibration-table tr[data-state='confirming'] td:last-child {
+  color: #fbbf24;
+}
+
+.calibration-table tr[data-state='gearbox-mismatch'] td:last-child {
+  color: #ff827d;
+}
+
+.calibration-cell__sub {
+  display: block;
+  margin-top: 3px;
+  color: #71717a;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: normal;
 }
 
 .settings-button--danger {

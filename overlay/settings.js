@@ -20,6 +20,8 @@
   const shiftLightState = document.getElementById('shift-light-state')
   const shiftLightGearRows = document.getElementById('shift-light-gear-rows')
   const shiftLightReset = document.getElementById('shift-light-reset')
+  const shiftLightHelp = document.getElementById('shift-light-help')
+  const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
   const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
   let editingTarget = null
   let shiftLightSocket = null
@@ -106,6 +108,28 @@
     telemetryStatusLabel.textContent = display.label
   }
 
+  function formatRpm(value) {
+    return Number.isFinite(value) ? `${Math.round(value)} RPM` : '—'
+  }
+
+  function formatPower(value) {
+    return Number.isFinite(value) ? `${Math.round(value / 1000)} kW` : '—'
+  }
+
+  function formatDiagnosticStatus(status) {
+    return String(status || 'learning').replaceAll('-', ' ').toUpperCase()
+  }
+
+  function appendCellText(cell, primary, secondary = '') {
+    cell.textContent = primary
+    if (secondary) {
+      const detail = document.createElement('span')
+      detail.className = 'calibration-cell__sub'
+      detail.textContent = secondary
+      cell.append(detail)
+    }
+  }
+
   function renderShiftLightState(value) {
     const state = typeof normalizeShiftLightState === 'function'
       ? normalizeShiftLightState(value)
@@ -123,27 +147,58 @@
     shiftLightState.textContent = `${activeState}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
     shiftLightGearRows.replaceChildren()
 
+    const diagnosticsByGear = new Map((state.diagnostics || []).map(diagnostic => [diagnostic.gear, diagnostic]))
+
     for (const gear of state.gears) {
+      const diagnostic = diagnosticsByGear.get(gear.gear)
+      const method = diagnostic?.method || gear.method
+      const diagnosticStatus = diagnostic?.status || method || gear.status
       const row = document.createElement('tr')
-      row.dataset.state = gear.method || gear.status
-      const values = [
-        `G${gear.gear}`,
-        gear.shiftRpm ? `${gear.shiftRpm} RPM` : '—',
-        String(gear.sampleCount),
-        gear.method?.toUpperCase() || gear.status.toUpperCase()
-      ]
-      for (const value of values) {
-        const cell = document.createElement('td')
-        cell.textContent = value
-        row.append(cell)
-      }
+      row.dataset.state = diagnosticStatus
+
+      const gearCell = document.createElement('td')
+      gearCell.textContent = `G${gear.gear}`
+      row.append(gearCell)
+
+      const targetCell = document.createElement('td')
+      appendCellText(
+        targetCell,
+        formatRpm(diagnostic?.targetRpm ?? gear.shiftRpm),
+        `AFTER ${formatRpm(diagnostic?.postShiftRpm)}`
+      )
+      row.append(targetCell)
+
+      const powerCell = document.createElement('td')
+      appendCellText(
+        powerCell,
+        `${formatPower(diagnostic?.powerAtTarget)} / ${formatPower(diagnostic?.powerAfterShift)}`,
+        'CURRENT / NEXT'
+      )
+      row.append(powerCell)
+
+      const dataCell = document.createElement('td')
+      const coverage = diagnostic ? `${Math.round(diagnostic.powerCurveCoverage * 100)}%` : '—'
+      const ratio = diagnostic
+        ? `${diagnostic.currentRatioSamples}/${diagnostic.nextRatioSamples}`
+        : '—'
+      const peakPower = diagnostic ? formatRpm(diagnostic.peakPowerRpm) : '—'
+      appendCellText(dataCell, `CURVE ${coverage}`, `PEAK ${peakPower} · RATIO ${ratio} · EVIDENCE ${diagnostic?.estimateEvidence || gear.sampleCount}`)
+      row.append(dataCell)
+
+      const stateCell = document.createElement('td')
+      appendCellText(
+        stateCell,
+        method?.toUpperCase() || gear.status.toUpperCase(),
+        formatDiagnosticStatus(diagnosticStatus)
+      )
+      row.append(stateCell)
       shiftLightGearRows.append(row)
     }
 
     if (!state.gears.length) {
       const row = document.createElement('tr')
       const cell = document.createElement('td')
-      cell.colSpan = 4
+      cell.colSpan = 5
       cell.textContent = 'NO GEAR SAMPLES YET'
       row.append(cell)
       shiftLightGearRows.append(row)
@@ -325,6 +380,12 @@
     const expanded = accordionToggle.getAttribute('aria-expanded') === 'true'
     accordionToggle.setAttribute('aria-expanded', String(!expanded))
     accordionPanel.hidden = expanded
+  })
+
+  shiftLightHelp?.addEventListener('click', () => {
+    const expanded = shiftLightHelp.getAttribute('aria-expanded') === 'true'
+    shiftLightHelp.setAttribute('aria-expanded', String(!expanded))
+    if (shiftLightHelpPanel) shiftLightHelpPanel.hidden = expanded
   })
 
   const visibility = readVisibility()

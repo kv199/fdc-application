@@ -12,6 +12,24 @@ test('normalizes the per-gear shift-light diagnostic state', () => {
     carKey: 'fh6:123:800:8000',
     currentGear: 3,
     method: 'optimal',
+    diagnostics: [{
+      gear: 3,
+      status: 'optimal',
+      method: 'optimal',
+      powerCurveCoverage: 0.95,
+      powerBinCount: 48,
+      peakPowerRpm: 6100,
+      currentRatio: 45,
+      nextRatio: 36,
+      ratioDrop: 0.8,
+      currentRatioSamples: 20,
+      nextRatioSamples: 20,
+      targetRpm: 7600,
+      postShiftRpm: 6080,
+      powerAtTarget: 290000,
+      powerAfterShift: 292000,
+      estimateEvidence: 68
+    }],
     gears: [
       { gear: 3, status: 'calibrated', shiftRpm: 7925, sampleCount: 25, method: 'optimal', ratioDrop: 0.8 },
       { gear: 2, status: 'learning', shiftRpm: null, sampleCount: 2, method: null, ratioDrop: null },
@@ -25,6 +43,24 @@ test('normalizes the per-gear shift-light diagnostic state', () => {
     carKey: 'fh6:123:800:8000',
     currentGear: 3,
     method: 'optimal',
+    diagnostics: [{
+      gear: 3,
+      status: 'optimal',
+      method: 'optimal',
+      powerCurveCoverage: 0.95,
+      powerBinCount: 48,
+      peakPowerRpm: 6100,
+      currentRatio: 45,
+      nextRatio: 36,
+      ratioDrop: 0.8,
+      currentRatioSamples: 20,
+      nextRatioSamples: 20,
+      targetRpm: 7600,
+      postShiftRpm: 6080,
+      powerAtTarget: 290000,
+      powerAfterShift: 292000,
+      estimateEvidence: 68
+    }],
     gears: [
       { gear: 2, status: 'learning', shiftRpm: null, sampleCount: 2, method: null, ratioDrop: null },
       { gear: 3, status: 'calibrated', shiftRpm: 7925, sampleCount: 25, method: 'optimal', ratioDrop: 0.8 }
@@ -41,6 +77,7 @@ test('turns an unavailable or malformed state into a safe empty state', () => {
     carKey: null,
     currentGear: null,
     method: null,
-    gears: []
+    gears: [],
+    diagnostics: []
   })
 })
