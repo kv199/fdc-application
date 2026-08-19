@@ -82,10 +82,6 @@ body {
   height: 100%;
 }
 
-.hud > section + section {
-  border-left: 1px solid var(--rule);
-}
-
 .tires {
   display: grid;
   grid-template-columns: repeat(2, 18px);

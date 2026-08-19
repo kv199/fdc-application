@@ -130,6 +130,52 @@ h1 {
   line-height: 1.45;
 }
 
+.settings-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 22px;
+  padding: 4px;
+  border: 1px solid rgb(226 232 240 / 14%);
+  border-radius: 4px;
+  background: rgb(8 10 12 / 68%);
+}
+
+.settings-tab {
+  min-height: 34px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: #71717a;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  cursor: pointer;
+}
+
+.settings-tab:hover,
+.settings-tab:focus-visible {
+  color: #f8fafc;
+  background: rgb(226 232 240 / 7%);
+  outline: none;
+}
+
+.settings-tab.is-active {
+  border-color: rgb(105 232 63 / 42%);
+  color: #69e83f;
+  background: rgb(105 232 63 / 8%);
+}
+
+.settings-tab-panel {
+  min-height: 0;
+  margin-top: 24px;
+}
+
+.settings-tab-panel[hidden] {
+  display: none;
+}
+
 .settings-section {
   margin-top: 24px;
 }

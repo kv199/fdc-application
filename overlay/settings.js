@@ -23,12 +23,26 @@
   const shiftLightHelp = document.getElementById('shift-light-help')
   const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
   const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
+  const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
+  const settingsPanels = [...document.querySelectorAll('[data-settings-panel]')]
   let editingTarget = null
   let shiftLightSocket = null
   let shiftLightReconnectTimer = null
   let shiftLightResetQueued = false
   let shiftLightResetPending = false
   let latestShiftLightState = null
+
+  function selectSettingsTab(tabName) {
+    for (const tab of settingsTabs) {
+      const isActive = tab.dataset.settingsTab === tabName
+      tab.classList.toggle('is-active', isActive)
+      tab.setAttribute('aria-selected', String(isActive))
+      tab.tabIndex = isActive ? 0 : -1
+    }
+    for (const panel of settingsPanels) {
+      panel.hidden = panel.dataset.settingsPanel !== tabName
+    }
+  }
 
   function setStatus(message, error = false) {
     status.textContent = message
@@ -381,6 +395,24 @@
     accordionToggle.setAttribute('aria-expanded', String(!expanded))
     accordionPanel.hidden = expanded
   })
+
+  for (const tab of settingsTabs) {
+    tab.addEventListener('click', () => selectSettingsTab(tab.dataset.settingsTab))
+    tab.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+      event.preventDefault()
+      const currentIndex = settingsTabs.indexOf(tab)
+      const nextIndex = event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? settingsTabs.length - 1
+          : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + settingsTabs.length) % settingsTabs.length
+      const nextTab = settingsTabs[nextIndex]
+      selectSettingsTab(nextTab.dataset.settingsTab)
+      nextTab.focus()
+    })
+  }
+  selectSettingsTab('hud')
 
   shiftLightHelp?.addEventListener('click', () => {
     const expanded = shiftLightHelp.getAttribute('aria-expanded') === 'true'
