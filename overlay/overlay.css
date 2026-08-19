@@ -166,6 +166,7 @@ body {
 }
 
 .gear {
+  position: relative;
   display: grid;
   grid-template-rows: 17px 33px 17px;
   place-items: center;
@@ -189,6 +190,27 @@ body {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+}
+
+.gear__status {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  padding: 1px 2px;
+  color: #a1a1aa;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.gear__status[data-status='learning'] {
+  color: #ffd400;
+}
+
+.gear__status[data-status='calibrated'] {
+  color: var(--gas);
 }
 
 .hud.is-redline .gear {

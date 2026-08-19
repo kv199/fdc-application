@@ -73,6 +73,28 @@ the local WebSocket. `co-driver` remains responsible for matching telemetry to
 track corners; the HUD presents the number, direction, phase, distance, and any
 explicit reference cue supplied by the backend.
 
+## Shift-light calibration contract
+
+The provider sends a temporary diagnostic message beside the gear output:
+
+```json
+{
+  "type": "shift_light",
+  "shiftLight": {
+    "status": "learning",
+    "phase": "approach",
+    "shiftRpm": null,
+    "sampleCount": 3,
+    "carKey": "fh6:123:800:8000"
+  }
+}
+```
+
+The HUD maps `phase` to its existing normal/redline/shift visual states. The
+provider learns and persists the target; the HUD never reads the database or
+derives a car profile locally. `status` is intentionally exposed during this
+MVP and may be removed after live validation.
+
 ## Reference Coach contract
 
 The HUD accepts an optional WebSocket message with this envelope:

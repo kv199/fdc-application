@@ -6,6 +6,7 @@ const brakeTrack = document.getElementById('brake-track')
 const speedValue = document.getElementById('speed-value')
 const gearValue = document.getElementById('gear-value')
 const rpmValue = document.getElementById('rpm-value')
+const shiftStatus = document.getElementById('shift-status')
 const steeringCanvas = document.getElementById('steering-canvas')
 const historyCanvas = document.getElementById('history-canvas')
 const coachCard = document.getElementById('coach-card')
@@ -66,6 +67,13 @@ let demoSignal = DEMO_SIGNALS.includes(DEMO_SIGNAL_FROM_URL) ? DEMO_SIGNAL_FROM_
 let demoCorner = DEMO_CORNERS.includes(DEMO_CORNER_FROM_URL) ? DEMO_CORNER_FROM_URL : null
 let demoReference = DEMO_REFERENCES.includes(DEMO_REFERENCE_FROM_URL) ? DEMO_REFERENCE_FROM_URL : null
 let activeRpmSignal = null
+let latestShiftLight = {
+  status: 'fallback',
+  phase: 'normal',
+  shiftRpm: null,
+  sampleCount: 0,
+  carKey: null
+}
 let latestCornerTemplate = null
 let latestCornerState = null
 let latestReference = window.ReferenceCoach.createEmptyReference()
@@ -322,6 +330,26 @@ function getRpmSignal(rawRpm, rawRpmMax) {
   return 'normal'
 }
 
+function getShiftLightSignal(telemetry) {
+  if (latestShiftLight.phase === 'shift') return 'shift'
+  if (latestShiftLight.phase === 'approach') return 'redline'
+  return getRpmSignal(telemetry.rpm, telemetry.rpmMax)
+}
+
+function queueShiftLight(shiftLight) {
+  if (!shiftLight || typeof shiftLight !== 'object') return
+  const status = ['fallback', 'learning', 'calibrated'].includes(shiftLight.status)
+    ? shiftLight.status
+    : 'fallback'
+  const phase = ['normal', 'approach', 'shift'].includes(shiftLight.phase)
+    ? shiftLight.phase
+    : 'normal'
+  latestShiftLight = { ...latestShiftLight, ...shiftLight, status, phase }
+  shiftStatus.textContent = status.toUpperCase()
+  shiftStatus.dataset.status = status
+  scheduleTelemetryRender()
+}
+
 function setDemoSignal(signal) {
   if (!DEMO_MODE) return
 
@@ -468,7 +496,7 @@ function renderTelemetry() {
   speedValue.textContent = formatSpeedKmh(telemetry.speedKmh)
   gearValue.textContent = formatGear(telemetry.gear)
   rpmValue.textContent = formatRpm(telemetry.rpm)
-  const signal = DEMO_MODE ? demoSignal : getRpmSignal(telemetry.rpm, telemetry.rpmMax)
+  const signal = DEMO_MODE ? demoSignal : getShiftLightSignal(telemetry)
   setRpmSignal(signal)
   if (!DEMO_MODE) pushHistory(throttle, brake)
   drawHistory()
@@ -616,6 +644,7 @@ function connect() {
     try {
       const message = JSON.parse(event.data)
       if (message.type === 'telemetry' && message.t) queueTelemetry(message.t)
+      if (message.type === 'shift_light') queueShiftLight(message.shiftLight)
       if (message.type === 'corner_template') queueCornerTemplate(message.template)
       if (message.type === 'corner_state') queueCornerState(message.cornerState)
       if (message.type === 'coach_reference') queueReference(message.reference)
