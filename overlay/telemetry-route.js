@@ -72,11 +72,6 @@ function suiteWarning(status) {
 function getRoutePresentation(rawStatus = {}) {
   const status = normalizeRouteStatus(rawStatus)
   const sourceLabel = status.source === 'direct' ? 'DIRECT' : 'SUITE'
-  const coexistenceLabel = status.source === 'direct' && status.suiteState === 'receiving'
-    ? ' · SUITE ALSO RECEIVING'
-    : status.source === 'direct' && status.suiteState === 'waiting'
-      ? ' · SUITE ONLINE'
-      : ''
   const detail = routeDetail(status)
   const message = status.message ? `${detail} ${status.message}` : detail
 
@@ -85,7 +80,6 @@ function getRoutePresentation(rawStatus = {}) {
     endpoint: ROUTE_ENDPOINTS[status.source],
     sourceLabel,
     phaseLabel: phaseLabel(status.phase),
-    badgeLabel: `${sourceLabel} · ${phaseLabel(status.phase)}${coexistenceLabel}`,
     statusLabel: `${sourceLabel} · ${phaseLabel(status.phase)}`,
     detail: message,
     warning: suiteWarning(status),

@@ -718,43 +718,6 @@ body.is-editing .coachbar {
   height: 100%;
 }
 
-.telemetry-route-badge {
-  position: absolute;
-  right: 0;
-  bottom: -20px;
-  max-width: 100%;
-  overflow: hidden;
-  padding: 3px 7px;
-  border: 1px solid rgb(226 232 240 / 22%);
-  border-radius: 3px;
-  color: #a1a1aa;
-  background: rgb(8 10 12 / 72%);
-  font-size: 9px;
-  font-weight: 750;
-  letter-spacing: 0.1em;
-  line-height: 1;
-  pointer-events: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.telemetry-route-badge[data-tone='live'] {
-  border-color: rgb(105 232 63 / 42%);
-  color: var(--gas);
-}
-
-.telemetry-route-badge[data-tone='waiting'],
-.telemetry-route-badge[data-tone='stale'] {
-  border-color: rgb(251 191 36 / 42%);
-  color: #fbbf24;
-}
-
-.telemetry-route-badge[data-tone='offline'],
-.telemetry-route-badge[data-tone='error'] {
-  border-color: rgb(255 49 43 / 48%);
-  color: #ff827d;
-}
-
 /* The visibility preference is authoritative even when a section has a display rule. */
 .hud-frame[hidden],
 .hud[hidden],

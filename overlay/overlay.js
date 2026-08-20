@@ -19,7 +19,6 @@ const coachTargetLabel = document.getElementById('coach-target-label')
 const coachTargetRef = document.getElementById('coach-target-ref')
 const coachTargetObserved = document.getElementById('coach-target-observed')
 const deltaStrip = document.getElementById('delta-strip')
-const telemetryRouteBadge = document.getElementById('telemetry-route-badge')
 const currentLapTime = document.getElementById('current-lap-time')
 const lapDeltaMarker = document.getElementById('lap-delta-marker')
 const lapDeltaValue = document.getElementById('lap-delta-value')
@@ -175,9 +174,6 @@ function publishRouteStatus(patch = {}, force = false) {
   })
   const changed = !sameRouteStatus(routeStatus, next)
   routeStatus = next
-  const presentation = window.HudTelemetryRoute.getRoutePresentation(routeStatus)
-  telemetryRouteBadge.textContent = DEMO_MODE ? 'DEMO · PREVIEW' : presentation.badgeLabel
-  telemetryRouteBadge.dataset.tone = DEMO_MODE ? 'waiting' : presentation.tone
   if (DEMO_MODE || (!changed && !force)) return
 
   const eventApi = window.HudTauriEvents?.getEventApi?.()

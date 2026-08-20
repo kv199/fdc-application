@@ -19,7 +19,7 @@ test('normalizes unknown route values to a safe Direct offline state', () => {
 test('describes a live Direct route without implying Suite input', () => {
   const presentation = getRoutePresentation({ source: 'direct', phase: 'live' })
 
-  assert.equal(presentation.badgeLabel, 'DIRECT · LIVE')
+  assert.equal(presentation.statusLabel, 'DIRECT · LIVE')
   assert.equal(presentation.endpoint, 'UDP 127.0.0.1:5301')
   assert.match(presentation.detail, /directly/)
   assert.equal(presentation.warning, '')
@@ -33,7 +33,7 @@ test('makes simultaneous Suite reception explicit while Direct remains authorita
     suiteState: 'receiving'
   })
 
-  assert.equal(presentation.badgeLabel, 'DIRECT · LIVE · SUITE ALSO RECEIVING')
+  assert.equal(presentation.statusLabel, 'DIRECT · LIVE')
   assert.match(presentation.warning, /HUD input is Direct UDP/)
   assert.match(presentation.warning, /also receiving UDP packets/)
 })

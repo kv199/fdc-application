@@ -686,8 +686,7 @@ fn main() {
             }
 
             let menu = MenuBuilder::new(app)
-                .text("settings", "Settings")
-                .text("reset-shift", "Reset Shift Calibration")
+                .text("settings", "Configuration")
                 .separator()
                 .text("quit", "Quit")
                 .build()?;
@@ -703,13 +702,6 @@ fn main() {
 
                     if event.id().as_ref() == "settings" {
                         let _ = show_settings(app);
-                        return;
-                    }
-
-                    if event.id().as_ref() == "reset-shift" {
-                        if let Some(settings) = app.get_webview_window("settings") {
-                            let _ = settings.eval("window.SettingsController?.resetShiftLight?.()");
-                        }
                     }
                 });
 

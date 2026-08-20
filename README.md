@@ -21,20 +21,21 @@ After a turn, the HUD briefly shows accumulated `BLEND` and `COAST` time plus
 minimum and exit speed when available.
 
 The Driver Coach, lap-delta strip, and telemetry HUD are independently movable
-overlay targets. The HUD icon's tray menu opens `Settings`; the settings window
-is shown automatically on the first launch and hides to the tray when closed.
-Use `EDIT` in Settings, drag the selected target in the overlay, then press
-`SAVE` in Settings or on the target itself. Closing Settings during an edit
+overlay targets. The HUD icon's tray menu opens `Configuration`; the window is
+shown automatically on the first launch and hides to the tray when closed.
+Use `EDIT` in Configuration, drag the selected target in the overlay, then press
+`SAVE` in Configuration or on the target itself. Closing Configuration during an edit
 cancels the uncommitted position. Positions are stored locally and clamped to
-the primary monitor. Settings is the only layout entry point in the native HUD.
+the primary monitor. Configuration is the only layout entry point in the native HUD.
 
-Settings also controls the five HUD content blocks: tires, throttle and brake,
+The `HUD` tab also controls the five HUD content blocks: tires, throttle and brake,
 steering, gear/speed/RPM, and input history. Disabled blocks disappear and the
 remaining HUD grid contracts; disabling every block hides the telemetry HUD.
 The three top-level overlay targets also have independent visibility toggles;
-the Telemetry HUD row expands to reveal its five child blocks. Settings shows
-the current telemetry connection state in the upper-right corner. Visibility
-choices are stored locally. In a browser preview, use
+the Telemetry HUD row expands to reveal its five child blocks. The `SETTINGS`
+tab shows the selected telemetry route, endpoint, lifecycle state, and Suite
+coexistence diagnostics; no route status is drawn over the in-game HUD.
+Visibility choices are stored locally. In a browser preview, use
 `?demo=1&corner=entry&edit=1` to edit the Coach.
 
 The Reference Coach can be previewed without Forza in demo mode:
@@ -77,7 +78,7 @@ explicit reference cue supplied by the backend.
 ## Telemetry sources and Shift Light
 
 The release executable has one universal build with two explicit source modes
-in Settings:
+in `Configuration > SETTINGS`:
 
 - `Direct Forza` binds `127.0.0.1:5301`, decodes FH6 Data Out packets locally,
   and works without Docker or co-driver. It renders the compact telemetry HUD
@@ -91,8 +92,8 @@ The HUD source modes are mutually exclusive inside the executable: Direct never
 reads the Suite WebSocket, and Suite never starts the HUD UDP receiver. Docker
 Desktop can expose its own `5301` forwarding endpoint while Direct owns
 `127.0.0.1:5301` on Windows, so co-driver may also receive packets in the
-background. The HUD shows its authoritative route plus this coexistence state;
-it never switches sources automatically. The selected mode is stored in local
+background. The `SETTINGS` tab shows the authoritative route plus this
+coexistence state; the HUD never switches sources automatically. The selected mode is stored in local
 HUD storage; there is no second executable or installer variant.
 
 Shift Light is calculated by the HUD in both modes. It learns per-gear targets
@@ -100,7 +101,7 @@ from clean full-throttle upshifts, restores profiles by the
 `fh6:<ordinal>:<pi>:<rpmMax>` identity, and keeps the existing observed and
 optimal diagnostics. Profiles are stored in a HUD-local `hud.sqlite` under the
 Windows AppData directory, never in the provider's `runtime/data` database.
-Settings listens to HUD-local events for the current per-gear table and the
+The `SHIFT LIGHT` tab listens to HUD-local events for the current per-gear table and the
 reset action clears the active local profile. The provider no longer sends a
 `shift_light` WebSocket message or owns Shift Light persistence.
 
@@ -198,12 +199,12 @@ To preview the short post-lap state in a browser, add `lapSummary=1`, for exampl
 
 ## Local dependency
 
-Choose `Direct Forza` in Settings to run without Docker or co-driver. Choose
+Choose `Direct Forza` in `Configuration > SETTINGS` to run without Docker or co-driver. Choose
 `co-driver Suite` to use `ws://127.0.0.1:3001/_ws` and the provider's analysis
 features. In Direct mode the HUD periodically probes the Suite WebSocket only
 for its immediate `forza_status`, closes the probe immediately after that
-snapshot, and ignores every other message. It reports whether co-driver is also
-online or receiving Forza packets; probe data never enters the HUD telemetry
+snapshot, and ignores every other message. The `SETTINGS` tab reports whether
+co-driver is also online or receiving Forza packets; probe data never enters the HUD telemetry
 pipeline. The overlay owns its Shift Light
 learner and local profile database; it does not read the provider database or
 duplicate provider corner/Coach analysis.
