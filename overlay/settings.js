@@ -273,11 +273,6 @@
     shiftLightReset.disabled = true
     setStatus('RESETTING CALIBRATION')
     Promise.resolve(reset('reset_shift_light'))
-      .then(() => {
-        shiftLightResetPending = false
-        shiftLightReset.disabled = !latestShiftLightState?.carKey
-        setStatus('CALIBRATION RESET COMPLETE')
-      })
       .catch(error => {
         shiftLightResetPending = false
         shiftLightReset.disabled = !latestShiftLightState?.carKey
@@ -285,14 +280,27 @@
       })
   }
 
+  function renderShiftLightResetResult(result) {
+    shiftLightResetPending = false
+    shiftLightReset.disabled = !latestShiftLightState?.carKey
+    if (result?.ok === true) {
+      setStatus('CALIBRATION RESET COMPLETE')
+      return
+    }
+    setStatus(result?.message || 'Unable to reset calibration', true)
+  }
+
   async function listenShiftLightEvents() {
     const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
     if (!eventApi || typeof eventApi.listen !== 'function') return
     await eventApi.listen('hud_shift_light', event => {
       renderShiftLightState(event.payload)
-      shiftLightResetPending = false
-      shiftLightReset.disabled = !latestShiftLightState?.carKey
+      shiftLightReset.disabled = !latestShiftLightState?.carKey || shiftLightResetPending
     })
+    await eventApi.listen('hud_shift_light_reset_result', event => {
+      renderShiftLightResetResult(event.payload)
+    })
+    await call('sync_shift_light_status')
   }
 
   async function listenRouteEvents() {

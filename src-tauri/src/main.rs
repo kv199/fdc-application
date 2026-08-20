@@ -631,6 +631,11 @@ fn sync_route_status(app: AppHandle) -> Result<(), String> {
     eval_main(&app, "window.HudOverlay?.syncRouteStatus?.()")
 }
 
+#[tauri::command]
+fn sync_shift_light_status(app: AppHandle) -> Result<(), String> {
+    eval_main(&app, "window.HudOverlay?.syncShiftLightStatus?.()")
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(DirectSourceState::default())
@@ -641,6 +646,7 @@ fn main() {
             set_hud_visibility,
             set_overlay_visibility,
             sync_route_status,
+            sync_shift_light_status,
             start_direct_source,
             stop_direct_source,
             set_telemetry_source,

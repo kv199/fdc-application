@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const settingsHtml = fs.readFileSync(path.join(__dirname, 'settings.html'), 'utf8')
+const settingsJs = fs.readFileSync(path.join(__dirname, 'settings.js'), 'utf8')
 const overlayHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8')
 
@@ -28,4 +29,11 @@ test('tray has one Configuration action and no calibration reset action', () => 
   assert.match(tauriMain, /\.text\("settings", "Configuration"\)/)
   assert.doesNotMatch(tauriMain, /reset-shift/)
   assert.match(tauriMain, /\.text\("quit", "Quit"\)/)
+})
+
+test('Configuration replays Shift Light state and waits for the real reset result', () => {
+  assert.match(settingsJs, /hud_shift_light_reset_result/)
+  assert.match(settingsJs, /call\('sync_shift_light_status'\)/)
+  assert.equal(settingsJs.match(/CALIBRATION RESET COMPLETE/g)?.length, 1)
+  assert.match(tauriMain, /fn sync_shift_light_status/)
 })

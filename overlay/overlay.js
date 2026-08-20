@@ -1059,13 +1059,13 @@ window.HudOverlay = {
   retryTelemetrySource: () => setTelemetrySource(telemetrySource, { force: true }),
   resetShiftLight: async () => {
     try {
-      await window.HudShiftLightRuntime?.reset?.()
-      return true
+      return await window.HudShiftLightRuntime?.reset?.() === true
     } catch (error) {
       console.warn('[hud] unable to reset Shift Light', error)
       return false
     }
   },
+  syncShiftLightStatus: () => window.HudShiftLightRuntime?.sync?.(),
   syncRouteStatus: () => publishRouteStatus({}, true)
 }
 

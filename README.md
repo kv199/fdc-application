@@ -104,6 +104,10 @@ Windows AppData directory, never in the provider's `runtime/data` database.
 The `SHIFT LIGHT` tab listens to HUD-local events for the current per-gear table and the
 reset action clears the active local profile. The provider no longer sends a
 `shift_light` WebSocket message or owns Shift Light persistence.
+Pause packets and temporary telemetry gaps keep the last car and per-gear table
+available in Configuration while clearing only the in-progress pull. Reset is
+acknowledged after the HUD-local SQLite operation completes, so it remains
+usable while Forza is paused.
 
 The checked-in `overlay/shift-light-engine.js` is the browser bundle used by
 the standalone HUD; its learner behavior is covered by
