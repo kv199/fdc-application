@@ -56,6 +56,13 @@ reference, the HUD keeps ordinary telemetry and corner readout without
 inventing coaching advice. The older short summary fallback remains for
 transitions where no finish result was received.
 
+The lap clock is source-neutral and game-clock based. Direct and Suite telemetry
+both use `lap.current` for the live clock, preserve the last useful value during
+pause/stale packets, and reset volatile timing state when the source changes.
+Suite `lap_complete.timeSource=forza_lap_last` represents a circuit boundary;
+`forza_lap_current` represents a validated point-to-point completion. The HUD
+does not infer a sprint finish from `isRaceOn=false` alone.
+
 The RPM preview can be combined with a reference state, for example
 `?demo=1&signal=shift&reference=brake-late`. In demo mode, keys `1`–`3` select
 the RPM signal and keys `9` and `0` select reference states.
@@ -149,13 +156,14 @@ separately:
     "lapTimeMs": 51250,
     "referenceTimeMs": 50000,
     "deltaMs": 1250,
-    "sourceSessionId": 29
+    "sourceSessionId": 29,
+    "timeSource": "forza_lap_last"
   }
 }
 ```
 
-This `deltaMs` is against the stored reference lap, not the game's displayed
-Rival time.
+This `deltaMs` is a `REFERENCE DELTA` against the stored reference lap, not the
+game's displayed Rivals time.
 
 Supported cue kinds are `brake_late`, `brake_early`, `release_late`,
 `apex_too_fast`, `apex_too_slow`, `throttle_late`, `throttle_early`, and
@@ -177,7 +185,8 @@ covers the same states:
 ?demo=1&reference=summary
 ```
 
-When reference data is available, the separate strip shows only `lapDeltaMs`:
+When reference data is available, the separate `REFERENCE DELTA` strip shows
+only `lapDeltaMs`:
 positive values are slower and move left into the red zone; negative values are
 faster and move right into the green zone. The visual range is limited to ±1 s,
 and missing live deltas stay neutral. A `lap_complete.deltaMs` value replaces

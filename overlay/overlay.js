@@ -55,6 +55,7 @@ const DEMO_LAP_SUMMARY_FROM_URL = new URLSearchParams(window.location.search).ge
 
 let latestTelemetry = null
 let latestLiveLapTimeSeconds = null
+let lapTimingState = window.HudLapTiming.createState()
 let latestSteer = 0
 let renderScheduled = false
 let reconnectTimer = null
@@ -249,6 +250,9 @@ function queueLapComplete(payload) {
   const lapComplete = window.ReferenceCoach.normalizeLapCompletePayload(payload)
   if (!lapComplete) return
 
+  lapTimingState = window.HudLapTiming.complete(lapTimingState, lapComplete)
+  latestLiveLapTimeSeconds = window.HudLapTiming.displayTimeMs(lapTimingState) / 1000
+
   finalLapSummaryReference = {
     ...window.ReferenceCoach.createEmptyReference(),
     available: true,
@@ -290,8 +294,8 @@ function renderCoach(reference, isSummary = false) {
     lapDeltaMarker.style.left = '50%'
     lapDeltaValue.textContent = '\u2014'
     deltaStrip.dataset.mode = ''
-    deltaStrip.setAttribute('aria-label', 'Lap delta')
-    lapDeltaValue.setAttribute('aria-label', 'Current lap delta')
+    deltaStrip.setAttribute('aria-label', 'Reference delta')
+    lapDeltaValue.setAttribute('aria-label', 'Current reference delta')
     window.HudLayout.refreshPosition?.()
     return
   }
@@ -309,8 +313,8 @@ function renderCoach(reference, isSummary = false) {
   lapDeltaMarker.style.left = `${lapDeltaView.positionPercent}%`
   lapDeltaValue.textContent = lapDeltaView.text || '\u2014'
   deltaStrip.dataset.mode = isSummary ? 'summary' : 'live'
-  deltaStrip.setAttribute('aria-label', isSummary ? 'Final lap delta' : 'Lap delta')
-  lapDeltaValue.setAttribute('aria-label', isSummary ? 'Final lap delta' : 'Current lap delta')
+  deltaStrip.setAttribute('aria-label', isSummary ? 'Final reference delta' : 'Reference delta')
+  lapDeltaValue.setAttribute('aria-label', isSummary ? 'Final reference delta' : 'Current reference delta')
 
   coachStatus.dataset.phase = isSummary ? 'summary' : phase
   coachStatus.dataset.cueKind = reference.cue?.kind || ''
@@ -515,7 +519,12 @@ function renderTelemetry() {
   renderScheduled = false
   const displayedReference = getDisplayedReference()
   const telemetry = latestTelemetry
-  currentLapTime.textContent = `LIVE LAP ${window.ReferenceCoach.formatLapTime(latestLiveLapTimeSeconds)}`
+  const timingPrefix = lapTimingState.phase === 'circuit_complete' || lapTimingState.phase === 'sprint_complete'
+    ? 'FINAL'
+    : lapTimingState.phase === 'paused'
+      ? 'PAUSED LAP'
+      : 'LIVE LAP'
+  currentLapTime.textContent = `${timingPrefix} ${window.ReferenceCoach.formatLapTime(latestLiveLapTimeSeconds)}`
   if (!telemetry) {
     renderCoach(displayedReference.reference, displayedReference.isSummary)
     renderCorner(latestCornerTemplate, latestCornerState, displayedReference.reference, displayedReference.isSummary)
@@ -556,11 +565,10 @@ function queueTelemetry(telemetry) {
 
   const shiftLightState = window.HudShiftLightRuntime?.update?.(telemetry)
   if (shiftLightState) queueShiftLight(shiftLightState)
+  lapTimingState = window.HudLapTiming.update(lapTimingState, telemetry)
   const raceRestart = window.ReferenceCoach.isRaceRestart(latestTelemetry, telemetry)
-  const lapCurrentSeconds = finiteStateNumber(telemetry?.lap?.current)
-  if (telemetry?.isRaceOn === true && lapCurrentSeconds !== null && lapCurrentSeconds >= 0) {
-    latestLiveLapTimeSeconds = lapCurrentSeconds
-  }
+  const displayedTimeMs = window.HudLapTiming.displayTimeMs(lapTimingState)
+  if (displayedTimeMs !== null) latestLiveLapTimeSeconds = displayedTimeMs / 1000
 
   const telemetryLapNumber = finiteStateNumber(telemetry?.lap?.number)
   if (
@@ -578,11 +586,6 @@ function queueTelemetry(telemetry) {
     finalLapSummaryLapNumber = null
     resetCornerState({ preserveLapSummary: false, promotePending: false })
   }
-
-  // The game may finish/leave the active lap before co-driver emits its idle
-  // state. Preserve the last useful Coach frame during that transition.
-  const endedLiveFrame = latestTelemetry?.isRaceOn === true && telemetry?.isRaceOn === false
-  if (endedLiveFrame) beginLapSummary()
 
   latestTelemetry = telemetry
   forzaConnected = true
@@ -614,6 +617,7 @@ function resetCornerState({ preserveLapSummary = false, promotePending = true } 
 function resetSourcePresentation() {
   latestTelemetry = null
   latestLiveLapTimeSeconds = null
+  lapTimingState = window.HudLapTiming.resetForSourceSwitch()
   latestSteer = 0
   historySamples = []
   latestShiftLight = {

@@ -45,6 +45,8 @@
     const currentRaceTimeS = finite(telemetry?.lap?.raceTime)
     const previousLapNumber = finite(previousTelemetry?.lap?.number)
     const currentLapNumber = finite(telemetry?.lap?.number)
+    const previousDistanceM = finite(previousTelemetry?.lap?.distance)
+    const currentDistanceM = finite(telemetry?.lap?.distance)
     if (
       previousRaceTimeS === null
       || currentRaceTimeS === null
@@ -54,8 +56,10 @@
 
     const lapWentBack = currentLapNumber < previousLapNumber
     const clockWentBack = currentRaceTimeS + 5 < previousRaceTimeS
-    const clockIsNearStart = currentRaceTimeS <= 5
-    return lapWentBack && (clockWentBack || clockIsNearStart)
+    const distanceWentBack = previousDistanceM !== null
+      && currentDistanceM !== null
+      && currentDistanceM + 100 < previousDistanceM
+    return clockWentBack && (lapWentBack || distanceWentBack)
   }
 
   function normalizePhase(value) {
@@ -154,6 +158,10 @@
     const lapTimeMs = finite(rawPayload.lapTimeMs)
     if (lapNumber === null || lapTimeMs === null || lapTimeMs <= 0) return null
 
+    const timeSource = ['forza_lap_last', 'forza_lap_current', 'udp_active_fallback'].includes(rawPayload.timeSource)
+      ? rawPayload.timeSource
+      : null
+
     return {
       sessionId: finite(rawPayload.sessionId),
       eventId: finite(rawPayload.eventId),
@@ -161,7 +169,8 @@
       lapTimeMs,
       referenceTimeMs: finite(rawPayload.referenceTimeMs),
       deltaMs: finite(rawPayload.deltaMs),
-      sourceSessionId: finite(rawPayload.sourceSessionId)
+      sourceSessionId: finite(rawPayload.sourceSessionId),
+      timeSource
     }
   }
 

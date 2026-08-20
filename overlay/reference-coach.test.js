@@ -173,7 +173,8 @@ test('normalizes a finish-anchored lap result', () => {
     lapTimeMs: 51250,
     referenceTimeMs: 50000,
     deltaMs: 1250,
-    sourceSessionId: 29
+    sourceSessionId: 29,
+    timeSource: 'forza_lap_last'
   }), {
     sessionId: 32,
     eventId: 13,
@@ -181,7 +182,8 @@ test('normalizes a finish-anchored lap result', () => {
     lapTimeMs: 51250,
     referenceTimeMs: 50000,
     deltaMs: 1250,
-    sourceSessionId: 29
+    sourceSessionId: 29,
+    timeSource: 'forza_lap_last'
   })
   assert.equal(normalizeLapCompletePayload({ lapNumber: 1, lapTimeMs: 0 }), null)
 })
@@ -198,4 +200,11 @@ test('does not treat a normal lap transition as a race restart', () => {
     { lap: { raceTime: 50.2, number: 3 } },
     { lap: { raceTime: 50.3, number: 4 } }
   ), false)
+})
+
+test('detects a point-to-point restart from route distance rollback', () => {
+  assert.equal(isRaceRestart(
+    { lap: { raceTime: 108.7, number: 0, distance: 5950 } },
+    { lap: { raceTime: 0.2, number: 0, distance: 0 } }
+  ), true)
 })

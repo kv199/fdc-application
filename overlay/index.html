@@ -38,7 +38,7 @@
       </div>
     </div>
 
-    <section id="delta-strip" class="delta-strip" aria-label="Lap delta">
+    <section id="delta-strip" class="delta-strip" aria-label="Reference delta">
       <div class="delta-strip__topline">
         <output id="current-lap-time" class="delta-strip__lap-time" aria-label="Current lap time">LAP --:--.---</output>
         <div class="delta-strip__labels" aria-hidden="true">
@@ -50,7 +50,7 @@
         <span class="delta-strip__zone delta-strip__zone--slow" aria-hidden="true"></span>
         <span class="delta-strip__zone delta-strip__zone--fast" aria-hidden="true"></span>
         <span id="lap-delta-marker" class="delta-strip__marker" aria-hidden="true"></span>
-        <output id="lap-delta-value" class="delta-strip__value" aria-label="Current lap delta">&mdash;</output>
+        <output id="lap-delta-value" class="delta-strip__value" aria-label="Current reference delta">&mdash;</output>
       </div>
       <div id="delta-edit-tools" class="layout-edit-tools" hidden>
         <span class="layout-edit__hint">DRAG DELTA</span>
@@ -117,6 +117,7 @@
   <script src="telemetry-route.js"></script>
   <script src="suite-probe.js"></script>
   <script src="reference-coach.js"></script>
+  <script src="lap-timing.js"></script>
   <script src="coach-layout.js"></script>
   <script src="hud-preferences.js"></script>
   <script src="tauri-events.js"></script>

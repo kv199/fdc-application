@@ -762,6 +762,12 @@ mod tests {
         put_f32(&mut packet, 16, 6_500.0);
         put_f32(&mut packet, 244 + 12, 50.0);
         put_f32(&mut packet, 244 + 24, 212.0);
+        put_f32(&mut packet, 244 + 48, 100.5);
+        put_f32(&mut packet, 244 + 52, 85.123);
+        put_f32(&mut packet, 244 + 56, 86.5);
+        put_f32(&mut packet, 244 + 60, 42.1);
+        put_f32(&mut packet, 244 + 64, 200.0);
+        packet[244 + 68..244 + 70].copy_from_slice(&3_u16.to_le_bytes());
         packet[244 + 71] = 128;
         packet[244 + 72] = 64;
         packet[244 + 76] = 127;
@@ -781,6 +787,12 @@ mod tests {
         assert_eq!(telemetry.gear, 4);
         assert_eq!(telemetry.car.ordinal, 1234);
         assert_eq!(telemetry.car.pi, 850);
+        assert!((telemetry.lap.distance - 100.5).abs() < f32::EPSILON);
+        assert!((telemetry.lap.best - 85.123).abs() < 0.001);
+        assert!((telemetry.lap.last - 86.5).abs() < f32::EPSILON);
+        assert!((telemetry.lap.current - 42.1).abs() < 0.001);
+        assert!((telemetry.lap.race_time - 200.0).abs() < f32::EPSILON);
+        assert_eq!(telemetry.lap.number, 3);
     }
 
     #[test]
