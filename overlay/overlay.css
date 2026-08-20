@@ -911,6 +911,7 @@ body.is-editing .coachbar {
   }
 }
 body[data-telemetry-source='direct'] #coach-card,
-body[data-telemetry-source='direct'] #delta-strip {
+body[data-telemetry-source='direct'] #delta-strip .delta-strip__labels,
+body[data-telemetry-source='direct'] #delta-strip .delta-strip__track {
   display: none;
 }

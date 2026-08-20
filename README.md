@@ -61,7 +61,10 @@ both use `lap.current` for the live clock, preserve the last useful value during
 pause/stale packets, and reset volatile timing state when the source changes.
 Suite `lap_complete.timeSource=forza_lap_last` represents a circuit boundary;
 `forza_lap_current` represents a validated point-to-point completion. The HUD
-does not infer a sprint finish from `isRaceOn=false` alone.
+does not infer a sprint finish from `isRaceOn=false` alone: an advancing
+`LastLap` is authoritative, while a CurrentLap-only finish needs the same
+non-live value twice and is cancelled if live driving resumes. Direct keeps the
+game lap clock visible but hides the Suite-only reference track and Coach.
 
 The RPM preview can be combined with a reference state, for example
 `?demo=1&signal=shift&reference=brake-late`. In demo mode, keys `1`–`3` select
