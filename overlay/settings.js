@@ -13,6 +13,12 @@
   const status = document.getElementById('settings-status')
   const telemetryStatus = document.getElementById('telemetry-status')
   const telemetryStatusLabel = document.getElementById('telemetry-status-label')
+  const telemetryRouteCard = document.getElementById('telemetry-route-card')
+  const telemetryRouteLabel = document.getElementById('telemetry-route-label')
+  const telemetryRouteEndpoint = document.getElementById('telemetry-route-endpoint')
+  const telemetryRouteDetail = document.getElementById('telemetry-route-detail')
+  const telemetryRouteWarning = document.getElementById('telemetry-route-warning')
+  const telemetryRouteRetry = document.getElementById('telemetry-route-retry')
   const shiftLightEmpty = document.getElementById('shift-light-empty')
   const shiftLightProfile = document.getElementById('shift-light-profile')
   const shiftLightCarKey = document.getElementById('shift-light-car-key')
@@ -30,6 +36,11 @@
   let shiftLightResetPending = false
   let latestShiftLightState = null
   let telemetrySource = globalScope.HudConnection?.readTelemetrySource?.() || 'direct'
+  let latestRouteRevision = -1
+  let latestRouteStatus = globalScope.HudTelemetryRoute?.normalizeRouteStatus?.({
+    source: telemetrySource,
+    phase: 'offline'
+  })
 
   function selectSettingsTab(tabName) {
     for (const tab of settingsTabs) {
@@ -110,34 +121,44 @@
     button.dataset.state = visible ? 'on' : 'off'
   }
 
-  function setTelemetryState(state) {
-    const stateMap = {
-      'is-live': { label: 'TELEMETRY LIVE', value: 'live' },
-      'is-waiting': { label: 'TELEMETRY CONNECTED', value: 'connected' },
-      'is-offline': { label: 'TELEMETRY OFFLINE', value: 'offline' }
-    }
-    const display = stateMap[state] || stateMap['is-offline']
-    telemetryStatus.dataset.state = display.value
-    telemetryStatusLabel.textContent = display.label
+  function renderRouteStatus(rawStatus) {
+    const nextStatus = globalScope.HudTelemetryRoute?.normalizeRouteStatus?.(rawStatus)
+    if (!nextStatus || nextStatus.revision < latestRouteRevision) return
+    latestRouteRevision = nextStatus.revision
+    latestRouteStatus = nextStatus
+    const presentation = globalScope.HudTelemetryRoute?.getRoutePresentation?.(latestRouteStatus)
+    if (!presentation) return
+
+    telemetrySource = presentation.source
+    applyTelemetrySourceInput()
+    telemetryStatus.dataset.state = presentation.tone === 'live'
+      ? 'live'
+      : ['waiting', 'stale'].includes(presentation.tone)
+        ? 'connected'
+        : 'offline'
+    telemetryStatusLabel.textContent = presentation.statusLabel
+    telemetryRouteCard.dataset.tone = presentation.tone
+    telemetryRouteLabel.textContent = presentation.statusLabel
+    telemetryRouteEndpoint.textContent = presentation.endpoint
+    telemetryRouteDetail.textContent = presentation.detail
+    telemetryRouteWarning.textContent = presentation.warning
+    telemetryRouteWarning.hidden = !presentation.warning
+    telemetryRouteRetry.hidden = !presentation.canRetry
   }
 
   function applyTelemetrySourceInput() {
     for (const input of telemetrySourceInputs) input.checked = input.value === telemetrySource
   }
 
-  async function selectTelemetrySource(source) {
+  async function selectTelemetrySource(source, force = false) {
     const next = globalScope.HudConnection?.normalizeTelemetrySource?.(source) || 'direct'
-    if (next === telemetrySource) return
+    if (next === telemetrySource && !force) return
     try {
+      setStatus(`SWITCHING TO ${next === 'direct' ? 'DIRECT FORZA' : 'CO-DRIVER SUITE'}`)
       await call('set_telemetry_source', { source: next })
       telemetrySource = next
       globalScope.HudConnection?.writeTelemetrySource?.(next)
       applyTelemetrySourceInput()
-      if (next === 'direct') {
-        setStatus('DIRECT FORZA SELECTED')
-      } else {
-        setStatus('CO-DRIVER SUITE SELECTED')
-      }
     } catch (error) {
       applyTelemetrySourceInput()
       setStatus(error.message || 'Unable to change telemetry source', true)
@@ -272,6 +293,13 @@
       shiftLightResetPending = false
       shiftLightReset.disabled = !latestShiftLightState?.carKey
     })
+  }
+
+  async function listenRouteEvents() {
+    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+    if (!eventApi || typeof eventApi.listen !== 'function') return
+    await eventApi.listen('hud_route_status', event => renderRouteStatus(event.payload))
+    await call('sync_route_status')
   }
 
   function updateLayoutRows() {
@@ -423,13 +451,18 @@
     requestShiftLightReset()
   })
 
-  setTelemetryState('is-offline')
+  telemetryRouteRetry.addEventListener('click', () => {
+    void selectTelemetrySource(telemetrySource, true)
+  })
+
+  renderRouteStatus(latestRouteStatus)
   renderShiftLightState(null)
   void listenShiftLightEvents()
+  void listenRouteEvents()
   globalScope.SettingsController = {
     cancelEdit,
     setLayoutEditingState,
-    setTelemetryState,
+    setRouteStatus: renderRouteStatus,
     resetShiftLight: requestShiftLightReset,
     setTelemetrySource: source => {
       telemetrySource = globalScope.HudConnection?.normalizeTelemetrySource?.(source) || 'direct'

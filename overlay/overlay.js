@@ -19,6 +19,7 @@ const coachTargetLabel = document.getElementById('coach-target-label')
 const coachTargetRef = document.getElementById('coach-target-ref')
 const coachTargetObserved = document.getElementById('coach-target-observed')
 const deltaStrip = document.getElementById('delta-strip')
+const telemetryRouteBadge = document.getElementById('telemetry-route-badge')
 const currentLapTime = document.getElementById('current-lap-time')
 const lapDeltaMarker = document.getElementById('lap-delta-marker')
 const lapDeltaValue = document.getElementById('lap-delta-value')
@@ -59,10 +60,22 @@ let latestSteer = 0
 let renderScheduled = false
 let reconnectTimer = null
 let directStartPending = false
+let directGeneration = 0
 let directEventUnlisteners = []
 let socket = null
 let forzaConnected = false
+let suiteHadTelemetry = false
 let lastConnectionState = null
+let routeRevision = 0
+let routeStatus = window.HudTelemetryRoute.normalizeRouteStatus({
+  source: telemetrySource,
+  phase: 'starting',
+  revision: routeRevision
+})
+const suiteProbe = window.HudSuiteProbe.createSuiteProbe({
+  url: WS_URL,
+  onStatus: suiteState => publishRouteStatus({ suiteState })
+})
 let historySamples = []
 let steeringWheelImageReady = false
 let demoSignal = DEMO_SIGNALS.includes(DEMO_SIGNAL_FROM_URL) ? DEMO_SIGNAL_FROM_URL : 'normal'
@@ -144,14 +157,37 @@ function setConnection(state) {
   lastConnectionState = state
   hud.classList.remove('is-live', 'is-waiting', 'is-offline')
   hud.classList.add(state)
-  notifyConnectionState(state)
 }
 
-function notifyConnectionState(state) {
-  const invoke = window.__TAURI_INTERNALS__?.invoke
-  if (typeof invoke === 'function') {
-    Promise.resolve(invoke('notify_connection_state', { state })).catch(() => {})
-  }
+function sameRouteStatus(left, right) {
+  return left.source === right.source
+    && left.phase === right.phase
+    && left.suiteState === right.suiteState
+    && left.message === right.message
+    && left.revision === right.revision
+}
+
+function publishRouteStatus(patch = {}, force = false) {
+  const next = window.HudTelemetryRoute.normalizeRouteStatus({
+    ...routeStatus,
+    ...patch,
+    revision: routeRevision
+  })
+  const changed = !sameRouteStatus(routeStatus, next)
+  routeStatus = next
+  const presentation = window.HudTelemetryRoute.getRoutePresentation(routeStatus)
+  telemetryRouteBadge.textContent = DEMO_MODE ? 'DEMO · PREVIEW' : presentation.badgeLabel
+  telemetryRouteBadge.dataset.tone = DEMO_MODE ? 'waiting' : presentation.tone
+  if (DEMO_MODE || (!changed && !force)) return
+
+  const eventApi = window.HudTauriEvents?.getEventApi?.()
+  if (eventApi?.emit) Promise.resolve(eventApi.emit('hud_route_status', routeStatus)).catch(() => {})
+}
+
+function errorMessage(error) {
+  if (typeof error === 'string') return error
+  if (typeof error?.message === 'string') return error.message
+  return String(error || 'Unknown telemetry source error')
 }
 
 function invokeTauri(command, args) {
@@ -520,6 +556,8 @@ function renderTelemetry() {
 }
 
 function queueTelemetry(telemetry) {
+  if (!telemetry || typeof telemetry !== 'object' || !Number.isFinite(telemetry.speedKmh)) return false
+
   const shiftLightState = window.HudShiftLightRuntime?.update?.(telemetry)
   if (shiftLightState) queueShiftLight(shiftLightState)
   const raceRestart = window.ReferenceCoach.isRaceRestart(latestTelemetry, telemetry)
@@ -552,9 +590,10 @@ function queueTelemetry(telemetry) {
 
   latestTelemetry = telemetry
   forzaConnected = true
-  if (renderScheduled) return
+  if (renderScheduled) return true
   renderScheduled = true
   requestAnimationFrame(renderTelemetry)
+  return true
 }
 
 function scheduleTelemetryRender() {
@@ -665,7 +704,7 @@ function scheduleReconnect() {
   }, RECONNECT_MS)
 }
 
-async function listenDirectEvents() {
+async function listenDirectEvents(generation) {
   if (directEventUnlisteners.length > 0) return
   const eventApi = window.HudTauriEvents?.getEventApi?.()
   if (!eventApi || typeof eventApi.listen !== 'function') {
@@ -673,28 +712,57 @@ async function listenDirectEvents() {
   }
 
   const unlistenTelemetry = await eventApi.listen('direct_telemetry', event => {
-    if (telemetrySource === 'direct' && event.payload) queueTelemetry(event.payload)
+    if (generation !== directGeneration || telemetrySource !== 'direct') return
+    if (queueTelemetry(event.payload)) publishRouteStatus({ phase: 'live', message: '' })
   })
-  const unlistenStatus = await eventApi.listen('direct_status', event => {
-    if (telemetrySource !== 'direct') return
-    const state = event.payload?.state
-    if (state === 'is-live') {
-      forzaConnected = true
-      setConnection('is-live')
-    } else if (state === 'is-waiting') {
-      forzaConnected = false
-      setConnection('is-waiting')
-      scheduleTelemetryRender()
-    } else {
-      forzaConnected = false
-      setConnection('is-offline')
-      scheduleTelemetryRender()
-    }
-  })
+  if (generation !== directGeneration) {
+    await unlistenTelemetry()
+    return
+  }
+
+  let unlistenStatus
+  try {
+    unlistenStatus = await eventApi.listen('direct_status', event => {
+      if (generation !== directGeneration || telemetrySource !== 'direct') return
+      const state = event.payload?.state
+      if (state === 'is-live') {
+        forzaConnected = true
+        setConnection('is-live')
+        publishRouteStatus({ phase: 'live', message: '' })
+      } else if (state === 'is-waiting') {
+        forzaConnected = false
+        setConnection('is-waiting')
+        publishRouteStatus({ phase: 'waiting', message: '' })
+        scheduleTelemetryRender()
+      } else if (state === 'is-stale') {
+        forzaConnected = false
+        setConnection('is-waiting')
+        publishRouteStatus({ phase: 'stale', message: '' })
+        scheduleTelemetryRender()
+      } else {
+        forzaConnected = false
+        setConnection('is-offline')
+        publishRouteStatus({
+          phase: event.payload?.message ? 'error' : 'offline',
+          message: event.payload?.message || ''
+        })
+        scheduleTelemetryRender()
+      }
+    })
+  } catch (error) {
+    await unlistenTelemetry()
+    throw error
+  }
+  if (generation !== directGeneration) {
+    await unlistenTelemetry()
+    await unlistenStatus()
+    return
+  }
   directEventUnlisteners = [unlistenTelemetry, unlistenStatus]
 }
 
 async function disconnectDirect() {
+  directGeneration += 1
   try {
     await invokeTauri('stop_direct_source')
   } catch {
@@ -713,18 +781,37 @@ async function disconnectDirect() {
 
 async function connectDirect() {
   if (DEMO_MODE || directStartPending || telemetrySource !== 'direct') return
+  const generation = ++directGeneration
   directStartPending = true
   forzaConnected = false
   setConnection('is-waiting')
+  publishRouteStatus({
+    source: 'direct',
+    phase: 'starting',
+    suiteState: 'unavailable',
+    message: ''
+  })
+  if (!DEMO_MODE) suiteProbe.start()
   try {
+    await listenDirectEvents(generation)
+    if (generation !== directGeneration || telemetrySource !== 'direct') return
     await invokeTauri('start_direct_source')
-    await listenDirectEvents()
+    if (
+      generation === directGeneration
+      && telemetrySource === 'direct'
+      && routeStatus.source === 'direct'
+      && routeStatus.phase === 'starting'
+    ) {
+      publishRouteStatus({ phase: 'waiting', message: '' })
+    }
   } catch (error) {
+    if (generation !== directGeneration || telemetrySource !== 'direct') return
     await disconnectDirect()
     setConnection('is-offline')
+    publishRouteStatus({ phase: 'error', message: errorMessage(error) })
     console.warn('[hud] unable to start Direct Forza source', error)
   } finally {
-    directStartPending = false
+    if (generation === directGeneration) directStartPending = false
   }
 }
 
@@ -732,13 +819,39 @@ function connectSuite() {
   if (DEMO_MODE || telemetrySource !== 'suite' || (socket && socket.readyState < WebSocket.CLOSING)) return
 
   forzaConnected = false
+  suiteHadTelemetry = false
   setConnection('is-waiting')
-  socket = new WebSocket(WS_URL)
+  publishRouteStatus({ source: 'suite', phase: 'starting', suiteState: 'unavailable', message: '' })
+  let currentSocket
+  try {
+    currentSocket = new WebSocket(WS_URL)
+  } catch (error) {
+    setConnection('is-offline')
+    publishRouteStatus({
+      phase: 'error',
+      suiteState: 'unavailable',
+      message: errorMessage(error)
+    })
+    scheduleReconnect()
+    return
+  }
+  socket = currentSocket
 
-  socket.addEventListener('message', (event) => {
+  currentSocket.addEventListener('open', () => {
+    if (socket !== currentSocket || telemetrySource !== 'suite') return
+    publishRouteStatus({ phase: 'waiting', suiteState: 'waiting', message: '' })
+  })
+
+  currentSocket.addEventListener('message', (event) => {
+    if (socket !== currentSocket || telemetrySource !== 'suite') return
     try {
       const message = JSON.parse(event.data)
-      if (message.type === 'telemetry' && message.t) queueTelemetry(message.t)
+      if (message.type === 'telemetry' && message.t) {
+        if (queueTelemetry(message.t)) {
+          suiteHadTelemetry = true
+          publishRouteStatus({ phase: 'live', suiteState: 'receiving', message: '' })
+        }
+      }
       if (message.type === 'corner_template') queueCornerTemplate(message.template)
       if (message.type === 'corner_state') queueCornerState(message.cornerState)
       if (message.type === 'coach_reference') queueReference(message.reference)
@@ -750,10 +863,22 @@ function connectSuite() {
       }
       if (message.type === 'forza_status') {
         forzaConnected = message.connected === true
-        if (forzaConnected) return
+        if (forzaConnected) {
+          publishRouteStatus({
+            phase: suiteHadTelemetry ? 'live' : 'waiting',
+            suiteState: 'receiving',
+            message: ''
+          })
+          return
+        }
         beginLapSummary()
         resetCornerState({ preserveLapSummary: true })
         setConnection('is-waiting')
+        publishRouteStatus({
+          phase: suiteHadTelemetry ? 'stale' : 'waiting',
+          suiteState: 'waiting',
+          message: ''
+        })
         scheduleTelemetryRender()
       }
     } catch {
@@ -761,24 +886,30 @@ function connectSuite() {
     }
   })
 
-  socket.addEventListener('close', () => {
+  currentSocket.addEventListener('close', () => {
+    if (socket !== currentSocket || telemetrySource !== 'suite') return
     socket = null
     forzaConnected = false
     resetCornerState({ promotePending: false })
     setConnection('is-offline')
+    publishRouteStatus({ phase: 'offline', suiteState: 'unavailable', message: '' })
     scheduleTelemetryRender()
     if (telemetrySource === 'suite') scheduleReconnect()
   })
 
-  socket.addEventListener('error', () => socket?.close())
+  currentSocket.addEventListener('error', () => {
+    if (socket === currentSocket) currentSocket.close()
+  })
 }
 
-async function setTelemetrySource(source) {
+async function setTelemetrySource(source, options = {}) {
   const next = window.HudConnection.normalizeTelemetrySource(source)
-  if (next === telemetrySource) return
+  if (next === telemetrySource && options.force !== true) return
 
+  routeRevision += 1
   telemetrySource = window.HudConnection.writeTelemetrySource(next)
   applyTelemetrySourcePresentation()
+  suiteProbe.stop()
   if (reconnectTimer !== null) {
     window.clearTimeout(reconnectTimer)
     reconnectTimer = null
@@ -788,10 +919,17 @@ async function setTelemetrySource(source) {
   if (telemetrySource === 'direct') {
     socket?.close()
     socket = null
+    suiteHadTelemetry = false
     resetCornerState({ promotePending: false })
+    await disconnectDirect()
     await connectDirect()
   } else {
     await disconnectDirect()
+    if (options.force === true) {
+      const previousSocket = socket
+      socket = null
+      previousSocket?.close()
+    }
     resetCornerState({ promotePending: false })
     connectSuite()
   }
@@ -922,6 +1060,7 @@ window.addEventListener('resize', () => {
 window.HudOverlay = {
   refresh: scheduleTelemetryRender,
   setTelemetrySource,
+  retryTelemetrySource: () => setTelemetrySource(telemetrySource, { force: true }),
   resetShiftLight: async () => {
     try {
       await window.HudShiftLightRuntime?.reset?.()
@@ -931,12 +1070,11 @@ window.HudOverlay = {
       return false
     }
   },
-  syncConnectionState: () => {
-    if (lastConnectionState) notifyConnectionState(lastConnectionState)
-  }
+  syncRouteStatus: () => publishRouteStatus({}, true)
 }
 
 applyTelemetrySourcePresentation()
+publishRouteStatus({}, true)
 if (DEMO_MODE) startDemo()
 else if (telemetrySource === 'direct') connectDirect()
 else connectSuite()

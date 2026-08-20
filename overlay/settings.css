@@ -743,3 +743,64 @@ h1 {
   font-size: 11px;
   line-height: 1.35;
 }
+
+.telemetry-route-card {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid rgb(226 232 240 / 16%);
+  border-radius: 4px;
+  background: rgb(8 10 12 / 68%);
+}
+
+.telemetry-route-card__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: #a1a1aa;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+#telemetry-route-endpoint {
+  color: #71717a;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+}
+
+#telemetry-route-detail,
+.telemetry-route-card__warning {
+  margin-top: 8px;
+  color: #a1a1aa;
+  font-size: 11px;
+  line-height: 1.4;
+  user-select: text;
+}
+
+.telemetry-route-card__warning {
+  padding: 8px 9px;
+  border-left: 2px solid #fbbf24;
+  color: #fbbf24;
+  background: rgb(251 191 36 / 7%);
+}
+
+.telemetry-route-card[data-tone='live'] #telemetry-route-label {
+  color: #69e83f;
+}
+
+.telemetry-route-card[data-tone='waiting'] #telemetry-route-label,
+.telemetry-route-card[data-tone='stale'] #telemetry-route-label {
+  color: #fbbf24;
+}
+
+.telemetry-route-card[data-tone='offline'] #telemetry-route-label,
+.telemetry-route-card[data-tone='error'] #telemetry-route-label {
+  color: #ff827d;
+}
+
+#telemetry-route-retry {
+  width: 100%;
+  margin-top: 10px;
+}

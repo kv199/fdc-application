@@ -302,7 +302,7 @@ fn start_direct_source(app: AppHandle, state: State<'_, DirectSourceState>) -> R
 
                 if live && last_packet_at.is_some_and(|at| at.elapsed() > Duration::from_secs(1)) {
                     live = false;
-                    emit_direct_status(&thread_app, "is-waiting", None);
+                    emit_direct_status(&thread_app, "is-stale", None);
                 }
             }
 
@@ -329,7 +329,10 @@ fn set_telemetry_source(app: AppHandle, source: String) -> Result<(), String> {
         return Err("unknown telemetry source".to_string());
     }
 
-    let script = format!("window.HudOverlay?.setTelemetrySource?.('{}')", source);
+    let script = format!(
+        "window.HudOverlay?.setTelemetrySource?.('{}', {{ force: true }})",
+        source
+    );
     if let Some(window) = app.get_webview_window("main") {
         window.eval(&script).map_err(|error| error.to_string())?;
     }
@@ -527,7 +530,7 @@ fn show_settings<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     window.show()?;
     window.set_focus()?;
     if let Some(main) = app.get_webview_window("main") {
-        let _ = main.eval("window.HudOverlay?.syncConnectionState?.()");
+        let _ = main.eval("window.HudOverlay?.syncRouteStatus?.()");
     }
     Ok(())
 }
@@ -624,20 +627,8 @@ fn set_overlay_visibility(app: AppHandle, component: String, visible: bool) -> R
 }
 
 #[tauri::command]
-fn notify_connection_state(app: AppHandle, state: String) -> Result<(), String> {
-    if !["is-live", "is-waiting", "is-offline"].contains(&state.as_str()) {
-        return Err("unknown telemetry connection state".to_string());
-    }
-
-    let script = format!(
-        "window.SettingsController?.setTelemetryState?.('{}')",
-        state
-    );
-    if let Some(settings) = app.get_webview_window("settings") {
-        settings.eval(&script).map_err(|error| error.to_string())?;
-    }
-
-    Ok(())
+fn sync_route_status(app: AppHandle) -> Result<(), String> {
+    eval_main(&app, "window.HudOverlay?.syncRouteStatus?.()")
 }
 
 fn main() {
@@ -649,7 +640,7 @@ fn main() {
             layout_action,
             set_hud_visibility,
             set_overlay_visibility,
-            notify_connection_state,
+            sync_route_status,
             start_direct_source,
             stop_direct_source,
             set_telemetry_source,

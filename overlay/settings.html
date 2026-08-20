@@ -42,6 +42,15 @@
           </span>
         </label>
       </div>
+      <div id="telemetry-route-card" class="telemetry-route-card" data-tone="offline">
+        <div class="telemetry-route-card__header">
+          <output id="telemetry-route-label" aria-live="polite">DIRECT · OFFLINE</output>
+          <output id="telemetry-route-endpoint">UDP 127.0.0.1:5301</output>
+        </div>
+        <p id="telemetry-route-detail">The Direct Forza UDP receiver is offline.</p>
+        <p id="telemetry-route-warning" class="telemetry-route-card__warning" hidden></p>
+        <button id="telemetry-route-retry" class="settings-button" type="button" hidden>RETRY SOURCE</button>
+      </div>
     </section>
 
     <div class="settings-tabs" role="tablist" aria-label="Settings categories">
@@ -218,6 +227,7 @@
   </main>
 
   <script src="connection.js"></script>
+  <script src="telemetry-route.js"></script>
   <script src="shift-light-settings.js"></script>
   <script src="tauri-events.js"></script>
   <script src="settings.js"></script>

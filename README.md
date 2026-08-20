@@ -87,10 +87,13 @@ in Settings:
   existing Coach, reference, corner, and lap-delta behavior. The HUD does not
   bind UDP in this mode.
 
-The modes are mutually exclusive: Docker/co-driver must be stopped before
-Direct mode can bind UDP `5301`, and Direct mode must be stopped before the
-provider can use that port. The selected mode is stored in local HUD storage;
-there is no second executable or installer variant.
+The HUD source modes are mutually exclusive inside the executable: Direct never
+reads the Suite WebSocket, and Suite never starts the HUD UDP receiver. Docker
+Desktop can expose its own `5301` forwarding endpoint while Direct owns
+`127.0.0.1:5301` on Windows, so co-driver may also receive packets in the
+background. The HUD shows its authoritative route plus this coexistence state;
+it never switches sources automatically. The selected mode is stored in local
+HUD storage; there is no second executable or installer variant.
 
 Shift Light is calculated by the HUD in both modes. It learns per-gear targets
 from clean full-throttle upshifts, restores profiles by the
@@ -197,9 +200,13 @@ To preview the short post-lap state in a browser, add `lapSummary=1`, for exampl
 
 Choose `Direct Forza` in Settings to run without Docker or co-driver. Choose
 `co-driver Suite` to use `ws://127.0.0.1:3001/_ws` and the provider's analysis
-features. Direct and Suite modes cannot bind the same UDP port simultaneously.
-The overlay owns its Shift Light learner and local profile database; it does
-not read the provider database or duplicate provider corner/Coach analysis.
+features. In Direct mode the HUD periodically probes the Suite WebSocket only
+for its immediate `forza_status`, closes the probe immediately after that
+snapshot, and ignores every other message. It reports whether co-driver is also
+online or receiving Forza packets; probe data never enters the HUD telemetry
+pipeline. The overlay owns its Shift Light
+learner and local profile database; it does not read the provider database or
+duplicate provider corner/Coach analysis.
 
 From the Suite root:
 
