@@ -142,7 +142,7 @@
     }
 
     function getFallbackSize(name, viewport) {
-      if (name === 'coach') return { width: Math.min(560, Math.max(0, viewport.width - 24)), height: 132 }
+      if (name === 'coach') return { width: Math.min(460, Math.max(0, viewport.width - 24)), height: 88 }
       if (name === 'delta') return { width: Math.min(1240, Math.max(0, viewport.width - 16)), height: 60 }
       return { width: Math.min(1240, Math.max(0, viewport.width - 16)), height: 138 }
     }
@@ -155,7 +155,8 @@
 
       if (name === 'hud') return { left: hudLeft, top: hudTop }
       if (name === 'delta') return { left: hudLeft, top: hudTop - elementSize.height - 10 }
-      return { left: hudLeft, top: hudTop - elementSize.height - 18 }
+      const deltaSize = getElementSize(elements.delta, getFallbackSize('delta', viewport))
+      return { left: hudLeft, top: hudTop - deltaSize.height - elementSize.height - 20 }
     }
 
     function ensurePosition(name) {

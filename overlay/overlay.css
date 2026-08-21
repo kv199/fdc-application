@@ -251,9 +251,9 @@ body {
   top: 12px;
   left: 12px;
   display: block;
-  width: min(560px, calc(100vw - 24px));
-  min-height: 148px;
-  padding: 16px 18px;
+  width: min(460px, calc(100vw - 24px));
+  min-height: 88px;
+  padding: 12px 16px;
   overflow: visible;
   background: rgb(8 10 12 / 82%);
   font-variant-numeric: tabular-nums;
@@ -276,19 +276,18 @@ body {
 
 .coach-card__body {
   justify-content: flex-start;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .coachbar output {
   overflow: hidden;
-  border-radius: 2px;
+  border-radius: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .coach__status,
 .corner__identity,
-.corner__phase,
 .corner__distance {
   padding: 0;
   font-style: normal;
@@ -296,31 +295,23 @@ body {
 
 .corner__identity {
   color: #f8fafc;
-  font-size: 32px;
+  font-size: 20px;
   font-weight: 800;
   letter-spacing: 0.02em;
   line-height: 1.05;
 }
 
-.corner__phase {
-  color: #a1a1aa;
-  font-size: 24px;
-  font-weight: 750;
-  letter-spacing: 0.04em;
-  line-height: 1.1;
-}
-
 .corner__distance {
   flex: 0 0 auto;
   color: #d4d4d8;
-  font-size: 20px;
+  font-size: 13px;
   font-weight: 650;
   line-height: 1.1;
 }
 
 .coach__status {
   color: #a1a1aa;
-  font-size: 25px;
+  font-size: 28px;
   font-weight: 800;
   letter-spacing: 0.04em;
   line-height: 1.1;
@@ -362,49 +353,8 @@ body {
   color: var(--gas);
 }
 
-.corner__identity[data-phase='loading'],
-.corner__phase[data-phase='loading'] {
+.corner__identity[data-phase='loading'] {
   color: #a1a1aa;
-}
-
-.corner__phase[data-phase='between'],
-.corner__phase[data-phase='approach'] {
-  color: #fbbf24;
-}
-
-.corner__phase[data-phase='entry'] {
-  color: var(--brake);
-}
-
-.corner__phase[data-phase='apex'] {
-  color: #f8fafc;
-}
-
-.corner__phase[data-phase='exit'] {
-  color: var(--gas);
-}
-
-.coach-target__label {
-  color: #f8fafc;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  line-height: 1.1;
-}
-
-.coach-target__reference,
-.coach-target__observed {
-  overflow: hidden;
-  color: #a1a1aa;
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.coach-target__observed {
-  color: #f8fafc;
 }
 
 .coach-edit-tools {
@@ -488,18 +438,6 @@ body.is-editing .coachbar:active {
   background: rgb(35 83 28 / 34%);
 }
 
-.coachbar[data-delta-state='green'] {
-  background: rgb(35 83 28 / 34%);
-}
-
-.coachbar[data-delta-state='amber'] {
-  background: rgb(92 66 15 / 30%);
-}
-
-.coachbar[data-delta-state='red'] {
-  background: rgb(103 24 21 / 30%);
-}
-
 body.is-editing .coachbar {
   background: rgb(8 10 12 / 88%);
 }
@@ -542,26 +480,20 @@ body.is-editing .coachbar {
   }
 
   .coachbar {
-    min-height: 112px;
+    min-height: 80px;
     padding: 12px 14px;
   }
 
   .corner__identity {
-    font-size: 25px;
+    font-size: 17px;
   }
 
-  .corner__phase,
   .coach__status {
-    font-size: 19px;
+    font-size: 22px;
   }
 
   .corner__distance {
-    font-size: 15px;
-  }
-
-  .coach-target__reference,
-  .coach-target__observed {
-    font-size: 12px;
+    font-size: 11px;
   }
 
 }
@@ -571,7 +503,7 @@ body.is-editing .coachbar {
   position: absolute;
   top: 12px;
   left: 12px;
-  width: min(560px, calc(100vw - 24px));
+  width: min(460px, calc(100vw - 24px));
   overflow: visible;
   pointer-events: none;
   z-index: 2;
@@ -583,58 +515,33 @@ body.is-editing .coachbar {
   left: auto;
   display: block;
   width: 100%;
-  min-height: 132px;
-  padding: 14px 18px;
+  min-height: 88px;
+  padding: 12px 16px;
   transform: none;
 }
 
-.coach-card__header,
-.coach-card__meta {
+.coach-card__header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
 }
 
-.coach-card__meta {
-  flex: 0 0 auto;
-  justify-content: flex-end;
-}
-
 .coach-card__body {
   justify-content: flex-start;
-  margin-top: 12px;
+  margin-top: 6px;
 }
 
 .corner__identity {
-  font-size: 30px;
+  font-size: 20px;
 }
 
-.corner__phase,
 .corner__distance {
   font-size: 13px;
 }
 
 .coach__status {
-  font-size: 24px;
-}
-
-.coach-target {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
-  align-items: baseline;
-  gap: 10px;
-  margin-top: 14px;
-  padding-top: 10px;
-}
-
-.coach-target[hidden] {
-  display: none;
-}
-
-.coach-target__reference,
-.coach-target__observed {
-  font-size: 15px;
+  font-size: 28px;
 }
 
 .delta-strip {
@@ -900,26 +807,20 @@ body.is-editing .coachbar {
   }
 
   .coachbar {
-    min-height: 112px;
+    min-height: 80px;
     padding: 12px 14px;
   }
 
   .corner__identity {
-    font-size: 25px;
+    font-size: 17px;
   }
 
-  .corner__phase,
   .corner__distance {
     font-size: 11px;
   }
 
   .coach__status {
-    font-size: 19px;
-  }
-
-  .coach-target__reference,
-  .coach-target__observed {
-    font-size: 12px;
+    font-size: 22px;
   }
 
   .delta-strip__value {

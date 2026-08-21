@@ -13,12 +13,11 @@ while the Suite root owns local runtime startup and end-to-end workflow.
 
 ## Driver Coach MVP
 
-The Coach card includes a neutral observed Driver Coach phase indicator:
-`BRAKE`, `BLEND`, `COAST`, or `POWER`. It describes the observed pedal and
-steering phase of the current turn; `BLEND` is the observable overlap of brake
-and steering, not a quality score or a claim that trail braking was correct.
-After a turn, the HUD briefly shows accumulated `BLEND` and `COAST` time plus
-minimum and exit speed when available.
+The Coach card is a compact at-a-glance instruction surface. It shows one large
+actionable instruction, the corner identity, and at most one numeric context.
+Technical matcher phases and absolute `REF` / `YOU` lap positions are not drawn
+in game. When a correction already includes a distance or speed, the secondary
+corner distance is hidden so the card never competes with itself.
 
 The Driver Coach, lap-delta strip, and telemetry HUD are independently movable
 overlay targets. The HUD icon's tray menu opens `Configuration`; the window is
@@ -83,8 +82,8 @@ Corner context can be previewed with the same demo page:
 
 The corner readout consumes `corner_template` and `corner_state` messages from
 the local WebSocket. `co-driver` remains responsible for matching telemetry to
-track corners; the HUD presents the number, direction, phase, distance, and any
-explicit reference cue supplied by the backend.
+track corners; the HUD presents the number, direction, one relevant distance,
+and any explicit reference cue supplied by the backend.
 
 ## Telemetry sources and Shift Light
 
@@ -179,9 +178,10 @@ the HUD hides the Coach and lap-delta strip and keeps the ordinary HUD. The HUD
 does not derive advice from raw telemetry.
 
 The Coach shows one phase-specific action at a time: brake on approach, release
-brake on entry, apex guidance at the apex, and throttle pickup on exit. It shows
-only the reference/observed pedal point relevant to that phase. The browser demo
-covers the same states:
+brake on entry, apex guidance at the apex, and throttle pickup on exit. Reference
+and observed pedal points remain provider data but are not displayed as raw
+lap-relative coordinates in the in-game card. The browser demo covers the same
+states:
 
 ```text
 ?demo=1&reference=brake-late
@@ -197,9 +197,10 @@ only `lapDeltaMs`:
 positive values are slower and move left into the red zone; negative values are
 faster and move right into the green zone. The visual range is limited to ±1 s,
 and missing live deltas stay neutral. A `lap_complete.deltaMs` value replaces
-the rolling value after the finish. The Coach border uses the local `deltaMs`
-for a small color accent, but does not display it as a second large number. `targets`
-and `observed` are displayed by the HUD and are not recomputed from telemetry.
+the rolling value after the finish. The Coach does not use the local corner
+`deltaMs` as a second performance color; its color is reserved for the current
+instruction. `targets` and `observed` remain in the provider contract and are
+not recomputed from telemetry.
 
 To preview the short post-lap state in a browser, add `lapSummary=1`, for example:
 

@@ -1,24 +1,42 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 const test = require('node:test')
 
 const {
   classifyDelta,
   createLapDeltaView,
   createDemoReference,
+  cueHasMagnitude,
   formatCue,
   formatCoachStatus,
   formatLapDelta,
   formatLapTime,
   formatPhaseAction,
-  formatPedalPoint,
   formatSummary,
   formatSignedMilliseconds,
-  getActivePedalPoint,
+  hasLiveCoachGuidance,
   isRaceRestart,
   normalizeLapCompletePayload,
   normalizeReferencePayload,
   selectPrimaryCue
 } = require('./reference-coach.js')
+
+test('keeps the in-game Coach card to one instruction and compact corner context', () => {
+  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
+  const css = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
+  const runtime = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
+
+  assert.match(html, /id="corner-identity"/)
+  assert.match(html, /id="corner-distance"/)
+  assert.match(html, /id="coach-status"/)
+  assert.doesNotMatch(html, /id="corner-phase"/)
+  assert.doesNotMatch(html, /id="coach-target(?:-|\")/)
+  assert.doesNotMatch(css, /\.coachbar\[data-delta-state=/)
+  assert.match(runtime, /DEMO_MODE && demoReference !== null/)
+  assert.equal([...runtime.matchAll(/beginLapSummary\(\)/g)].length, 2)
+  assert.match(runtime, /Only an explicit lap_complete may turn a live value into a final result/)
+})
 
 test('does not expose a cue when reference is unavailable', () => {
   const reference = normalizeReferencePayload({
@@ -41,12 +59,10 @@ test('classifies pace deltas with null safety and hysteresis', () => {
   assert.equal(classifyDelta(25, 'red'), 'red')
 })
 
-test('formats signed milliseconds and pedal points for the Coach card', () => {
+test('formats signed milliseconds for reference diagnostics', () => {
   assert.equal(formatSignedMilliseconds(-38), '-38 ms')
   assert.equal(formatSignedMilliseconds(42), '+42 ms')
   assert.equal(formatSignedMilliseconds(null), '')
-  assert.equal(formatPedalPoint(560, 'REF'), 'REF 560 m')
-  assert.equal(formatPedalPoint(null, 'YOU'), 'YOU —')
 })
 
 test('formats the lap delta with the correct faster/slower sign', () => {
@@ -74,32 +90,10 @@ test('maps lap delta to the strip direction and color state', () => {
   })
 })
 
-test('selects one phase action and one active pedal point', () => {
-  const targets = {
-    brakeStartDistanceM: 560,
-    brakeReleaseDistanceM: 690,
-    throttlePickupDistanceM: 835
-  }
-  const observed = {
-    brakeStartDistanceM: 578,
-    brakeReleaseDistanceM: null,
-    throttlePickupDistanceM: null
-  }
-
+test('selects one phase action without exposing reference and observed target rows', () => {
   assert.equal(formatPhaseAction('approach'), 'BRAKE')
   assert.equal(formatPhaseAction('entry'), 'RELEASE BRAKE')
   assert.equal(formatPhaseAction('apex'), 'APEX')
-  assert.deepEqual(getActivePedalPoint('approach', targets, observed), {
-    label: 'BRAKE',
-    reference: 'REF 560 m',
-    observed: 'YOU 578 m'
-  })
-  assert.deepEqual(getActivePedalPoint('entry', targets, observed), {
-    label: 'RELEASE BRAKE',
-    reference: 'REF 690 m',
-    observed: 'YOU —'
-  })
-  assert.equal(getActivePedalPoint('apex', targets, observed), null)
 })
 
 test('selects the highest-priority cue from a payload', () => {
@@ -115,22 +109,40 @@ test('selects the highest-priority cue from a payload', () => {
   assert.equal(cue.value, 12)
 })
 
-test('formats the supported guidance cues without inventing advice', () => {
-  assert.equal(formatCue({ kind: 'brake_late', value: 12 }), 'BRAKE 12 m LATE')
-  assert.equal(formatCue({ kind: 'release_late' }), 'RELEASE BRAKE')
-  assert.equal(formatCue({ kind: 'apex_too_fast', value: 4 }), 'APEX 4 km/h SLOW')
-  assert.equal(formatCue({ kind: 'throttle_late', value: 8 }), 'THROTTLE 8 m LATE')
+test('formats the supported guidance cues as one actionable instruction', () => {
+  assert.equal(formatCue({ kind: 'brake_late', value: 12 }), 'BRAKE 12 m EARLIER')
+  assert.equal(formatCue({ kind: 'brake_early', value: 12 }), 'BRAKE 12 m LATER')
+  assert.equal(formatCue({ kind: 'release_late' }), 'RELEASE EARLIER')
+  assert.equal(formatCue({ kind: 'apex_too_fast', value: 4 }), 'APEX +4 km/h')
+  assert.equal(formatCue({ kind: 'apex_too_slow', value: 4 }), 'APEX -4 km/h')
+  assert.equal(formatCue({ kind: 'throttle_late', value: 8 }), 'THROTTLE 8 m EARLIER')
+  assert.equal(formatCue({ kind: 'throttle_early', value: 8 }), 'THROTTLE 8 m LATER')
+  assert.equal(formatCue({ kind: 'good' }), 'GOOD EXIT')
   assert.equal(formatCue({ kind: 'unknown', value: 99 }), '')
 })
 
+test('shows Coach only for live corner guidance, never for pace-only or final data', () => {
+  assert.equal(hasLiveCoachGuidance({ available: true, corner: 'T3 LEFT' }), true)
+  assert.equal(hasLiveCoachGuidance({ available: true, corner: '' }), false)
+  assert.equal(hasLiveCoachGuidance({ available: true, corner: 'T3 LEFT' }, true), false)
+  assert.equal(hasLiveCoachGuidance({ available: false, corner: 'T3 LEFT' }), false)
+})
+
+test('identifies cues whose correction already supplies the only numeric context', () => {
+  assert.equal(cueHasMagnitude({ kind: 'brake_late', value: 12 }), true)
+  assert.equal(cueHasMagnitude({ kind: 'release_late' }), false)
+  assert.equal(cueHasMagnitude({ kind: 'good' }), false)
+  assert.equal(cueHasMagnitude(null), false)
+})
+
 test('formats apex guidance in the selected speed unit', () => {
-  assert.equal(formatCue({ kind: 'apex_too_fast', value: 16 }, 'mph'), 'APEX 10 mph SLOW')
+  assert.equal(formatCue({ kind: 'apex_too_fast', value: 16 }, 'mph'), 'APEX +10 mph')
   assert.equal(formatCoachStatus({
     available: true,
     corner: 'T3 LEFT',
     phase: 'apex',
     cue: { kind: 'apex_too_slow', value: 8 }
-  }, false, 'mph'), 'APEX 5 mph FAST')
+  }, false, 'mph'), 'APEX -5 mph')
 })
 
 test('formats a reference summary using the corner delta', () => {

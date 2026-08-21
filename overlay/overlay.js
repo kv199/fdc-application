@@ -12,12 +12,7 @@ const coachCard = document.getElementById('coach-card')
 const coachbar = document.getElementById('coachbar')
 const coachStatus = document.getElementById('coach-status')
 const cornerIdentity = document.getElementById('corner-identity')
-const cornerPhase = document.getElementById('corner-phase')
 const cornerDistance = document.getElementById('corner-distance')
-const coachTarget = document.getElementById('coach-target')
-const coachTargetLabel = document.getElementById('coach-target-label')
-const coachTargetRef = document.getElementById('coach-target-ref')
-const coachTargetObserved = document.getElementById('coach-target-observed')
 const deltaStrip = document.getElementById('delta-strip')
 const currentLapTime = document.getElementById('current-lap-time')
 const lapDeltaMarker = document.getElementById('lap-delta-marker')
@@ -94,7 +89,6 @@ let latestShiftLight = {
 let latestCornerTemplate = null
 let latestCornerState = null
 let latestReference = window.ReferenceCoach.createEmptyReference()
-let referenceDeltaState = 'neutral'
 let lapDeltaState = 'neutral'
 let lapSummaryReference = null
 let lapSummaryExpiresAt = 0
@@ -189,7 +183,9 @@ function invokeTauri(command, args) {
 }
 
 function applyTelemetrySourcePresentation() {
-  document.body.dataset.telemetrySource = telemetrySource
+  document.body.dataset.telemetrySource = DEMO_MODE && demoReference !== null
+    ? 'suite'
+    : telemetrySource
 }
 
 function applyDisplayPreferences() {
@@ -294,18 +290,17 @@ function getDisplayedReference() {
 
 function renderCoach(reference, isSummary = false) {
   const hasReference = reference?.available === true
+  const hasCoachGuidance = window.ReferenceCoach.hasLiveCoachGuidance(reference, isSummary)
   const isCoachEditing = window.HudLayout?.isEditing?.('coach') === true
   const isCoachVisible = window.HudPreferences?.isOverlayVisible?.('coach') !== false
   const isDeltaVisible = window.HudPreferences?.isOverlayVisible?.('delta') !== false
   coachCard.dataset.hasReference = hasReference ? 'true' : 'false'
-  coachCard.hidden = !isCoachEditing && (!isCoachVisible || !hasReference)
+  coachCard.hidden = !isCoachEditing && (!isCoachVisible || !hasCoachGuidance)
   deltaStrip.hidden = !isDeltaVisible
 
   if (!hasReference) {
-    coachbar.dataset.deltaState = 'neutral'
     coachbar.dataset.cueKind = ''
     coachbar.dataset.phase = ''
-    coachTarget.hidden = true
     lapDeltaState = 'neutral'
     deltaStrip.dataset.deltaState = 'neutral'
     lapDeltaMarker.style.left = '50%'
@@ -318,11 +313,6 @@ function renderCoach(reference, isSummary = false) {
   }
 
   const phase = reference.phase || 'between'
-  const deltaState = isSummary
-    ? 'neutral'
-    : window.ReferenceCoach.classifyDelta(reference.deltaMs, referenceDeltaState)
-  referenceDeltaState = deltaState
-  coachbar.dataset.deltaState = deltaState
 
   const lapDeltaView = window.ReferenceCoach.createLapDeltaView(reference.lapDeltaMs, lapDeltaState)
   lapDeltaState = lapDeltaView.state
@@ -341,16 +331,6 @@ function renderCoach(reference, isSummary = false) {
     displayPreferences.speedUnit
   ) || '\u2014'
 
-  const target = isSummary
-    ? null
-    : window.ReferenceCoach.getActivePedalPoint(phase, reference.targets, reference.observed)
-  coachTarget.hidden = target === null
-  if (target) {
-    coachTargetLabel.textContent = target.label
-    coachTargetRef.textContent = target.reference
-    coachTargetObserved.textContent = target.observed
-  }
-
   window.HudLayout.refreshPosition?.()
 }
 
@@ -359,8 +339,6 @@ function renderCorner(template, state, reference, isSummary = false) {
     const referenceReadout = window.ReferenceCoach.formatCornerReadout(reference)
     cornerIdentity.textContent = referenceReadout.identity
     cornerIdentity.hidden = !referenceReadout.visible || referenceReadout.identity === ''
-    cornerPhase.textContent = ''
-    cornerPhase.hidden = true
     cornerDistance.textContent = ''
     cornerDistance.hidden = true
     cornerIdentity.dataset.phase = ''
@@ -372,13 +350,11 @@ function renderCorner(template, state, reference, isSummary = false) {
   const mergedReadout = {
     visible: readout.visible || referenceReadout.visible,
     identity: referenceReadout.identity || readout.identity,
-    phase: referenceReadout.phase || readout.phase,
-    distance: readout.distance,
+    distance: window.ReferenceCoach.cueHasMagnitude(reference.cue) ? '' : readout.distance,
     phaseClass: referenceReadout.visible ? referenceReadout.phaseClass : readout.phaseClass
   }
   const fields = [
     [cornerIdentity, mergedReadout.identity],
-    [cornerPhase, mergedReadout.phase],
     [cornerDistance, mergedReadout.distance]
   ]
 
@@ -626,7 +602,6 @@ function resetCornerState({ preserveLapSummary = false, promotePending = true } 
   latestCornerTemplate = null
   latestCornerState = null
   latestReference = window.ReferenceCoach.createEmptyReference()
-  referenceDeltaState = 'neutral'
   lapDeltaState = 'neutral'
   if (!preserveLapSummary) {
     lastAvailableReference = null
@@ -658,11 +633,9 @@ function queueCornerTemplate(template) {
   if (!template || typeof template !== 'object') return
 
   const isRecordingIdle = template.status === 'idle'
-  if (isRecordingIdle) beginLapSummary()
   latestCornerTemplate = template
   latestCornerState = null
   latestReference = window.ReferenceCoach.createEmptyReference()
-  referenceDeltaState = 'neutral'
   lapDeltaState = 'neutral'
   if (!isRecordingIdle) {
     finalLapSummaryReference = null
@@ -688,7 +661,6 @@ function queueCornerState(state) {
     : ''
   if (changedCorner && referenceCorner && referenceCorner !== nextIdentity) {
     latestReference = window.ReferenceCoach.createEmptyReference()
-    referenceDeltaState = 'neutral'
     lapDeltaState = 'neutral'
   }
 
@@ -708,11 +680,10 @@ function queueReference(payload) {
       latestReference = reference
     }
   } else {
-    // co-driver makes the reference unavailable after the final matched zone.
-    // Keep the last valid frame until the explicit lap_complete message arrives
-    // instead of turning the live delta into a premature final summary.
-    if (!summary && lastAvailableReference?.available === true) latestReference = lastAvailableReference
-    else if (!summary) latestReference = reference
+    // Only an explicit lap_complete may turn a live value into a final result.
+    // Provider loss or an unavailable reference must clear stale live guidance.
+    if (!summary) latestReference = reference
+    lastAvailableReference = null
   }
   scheduleTelemetryRender()
 }
@@ -878,8 +849,7 @@ function connectSuite() {
       if (message.type === 'coach_reference') queueReference(message.reference)
       if (message.type === 'lap_complete') queueLapComplete(message.lapComplete)
       if (message.type === 'recording_state' && message.state === 'idle') {
-        beginLapSummary()
-        resetCornerState({ preserveLapSummary: true })
+        resetCornerState({ promotePending: false })
         scheduleTelemetryRender()
       }
       if (message.type === 'forza_status') {
@@ -892,8 +862,7 @@ function connectSuite() {
           })
           return
         }
-        beginLapSummary()
-        resetCornerState({ preserveLapSummary: true })
+        resetCornerState({ promotePending: false })
         setConnection('is-waiting')
         publishRouteStatus({
           phase: suiteHadTelemetry ? 'stale' : 'waiting',
@@ -1003,8 +972,8 @@ function setDemoReference(reference, schedule = true) {
     ? window.ReferenceCoach.createEmptyReference()
     : window.ReferenceCoach.createDemoReference(demoReference)
   lastAvailableReference = latestReference.available ? latestReference : null
-  referenceDeltaState = 'neutral'
   lapDeltaState = 'neutral'
+  applyTelemetrySourcePresentation()
 
   if (schedule) scheduleTelemetryRender()
 }

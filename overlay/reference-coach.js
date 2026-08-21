@@ -217,19 +217,29 @@
     if (!normalizedCue) return ''
 
     const magnitude = formatMagnitude(normalizedCue.value)
-    if (normalizedCue.kind === 'brake_late') return `BRAKE ${magnitude} m LATE`
-    if (normalizedCue.kind === 'brake_early') return `BRAKE ${magnitude} m EARLY`
-    if (normalizedCue.kind === 'release_late') return 'RELEASE BRAKE'
+    if (normalizedCue.kind === 'brake_late') return `BRAKE ${magnitude} m EARLIER`
+    if (normalizedCue.kind === 'brake_early') return `BRAKE ${magnitude} m LATER`
+    if (normalizedCue.kind === 'release_late') return 'RELEASE EARLIER'
     if (normalizedCue.kind === 'apex_too_fast') {
-      return `APEX ${formatSpeedMagnitudeKmh(normalizedCue.value, speedUnit)} ${speedUnitLabel(speedUnit)} SLOW`
+      return `APEX +${formatSpeedMagnitudeKmh(normalizedCue.value, speedUnit)} ${speedUnitLabel(speedUnit)}`
     }
     if (normalizedCue.kind === 'apex_too_slow') {
-      return `APEX ${formatSpeedMagnitudeKmh(normalizedCue.value, speedUnit)} ${speedUnitLabel(speedUnit)} FAST`
+      return `APEX -${formatSpeedMagnitudeKmh(normalizedCue.value, speedUnit)} ${speedUnitLabel(speedUnit)}`
     }
-    if (normalizedCue.kind === 'throttle_late') return `THROTTLE ${magnitude} m LATE`
-    if (normalizedCue.kind === 'throttle_early') return `THROTTLE ${magnitude} m EARLY`
-    if (normalizedCue.kind === 'good') return 'GOOD'
+    if (normalizedCue.kind === 'throttle_late') return `THROTTLE ${magnitude} m EARLIER`
+    if (normalizedCue.kind === 'throttle_early') return `THROTTLE ${magnitude} m LATER`
+    if (normalizedCue.kind === 'good') return 'GOOD EXIT'
     return ''
+  }
+
+  function cueHasMagnitude(cue) {
+    const normalizedCue = normalizeCue(cue)
+    return normalizedCue !== null && normalizedCue.value !== null
+  }
+
+  function hasLiveCoachGuidance(reference, isSummary = false) {
+    const normalized = normalizeReferencePayload(reference)
+    return !isSummary && normalized.available && normalized.corner !== ''
   }
 
   function formatDeltaSeconds(deltaMs) {
@@ -269,12 +279,6 @@
     return `${minutes}:${remainder}`
   }
 
-  function formatPedalPoint(value, prefix) {
-    const distance = finite(value)
-    if (distance === null) return `${prefix} —`
-    return `${prefix} ${Math.max(0, Math.round(distance))} m`
-  }
-
   function formatPhaseAction(phase) {
     return PHASE_GUIDANCE[normalizePhase(phase)]?.action || ''
   }
@@ -289,21 +293,6 @@
     if (cueText) return cueText
     if (normalized.phase === 'between' && !normalized.corner) return 'TO FINISH'
     return formatPhaseAction(normalized.phase)
-  }
-
-  function getActivePedalPoint(phase, targets, observed) {
-    const guidance = PHASE_GUIDANCE[normalizePhase(phase)]
-    if (!guidance?.targetKey) return null
-
-    const referenceValue = targets?.[guidance.targetKey]
-    const observedValue = observed?.[guidance.targetKey]
-    if (finite(referenceValue) === null && finite(observedValue) === null) return null
-
-    return {
-      label: guidance.action,
-      reference: formatPedalPoint(referenceValue, 'REF'),
-      observed: formatPedalPoint(observedValue, 'YOU')
-    }
   }
 
   function createLapDeltaView(deltaMs, previousState = 'neutral') {
@@ -427,16 +416,16 @@
     createDemoReference,
     createEmptyReference,
     createLapDeltaView,
+    cueHasMagnitude,
     formatCornerReadout,
     formatCoachStatus,
     formatCue,
     formatLapDelta,
     formatLapTime,
     formatPhaseAction,
-    formatPedalPoint,
     formatSummary,
     formatSignedMilliseconds,
-    getActivePedalPoint,
+    hasLiveCoachGuidance,
     isRaceRestart,
     normalizeCue,
     normalizeLapCompletePayload,
