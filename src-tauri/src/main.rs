@@ -627,6 +627,27 @@ fn set_overlay_visibility(app: AppHandle, component: String, visible: bool) -> R
 }
 
 #[tauri::command]
+fn set_display_preferences(
+    app: AppHandle,
+    speed_unit: String,
+    shift_light_brightness: u8,
+) -> Result<(), String> {
+    let safe_speed_unit = match speed_unit.as_str() {
+        "kmh" | "mph" => speed_unit,
+        _ => return Err("unknown speed unit".to_string()),
+    };
+    if !(20..=100).contains(&shift_light_brightness) {
+        return Err("Shift Light brightness must be between 20 and 100".to_string());
+    }
+
+    let script = format!(
+        "window.HudOverlay?.setDisplayPreferences?.({{ speedUnit: '{}', shiftLightBrightness: {} }})",
+        safe_speed_unit, shift_light_brightness
+    );
+    eval_main(&app, &script)
+}
+
+#[tauri::command]
 fn sync_route_status(app: AppHandle) -> Result<(), String> {
     eval_main(&app, "window.HudOverlay?.syncRouteStatus?.()")
 }
@@ -645,6 +666,7 @@ fn main() {
             layout_action,
             set_hud_visibility,
             set_overlay_visibility,
+            set_display_preferences,
             sync_route_status,
             sync_shift_light_status,
             start_direct_source,

@@ -28,12 +28,22 @@
   const shiftLightReset = document.getElementById('shift-light-reset')
   const shiftLightHelp = document.getElementById('shift-light-help')
   const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
+  const displayPreferencesApi = globalScope.DisplayPreferences
+  const speedUnitInputs = [...document.querySelectorAll('input[name="speed-unit"]')]
+  const shiftLightBrightness = document.getElementById('shift-light-brightness')
+  const shiftLightBrightnessValue = document.getElementById('shift-light-brightness-value')
+  const displaySettingRows = [...document.querySelectorAll('.display-setting-row')]
   const telemetrySourceInputs = [...document.querySelectorAll('input[name="telemetry-source"]')]
   const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
   const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
   const settingsPanels = [...document.querySelectorAll('[data-settings-panel]')]
   let editingTarget = null
   let shiftLightResetPending = false
+  let displayPreferencesPending = false
+  let displayPreferences = displayPreferencesApi?.read?.() || {
+    speedUnit: 'kmh',
+    shiftLightBrightness: 80
+  }
   let latestShiftLightState = null
   let telemetrySource = globalScope.HudConnection?.readTelemetrySource?.() || 'direct'
   let latestRouteRevision = -1
@@ -64,6 +74,54 @@
       return Promise.reject(new Error('Tauri commands are unavailable'))
     }
     return invoke(command, args)
+  }
+
+  function renderDisplayPreferences(preferences) {
+    for (const input of speedUnitInputs) {
+      input.checked = input.value === preferences.speedUnit
+    }
+    shiftLightBrightness.value = String(preferences.shiftLightBrightness)
+    shiftLightBrightnessValue.textContent = `${preferences.shiftLightBrightness}%`
+  }
+
+  function setDisplayPreferencesPending(pending) {
+    displayPreferencesPending = pending
+    for (const input of speedUnitInputs) input.disabled = pending
+    shiftLightBrightness.disabled = pending
+    for (const row of displaySettingRows) row.classList.toggle('is-pending', pending)
+  }
+
+  async function updateDisplayPreferences(update, successMessage) {
+    if (displayPreferencesPending) {
+      renderDisplayPreferences(displayPreferences)
+      return
+    }
+    if (!displayPreferencesApi?.normalize || !displayPreferencesApi?.write) {
+      setStatus('DISPLAY PREFERENCES ARE UNAVAILABLE', true)
+      return
+    }
+
+    const previous = displayPreferences
+    const next = displayPreferencesApi.normalize({ ...previous, ...update })
+    displayPreferences = next
+    displayPreferencesApi.write(next)
+    renderDisplayPreferences(next)
+    setDisplayPreferencesPending(true)
+
+    try {
+      await call('set_display_preferences', {
+        speedUnit: next.speedUnit,
+        shiftLightBrightness: next.shiftLightBrightness
+      })
+      setStatus(successMessage(next))
+    } catch (error) {
+      displayPreferences = previous
+      displayPreferencesApi.write(previous)
+      renderDisplayPreferences(previous)
+      setStatus(error.message || 'Unable to update display preferences', true)
+    } finally {
+      setDisplayPreferencesPending(false)
+    }
   }
 
   function readVisibility() {
@@ -424,6 +482,27 @@
     })
   }
   selectSettingsTab('hud')
+
+  displayPreferences = displayPreferencesApi?.normalize?.(displayPreferences) || displayPreferences
+  renderDisplayPreferences(displayPreferences)
+  for (const input of speedUnitInputs) {
+    input.addEventListener('change', () => {
+      if (!input.checked) return
+      void updateDisplayPreferences(
+        { speedUnit: input.value },
+        next => `SPEED UNIT SET TO ${next.speedUnit === 'mph' ? 'MPH' : 'KM/H'}`
+      )
+    })
+  }
+  shiftLightBrightness.addEventListener('input', () => {
+    shiftLightBrightnessValue.textContent = `${shiftLightBrightness.value}%`
+  })
+  shiftLightBrightness.addEventListener('change', () => {
+    void updateDisplayPreferences(
+      { shiftLightBrightness: Number(shiftLightBrightness.value) },
+      next => `SHIFT LIGHT BRIGHTNESS SET TO ${next.shiftLightBrightness}%`
+    )
+  })
 
   applyTelemetrySourceInput()
   for (const input of telemetrySourceInputs) {

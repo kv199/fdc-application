@@ -21,6 +21,7 @@
   const DELTA_RED_MS = 30
   const DELTA_HYSTERESIS_MS = 10
   const LAP_DELTA_RANGE_MS = 1000
+  const MPH_PER_KMH = 0.621371
   const PHASE_GUIDANCE = Object.freeze({
     between: Object.freeze({ action: 'NEXT CORNER', targetKey: null }),
     approach: Object.freeze({ action: 'BRAKE', targetKey: 'brakeStartDistanceM' }),
@@ -195,7 +196,23 @@
     return String(Math.max(0, Math.round(Math.abs(number))))
   }
 
-  function formatCue(cue) {
+  function normalizeSpeedUnit(value) {
+    return value === 'mph' ? 'mph' : 'kmh'
+  }
+
+  function formatSpeedMagnitudeKmh(value, speedUnit = 'kmh') {
+    const number = finite(value)
+    if (number === null) return ''
+    const unit = normalizeSpeedUnit(speedUnit)
+    const converted = unit === 'mph' ? number * MPH_PER_KMH : number
+    return String(Math.max(0, Math.round(Math.abs(converted))))
+  }
+
+  function speedUnitLabel(speedUnit = 'kmh') {
+    return normalizeSpeedUnit(speedUnit) === 'mph' ? 'mph' : 'km/h'
+  }
+
+  function formatCue(cue, speedUnit = 'kmh') {
     const normalizedCue = normalizeCue(cue)
     if (!normalizedCue) return ''
 
@@ -203,8 +220,12 @@
     if (normalizedCue.kind === 'brake_late') return `BRAKE ${magnitude} m LATE`
     if (normalizedCue.kind === 'brake_early') return `BRAKE ${magnitude} m EARLY`
     if (normalizedCue.kind === 'release_late') return 'RELEASE BRAKE'
-    if (normalizedCue.kind === 'apex_too_fast') return `APEX ${magnitude} km/h SLOW`
-    if (normalizedCue.kind === 'apex_too_slow') return `APEX ${magnitude} km/h FAST`
+    if (normalizedCue.kind === 'apex_too_fast') {
+      return `APEX ${formatSpeedMagnitudeKmh(normalizedCue.value, speedUnit)} ${speedUnitLabel(speedUnit)} SLOW`
+    }
+    if (normalizedCue.kind === 'apex_too_slow') {
+      return `APEX ${formatSpeedMagnitudeKmh(normalizedCue.value, speedUnit)} ${speedUnitLabel(speedUnit)} FAST`
+    }
     if (normalizedCue.kind === 'throttle_late') return `THROTTLE ${magnitude} m LATE`
     if (normalizedCue.kind === 'throttle_early') return `THROTTLE ${magnitude} m EARLY`
     if (normalizedCue.kind === 'good') return 'GOOD'
@@ -258,13 +279,13 @@
     return PHASE_GUIDANCE[normalizePhase(phase)]?.action || ''
   }
 
-  function formatCoachStatus(reference, isSummary = false) {
+  function formatCoachStatus(reference, isSummary = false, speedUnit = 'kmh') {
     if (isSummary) return 'LAP COMPLETE'
 
     const normalized = normalizeReferencePayload(reference)
     if (!normalized.available) return ''
 
-    const cueText = formatCue(normalized.cue)
+    const cueText = formatCue(normalized.cue, speedUnit)
     if (cueText) return cueText
     if (normalized.phase === 'between' && !normalized.corner) return 'TO FINISH'
     return formatPhaseAction(normalized.phase)
@@ -299,7 +320,7 @@
     }
   }
 
-  function formatSummary(summary, corner = '') {
+  function formatSummary(summary, corner = '', speedUnit = 'kmh') {
     const normalizedSummary = normalizeSummary(summary)
     if (!normalizedSummary) return ''
 
@@ -311,7 +332,13 @@
     const apexDelta = finite(normalizedSummary.apexSpeedDeltaKmh)
     if (apexDelta !== null) {
       const sign = apexDelta > 0 ? '+' : ''
-      return `${label} APEX ${sign}${Math.round(apexDelta)} km/h`
+      const magnitude = formatSpeedMagnitudeKmh(apexDelta, speedUnit)
+      const signedMagnitude = Number(magnitude) === 0
+        ? '0'
+        : apexDelta < 0
+          ? `-${magnitude}`
+          : `${sign}${magnitude}`
+      return `${label} APEX ${signedMagnitude} ${speedUnitLabel(speedUnit)}`
     }
 
     return ''

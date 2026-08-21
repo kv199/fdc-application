@@ -189,44 +189,83 @@
     </section>
 
     <section id="settings-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="settings-tab" data-settings-panel="settings" hidden>
-      <div class="settings-section__heading">
-        <h2>TELEMETRY SETTINGS</h2>
-        <div id="telemetry-status" class="telemetry-status" data-state="offline" role="status" aria-live="polite">
-          <span class="telemetry-status__dot" aria-hidden="true"></span>
-          <span id="telemetry-status-label">TELEMETRY OFFLINE</span>
-        </div>
-      </div>
-
-      <section class="source-section" aria-labelledby="source-title">
+      <section class="display-settings" aria-labelledby="display-settings-title">
         <div class="settings-section__heading">
-          <h2 id="source-title">TELEMETRY SOURCE</h2>
-          <span>CHOOSE THE ACTIVE INPUT</span>
+          <h2 id="display-settings-title">DISPLAY SETTINGS</h2>
+          <span>SPEED + SHIFT LIGHT</span>
         </div>
-        <div class="source-options">
-          <label class="source-option">
-            <input type="radio" name="telemetry-source" value="direct">
-            <span>
-              <strong>Direct Forza</strong>
-              <small>Receive Data Out directly on UDP 5301. No co-driver required.</small>
-            </span>
-          </label>
-          <label class="source-option">
-            <input type="radio" name="telemetry-source" value="suite">
-            <span>
-              <strong>co-driver Suite</strong>
-              <small>Use the provider WebSocket for Coach, corners and reference laps.</small>
-            </span>
-          </label>
-        </div>
-        <div id="telemetry-route-card" class="telemetry-route-card" data-tone="offline">
-          <div class="telemetry-route-card__header">
-            <output id="telemetry-route-label" aria-live="polite">DIRECT · OFFLINE</output>
-            <output id="telemetry-route-endpoint">UDP 127.0.0.1:5301</output>
+
+        <div class="display-settings__list">
+          <div class="display-setting-row" role="group" aria-labelledby="speed-unit-title">
+            <div class="display-setting-row__copy">
+              <strong id="speed-unit-title">SPEED UNIT</strong>
+              <small>Choose how vehicle speed is shown in the HUD.</small>
+            </div>
+            <div class="unit-options" aria-label="Speed unit">
+              <label class="unit-option">
+                <input type="radio" name="speed-unit" value="kmh">
+                <span>KM/H</span>
+              </label>
+              <label class="unit-option">
+                <input type="radio" name="speed-unit" value="mph">
+                <span>MPH</span>
+              </label>
+            </div>
           </div>
-          <p id="telemetry-route-detail">The Direct Forza UDP receiver is offline.</p>
-          <p id="telemetry-route-warning" class="telemetry-route-card__warning" hidden></p>
-          <button id="telemetry-route-retry" class="settings-button" type="button" hidden>RETRY SOURCE</button>
+
+          <div class="display-setting-row">
+            <label class="display-setting-row__copy" for="shift-light-brightness">
+              <strong>SHIFT LIGHT BRIGHTNESS</strong>
+              <small>Adjust the intensity of the Shift Light without dimming speed, RPM or gear text.</small>
+            </label>
+            <div class="brightness-control">
+              <input id="shift-light-brightness" type="range" min="20" max="100" step="5" value="80" aria-describedby="shift-light-brightness-value">
+              <output id="shift-light-brightness-value" for="shift-light-brightness">80%</output>
+            </div>
+          </div>
         </div>
+      </section>
+
+      <section class="telemetry-settings" aria-labelledby="telemetry-settings-title">
+        <div class="settings-section__heading">
+          <h2 id="telemetry-settings-title">TELEMETRY SETTINGS</h2>
+          <div id="telemetry-status" class="telemetry-status" data-state="offline" role="status" aria-live="polite">
+            <span class="telemetry-status__dot" aria-hidden="true"></span>
+            <span id="telemetry-status-label">TELEMETRY OFFLINE</span>
+          </div>
+        </div>
+
+        <section class="source-section" aria-labelledby="source-title">
+          <div class="settings-section__heading">
+            <h2 id="source-title">TELEMETRY SOURCE</h2>
+            <span>CHOOSE THE ACTIVE INPUT</span>
+          </div>
+          <div class="source-options">
+            <label class="source-option">
+              <input type="radio" name="telemetry-source" value="direct">
+              <span>
+                <strong>Direct Forza</strong>
+                <small>Receive Data Out directly on UDP 5301. No co-driver required.</small>
+              </span>
+            </label>
+            <label class="source-option">
+              <input type="radio" name="telemetry-source" value="suite">
+              <span>
+                <strong>co-driver Suite</strong>
+                <small>Use the provider WebSocket for Coach, corners and reference laps.</small>
+              </span>
+            </label>
+          </div>
+          <div id="telemetry-route-card" class="telemetry-route-card" data-tone="offline">
+            <div class="telemetry-route-card__header">
+              <output id="telemetry-route-label" aria-live="polite">DIRECT · OFFLINE</output>
+              <output id="telemetry-route-endpoint">UDP 127.0.0.1:5301</output>
+            </div>
+            <p id="telemetry-route-detail">The Direct Forza UDP receiver is offline.</p>
+            <p id="telemetry-route-warning" class="telemetry-route-card__warning" hidden></p>
+            <button id="telemetry-route-retry" class="settings-button" type="button" hidden>RETRY SOURCE</button>
+          </div>
+        </section>
       </section>
     </section>
 
@@ -236,6 +275,7 @@
   <script src="connection.js"></script>
   <script src="telemetry-route.js"></script>
   <script src="shift-light-settings.js"></script>
+  <script src="display-preferences.js"></script>
   <script src="tauri-events.js"></script>
   <script src="settings.js"></script>
 </body>

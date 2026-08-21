@@ -33,9 +33,10 @@ steering, gear/speed/RPM, and input history. Disabled blocks disappear and the
 remaining HUD grid contracts; disabling every block hides the telemetry HUD.
 The three top-level overlay targets also have independent visibility toggles;
 the Telemetry HUD row expands to reveal its five child blocks. The `SETTINGS`
-tab shows the selected telemetry route, endpoint, lifecycle state, and Suite
+tab controls the displayed speed unit (`km/h` by default or `mph`), Shift Light
+brightness, the selected telemetry route, endpoint, lifecycle state, and Suite
 coexistence diagnostics; no route status is drawn over the in-game HUD.
-Visibility choices are stored locally. In a browser preview, use
+Display and visibility choices are stored locally. In a browser preview, use
 `?demo=1&corner=entry&edit=1` to edit the Coach.
 
 The Reference Coach can be previewed without Forza in demo mode:
@@ -109,7 +110,9 @@ HUD storage; there is no second executable or installer variant.
 Shift Light is calculated by the HUD in both modes. It learns per-gear targets
 from clean full-throttle upshifts, restores profiles by the
 `fh6:<ordinal>:<pi>:<rpmMax>` identity, and keeps the existing observed and
-optimal diagnostics. Profiles are stored in a HUD-local `hud.sqlite` under the
+optimal diagnostics. Its visual brightness is adjustable from 20% to 100%; the
+default 80% preserves the original alert intensity without dimming the gear,
+speed, or RPM text. Profiles are stored in a HUD-local `hud.sqlite` under the
 Windows AppData directory, never in the provider's `runtime/data` database.
 The `SHIFT LIGHT` tab listens to HUD-local events for the current per-gear table and the
 reset action clears the active local profile. The provider no longer sends a

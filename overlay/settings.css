@@ -694,6 +694,145 @@ h1 {
 .settings-status.is-error {
   color: #ff827d;
 }
+
+.display-settings__list {
+  overflow: hidden;
+  border: 1px solid rgb(226 232 240 / 18%);
+  border-radius: 4px;
+  background: rgb(8 10 12 / 68%);
+}
+
+.display-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-width: 0;
+  margin: 0;
+  padding: 15px 16px;
+  border: 0;
+}
+
+.display-setting-row + .display-setting-row {
+  border-top: 1px solid rgb(226 232 240 / 12%);
+}
+
+.display-setting-row__copy {
+  min-width: 0;
+  padding: 0;
+}
+
+.display-setting-row__copy strong,
+.display-setting-row__copy small {
+  display: block;
+}
+
+.display-setting-row__copy strong {
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.display-setting-row__copy small {
+  margin-top: 5px;
+  color: #71717a;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.unit-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(62px, 1fr));
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgb(226 232 240 / 18%);
+  border-radius: 4px;
+  background: rgb(8 10 12 / 72%);
+}
+
+.unit-option {
+  cursor: pointer;
+}
+
+.unit-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.unit-option span {
+  display: block;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: #71717a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+.unit-option:hover span,
+.unit-option input:focus-visible + span {
+  color: #f8fafc;
+  background: rgb(226 232 240 / 7%);
+}
+
+.unit-option input:focus-visible + span {
+  outline: 1px solid rgb(105 232 63 / 70%);
+  outline-offset: 1px;
+}
+
+.unit-option input:checked + span {
+  border-color: rgb(105 232 63 / 48%);
+  color: #69e83f;
+  background: rgb(105 232 63 / 9%);
+}
+
+.brightness-control {
+  display: grid;
+  grid-template-columns: minmax(130px, 210px) 48px;
+  align-items: center;
+  flex: 0 1 260px;
+  gap: 12px;
+}
+
+.brightness-control input {
+  width: 100%;
+  margin: 0;
+  accent-color: #69e83f;
+  cursor: pointer;
+}
+
+.brightness-control input:focus-visible {
+  outline: 1px solid rgb(105 232 63 / 70%);
+  outline-offset: 4px;
+}
+
+.brightness-control output {
+  color: #69e83f;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  text-align: right;
+}
+
+.display-setting-row.is-pending {
+  opacity: 0.68;
+}
+
+.telemetry-settings {
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid rgb(226 232 240 / 14%);
+}
+
 .source-section {
   padding: 0;
 }

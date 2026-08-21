@@ -123,9 +123,21 @@ test('formats the supported guidance cues without inventing advice', () => {
   assert.equal(formatCue({ kind: 'unknown', value: 99 }), '')
 })
 
+test('formats apex guidance in the selected speed unit', () => {
+  assert.equal(formatCue({ kind: 'apex_too_fast', value: 16 }, 'mph'), 'APEX 10 mph SLOW')
+  assert.equal(formatCoachStatus({
+    available: true,
+    corner: 'T3 LEFT',
+    phase: 'apex',
+    cue: { kind: 'apex_too_slow', value: 8 }
+  }, false, 'mph'), 'APEX 5 mph FAST')
+})
+
 test('formats a reference summary using the corner delta', () => {
   assert.equal(formatSummary({ deltaMs: 180 }, 'T3 LEFT'), 'T3 +0.18 s')
   assert.equal(formatSummary({ apexSpeedDeltaKmh: -4 }, 'T3 LEFT'), 'T3 APEX -4 km/h')
+  assert.equal(formatSummary({ apexSpeedDeltaKmh: -16 }, 'T3 LEFT', 'mph'), 'T3 APEX -10 mph')
+  assert.equal(formatSummary({ apexSpeedDeltaKmh: -0.4 }, 'T3 LEFT', 'mph'), 'T3 APEX 0 mph')
 })
 
 test('provides deterministic demo references for each MVP state', () => {

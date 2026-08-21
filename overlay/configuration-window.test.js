@@ -25,6 +25,29 @@ test('telemetry diagnostics live only inside the Settings tab', () => {
   assert.doesNotMatch(overlayHtml, /telemetry-route-badge/)
 })
 
+test('Display settings expose speed units and Shift Light brightness before telemetry', () => {
+  const displaySettingsIndex = settingsHtml.indexOf('id="display-settings-title"')
+  const telemetrySettingsIndex = settingsHtml.indexOf('id="telemetry-settings-title"')
+  const displayPreferencesScriptIndex = settingsHtml.indexOf('src="display-preferences.js"')
+  const settingsScriptIndex = settingsHtml.indexOf('src="settings.js"')
+
+  assert.ok(displaySettingsIndex >= 0)
+  assert.ok(telemetrySettingsIndex > displaySettingsIndex)
+  assert.match(settingsHtml, /name="speed-unit" value="kmh"/)
+  assert.match(settingsHtml, /name="speed-unit" value="mph"/)
+  assert.match(settingsHtml, /id="shift-light-brightness" type="range" min="20" max="100" step="5" value="80"/)
+  assert.ok(displayPreferencesScriptIndex >= 0)
+  assert.ok(settingsScriptIndex > displayPreferencesScriptIndex)
+})
+
+test('Configuration persists and applies display preferences through the shared contract', () => {
+  assert.match(settingsJs, /displayPreferencesApi\?\.read/)
+  assert.match(settingsJs, /displayPreferencesApi\.normalize/)
+  assert.match(settingsJs, /displayPreferencesApi\.write\(next\)/)
+  assert.match(settingsJs, /call\('set_display_preferences', \{\s*speedUnit: next\.speedUnit,\s*shiftLightBrightness: next\.shiftLightBrightness\s*\}\)/)
+  assert.match(settingsJs, /displayPreferences = previous\s*displayPreferencesApi\.write\(previous\)\s*renderDisplayPreferences\(previous\)/)
+})
+
 test('tray has one Configuration action and no calibration reset action', () => {
   assert.match(tauriMain, /\.text\("settings", "Configuration"\)/)
   assert.doesNotMatch(tauriMain, /reset-shift/)

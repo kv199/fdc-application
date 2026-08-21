@@ -37,6 +37,7 @@ const tireVisualElements = {
 
 const WS_URL = window.HudConnection.resolveCoDriverWebSocketUrl()
 let telemetrySource = window.HudConnection.readTelemetrySource()
+let displayPreferences = window.DisplayPreferences.read()
 const STEERING_WHEEL_ASSET = 'assets/steering-wheels/default.svg'
 const STEERING_WHEEL_RANGE_DEGREES = 90
 const RECONNECT_MS = 1000
@@ -132,12 +133,6 @@ function formatGear(rawGear) {
   return String(Math.max(1, Math.min(10, Math.trunc(gear))))
 }
 
-function formatSpeedKmh(rawSpeed) {
-  const speed = Number(rawSpeed)
-  if (!Number.isFinite(speed)) return '-- km/h'
-  return `${Math.max(0, Math.round(speed))} km/h`
-}
-
 function formatRpm(rawRpm) {
   const rpm = Number(rawRpm)
   if (!Number.isFinite(rpm)) return '-- RPM'
@@ -195,6 +190,28 @@ function invokeTauri(command, args) {
 
 function applyTelemetrySourcePresentation() {
   document.body.dataset.telemetrySource = telemetrySource
+}
+
+function applyDisplayPreferences() {
+  const brightnessScale = window.DisplayPreferences.shiftLightBrightnessScale(
+    displayPreferences.shiftLightBrightness
+  )
+  document.documentElement.style.setProperty('--shift-light-brightness-scale', String(brightnessScale))
+  document.documentElement.dataset.speedUnit = displayPreferences.speedUnit
+  speedValue.textContent = window.DisplayPreferences.formatSpeed(
+    latestTelemetry?.speedKmh,
+    displayPreferences.speedUnit
+  )
+}
+
+function setDisplayPreferences(preferences) {
+  displayPreferences = window.DisplayPreferences.write({
+    ...displayPreferences,
+    ...(preferences && typeof preferences === 'object' ? preferences : {})
+  })
+  applyDisplayPreferences()
+  scheduleTelemetryRender()
+  return { ...displayPreferences }
 }
 
 function setRpmSignal(signal) {
@@ -318,7 +335,11 @@ function renderCoach(reference, isSummary = false) {
 
   coachStatus.dataset.phase = isSummary ? 'summary' : phase
   coachStatus.dataset.cueKind = reference.cue?.kind || ''
-  coachStatus.textContent = window.ReferenceCoach.formatCoachStatus(reference, isSummary) || '\u2014'
+  coachStatus.textContent = window.ReferenceCoach.formatCoachStatus(
+    reference,
+    isSummary,
+    displayPreferences.speedUnit
+  ) || '\u2014'
 
   const target = isSummary
     ? null
@@ -545,7 +566,7 @@ function renderTelemetry() {
 
   drawSteering(steer)
   updateTires(telemetry.tireTempC)
-  speedValue.textContent = formatSpeedKmh(telemetry.speedKmh)
+  speedValue.textContent = window.DisplayPreferences.formatSpeed(telemetry.speedKmh, displayPreferences.speedUnit)
   gearValue.textContent = formatGear(telemetry.gear)
   rpmValue.textContent = formatRpm(telemetry.rpm)
   const signal = DEMO_MODE ? demoSignal : getShiftLightSignal(telemetry)
@@ -1059,6 +1080,7 @@ window.addEventListener('resize', () => {
 
 window.HudOverlay = {
   refresh: scheduleTelemetryRender,
+  setDisplayPreferences,
   setTelemetrySource,
   retryTelemetrySource: () => setTelemetrySource(telemetrySource, { force: true }),
   resetShiftLight: async () => {
@@ -1074,6 +1096,7 @@ window.HudOverlay = {
 }
 
 applyTelemetrySourcePresentation()
+applyDisplayPreferences()
 publishRouteStatus({}, true)
 if (DEMO_MODE) startDemo()
 else if (telemetrySource === 'direct') connectDirect()
