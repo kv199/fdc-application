@@ -25,7 +25,7 @@ test('telemetry diagnostics live only inside the Settings tab', () => {
   assert.doesNotMatch(overlayHtml, /telemetry-route-badge/)
 })
 
-test('Display settings expose speed units and Shift Light brightness before telemetry', () => {
+test('Display settings expose speed units before telemetry', () => {
   const displaySettingsIndex = settingsHtml.indexOf('id="display-settings-title"')
   const telemetrySettingsIndex = settingsHtml.indexOf('id="telemetry-settings-title"')
   const displayPreferencesScriptIndex = settingsHtml.indexOf('src="display-preferences.js"')
@@ -35,9 +35,21 @@ test('Display settings expose speed units and Shift Light brightness before tele
   assert.ok(telemetrySettingsIndex > displaySettingsIndex)
   assert.match(settingsHtml, /name="speed-unit" value="kmh"/)
   assert.match(settingsHtml, /name="speed-unit" value="mph"/)
-  assert.match(settingsHtml, /id="shift-light-brightness" type="range" min="20" max="100" step="5" value="80"/)
   assert.ok(displayPreferencesScriptIndex >= 0)
   assert.ok(settingsScriptIndex > displayPreferencesScriptIndex)
+})
+
+test('Shift Light brightness lives in the Shift Light tab and uses a rectilinear meter', () => {
+  const shiftLightPanelIndex = settingsHtml.indexOf('id="shift-light-panel"')
+  const brightnessIndex = settingsHtml.indexOf('id="shift-light-brightness"')
+  const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
+
+  assert.ok(shiftLightPanelIndex >= 0)
+  assert.ok(brightnessIndex > shiftLightPanelIndex)
+  assert.ok(brightnessIndex < settingsPanelIndex)
+  assert.match(settingsHtml, /class="shift-light-brightness-card"/)
+  assert.match(settingsHtml, /id="shift-light-brightness" type="range" min="0" max="100" step="5" value="80"/)
+  assert.match(settingsJs, /--brightness-fill/)
 })
 
 test('Configuration persists and applies display preferences through the shared contract', () => {

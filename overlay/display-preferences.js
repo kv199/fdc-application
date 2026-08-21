@@ -18,7 +18,7 @@
       ? Number.NaN
       : Number(brightnessCandidate)
     const shiftLightBrightness = Number.isFinite(rawBrightness)
-      ? Math.round(Math.max(20, Math.min(100, rawBrightness)))
+      ? Math.round(Math.max(0, Math.min(100, rawBrightness)))
       : DEFAULTS.shiftLightBrightness
 
     return {

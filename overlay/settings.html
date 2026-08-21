@@ -133,6 +133,24 @@
         </div>
       </div>
 
+      <section class="shift-light-brightness-card" data-display-preference aria-labelledby="shift-light-brightness-title">
+        <div class="shift-light-brightness-card__heading">
+          <div>
+            <span>VISUAL OUTPUT</span>
+            <h3 id="shift-light-brightness-title">LIGHT BAR BRIGHTNESS</h3>
+          </div>
+          <output id="shift-light-brightness-value" for="shift-light-brightness" aria-live="polite">80%</output>
+        </div>
+        <div class="brightness-control">
+          <input id="shift-light-brightness" type="range" min="0" max="100" step="5" value="80" aria-labelledby="shift-light-brightness-title" aria-describedby="shift-light-brightness-scale">
+        </div>
+        <div id="shift-light-brightness-scale" class="brightness-scale" aria-hidden="true">
+          <span>0 · DIM</span>
+          <span>80 · DEFAULT</span>
+          <span>100 · MAX</span>
+        </div>
+      </section>
+
       <div id="shift-light-help-panel" class="calibration-help" hidden>
         <div class="calibration-help__title">HOW TO READ DIAGNOSTICS</div>
         <dl>
@@ -192,11 +210,11 @@
       <section class="display-settings" aria-labelledby="display-settings-title">
         <div class="settings-section__heading">
           <h2 id="display-settings-title">DISPLAY SETTINGS</h2>
-          <span>SPEED + SHIFT LIGHT</span>
+          <span>SPEED FORMAT</span>
         </div>
 
         <div class="display-settings__list">
-          <div class="display-setting-row" role="group" aria-labelledby="speed-unit-title">
+          <div class="display-setting-row" data-display-preference role="group" aria-labelledby="speed-unit-title">
             <div class="display-setting-row__copy">
               <strong id="speed-unit-title">SPEED UNIT</strong>
               <small>Choose how vehicle speed is shown in the HUD.</small>
@@ -210,17 +228,6 @@
                 <input type="radio" name="speed-unit" value="mph">
                 <span>MPH</span>
               </label>
-            </div>
-          </div>
-
-          <div class="display-setting-row">
-            <label class="display-setting-row__copy" for="shift-light-brightness">
-              <strong>SHIFT LIGHT BRIGHTNESS</strong>
-              <small>Adjust the intensity of the Shift Light without dimming speed, RPM or gear text.</small>
-            </label>
-            <div class="brightness-control">
-              <input id="shift-light-brightness" type="range" min="20" max="100" step="5" value="80" aria-describedby="shift-light-brightness-value">
-              <output id="shift-light-brightness-value" for="shift-light-brightness">80%</output>
             </div>
           </div>
         </div>

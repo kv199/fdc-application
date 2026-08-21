@@ -636,8 +636,8 @@ fn set_display_preferences(
         "kmh" | "mph" => speed_unit,
         _ => return Err("unknown speed unit".to_string()),
     };
-    if !(20..=100).contains(&shift_light_brightness) {
-        return Err("Shift Light brightness must be between 20 and 100".to_string());
+    if shift_light_brightness > 100 {
+        return Err("Shift Light brightness must be between 0 and 100".to_string());
     }
 
     let script = format!(

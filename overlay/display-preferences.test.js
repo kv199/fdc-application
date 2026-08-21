@@ -26,9 +26,9 @@ test('sanitizes stored units and clamps brightness', () => {
     speedUnit: 'mph',
     shiftLightBrightness: 100
   })
-  assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'knots', shiftLightBrightness: 4 }), {
+  assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'knots', shiftLightBrightness: -4 }), {
     speedUnit: 'kmh',
-    shiftLightBrightness: 20
+    shiftLightBrightness: 0
   })
   assert.deepEqual(DisplayPreferences.normalize({ shiftLightBrightness: '64.6' }), {
     speedUnit: 'kmh',
@@ -69,6 +69,7 @@ test('formats canonical km/h telemetry for either display unit', () => {
 })
 
 test('maps the existing 80 percent appearance to brightness scale 1', () => {
+  assert.equal(DisplayPreferences.shiftLightBrightnessScale(0), 0)
   assert.equal(DisplayPreferences.shiftLightBrightnessScale(20), 0.25)
   assert.equal(DisplayPreferences.shiftLightBrightnessScale(80), 1)
   assert.equal(DisplayPreferences.shiftLightBrightnessScale(100), 1.25)

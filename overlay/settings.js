@@ -32,7 +32,7 @@
   const speedUnitInputs = [...document.querySelectorAll('input[name="speed-unit"]')]
   const shiftLightBrightness = document.getElementById('shift-light-brightness')
   const shiftLightBrightnessValue = document.getElementById('shift-light-brightness-value')
-  const displaySettingRows = [...document.querySelectorAll('.display-setting-row')]
+  const displayPreferenceRows = [...document.querySelectorAll('[data-display-preference]')]
   const telemetrySourceInputs = [...document.querySelectorAll('input[name="telemetry-source"]')]
   const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
   const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
@@ -80,15 +80,25 @@
     for (const input of speedUnitInputs) {
       input.checked = input.value === preferences.speedUnit
     }
-    shiftLightBrightness.value = String(preferences.shiftLightBrightness)
-    shiftLightBrightnessValue.textContent = `${preferences.shiftLightBrightness}%`
+    renderShiftLightBrightness(preferences.shiftLightBrightness)
+  }
+
+  function renderShiftLightBrightness(value) {
+    const brightness = Number(value)
+    const minimum = Number(shiftLightBrightness.min)
+    const maximum = Number(shiftLightBrightness.max)
+    const progress = ((brightness - minimum) / (maximum - minimum)) * 100
+    shiftLightBrightness.value = String(brightness)
+    shiftLightBrightness.style.setProperty('--brightness-fill', `${Math.max(0, Math.min(100, progress))}%`)
+    shiftLightBrightness.setAttribute('aria-valuetext', `${brightness}% brightness`)
+    shiftLightBrightnessValue.textContent = `${brightness}%`
   }
 
   function setDisplayPreferencesPending(pending) {
     displayPreferencesPending = pending
     for (const input of speedUnitInputs) input.disabled = pending
     shiftLightBrightness.disabled = pending
-    for (const row of displaySettingRows) row.classList.toggle('is-pending', pending)
+    for (const row of displayPreferenceRows) row.classList.toggle('is-pending', pending)
   }
 
   async function updateDisplayPreferences(update, successMessage) {
@@ -495,7 +505,7 @@
     })
   }
   shiftLightBrightness.addEventListener('input', () => {
-    shiftLightBrightnessValue.textContent = `${shiftLightBrightness.value}%`
+    renderShiftLightBrightness(shiftLightBrightness.value)
   })
   shiftLightBrightness.addEventListener('change', () => {
     void updateDisplayPreferences(
