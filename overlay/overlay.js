@@ -436,9 +436,10 @@ function updateTires(tires = {}) {
 }
 
 function updateEngine(telemetry = {}) {
-  engineElements.boost.textContent = window.HudEnginePresentation.formatBoost(telemetry.boost)
-  engineElements.power.textContent = window.HudEnginePresentation.formatPower(telemetry.power)
-  engineElements.torque.textContent = window.HudEnginePresentation.formatTorque(telemetry.torque)
+  const engine = window.HudEnginePresentation.formatEngine(telemetry)
+  engineElements.boost.textContent = engine.boost
+  engineElements.power.textContent = engine.power
+  engineElements.torque.textContent = engine.torque
 }
 
 function pushHistory(throttle, brake, timestamp = performance.now()) {

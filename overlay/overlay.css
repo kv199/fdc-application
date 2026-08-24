@@ -8,6 +8,7 @@
   --rule: rgb(226 232 240 / 42%);
   --panel: rgb(8 10 12 / 56%);
   --shift-light-brightness-scale: 1;
+  --hud-scale: min(2, calc((100vw - 16px) / 736px));
 }
 
 * {
@@ -44,7 +45,7 @@ body {
   bottom: 28px;
   left: 0;
   width: min(1472px, calc(100vw - 16px));
-  height: 213px;
+  height: calc(69px * var(--hud-scale));
   margin: 0 auto;
   z-index: 1;
 }
@@ -56,18 +57,17 @@ body {
   gap: 10px;
   justify-content: flex-end;
   width: 100%;
-  height: 213px;
+  height: calc(69px * var(--hud-scale));
 }
 
 .hud-visual {
   display: grid;
   place-items: center;
   width: 100%;
-  height: 138px;
+  height: calc(69px * var(--hud-scale));
 }
 
 .hud {
-  --hud-scale: 2;
   display: grid;
   grid-template-columns: 72px 46px 68px 92px 116px minmax(0, 1fr);
   width: 736px;
@@ -494,29 +494,9 @@ body.is-editing .coachbar {
   --panel: rgb(8 10 12 / 49%);
 }
 
-@media (max-width: 1487px) {
-  .hud-frame {
-    width: calc(100vw - 16px);
-    height: 144px;
-  }
-
-  .hud-stack {
-    width: min(736px, calc(100vw - 16px));
-    height: 144px;
-  }
-
-  .hud-visual {
-    height: 69px;
-  }
-
-  .hud {
-    transform: none;
-  }
-}
-
 @media (max-width: 684px) {
   .hud-frame {
-    height: 144px;
+    height: calc(69px * var(--hud-scale));
   }
 
   .coachbar {
@@ -672,7 +652,7 @@ body.is-editing .coachbar {
   bottom: 28px;
   left: 0;
   width: min(1472px, calc(100vw - 16px));
-  height: 138px;
+  height: calc(69px * var(--hud-scale));
   margin: 0 auto;
 }
 
@@ -692,7 +672,7 @@ body.is-editing .coachbar {
   position: absolute;
   top: auto;
   right: 0;
-  bottom: 176px;
+  bottom: calc(38px + 69px * var(--hud-scale));
   left: 0;
   width: min(1472px, calc(100vw - 16px));
   margin: 0 auto;
@@ -788,18 +768,6 @@ body.is-editing .coachbar {
 
 body.is-editing .coachbar {
   background: rgb(8 10 12 / 88%);
-}
-
-@media (max-width: 1487px) {
-  .hud-frame {
-    width: min(736px, calc(100vw - 16px));
-    height: 69px;
-  }
-
-  .delta-strip {
-    bottom: 107px;
-    width: min(736px, calc(100vw - 16px));
-  }
 }
 
 .delta-strip__value {
