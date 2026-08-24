@@ -383,6 +383,7 @@ struct RatioFeature {
 
 const RATIO_FEATURE_TOLERANCE: f64 = 0.005;
 const MAX_SHIFT_LIGHT_SAMPLES: usize = 5;
+const OBSERVED_SHIFT_RPM_OFFSET: f64 = 75.0;
 
 fn default_shift_light_status() -> String {
     "learning".to_string()
@@ -517,6 +518,25 @@ fn merge_profile_samples(left: &[i32], right: &[i32]) -> Vec<i32> {
     samples
 }
 
+fn complete_observed_profile(profile: &mut StoredShiftLightProfile) {
+    if profile.method != "observed"
+        || profile.shift_rpm.is_some()
+        || profile.samples.len() < MAX_SHIFT_LIGHT_SAMPLES
+    {
+        return;
+    }
+
+    let average = profile
+        .samples
+        .iter()
+        .map(|sample| *sample as f64)
+        .sum::<f64>()
+        / profile.samples.len() as f64;
+    profile.shift_rpm = Some((average - OBSERVED_SHIFT_RPM_OFFSET).round().max(0.0) as i32);
+    profile.sample_count = profile.sample_count.max(profile.samples.len() as i32);
+    profile.status = "calibrated".to_string();
+}
+
 fn merge_stored_profiles(
     left: &StoredShiftLightProfile,
     right: &StoredShiftLightProfile,
@@ -533,6 +553,7 @@ fn merge_stored_profiles(
         .max(right.sample_count)
         .max(samples.len() as i32);
     merged.samples = samples;
+    complete_observed_profile(&mut merged);
     if merged.status == "learning" && merged.sample_count >= 5 && merged.shift_rpm.is_some() {
         merged.status = "calibrated".to_string();
     }
@@ -583,6 +604,9 @@ fn read_stored_profiles(
             profile.samples.push(rpm);
         }
     }
+    for profile in &mut profiles {
+        complete_observed_profile(profile);
+    }
     Ok(profiles)
 }
 
@@ -591,6 +615,8 @@ fn write_stored_profile(
     variant_id: i64,
     profile: &StoredShiftLightProfile,
 ) -> Result<(), String> {
+    let mut profile = profile.clone();
+    complete_observed_profile(&mut profile);
     connection
         .execute(
             "INSERT INTO shift_light_profiles
@@ -1834,6 +1860,35 @@ mod tests {
         assert_eq!(left.shift_rpm, Some(7800));
         assert_eq!(left.samples, right.samples);
         assert_eq!(left.shift_rpm, right.shift_rpm);
+    }
+
+    #[test]
+    fn merging_five_partial_observed_samples_completes_calibration() {
+        let first = StoredShiftLightProfile {
+            gear: 2,
+            status: "learning".to_string(),
+            shift_rpm: None,
+            sample_count: 3,
+            method: "observed".to_string(),
+            ratio_drop: None,
+            samples: vec![7900, 7920, 7940],
+        };
+        let second = StoredShiftLightProfile {
+            gear: 2,
+            status: "learning".to_string(),
+            shift_rpm: None,
+            sample_count: 2,
+            method: "observed".to_string(),
+            ratio_drop: None,
+            samples: vec![7960, 7980],
+        };
+
+        let merged = merge_stored_profiles(&first, &second);
+
+        assert_eq!(merged.status, "calibrated");
+        assert_eq!(merged.shift_rpm, Some(7865));
+        assert_eq!(merged.sample_count, 5);
+        assert_eq!(merged.samples, vec![7900, 7920, 7940, 7960, 7980]);
     }
 
     #[test]

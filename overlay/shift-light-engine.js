@@ -274,6 +274,11 @@ var HudShiftLight = (() => {
   function roundRpm(value) {
     return Math.max(0, Math.round(value));
   }
+  function observedShiftRpm(samples) {
+    if (samples.length < REQUIRED_SAMPLES) return null;
+    const average = samples.reduce((sum, sample) => sum + sample, 0) / samples.length;
+    return roundRpm(average - RPM_OFFSET);
+  }
   function normalizeGearboxSignature(signature) {
     return typeof signature === "string" && signature.length > 0 ? signature : null;
   }
@@ -293,6 +298,12 @@ var HudShiftLight = (() => {
       const detectedRatio = detectedByGear.get(part.gear);
       return detectedRatio === void 0 || Math.abs(detectedRatio - part.ratioDrop) <= GEARBOX_SIGNATURE_TOLERANCE;
     });
+  }
+  function signaturesAreCompatible(left, right) {
+    const leftParts = parseGearboxSignature(left);
+    const rightParts = parseGearboxSignature(right);
+    if (leftParts.length === 0 || rightParts.length === 0) return false;
+    return signaturesHaveCompatibleKnownParts(leftParts, rightParts) && signaturesHaveCompatibleKnownParts(rightParts, leftParts);
   }
   function mergeGearboxSignatures(previous, detected) {
     if (!previous) return detected;
@@ -378,12 +389,14 @@ var HudShiftLight = (() => {
           maxSampleCount,
           Math.max(storedSampleCount, samples.length)
         );
-        const calibrated = Number.isFinite(profile.shiftRpm) && (profile.status === "calibrated" || sampleCount >= REQUIRED_SAMPLES);
-        const storedShiftRpm = profile.shiftRpm;
+        const storedShiftRpm = typeof profile.shiftRpm === "number" && Number.isFinite(profile.shiftRpm) ? roundRpm(profile.shiftRpm) : null;
+        const completedObservedShiftRpm = storedShiftRpm === null && method === "observed" ? observedShiftRpm(samples) : null;
+        const effectiveShiftRpm = storedShiftRpm ?? completedObservedShiftRpm;
+        const calibrated = effectiveShiftRpm !== null && (profile.status === "calibrated" || sampleCount >= REQUIRED_SAMPLES);
         const normalized = {
           key: this.key,
           gear: profile.gear,
-          shiftRpm: calibrated && typeof storedShiftRpm === "number" && Number.isFinite(storedShiftRpm) ? roundRpm(storedShiftRpm) : null,
+          shiftRpm: calibrated ? effectiveShiftRpm : null,
           sampleCount,
           status: calibrated ? "calibrated" : "learning",
           samples,
@@ -760,7 +773,9 @@ var HudShiftLight = (() => {
       }
     }
     isGearboxCompatible(signature) {
-      return !this.gearboxSignature || normalizeGearboxSignature(signature) === this.gearboxSignature;
+      if (!this.gearboxSignature) return true;
+      const normalized = normalizeGearboxSignature(signature);
+      return normalized !== null && signaturesAreCompatible(this.gearboxSignature, normalized);
     }
     hasCompatibleProfile(gear) {
       const profile = this.profiles.get(gear);

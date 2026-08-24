@@ -196,6 +196,51 @@ test('rejects an observed profile when the confirmed gearbox signature differs',
   assert.equal(snapshot.diagnostics.find(row => row.gear === 2).status, 'gearbox-mismatch')
 })
 
+test('restores a tolerance-matched observed profile from the live gearbox', () => {
+  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  learner.setProfile({
+    key: 'fh6:123:800:8000',
+    gear: 2,
+    shiftRpm: 7600,
+    sampleCount: 5,
+    method: 'observed',
+    gearboxSignature: '2:0.8000|3:0.8750'
+  })
+
+  for (let sample = 0; sample < 20; sample += 1) {
+    learner.update(ratioFrame(2, 60, 4000 + sample, 1000 + sample * 32))
+    learner.update(ratioFrame(3, 48.06, 4000 + sample, 2000 + sample * 32))
+    learner.update(ratioFrame(4, 42, 4000 + sample, 3000 + sample * 32))
+  }
+
+  const snapshot = learner.snapshot(ratioFrame(2, 60, 7000, 4000))
+  assert.equal(snapshot.status, 'calibrated')
+  assert.equal(snapshot.shiftRpm, 7600)
+})
+
+test('completes observed calibration restored from five merged samples', () => {
+  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  learner.setProfile({
+    key: 'fh6:123:800:8000',
+    gear: 2,
+    shiftRpm: null,
+    sampleCount: 5,
+    status: 'learning',
+    samples: [7900, 7920, 7940, 7960, 7980],
+    method: 'observed'
+  })
+
+  const gear = learner.snapshot(frame({ gear: 2 })).gears.find(gear => gear.gear === 2)
+  assert.deepEqual(gear, {
+    gear: 2,
+    status: 'calibrated',
+    shiftRpm: 7865,
+    sampleCount: 5,
+    method: 'observed',
+    ratioDrop: null
+  })
+})
+
 test('migrates signed partial evidence when the gearbox signature expands', () => {
   const learner = new ShiftLightLearner('fh6:123:800:8000')
   for (let sample = 0; sample < 20; sample += 1) {
