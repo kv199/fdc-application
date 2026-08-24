@@ -120,10 +120,12 @@ provider's `runtime/data` database. The schema separates `Car` (`gameId` plus
 `carOrdinal`), tune/gearbox `Variant` (`PI` plus `RPM max`), and bounded per-gear
 learning evidence. A car and variant are registered on the first valid packet,
 before calibration is complete. After enough adjacent ratios are confirmed,
-the HUD adds a bounded gearbox signature to the variant and only activates
-observed, partial, or optimal evidence with a matching signature.
+the HUD adds a bounded, quantized gearbox signature to the variant, extends it
+when higher-gear evidence becomes reliable, and only activates observed,
+partial, or optimal evidence with a matching signature. Reset also clears the
+provisional unsigned evidence for the same car variant.
 The `SHIFT LIGHT` tab listens to HUD-local events for the current per-gear table and the
-reset action clears only the active variant. The provider no longer sends a
+reset action clears the active variant and its unsigned provisional companion. The provider no longer sends a
 `shift_light` WebSocket message or owns Shift Light persistence.
 Pause packets and temporary telemetry gaps keep the last car and per-gear table
 available in Configuration while clearing only the in-progress pull. Reset is

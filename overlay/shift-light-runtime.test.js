@@ -40,6 +40,16 @@ function upshiftPull(runtime, gear) {
   runtime.update(frame({ gear: gear + 1, rpm: 6000 }))
 }
 
+function ratioFrame(gear, ratio, rpm, timestampMs) {
+  const wheelSpeed = rpm / ratio
+  return frame({
+    timestampMs,
+    gear,
+    rpm,
+    wheelRotation: { fl: wheelSpeed, fr: wheelSpeed, rl: wheelSpeed, rr: wheelSpeed }
+  })
+}
+
 function deferred() {
   let resolve
   const promise = new Promise(done => {
@@ -233,6 +243,24 @@ test('reset blocks new calibration saves while SQLite deletion is pending', asyn
   reset.resolve()
   assert.equal(await resetResult, true)
   assert.equal(calls.some(call => call.command === 'save_shift_light_profile'), false)
+})
+
+test('reset includes the active signature while Rust also clears the unsigned variant', async () => {
+  const key = 'fh6:123:800:8000'
+  const { calls, runtime } = createRuntime()
+  for (let sample = 0; sample < 20; sample += 1) {
+    runtime.update(ratioFrame(2, 60, 4000 + sample, 1000 + sample * 32))
+    runtime.update(ratioFrame(3, 48, 4000 + sample, 2000 + sample * 32))
+    runtime.update(ratioFrame(4, 42, 4000 + sample, 3000 + sample * 32))
+  }
+  await flushPromises()
+
+  const signature = '2:0.8000|3:0.8750'
+  assert.equal(runtime.getState().gearboxSignature, signature)
+  assert.equal(await runtime.reset(), true)
+
+  const resetCall = calls.find(call => call.command === 'reset_shift_light_profiles')
+  assert.deepEqual(resetCall?.args, { key, gearboxSignature: signature })
 })
 
 test('registers a variant on its first valid packet and saves old progress after a car switch', async () => {

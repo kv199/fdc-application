@@ -400,6 +400,27 @@ fn find_shift_light_variant_id(
     }
 }
 
+fn delete_shift_light_profiles(
+    connection: &Connection,
+    car_ordinal: i32,
+    pi: i32,
+    rpm_max: i32,
+    gearbox_signature: &str,
+) -> Result<(), String> {
+    connection
+        .execute(
+            "DELETE FROM shift_light_profiles
+             WHERE variant_id IN (
+               SELECT id FROM shift_light_variants
+               WHERE game_id = 'fh6' AND car_ordinal = ?1 AND pi = ?2 AND rpm_max = ?3
+                 AND (gearbox_signature = '' OR gearbox_signature = ?4)
+             )",
+            params![car_ordinal, pi, rpm_max, gearbox_signature],
+        )
+        .map_err(|error| format!("unable to reset Shift Light profiles: {error}"))?;
+    Ok(())
+}
+
 fn table_exists(connection: &Connection, table: &str) -> Result<bool, String> {
     connection
         .query_row(
@@ -780,18 +801,7 @@ fn reset_shift_light_profiles(
     let (car_ordinal, pi, rpm_max) = parse_shift_light_key(&key)?;
     let connection = open_shift_light_db(&app)?;
     let gearbox_signature = gearbox_signature.unwrap_or_default();
-    let variant_id =
-        find_shift_light_variant_id(&connection, car_ordinal, pi, rpm_max, &gearbox_signature)?;
-    let Some(variant_id) = variant_id else {
-        return Ok(());
-    };
-    connection
-        .execute(
-            "DELETE FROM shift_light_profiles WHERE variant_id = ?1",
-            params![variant_id],
-        )
-        .map_err(|error| format!("unable to reset Shift Light profiles: {error}"))?;
-    Ok(())
+    delete_shift_light_profiles(&connection, car_ordinal, pi, rpm_max, &gearbox_signature)
 }
 
 #[tauri::command]
@@ -1266,5 +1276,61 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn reset_removes_active_and_unsigned_profiles_but_keeps_other_gearboxes() {
+        let connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&connection).unwrap();
+        connection
+            .execute(
+                "INSERT INTO shift_light_cars (game_id, car_ordinal) VALUES ('fh6', 260)",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO shift_light_variants
+                   (game_id, car_ordinal, pi, rpm_max, gearbox_signature)
+                 VALUES
+                   ('fh6', 260, 600, 8500, ''),
+                   ('fh6', 260, 600, 8500, '2:0.8000|3:0.8750'),
+                   ('fh6', 260, 600, 8500, '2:0.7500|3:0.8500')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO shift_light_profiles (variant_id, gear)
+                 SELECT id, 2 FROM shift_light_variants",
+                [],
+            )
+            .unwrap();
+
+        delete_shift_light_profiles(&connection, 260, 600, 8500, "2:0.8000|3:0.8750").unwrap();
+
+        let remaining: Vec<(String, i32)> = connection
+            .prepare(
+                "SELECT v.gearbox_signature, COUNT(p.gear)
+                 FROM shift_light_variants AS v
+                 LEFT JOIN shift_light_profiles AS p ON p.variant_id = v.id
+                 WHERE v.car_ordinal = 260
+                 GROUP BY v.id, v.gearbox_signature
+                 ORDER BY v.gearbox_signature",
+            )
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(
+            remaining,
+            vec![
+                ("".to_string(), 0),
+                ("2:0.7500|3:0.8500".to_string(), 1),
+                ("2:0.8000|3:0.8750".to_string(), 0)
+            ]
+        );
     }
 }

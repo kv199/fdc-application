@@ -35,7 +35,9 @@ var HudShiftLight = (() => {
   var MAX_RATIO_SAMPLES = 240;
   var MIN_RATIO_SAMPLES = 20;
   var MIN_GEARBOX_SIGNATURE_DROPS = 2;
-  var MAX_GEARBOX_SIGNATURE_DROPS = 4;
+  var MAX_GEARBOX_SIGNATURE_DROPS = FORWARD_GEAR_MAX - FORWARD_GEAR_MIN;
+  var GEARBOX_SIGNATURE_SCALE = 1e3;
+  var GEARBOX_SIGNATURE_FORMAT_DECIMALS = 4;
   var MIN_DRIVEN_WHEEL_RAD_S = 5;
   var MIN_ENGINE_RPM = 1200;
   var MAX_CLUTCH = 0.05;
@@ -107,7 +109,8 @@ var HudShiftLight = (() => {
       for (let gear = FORWARD_GEAR_MIN; gear < FORWARD_GEAR_MAX; gear += 1) {
         const ratio = this.getRatioDrop(gear);
         if (!ratio) continue;
-        drops.push(`${gear}:${ratio.ratioDrop.toFixed(4)}`);
+        const canonicalDrop = Math.round(ratio.ratioDrop * GEARBOX_SIGNATURE_SCALE) / GEARBOX_SIGNATURE_SCALE;
+        drops.push(`${gear}:${canonicalDrop.toFixed(GEARBOX_SIGNATURE_FORMAT_DECIMALS)}`);
         if (drops.length >= MAX_GEARBOX_SIGNATURE_DROPS) break;
       }
       return drops.length >= MIN_GEARBOX_SIGNATURE_DROPS ? drops.join("|") : null;
@@ -403,9 +406,8 @@ var HudShiftLight = (() => {
       const neutral = telemetry.gear === NEUTRAL_GEAR;
       if (forward) this.observedGears.add(telemetry.gear);
       this.optimalEstimator.ingest(telemetry);
-      if (!this.gearboxSignature) {
-        this.gearboxSignature = this.optimalEstimator.getGearboxSignature();
-      }
+      const detectedGearboxSignature = this.optimalEstimator.getGearboxSignature();
+      if (detectedGearboxSignature) this.updateGearboxSignature(detectedGearboxSignature);
       this.activateStoredOptimalProfiles();
       this.updateOptimalProfiles();
       this.updateRpmRate(previous, telemetry, wot, forward);
@@ -520,17 +522,16 @@ var HudShiftLight = (() => {
       ]);
       return [...gears].sort((left, right) => left - right).map((gear) => {
         const profile = this.profiles.get(gear);
-        const compatible = this.isGearboxCompatible(
-          profile ? profile.gearboxSignature : this.storedGearboxSignatures.get(gear)
-        );
-        const samples = compatible ? this.samples.get(gear) ?? [] : [];
+        const profileCompatible = !profile || this.isGearboxCompatible(profile.gearboxSignature);
+        const samplesCompatible = this.isGearboxCompatible(this.storedGearboxSignatures.get(gear));
+        const samples = samplesCompatible ? this.samples.get(gear) ?? [] : [];
         return {
           gear,
-          status: compatible && profile ? "calibrated" : "learning",
-          shiftRpm: compatible ? profile?.shiftRpm ?? null : null,
-          sampleCount: compatible ? profile?.sampleCount ?? samples.length : 0,
-          method: compatible ? profile?.method ?? null : null,
-          ratioDrop: compatible ? profile?.ratioDrop ?? null : null
+          status: profileCompatible && profile ? "calibrated" : "learning",
+          shiftRpm: profileCompatible ? profile?.shiftRpm ?? null : null,
+          sampleCount: profileCompatible && profile ? profile.sampleCount : samples.length,
+          method: profileCompatible ? profile?.method ?? null : null,
+          ratioDrop: profileCompatible ? profile?.ratioDrop ?? null : null
         };
       });
     }
@@ -672,6 +673,16 @@ var HudShiftLight = (() => {
     normalizeSamples(samples) {
       if (!Array.isArray(samples)) return [];
       return samples.filter((sample) => Number.isFinite(sample)).slice(0, MAX_EVIDENCE_SAMPLES).map((sample) => roundRpm(sample));
+    }
+    updateGearboxSignature(signature) {
+      if (signature === this.gearboxSignature) return;
+      this.gearboxSignature = signature;
+      for (const [gear, storedSignature] of this.storedGearboxSignatures) {
+        if (storedSignature === signature) continue;
+        this.samples.delete(gear);
+        this.storedGearboxSignatures.delete(gear);
+        this.dirtyGears.delete(gear);
+      }
     }
     isGearboxCompatible(signature) {
       return !this.gearboxSignature || normalizeGearboxSignature(signature) === this.gearboxSignature;
