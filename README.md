@@ -107,23 +107,31 @@ coexistence state; the HUD never switches sources automatically. The selected mo
 HUD storage; there is no second executable or installer variant.
 
 Shift Light is calculated by the HUD in both modes. It learns per-gear targets
-from clean full-throttle upshifts, restores profiles by the
-`fh6:<ordinal>:<pi>:<rpmMax>` identity, and keeps the existing observed and
-optimal diagnostics. Its visual brightness is adjustable from 0% to 100%; the
+from clean full-throttle upshifts, accepts the game's neutral transition by
+elapsed time (bounded to 200 ms and 64 frames), and restores partial evidence as
+well as calibrated targets by the internal
+`fh6:<ordinal>:<pi>:<rpmMax>` variant key. Its visual brightness is adjustable from 0% to 100%; the
 default 80% preserves the original alert intensity without dimming the gear,
 speed, or RPM text. The control lives with its diagnostics in the `SHIFT LIGHT`
-tab. Profiles are stored in a HUD-local `hud.sqlite` under the
-Windows AppData directory, never in the provider's `runtime/data` database.
+tab. Purple shift cues latch immediately for at least 250 ms and use the bounded
+RPM-rate lead for both observed and optimal profiles. Profiles are stored in a
+HUD-local `hud.sqlite` under the Windows AppData directory, never in the
+provider's `runtime/data` database. The schema separates `Car` (`gameId` plus
+`carOrdinal`), tune/gearbox `Variant` (`PI` plus `RPM max`), and bounded per-gear
+learning evidence. A car and variant are registered on the first valid packet,
+before calibration is complete.
 The `SHIFT LIGHT` tab listens to HUD-local events for the current per-gear table and the
-reset action clears the active local profile. The provider no longer sends a
+reset action clears only the active variant. The provider no longer sends a
 `shift_light` WebSocket message or owns Shift Light persistence.
 Pause packets and temporary telemetry gaps keep the last car and per-gear table
 available in Configuration while clearing only the in-progress pull. Reset is
 acknowledged after the HUD-local SQLite operation completes, so it remains
 usable while Forza is paused.
 
-The checked-in `overlay/shift-light-engine.js` is the browser bundle used by
-the standalone HUD; its learner behavior is covered by
+The checked-in `overlay/shift-light-engine.js` is generated from
+`apps/co-driver/app/utils/shift-light.ts` with the root command
+`.\scripts\build-shift-light-bundle.ps1`; it is the browser bundle used by
+the standalone HUD. Its learner behavior is covered by
 `overlay/shift-light-engine.test.js`.
 
 ## Reference Coach contract

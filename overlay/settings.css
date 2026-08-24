@@ -519,7 +519,7 @@ h1 {
 
 .calibration-card__meta {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(100px, 0.8fr));
+  grid-template-columns: minmax(0, 1.25fr) repeat(3, minmax(86px, 0.75fr));
   gap: 14px;
   padding-bottom: 14px;
 }

@@ -1,6 +1,4 @@
-// Generated browser bundle of the Shift Light learner. Keep the runtime
-// dependency-free; regenerate from the calibrated learner source when it
-// changes and keep the HUD tests beside this file.
+// Generated from apps/co-driver/app/utils/shift-light.ts; keep this file synchronized with the source.
 var HudShiftLight = (() => {
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -20,14 +18,15 @@ var HudShiftLight = (() => {
   };
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // app/utils/shift-light.ts
+  // apps/co-driver/app/utils/shift-light.ts
   var shift_light_exports = {};
   __export(shift_light_exports, {
     ShiftLightLearner: () => ShiftLightLearner,
-    getShiftLightCarKey: () => getShiftLightCarKey
+    getShiftLightCarKey: () => getShiftLightCarKey,
+    getShiftLightIdentity: () => getShiftLightIdentity
   });
 
-  // app/utils/optimal-shift.ts
+  // apps/co-driver/app/utils/optimal-shift.ts
   var FORWARD_GEAR_MIN = 1;
   var FORWARD_GEAR_MAX = 10;
   var WOT_THRESHOLD = 0.95;
@@ -219,7 +218,7 @@ var HudShiftLight = (() => {
     }
   };
 
-  // app/utils/shift-light.ts
+  // apps/co-driver/app/utils/shift-light.ts
   var MIN_THROTTLE = 0.95;
   var MIN_RPM_FRACTION = 0.82;
   var REARM_FRACTION = 0.85;
@@ -228,7 +227,10 @@ var HudShiftLight = (() => {
   var RPM_OFFSET = 75;
   var REQUIRED_SAMPLES = 5;
   var NEUTRAL_GEAR = 11;
-  var MAX_NEUTRAL_FRAMES = 4;
+  var MAX_NEUTRAL_MS = 200;
+  var MAX_NEUTRAL_FRAMES = 64;
+  var MAX_TIMESTAMP_GAP_MS = 1e3;
+  var MAX_EVIDENCE_SAMPLES = 5;
   var OPTIMAL_CONFIRM_SAMPLES = 3;
   var OPTIMAL_STABILITY_RPM = 100;
   var OPTIMAL_UPDATE_RPM = 50;
@@ -260,6 +262,18 @@ var HudShiftLight = (() => {
     if (!Number.isFinite(rpmMax) || rpmMax <= 0) return null;
     return `fh6:${Math.round(ordinal)}:${Math.round(pi)}:${roundRpm(rpmMax)}`;
   }
+  function getShiftLightIdentity(telemetry) {
+    const key = getShiftLightCarKey(telemetry);
+    if (!key) return null;
+    const parts = key.split(":");
+    return {
+      gameId: "fh6",
+      carOrdinal: Number(parts[1]),
+      pi: Number(parts[2]),
+      rpmMax: Number(parts[3]),
+      key
+    };
+  }
   var ShiftLightLearner = class {
     constructor(key, options = {}) {
       this.key = key;
@@ -278,8 +292,10 @@ var HudShiftLight = (() => {
     pullGear = null;
     pullPeakRpm = 0;
     limiterCommitted = false;
+    limiterCandidate = null;
     pendingUpshift = null;
     rpmRate = null;
+    dirtyGears = /* @__PURE__ */ new Set();
     /** Compatibility helper for callers that only have one stored profile. */
     setProfile(profile) {
       if (profile) this.setProfiles([profile]);
@@ -288,20 +304,39 @@ var HudShiftLight = (() => {
       for (const profile of profiles) {
         if (profile.key !== this.key) continue;
         if (!Number.isInteger(profile.gear) || profile.gear < 0 || profile.gear > 10) continue;
-        if (!Number.isFinite(profile.shiftRpm)) continue;
+        if (!Number.isFinite(profile.shiftRpm) && !Array.isArray(profile.samples)) continue;
+        if (this.dirtyGears.has(profile.gear)) continue;
+        const samples = this.normalizeSamples(profile.samples);
+        const method = profile.method === "optimal" ? "optimal" : "observed";
+        const maxSampleCount = method === "optimal" ? 999 : MAX_EVIDENCE_SAMPLES;
+        const storedSampleCount = Number.isFinite(profile.sampleCount) ? Math.max(0, Math.round(profile.sampleCount)) : 0;
+        const sampleCount = Math.min(
+          maxSampleCount,
+          Math.max(storedSampleCount, samples.length)
+        );
+        const calibrated = Number.isFinite(profile.shiftRpm) && (profile.status === "calibrated" || sampleCount >= REQUIRED_SAMPLES);
+        const storedShiftRpm = profile.shiftRpm;
         const normalized = {
           key: this.key,
           gear: profile.gear,
-          shiftRpm: roundRpm(profile.shiftRpm),
-          sampleCount: Math.max(REQUIRED_SAMPLES, Math.round(profile.sampleCount)),
-          method: profile.method === "optimal" ? "optimal" : "observed",
+          shiftRpm: calibrated && typeof storedShiftRpm === "number" && Number.isFinite(storedShiftRpm) ? roundRpm(storedShiftRpm) : null,
+          sampleCount,
+          status: calibrated ? "calibrated" : "learning",
+          samples,
+          method,
           ratioDrop: Number.isFinite(profile.ratioDrop) ? profile.ratioDrop : null
         };
+        if (!calibrated) {
+          if (samples.length > 0) this.samples.set(normalized.gear, samples);
+          this.observedGears.add(normalized.gear);
+          continue;
+        }
         if (normalized.method === "optimal" && normalized.ratioDrop !== null) {
           this.pendingOptimalProfiles.set(normalized.gear, normalized);
         } else {
           this.profiles.set(normalized.gear, normalized);
         }
+        if (samples.length > 0) this.samples.set(normalized.gear, samples);
         if (normalized.gear > 0) this.observedGears.add(normalized.gear);
       }
     }
@@ -315,6 +350,7 @@ var HudShiftLight = (() => {
       this.observedGears.clear();
       this.optimalCandidates.clear();
       this.mismatchedOptimalGears.clear();
+      this.dirtyGears.clear();
       this.optimalEstimator.reset();
       this.resetPull();
       this.previous = null;
@@ -330,7 +366,11 @@ var HudShiftLight = (() => {
       this.rpmRate = null;
     }
     update(telemetry) {
-      const previous = this.previous;
+      let previous = this.previous;
+      if (previous && !this.hasContinuousTimestamp(previous, telemetry)) {
+        this.resetTransient();
+        previous = null;
+      }
       const wot = Number.isFinite(telemetry.throttle) && telemetry.throttle >= MIN_THROTTLE;
       const forward = isForwardGear2(telemetry.gear);
       const neutral = telemetry.gear === NEUTRAL_GEAR;
@@ -348,17 +388,27 @@ var HudShiftLight = (() => {
         }
         if (transition && transition.peakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION) {
           this.recordSample(transition.sourceGear, transition.peakRpm);
+          this.limiterCandidate = null;
         }
         this.pendingUpshift = null;
         if (this.pullGear !== telemetry.gear) {
           this.pullGear = telemetry.gear;
           this.pullPeakRpm = 0;
           this.limiterCommitted = false;
+          this.limiterCandidate = null;
         }
         const rpmDrop = Math.max(MIN_RPM_DROP, telemetry.rpmMax * RPM_DROP_FRACTION);
         if (!this.profiles.has(telemetry.gear) && !this.limiterCommitted && this.pullPeakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION && this.pullPeakRpm - telemetry.rpm >= rpmDrop) {
-          this.recordSample(telemetry.gear, this.pullPeakRpm);
-          this.limiterCommitted = true;
+          if (this.limiterCandidate?.gear === telemetry.gear) {
+            this.recordSample(telemetry.gear, this.limiterCandidate.peakRpm);
+            this.limiterCandidate = null;
+            this.limiterCommitted = true;
+          } else {
+            this.limiterCandidate = {
+              gear: telemetry.gear,
+              peakRpm: this.pullPeakRpm
+            };
+          }
         }
         if (telemetry.rpm < this.pullPeakRpm * REARM_FRACTION) {
           this.pullPeakRpm = 0;
@@ -366,12 +416,15 @@ var HudShiftLight = (() => {
         }
         this.pullPeakRpm = Math.max(this.pullPeakRpm, telemetry.rpm);
       } else if (neutral && this.pullGear !== null && this.pullPeakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION) {
+        const firstNeutralTimestampMs = this.pendingUpshift?.sourceGear === this.pullGear ? this.pendingUpshift.firstNeutralTimestampMs : telemetry.timestampMs;
         const neutralFrames = this.pendingUpshift?.sourceGear === this.pullGear ? this.pendingUpshift.neutralFrames + 1 : 1;
-        if (neutralFrames <= MAX_NEUTRAL_FRAMES) {
+        const neutralDurationMs = telemetry.timestampMs - firstNeutralTimestampMs;
+        if (Number.isFinite(neutralDurationMs) && neutralDurationMs <= MAX_NEUTRAL_MS && neutralFrames <= MAX_NEUTRAL_FRAMES) {
           this.pendingUpshift = {
             sourceGear: this.pullGear,
             peakRpm: this.pullPeakRpm,
-            neutralFrames
+            neutralFrames,
+            firstNeutralTimestampMs
           };
         } else {
           this.resetPull();
@@ -383,6 +436,7 @@ var HudShiftLight = (() => {
       return this.snapshot(telemetry);
     }
     snapshot(telemetry = this.previous) {
+      const identity = this.parseIdentity();
       const currentGear = telemetry && isForwardGear2(telemetry.gear) ? telemetry.gear : null;
       const activeProfile = currentGear === null ? this.profiles.get(0) : this.profiles.get(currentGear) ?? this.profiles.get(0);
       const currentSamples = currentGear === null ? [] : this.samples.get(currentGear) ?? [];
@@ -392,7 +446,7 @@ var HudShiftLight = (() => {
       if (shiftRpm !== null && telemetry) {
         const approachWindow = Math.max(250, shiftRpm * 0.04);
         const rpmRate = this.rpmRate;
-        const predictiveRate = activeProfile?.method === "optimal" && rpmRate !== null && rpmRate > 0 ? rpmRate : null;
+        const predictiveRate = activeProfile?.method !== null && activeProfile?.method !== void 0 && rpmRate !== null && rpmRate > 0 ? rpmRate : null;
         const shiftLead = predictiveRate !== null ? Math.min(MAX_SHIFT_SIGNAL_LEAD_RPM, predictiveRate * SHIFT_SIGNAL_LEAD_MS / 1e3) : 0;
         const approachLead = predictiveRate !== null ? Math.max(approachWindow, Math.min(MAX_APPROACH_SIGNAL_LEAD_RPM, predictiveRate * APPROACH_SIGNAL_LEAD_MS / 1e3)) : approachWindow;
         if (telemetry.rpm >= shiftRpm - shiftLead) phase = "shift";
@@ -405,6 +459,10 @@ var HudShiftLight = (() => {
         shiftRpm,
         sampleCount: activeProfile?.sampleCount ?? currentSamples.length,
         carKey: this.key,
+        gameId: identity?.gameId ?? null,
+        carOrdinal: identity?.carOrdinal ?? null,
+        pi: identity?.pi ?? null,
+        rpmMax: identity?.rpmMax ?? null,
         currentGear,
         method: activeProfile?.method ?? null,
         gears: this.getGearStates(),
@@ -412,7 +470,7 @@ var HudShiftLight = (() => {
       };
     }
     getUpshiftTransition(previous, telemetry) {
-      if (this.pendingUpshift && telemetry.gear > this.pendingUpshift.sourceGear) {
+      if (this.pendingUpshift && telemetry.gear > this.pendingUpshift.sourceGear && telemetry.timestampMs - this.pendingUpshift.firstNeutralTimestampMs <= MAX_NEUTRAL_MS) {
         return this.pendingUpshift;
       }
       if (previous && isForwardGear2(previous.gear) && telemetry.gear > previous.gear && this.pullGear === previous.gear) {
@@ -489,12 +547,14 @@ var HudShiftLight = (() => {
         const target = roundRpm(targetValues.reduce((sum, value) => sum + value, 0) / targetValues.length);
         const latest = candidates.at(-1);
         const existing = this.profiles.get(gear);
-        if (existing?.method === "optimal" && Math.abs(existing.shiftRpm - target) < OPTIMAL_UPDATE_RPM) continue;
+        if (existing?.method === "optimal" && existing.shiftRpm !== null && Math.abs(existing.shiftRpm - target) < OPTIMAL_UPDATE_RPM) continue;
         const profile = {
           key: this.key,
           gear,
           shiftRpm: target,
           sampleCount: latest.evidence,
+          status: "calibrated",
+          samples: [],
           method: "optimal",
           ratioDrop: latest.ratioDrop
         };
@@ -520,6 +580,7 @@ var HudShiftLight = (() => {
       this.pullGear = null;
       this.pullPeakRpm = 0;
       this.limiterCommitted = false;
+      this.limiterCandidate = null;
       this.pendingUpshift = null;
     }
     recordSample(gear, observedRpm) {
@@ -529,22 +590,60 @@ var HudShiftLight = (() => {
       gearSamples.push(roundRpm(observedRpm));
       this.samples.set(gear, gearSamples);
       this.observedGears.add(gear);
-      if (gearSamples.length < REQUIRED_SAMPLES) return;
+      this.dirtyGears.add(gear);
+      if (gearSamples.length < REQUIRED_SAMPLES) {
+        this.options.onProgress?.({
+          key: this.key,
+          gear,
+          shiftRpm: null,
+          sampleCount: gearSamples.length,
+          status: "learning",
+          samples: [...gearSamples],
+          method: "observed",
+          ratioDrop: null
+        });
+        return;
+      }
       const observedAverage = gearSamples.reduce((sum, rpm) => sum + rpm, 0) / gearSamples.length;
       const profile = {
         key: this.key,
         gear,
         shiftRpm: roundRpm(observedAverage - RPM_OFFSET),
         sampleCount: gearSamples.length,
+        status: "calibrated",
+        samples: [...gearSamples],
         method: "observed",
         ratioDrop: null
       };
       this.profiles.set(gear, profile);
+      this.options.onProgress?.(profile);
       this.options.onCalibrated?.(profile);
+    }
+    normalizeSamples(samples) {
+      if (!Array.isArray(samples)) return [];
+      return samples.filter((sample) => Number.isFinite(sample)).slice(0, MAX_EVIDENCE_SAMPLES).map((sample) => roundRpm(sample));
+    }
+    hasContinuousTimestamp(previous, telemetry) {
+      const previousTimestampMs = previous.timestampMs;
+      const timestampMs = telemetry.timestampMs;
+      if (!Number.isFinite(previousTimestampMs) || !Number.isFinite(timestampMs)) return false;
+      const deltaMs = timestampMs - previousTimestampMs;
+      return deltaMs >= 0 && deltaMs <= MAX_TIMESTAMP_GAP_MS;
+    }
+    parseIdentity() {
+      const parts = this.key.split(":");
+      if (parts.length !== 4 || parts[0] !== "fh6") return null;
+      const values = parts.slice(1).map((value) => Number(value));
+      const [carOrdinal, pi, rpmMax] = values;
+      if (carOrdinal === void 0 || !Number.isFinite(carOrdinal) || carOrdinal <= 0 || pi === void 0 || !Number.isFinite(pi) || pi <= 0 || rpmMax === void 0 || !Number.isFinite(rpmMax) || rpmMax <= 0) return null;
+      return {
+        gameId: "fh6",
+        carOrdinal,
+        pi,
+        rpmMax
+      };
     }
   };
   return __toCommonJS(shift_light_exports);
 })();
-
-if (typeof globalThis !== "undefined") globalThis.HudShiftLight = HudShiftLight;
-if (typeof module !== "undefined") module.exports = HudShiftLight;
+if (typeof globalThis !== undefined) globalThis.HudShiftLight = HudShiftLight; if (typeof module !== undefined) module.exports = HudShiftLight;

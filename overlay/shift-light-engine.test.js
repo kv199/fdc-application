@@ -48,6 +48,59 @@ test('uses the car identity and limiter for the profile key', () => {
   assert.equal(getShiftLightCarKey(frame({ car: { ordinal: 0, pi: 800 } })), null)
 })
 
+test('accepts a Porsche-length neutral transition by elapsed time', () => {
+  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  learner.update(frame({ gear: 2, rpm: 8000, timestampMs: 0 }))
+  for (let index = 1; index <= 18; index += 1) {
+    learner.update(frame({ gear: 11, rpm: 7800, timestampMs: index * 7 }))
+  }
+  const snapshot = learner.update(frame({ gear: 3, rpm: 6000, timestampMs: 140 }))
+  assert.equal(snapshot.gears.find(gear => gear.gear === 2)?.sampleCount, 1)
+})
+
+test('does not double-count a limiter candidate followed by an upshift', () => {
+  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  learner.update(frame({ gear: 2, rpm: 8000, timestampMs: 0 }))
+  learner.update(frame({ gear: 2, rpm: 7800, timestampMs: 16 }))
+  const snapshot = learner.update(frame({ gear: 3, rpm: 6000, timestampMs: 32 }))
+  assert.equal(snapshot.gears.find(gear => gear.gear === 2)?.sampleCount, 1)
+})
+
+test('restores bounded partial evidence without marking it calibrated', () => {
+  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  learner.setProfile({
+    key: 'fh6:123:800:8000',
+    gear: 2,
+    shiftRpm: null,
+    sampleCount: 3,
+    status: 'learning',
+    samples: [7900, 7920, 7910],
+    method: 'observed',
+    ratioDrop: null
+  })
+  assert.deepEqual(learner.snapshot(frame({ gear: 2 })).gears.find(gear => gear.gear === 2), {
+    gear: 2,
+    status: 'learning',
+    shiftRpm: null,
+    sampleCount: 3,
+    method: null,
+    ratioDrop: null
+  })
+})
+
+test('uses RPM-rate lead for observed profiles', () => {
+  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  learner.setProfile({
+    key: 'fh6:123:800:8000',
+    gear: 2,
+    shiftRpm: 7600,
+    sampleCount: 5,
+    method: 'observed'
+  })
+  learner.update(frame({ gear: 2, rpm: 6500, timestampMs: 4000 }))
+  assert.equal(learner.update(frame({ gear: 2, rpm: 6700, timestampMs: 4016 })).phase, 'shift')
+})
+
 test('calibrates observed targets from clean full-throttle upshifts', () => {
   const learner = new ShiftLightLearner('fh6:123:800:8000')
 

@@ -84,8 +84,14 @@ let latestShiftLight = {
   shiftRpm: null,
   sampleCount: 0,
   carKey: null,
+  gameId: null,
+  carOrdinal: null,
+  pi: null,
+  rpmMax: null,
   method: null
 }
+const shiftLightPresentation = window.ShiftLightPresentation.createShiftLightPresentation()
+let shiftLightLatchTimer = null
 let latestCornerTemplate = null
 let latestCornerState = null
 let latestReference = window.ReferenceCoach.createEmptyReference()
@@ -377,8 +383,9 @@ function getRpmSignal(rawRpm, rawRpmMax) {
 }
 
 function getShiftLightSignal(telemetry) {
-  if (latestShiftLight.phase === 'shift') return 'shift'
-  if (latestShiftLight.phase === 'approach') return 'redline'
+  const phase = shiftLightPresentation.getPhase()
+  if (phase === 'shift') return 'shift'
+  if (phase === 'approach') return 'redline'
   return getRpmSignal(telemetry.rpm, telemetry.rpmMax)
 }
 
@@ -391,6 +398,14 @@ function queueShiftLight(shiftLight) {
     ? shiftLight.phase
     : 'normal'
   latestShiftLight = { ...latestShiftLight, ...shiftLight, status, phase }
+  shiftLightPresentation.update(phase)
+  if (phase === 'shift') {
+    if (shiftLightLatchTimer !== null) window.clearTimeout(shiftLightLatchTimer)
+    shiftLightLatchTimer = window.setTimeout(() => {
+      shiftLightLatchTimer = null
+      scheduleTelemetryRender()
+    }, window.ShiftLightPresentation.LATCH_MS + 1)
+  }
   scheduleTelemetryRender()
 }
 
@@ -622,8 +637,17 @@ function resetSourcePresentation() {
     shiftRpm: null,
     sampleCount: 0,
     carKey: null,
+    gameId: null,
+    carOrdinal: null,
+    pi: null,
+    rpmMax: null,
     method: null
   }
+  if (shiftLightLatchTimer !== null) {
+    window.clearTimeout(shiftLightLatchTimer)
+    shiftLightLatchTimer = null
+  }
+  shiftLightPresentation.reset()
   window.HudShiftLightRuntime?.update?.(null)
   setRpmSignal('normal')
   scheduleTelemetryRender()
@@ -728,11 +752,13 @@ async function listenDirectEvents(generation) {
         scheduleTelemetryRender()
       } else if (state === 'is-stale') {
         forzaConnected = false
+        window.HudShiftLightRuntime?.resetTransient?.()
         setConnection('is-waiting')
         publishRouteStatus({ phase: 'stale', message: '' })
         scheduleTelemetryRender()
       } else {
         forzaConnected = false
+        window.HudShiftLightRuntime?.resetTransient?.()
         setConnection('is-offline')
         publishRouteStatus({
           phase: event.payload?.message ? 'error' : 'offline',
@@ -863,6 +889,7 @@ function connectSuite() {
           return
         }
         resetCornerState({ promotePending: false })
+        window.HudShiftLightRuntime?.resetTransient?.()
         setConnection('is-waiting')
         publishRouteStatus({
           phase: suiteHadTelemetry ? 'stale' : 'waiting',
@@ -880,6 +907,7 @@ function connectSuite() {
     if (socket !== currentSocket || telemetrySource !== 'suite') return
     socket = null
     forzaConnected = false
+    window.HudShiftLightRuntime?.resetTransient?.()
     resetCornerState({ promotePending: false })
     setConnection('is-offline')
     publishRouteStatus({ phase: 'offline', suiteState: 'unavailable', message: '' })

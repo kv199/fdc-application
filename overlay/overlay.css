@@ -230,13 +230,14 @@ body {
 
 @keyframes shift-alert {
   0%,
-  44% {
-    background: rgb(8 10 12 / 94%);
+  44%,
+  100% {
+    background: rgb(168 85 247 / 96%);
   }
 
   45%,
-  100% {
-    background: rgb(168 85 247 / 96%);
+  72% {
+    background: rgb(216 180 254 / 98%);
   }
 }
 

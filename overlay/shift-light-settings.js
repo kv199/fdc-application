@@ -36,7 +36,7 @@
           gear: gear.gear,
           status: gear.status === 'calibrated' ? 'calibrated' : 'learning',
           shiftRpm: Number.isFinite(gear.shiftRpm) ? Math.round(gear.shiftRpm) : null,
-          sampleCount: Number.isFinite(gear.sampleCount) ? Math.max(0, Math.round(gear.sampleCount)) : 0,
+      sampleCount: Number.isFinite(gear.sampleCount) ? Math.max(0, Math.round(gear.sampleCount)) : 0,
           method: ['observed', 'optimal'].includes(gear.method) ? gear.method : null,
           ratioDrop: Number.isFinite(gear.ratioDrop) ? gear.ratioDrop : null
         }))
@@ -82,6 +82,10 @@
       shiftRpm: Number.isFinite(state.shiftRpm) ? Math.round(state.shiftRpm) : null,
       sampleCount: Number.isFinite(state.sampleCount) ? Math.max(0, Math.round(state.sampleCount)) : 0,
       carKey: typeof state.carKey === 'string' && state.carKey ? state.carKey : null,
+      gameId: typeof state.gameId === 'string' && state.gameId ? state.gameId : null,
+      carOrdinal: Number.isFinite(state.carOrdinal) && state.carOrdinal > 0 ? Math.round(state.carOrdinal) : null,
+      pi: Number.isFinite(state.pi) && state.pi > 0 ? Math.round(state.pi) : null,
+      rpmMax: Number.isFinite(state.rpmMax) && state.rpmMax > 0 ? Math.round(state.rpmMax) : null,
       currentGear: Number.isInteger(state.currentGear) && state.currentGear >= 1 && state.currentGear <= 10
         ? state.currentGear
         : null,

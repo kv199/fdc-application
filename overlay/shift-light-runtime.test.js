@@ -231,3 +231,33 @@ test('reset blocks new calibration saves while SQLite deletion is pending', asyn
   assert.equal(await resetResult, true)
   assert.equal(calls.some(call => call.command === 'save_shift_light_profile'), false)
 })
+
+test('registers a variant on its first valid packet and saves old progress after a car switch', async () => {
+  const { calls, runtime } = createRuntime()
+  runtime.update(frame())
+  await flushPromises()
+
+  const registration = calls.find(call => call.command === 'register_shift_light_variant')
+  assert.deepEqual(registration?.args, { key: 'fh6:123:800:8000' })
+
+  upshiftPull(runtime, 3)
+  runtime.update(frame({ car: { ordinal: 456, pi: 900, drivetrain: 1 } }))
+  await flushPromises()
+
+  const saved = calls.find(call => call.command === 'save_shift_light_profile')
+  assert.equal(saved?.args.key, 'fh6:123:800:8000')
+  assert.equal(saved?.args.status, 'learning')
+  assert.equal(saved?.args.sampleCount, 1)
+})
+
+test('does not let a late SQLite load overwrite samples collected in memory', async () => {
+  const load = deferred()
+  const { runtime } = createRuntime({ loadPromise: load.promise })
+  runtime.update(frame())
+  upshiftPull(runtime, 3)
+  load.resolve([])
+  await flushPromises()
+
+  assert.equal(runtime.getState().gears.find(gear => gear.gear === 3)?.sampleCount, 1)
+  assert.equal(runtime.getState().gears.find(gear => gear.gear === 3)?.status, 'learning')
+})

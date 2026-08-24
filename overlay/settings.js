@@ -22,6 +22,8 @@
   const shiftLightEmpty = document.getElementById('shift-light-empty')
   const shiftLightProfile = document.getElementById('shift-light-profile')
   const shiftLightCarKey = document.getElementById('shift-light-car-key')
+  const shiftLightCarPi = document.getElementById('shift-light-car-pi')
+  const shiftLightCarRpmMax = document.getElementById('shift-light-car-rpm-max')
   const shiftLightCurrentTarget = document.getElementById('shift-light-current-target')
   const shiftLightState = document.getElementById('shift-light-state')
   const shiftLightGearRows = document.getElementById('shift-light-gear-rows')
@@ -260,13 +262,17 @@
       ? normalizeShiftLightState(value)
       : value
     latestShiftLightState = state
-    const hasProfile = Boolean(state?.carKey)
+    const hasProfile = Boolean(state?.carKey && state?.carOrdinal)
     shiftLightEmpty.hidden = hasProfile
     shiftLightProfile.hidden = !hasProfile
     shiftLightReset.disabled = !hasProfile || shiftLightResetPending
     if (!hasProfile) return
 
-    shiftLightCarKey.textContent = state.carKey
+    shiftLightCarKey.textContent = state.gameId === 'fh6' && state.carOrdinal
+      ? `FH6 CAR #${state.carOrdinal}`
+      : '—'
+    shiftLightCarPi.textContent = state.pi ? `PI ${state.pi}` : '—'
+    shiftLightCarRpmMax.textContent = state.rpmMax ? `${state.rpmMax} RPM` : '—'
     shiftLightCurrentTarget.textContent = state.shiftRpm ? `${state.shiftRpm} RPM` : 'FALLBACK'
     const activeState = state.method?.toUpperCase() || state.status.toUpperCase()
     shiftLightState.textContent = `${activeState}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
