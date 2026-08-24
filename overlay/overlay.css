@@ -96,7 +96,6 @@ body {
 .tire {
   width: 12px;
   height: 19px;
-  border: 1.5px solid currentColor;
   border-radius: 3px;
   background: rgb(3 5 7 / 30%);
 }
@@ -128,7 +127,6 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  border: 1.5px solid rgb(226 232 240 / 66%);
   border-radius: 2px;
   background: rgb(3 5 7 / 34%);
 }
@@ -276,7 +274,7 @@ body {
 
   45%,
   72% {
-    background: rgb(216 180 254 / 98%);
+    background: rgb(185 118 248 / 98%);
   }
 }
 
