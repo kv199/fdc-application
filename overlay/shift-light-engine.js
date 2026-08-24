@@ -277,6 +277,44 @@ var HudShiftLight = (() => {
   function normalizeGearboxSignature(signature) {
     return typeof signature === "string" && signature.length > 0 ? signature : null;
   }
+  var GEARBOX_SIGNATURE_TOLERANCE = 5e-3;
+  function parseGearboxSignature(signature) {
+    return signature.split("|").map((part) => {
+      const [gearText, ratioText] = part.split(":");
+      const gear = Number(gearText);
+      const ratioDrop = Number(ratioText);
+      if (!Number.isInteger(gear) || !Number.isFinite(ratioDrop)) return null;
+      return { gear, ratioDrop, token: part };
+    }).filter((part) => part !== null);
+  }
+  function signaturesHaveCompatibleKnownParts(previous, detected) {
+    const detectedByGear = new Map(detected.map((part) => [part.gear, part.ratioDrop]));
+    return previous.every((part) => {
+      const detectedRatio = detectedByGear.get(part.gear);
+      return detectedRatio === void 0 || Math.abs(detectedRatio - part.ratioDrop) <= GEARBOX_SIGNATURE_TOLERANCE;
+    });
+  }
+  function mergeGearboxSignatures(previous, detected) {
+    if (!previous) return detected;
+    const previousParts = parseGearboxSignature(previous);
+    const detectedParts = parseGearboxSignature(detected);
+    if (previousParts.length === 0 || detectedParts.length === 0) return detected;
+    if (!signaturesHaveCompatibleKnownParts(previousParts, detectedParts)) return detected;
+    const detectedGears = new Set(detectedParts.map((part) => part.gear));
+    if (previousParts.some((part) => !detectedGears.has(part.gear))) return previous;
+    const previousByGear = new Map(previousParts.map((part) => [part.gear, part]));
+    const merged = detectedParts.map((part) => previousByGear.get(part.gear) ?? part);
+    for (const part of previousParts) {
+      if (!merged.some((candidate) => candidate.gear === part.gear)) merged.push(part);
+    }
+    return merged.sort((left, right) => left.gear - right.gear).map((part) => part.token).join("|");
+  }
+  function isSignatureExtension(previous, next) {
+    const previousParts = parseGearboxSignature(previous);
+    const nextParts = parseGearboxSignature(next);
+    const nextGears = new Set(nextParts.map((part) => part.gear));
+    return nextParts.length > previousParts.length && previousParts.every((part) => nextGears.has(part.gear)) && signaturesHaveCompatibleKnownParts(previousParts, nextParts);
+  }
   function getShiftLightCarKey(telemetry) {
     const ordinal = telemetry.car?.ordinal;
     const pi = telemetry.car?.pi;
@@ -675,10 +713,47 @@ var HudShiftLight = (() => {
       return samples.filter((sample) => Number.isFinite(sample)).slice(0, MAX_EVIDENCE_SAMPLES).map((sample) => roundRpm(sample));
     }
     updateGearboxSignature(signature) {
-      if (signature === this.gearboxSignature) return;
-      this.gearboxSignature = signature;
+      const nextSignature = mergeGearboxSignatures(this.gearboxSignature, signature);
+      if (nextSignature === this.gearboxSignature) return;
+      const previousSignature = this.gearboxSignature;
+      const canMigrateEvidence = previousSignature !== null && isSignatureExtension(previousSignature, nextSignature);
+      this.gearboxSignature = nextSignature;
+      const migratedGears = /* @__PURE__ */ new Set();
+      if (canMigrateEvidence) {
+        for (const [gear, profile] of this.profiles) {
+          if (profile.gearboxSignature !== previousSignature) continue;
+          const migrated = { ...profile, gearboxSignature: nextSignature };
+          this.profiles.set(gear, migrated);
+          migratedGears.add(gear);
+          this.options.onProgress?.(migrated);
+        }
+        for (const [gear, profile] of this.pendingOptimalProfiles) {
+          if (profile.gearboxSignature !== previousSignature) continue;
+          const migrated = { ...profile, gearboxSignature: nextSignature };
+          this.pendingOptimalProfiles.set(gear, migrated);
+          migratedGears.add(gear);
+          this.options.onProgress?.(migrated);
+        }
+      }
       for (const [gear, storedSignature] of this.storedGearboxSignatures) {
-        if (storedSignature === signature) continue;
+        if (canMigrateEvidence && storedSignature === previousSignature) {
+          this.storedGearboxSignatures.set(gear, nextSignature);
+          const samples = this.samples.get(gear);
+          if (samples && samples.length > 0 && !migratedGears.has(gear)) {
+            this.options.onProgress?.({
+              key: this.key,
+              gear,
+              shiftRpm: null,
+              sampleCount: samples.length,
+              status: "learning",
+              samples: [...samples],
+              method: "observed",
+              ratioDrop: null,
+              gearboxSignature: nextSignature
+            });
+          }
+          continue;
+        }
         this.samples.delete(gear);
         this.storedGearboxSignatures.delete(gear);
         this.dirtyGears.delete(gear);

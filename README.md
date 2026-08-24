@@ -121,9 +121,12 @@ provider's `runtime/data` database. The schema separates `Car` (`gameId` plus
 learning evidence. A car and variant are registered on the first valid packet,
 before calibration is complete. After enough adjacent ratios are confirmed,
 the HUD adds a bounded, quantized gearbox signature to the variant, extends it
-when higher-gear evidence becomes reliable, and only activates observed,
-partial, or optimal evidence with a matching signature. Reset also clears the
-provisional unsigned evidence for the same car variant.
+when higher-gear evidence becomes reliable, migrates signed evidence across a
+compatible extension, and keeps the active token through small telemetry
+changes. Only a material ratio contradiction creates a new identity, and only
+matching observed, partial, or optimal evidence is activated. Reset also clears
+all stored prefix stages and the provisional unsigned evidence for the same car
+variant.
 The `SHIFT LIGHT` tab listens to HUD-local events for the current per-gear table and the
 reset action clears the active variant and its unsigned provisional companion. The provider no longer sends a
 `shift_light` WebSocket message or owns Shift Light persistence.

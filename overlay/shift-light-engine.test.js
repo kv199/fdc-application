@@ -196,6 +196,62 @@ test('rejects an observed profile when the confirmed gearbox signature differs',
   assert.equal(snapshot.diagnostics.find(row => row.gear === 2).status, 'gearbox-mismatch')
 })
 
+test('migrates signed partial evidence when the gearbox signature expands', () => {
+  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  for (let sample = 0; sample < 20; sample += 1) {
+    learner.update(ratioFrame(2, 60, 4000 + sample, 1000 + sample * 32))
+    learner.update(ratioFrame(3, 48, 4000 + sample, 2000 + sample * 32))
+    learner.update(ratioFrame(4, 42, 4000 + sample, 3000 + sample * 32))
+  }
+  learner.setProfile({
+    key: 'fh6:123:800:8000',
+    gear: 2,
+    shiftRpm: null,
+    sampleCount: 1,
+    status: 'learning',
+    samples: [7900],
+    method: 'observed',
+    gearboxSignature: '2:0.8000|3:0.8750'
+  })
+
+  for (let sample = 0; sample < 20; sample += 1) {
+    learner.update(ratioFrame(5, 35, 4000 + sample, 4100 + sample * 32))
+  }
+
+  const snapshot = learner.snapshot(ratioFrame(5, 35, 7000, 4800))
+  assert.equal(snapshot.gearboxSignature, '2:0.8000|3:0.8750|4:0.8330')
+  assert.equal(snapshot.gears.find(gear => gear.gear === 2)?.sampleCount, 1)
+})
+
+test('keeps the active signature through a small independent ratio change', () => {
+  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  for (let sample = 0; sample < 20; sample += 1) {
+    learner.update(ratioFrame(2, 60, 4000 + sample, 1000 + sample * 32))
+    learner.update(ratioFrame(3, 48, 4000 + sample, 2000 + sample * 32))
+    learner.update(ratioFrame(4, 42, 4000 + sample, 3000 + sample * 32))
+  }
+  learner.setProfile({
+    key: 'fh6:123:800:8000',
+    gear: 2,
+    shiftRpm: null,
+    sampleCount: 1,
+    status: 'learning',
+    samples: [7900],
+    method: 'observed',
+    gearboxSignature: '2:0.8000|3:0.8750'
+  })
+
+  for (let sample = 0; sample < 20; sample += 1) {
+    learner.update(ratioFrame(2, 60, 4000 + sample, 4100 + sample * 32))
+    learner.update(ratioFrame(3, 48.06, 4000 + sample, 4200 + sample * 32))
+    learner.update(ratioFrame(4, 42, 4000 + sample, 4300 + sample * 32))
+  }
+
+  const snapshot = learner.snapshot(ratioFrame(2, 60, 7000, 4800))
+  assert.equal(snapshot.gearboxSignature, '2:0.8000|3:0.8750')
+  assert.equal(snapshot.gears.find(gear => gear.gear === 2)?.sampleCount, 1)
+})
+
 test('projects the optimal cue while RPM is rising quickly', () => {
   const learner = new ShiftLightLearner('fh6:123:800:8000')
   learner.setProfile({

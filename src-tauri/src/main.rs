@@ -413,7 +413,11 @@ fn delete_shift_light_profiles(
              WHERE variant_id IN (
                SELECT id FROM shift_light_variants
                WHERE game_id = 'fh6' AND car_ordinal = ?1 AND pi = ?2 AND rpm_max = ?3
-                 AND (gearbox_signature = '' OR gearbox_signature = ?4)
+                 AND (
+                   gearbox_signature = ''
+                   OR gearbox_signature = ?4
+                   OR (?4 <> '' AND instr(?4, gearbox_signature || '|') = 1)
+                 )
              )",
             params![car_ordinal, pi, rpm_max, gearbox_signature],
         )
@@ -1295,6 +1299,7 @@ mod tests {
                  VALUES
                    ('fh6', 260, 600, 8500, ''),
                    ('fh6', 260, 600, 8500, '2:0.8000|3:0.8750'),
+                   ('fh6', 260, 600, 8500, '2:0.8000|3:0.8750|4:0.8330'),
                    ('fh6', 260, 600, 8500, '2:0.7500|3:0.8500')",
                 [],
             )
@@ -1307,7 +1312,8 @@ mod tests {
             )
             .unwrap();
 
-        delete_shift_light_profiles(&connection, 260, 600, 8500, "2:0.8000|3:0.8750").unwrap();
+        delete_shift_light_profiles(&connection, 260, 600, 8500, "2:0.8000|3:0.8750|4:0.8330")
+            .unwrap();
 
         let remaining: Vec<(String, i32)> = connection
             .prepare(
@@ -1329,7 +1335,8 @@ mod tests {
             vec![
                 ("".to_string(), 0),
                 ("2:0.7500|3:0.8500".to_string(), 1),
-                ("2:0.8000|3:0.8750".to_string(), 0)
+                ("2:0.8000|3:0.8750".to_string(), 0),
+                ("2:0.8000|3:0.8750|4:0.8330".to_string(), 0)
             ]
         );
     }
