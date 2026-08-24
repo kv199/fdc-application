@@ -90,6 +90,21 @@
             <output id="rpm-value" class="gear__rpm">-- RPM</output>
           </section>
 
+          <section id="hud-engine" class="engine" aria-label="Engine telemetry">
+            <div class="engine__row">
+              <span class="engine__label">BOOST</span>
+              <output id="engine-boost" class="engine__value" aria-label="Boost pressure">&mdash;</output>
+            </div>
+            <div class="engine__row">
+              <span class="engine__label">POWER</span>
+              <output id="engine-power" class="engine__value" aria-label="Engine power">&mdash;</output>
+            </div>
+            <div class="engine__row">
+              <span class="engine__label">TORQUE</span>
+              <output id="engine-torque" class="engine__value" aria-label="Engine torque">&mdash;</output>
+            </div>
+          </section>
+
           <section id="hud-history" class="history" aria-label="Throttle and brake history">
             <canvas id="history-canvas"></canvas>
           </section>
@@ -109,6 +124,7 @@
   <script src="telemetry-route.js"></script>
   <script src="suite-probe.js"></script>
   <script src="display-preferences.js"></script>
+  <script src="engine-presentation.js"></script>
   <script src="reference-coach.js"></script>
   <script src="lap-timing.js"></script>
   <script src="coach-layout.js"></script>

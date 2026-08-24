@@ -1435,7 +1435,7 @@ fn layout_action(app: AppHandle, action: String, target: String) -> Result<(), S
 #[tauri::command]
 fn set_hud_visibility(app: AppHandle, component: String, visible: bool) -> Result<(), String> {
     let safe_component = match component.as_str() {
-        "tires" | "pedals" | "steering" | "gear" | "history" => component,
+        "tires" | "pedals" | "steering" | "gear" | "engine" | "history" => component,
         _ => return Err("unknown HUD component".to_string()),
     };
     let value = if visible { "true" } else { "false" };

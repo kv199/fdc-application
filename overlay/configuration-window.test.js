@@ -14,6 +14,27 @@ test('Configuration exposes HUD, Shift Light and Settings tabs', () => {
   assert.deepEqual(tabs, ['hud', 'shift-light', 'settings'])
 })
 
+test('Engine telemetry keeps the compact panel order and one visibility toggle', () => {
+  const sections = [...overlayHtml.matchAll(/<section id="(hud-[^"]+)"/g)].map(match => match[1])
+  const components = [...settingsHtml.matchAll(/data-hud-component="([^"]+)"/g)].map(match => match[1])
+
+  assert.deepEqual(sections, ['hud-tires', 'hud-pedals', 'hud-steering', 'hud-gear', 'hud-engine', 'hud-history'])
+  assert.deepEqual(components, ['tires', 'pedals', 'steering', 'gear', 'engine', 'history'])
+  assert.match(settingsHtml, /<strong>Engine \/ Boost<\/strong>/)
+  assert.match(settingsHtml, /<small>Boost, power and torque data<\/small>/)
+  assert.match(overlayHtml, /id="engine-boost"[^>]+aria-label="Boost pressure"/)
+  assert.match(overlayHtml, /id="engine-power"[^>]+aria-label="Engine power"/)
+  assert.match(overlayHtml, /id="engine-torque"[^>]+aria-label="Engine torque"/)
+})
+
+test('Engine visibility is part of the safe HUD component contract', () => {
+  const preferences = fs.readFileSync(path.join(__dirname, 'hud-preferences.js'), 'utf8')
+
+  assert.match(preferences, /const COMPONENTS = \['tires', 'pedals', 'steering', 'gear', 'engine', 'history'\]/)
+  assert.match(preferences, /engine: '126px'/)
+  assert.match(tauriMain, /"tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
+})
+
 test('telemetry diagnostics live only inside the Settings tab', () => {
   const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
   const telemetryStatusIndex = settingsHtml.indexOf('id="telemetry-status"')

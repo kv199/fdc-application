@@ -3,13 +3,14 @@
 
   const STORAGE_KEY = 'forza-horizon-6-hud.hud-visibility.v1'
   const OVERLAY_STORAGE_KEY = 'forza-horizon-6-hud.overlay-visibility.v1'
-  const COMPONENTS = ['tires', 'pedals', 'steering', 'gear', 'history']
+  const COMPONENTS = ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']
   const OVERLAY_COMPONENTS = ['coach', 'delta', 'hud']
   const COLUMN_WIDTHS = {
     tires: '72px',
     pedals: '46px',
     steering: '68px',
     gear: '92px',
+    engine: '126px',
     history: '342px'
   }
   const DEFAULT_STATE = COMPONENTS.reduce((state, name) => {
@@ -77,6 +78,7 @@
       pedals: document.getElementById('hud-pedals'),
       steering: document.getElementById('hud-steering'),
       gear: document.getElementById('hud-gear'),
+      engine: document.getElementById('hud-engine'),
       history: document.getElementById('hud-history')
     }
     if (Object.values(sections).some(section => !section)) return null

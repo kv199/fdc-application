@@ -143,8 +143,8 @@
 
     function getFallbackSize(name, viewport) {
       if (name === 'coach') return { width: Math.min(460, Math.max(0, viewport.width - 24)), height: 88 }
-      if (name === 'delta') return { width: Math.min(1240, Math.max(0, viewport.width - 16)), height: 60 }
-      return { width: Math.min(1240, Math.max(0, viewport.width - 16)), height: 138 }
+      if (name === 'delta') return { width: Math.min(1492, Math.max(0, viewport.width - 16)), height: 60 }
+      return { width: Math.min(1492, Math.max(0, viewport.width - 16)), height: 138 }
     }
 
     function getDefaultAnchor(name, elementSize, viewport) {

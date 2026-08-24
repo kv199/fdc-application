@@ -6,6 +6,11 @@ const brakeTrack = document.getElementById('brake-track')
 const speedValue = document.getElementById('speed-value')
 const gearValue = document.getElementById('gear-value')
 const rpmValue = document.getElementById('rpm-value')
+const engineElements = {
+  boost: document.getElementById('engine-boost'),
+  power: document.getElementById('engine-power'),
+  torque: document.getElementById('engine-torque')
+}
 const steeringCanvas = document.getElementById('steering-canvas')
 const historyCanvas = document.getElementById('history-canvas')
 const coachCard = document.getElementById('coach-card')
@@ -430,6 +435,12 @@ function updateTires(tires = {}) {
   }
 }
 
+function updateEngine(telemetry = {}) {
+  engineElements.boost.textContent = window.HudEnginePresentation.formatBoost(telemetry.boost)
+  engineElements.power.textContent = window.HudEnginePresentation.formatPower(telemetry.power)
+  engineElements.torque.textContent = window.HudEnginePresentation.formatTorque(telemetry.torque)
+}
+
 function pushHistory(throttle, brake, timestamp = performance.now()) {
   historySamples.push({ timestamp, throttle, brake })
   const cutoff = timestamp - HISTORY_MS
@@ -560,6 +571,7 @@ function renderTelemetry() {
   speedValue.textContent = window.DisplayPreferences.formatSpeed(telemetry.speedKmh, displayPreferences.speedUnit)
   gearValue.textContent = formatGear(telemetry.gear)
   rpmValue.textContent = formatRpm(telemetry.rpm)
+  updateEngine(telemetry)
   const signal = DEMO_MODE ? demoSignal : getShiftLightSignal(telemetry)
   setRpmSignal(signal)
   if (!DEMO_MODE) pushHistory(throttle, brake)
@@ -1035,6 +1047,9 @@ function startDemo() {
     gear: 5,
     rpm: 6420,
     rpmMax: 8000,
+    power: 312000,
+    torque: 460,
+    boost: 12.3,
     lap: { current: 50.123 },
     tireTempC: { fl: 79, fr: 84, rl: 77, rr: 77 }
   }
