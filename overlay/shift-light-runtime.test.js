@@ -62,6 +62,8 @@ function createRuntime(options = {}) {
   const calls = []
   const events = []
   let profiles = options.profiles || []
+  let variantId = options.variantId || 101
+  const resolvedVariantId = options.resolvedVariantId || 202
   const runtimePath = require.resolve('./shift-light-runtime.js')
   delete require.cache[runtimePath]
 
@@ -80,12 +82,23 @@ function createRuntime(options = {}) {
         if (options.loadPromise) return options.loadPromise
         return profiles
       }
+      if (command === 'register_shift_light_variant') {
+        if (args?.gearboxSignature) {
+          variantId = resolvedVariantId
+          return {
+            variantId,
+            status: options.registerStatus || 'resolved',
+            ratioFeatures: args.gearboxSignature
+          }
+        }
+        return { variantId, status: 'provisional', ratioFeatures: null }
+      }
       if (command === 'reset_shift_light_profiles') {
         if (options.resetPromise) await options.resetPromise
         profiles = []
         return undefined
       }
-      if (command === 'save_shift_light_profile' && !args?.profile) {
+      if (command === 'save_shift_light_profile' && (!args?.profile || !args?.variantId)) {
         throw new Error('missing named profile argument')
       }
       if (command === 'save_shift_light_profile' && options.savePromise) {
@@ -124,7 +137,7 @@ test('preserves the last car and gear calibration through pause and resets it th
   assert.equal(await runtime.reset(), true)
 
   const resetCall = calls.find(call => call.command === 'reset_shift_light_profiles')
-  assert.deepEqual(resetCall?.args, { key })
+  assert.deepEqual(resetCall?.args, { variantId: 101 })
   assert.equal(runtime.getState().carKey, key)
   assert.equal(runtime.getState().phase, 'normal')
   assert.deepEqual(runtime.getState().gears, [])
@@ -245,7 +258,7 @@ test('reset blocks new calibration saves while SQLite deletion is pending', asyn
   assert.equal(calls.some(call => call.command === 'save_shift_light_profile'), false)
 })
 
-test('reset includes the active signature while Rust also clears the unsigned variant', async () => {
+test('reset targets the resolved numeric variant and never sends a signature identity', async () => {
   const key = 'fh6:123:800:8000'
   const { calls, runtime } = createRuntime()
   for (let sample = 0; sample < 20; sample += 1) {
@@ -260,7 +273,30 @@ test('reset includes the active signature while Rust also clears the unsigned va
   assert.equal(await runtime.reset(), true)
 
   const resetCall = calls.find(call => call.command === 'reset_shift_light_profiles')
-  assert.deepEqual(resetCall?.args, { key, gearboxSignature: signature })
+  assert.deepEqual(resetCall?.args, { variantId: 202 })
+  assert.equal(Object.hasOwn(resetCall?.args || {}, 'gearboxSignature'), false)
+  const loads = calls.filter(call => call.command === 'load_shift_light_profiles')
+  assert.equal(loads.some(call => call.args.variantId === 101), true)
+  assert.equal(loads.some(call => call.args.variantId === 202), true)
+  assert.equal(loads.every(call => !Object.hasOwn(call.args, 'gearboxSignature')), true)
+})
+
+test('ambiguous gearbox resolution stays on provisional evidence without loading a candidate', async () => {
+  const { calls, runtime } = createRuntime({ registerStatus: 'ambiguous' })
+  for (let sample = 0; sample < 20; sample += 1) {
+    runtime.update(ratioFrame(2, 60, 4000 + sample, 1000 + sample * 32))
+    runtime.update(ratioFrame(3, 48, 4000 + sample, 2000 + sample * 32))
+    runtime.update(ratioFrame(4, 42, 4000 + sample, 3000 + sample * 32))
+  }
+  await flushPromises()
+
+  const signatureLoad = calls.find(call => (
+    call.command === 'load_shift_light_profiles' && call.args.variantId === 202
+  ))
+  assert.equal(signatureLoad, undefined)
+  assert.equal(calls.some(call => (
+    call.command === 'register_shift_light_variant' && call.args.gearboxSignature
+  )), true)
 })
 
 test('registers a variant on its first valid packet and saves old progress after a car switch', async () => {
@@ -270,6 +306,8 @@ test('registers a variant on its first valid packet and saves old progress after
 
   const registration = calls.find(call => call.command === 'register_shift_light_variant')
   assert.deepEqual(registration?.args, { key: 'fh6:123:800:8000' })
+  const initialLoad = calls.find(call => call.command === 'load_shift_light_profiles')
+  assert.deepEqual(initialLoad?.args, { key: 'fh6:123:800:8000', variantId: 101 })
 
   upshiftPull(runtime, 3)
   runtime.update(frame({ car: { ordinal: 456, pi: 900, drivetrain: 1 } }))
@@ -279,6 +317,7 @@ test('registers a variant on its first valid packet and saves old progress after
   assert.equal(saved?.args.profile.key, 'fh6:123:800:8000')
   assert.equal(saved?.args.profile.status, 'learning')
   assert.equal(saved?.args.profile.sampleCount, 1)
+  assert.equal(saved?.args.variantId, 101)
 })
 
 test('does not let a late SQLite load overwrite samples collected in memory', async () => {

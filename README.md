@@ -110,25 +110,28 @@ Shift Light is calculated by the HUD in both modes. It learns per-gear targets
 from clean full-throttle upshifts, accepts the game's neutral transition by
 elapsed time (bounded to 200 ms and 64 frames), and restores partial evidence as
 well as calibrated targets by the internal
-`fh6:<ordinal>:<pi>:<rpmMax>` variant key. Its visual brightness is adjustable from 0% to 100%; the
+`fh6:<ordinal>:<pi>:<rpmMax>` base vehicle identity. SQLite assigns each
+resolved gearbox an immutable numeric `variantId`; ratio drops are matching
+features, not a changing database key. Its visual brightness is adjustable from 0% to 100%; the
 default 80% preserves the original alert intensity without dimming the gear,
 speed, or RPM text. The control lives with its diagnostics in the `SHIFT LIGHT`
 tab. Purple shift cues latch immediately for at least 250 ms and use the bounded
 RPM-rate lead for both observed and optimal profiles. Profiles are stored in a
 HUD-local `hud.sqlite` under the Windows AppData directory, never in the
 provider's `runtime/data` database. The schema separates `Car` (`gameId` plus
-`carOrdinal`), tune/gearbox `Variant` (`PI` plus `RPM max`), and bounded per-gear
-learning evidence. A car and variant are registered on the first valid packet,
-before calibration is complete. After enough adjacent ratios are confirmed,
-the HUD adds a bounded, quantized gearbox signature to the variant, extends it
-when higher-gear evidence becomes reliable, migrates signed evidence across a
-compatible extension, and keeps the active token through small telemetry
-changes. Only a material ratio contradiction creates a new identity, and only
-matching observed, partial, or optimal evidence is activated. Reset also clears
-all stored prefix stages and the provisional unsigned evidence for the same car
-variant.
+`carOrdinal`), base tune identity (`PI` plus `RPM max`), immutable numeric
+gearbox `Variant` IDs, and bounded per-gear learning evidence. A car and its
+provisional variant are registered on the first valid packet, before
+calibration is complete. After enough adjacent ratios are confirmed, the HUD
+matches compatible ratio features with tolerance and updates the resolved
+variant row without changing its ID. Higher-gear evidence extends the same
+variant; a material contradiction creates another variant; ambiguous matches
+remain provisional. Provisional partial evidence is merged transactionally,
+and monotonic persistence never replaces calibrated or stronger evidence with
+weaker data. Reset targets the active numeric variant and clears the same
+base vehicle's provisional evidence without deleting other variants.
 The `SHIFT LIGHT` tab listens to HUD-local events for the current per-gear table and the
-reset action clears the active variant and its unsigned provisional companion. The provider no longer sends a
+reset action clears the active numeric variant and its provisional companion. The provider no longer sends a
 `shift_light` WebSocket message or owns Shift Light persistence.
 Pause packets and temporary telemetry gaps keep the last car and per-gear table
 available in Configuration while clearing only the in-progress pull. Reset is
