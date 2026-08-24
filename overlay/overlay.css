@@ -43,7 +43,7 @@ body {
   right: 0;
   bottom: 28px;
   left: 0;
-  width: min(1492px, calc(100vw - 16px));
+  width: min(1472px, calc(100vw - 16px));
   height: 213px;
   margin: 0 auto;
   z-index: 1;
@@ -69,8 +69,8 @@ body {
 .hud {
   --hud-scale: 2;
   display: grid;
-  grid-template-columns: 72px 46px 68px 92px 126px minmax(0, 1fr);
-  width: 746px;
+  grid-template-columns: 72px 46px 68px 92px 116px minmax(0, 1fr);
+  width: 736px;
   height: 69px;
   overflow: hidden;
   background: var(--panel);
@@ -233,18 +233,17 @@ body {
   grid-template-rows: repeat(3, 1fr);
   align-content: center;
   gap: 1px;
-  padding: 5px 8px;
-  border-left: 1px solid rgb(226 232 240 / 14%);
+  padding: 5px 6px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .engine__row {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: 46px minmax(0, 1fr);
   align-items: center;
   min-width: 0;
-  gap: 4px;
+  gap: 3px;
 }
 
 .engine__label {
@@ -495,14 +494,14 @@ body.is-editing .coachbar {
   --panel: rgb(8 10 12 / 49%);
 }
 
-@media (max-width: 1507px) {
+@media (max-width: 1487px) {
   .hud-frame {
     width: calc(100vw - 16px);
     height: 144px;
   }
 
   .hud-stack {
-    width: min(746px, calc(100vw - 16px));
+    width: min(736px, calc(100vw - 16px));
     height: 144px;
   }
 
@@ -672,7 +671,7 @@ body.is-editing .coachbar {
   right: 0;
   bottom: 28px;
   left: 0;
-  width: min(1492px, calc(100vw - 16px));
+  width: min(1472px, calc(100vw - 16px));
   height: 138px;
   margin: 0 auto;
 }
@@ -695,7 +694,7 @@ body.is-editing .coachbar {
   right: 0;
   bottom: 176px;
   left: 0;
-  width: min(1492px, calc(100vw - 16px));
+  width: min(1472px, calc(100vw - 16px));
   margin: 0 auto;
   z-index: 1;
 }
@@ -791,15 +790,15 @@ body.is-editing .coachbar {
   background: rgb(8 10 12 / 88%);
 }
 
-@media (max-width: 1507px) {
+@media (max-width: 1487px) {
   .hud-frame {
-    width: min(746px, calc(100vw - 16px));
+    width: min(736px, calc(100vw - 16px));
     height: 69px;
   }
 
   .delta-strip {
     bottom: 107px;
-    width: min(746px, calc(100vw - 16px));
+    width: min(736px, calc(100vw - 16px));
   }
 }
 

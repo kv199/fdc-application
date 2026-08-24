@@ -9,15 +9,15 @@ const {
 
 test('formats engine telemetry at the HUD presentation boundary', () => {
   assert.equal(formatBoost(12.3), '0.85 BAR')
-  assert.equal(formatPower(312000), '312 KW')
+  assert.equal(formatPower(312000), '418 HP')
   assert.equal(formatTorque(460), '460 NM')
 })
 
-test('keeps valid zero and negative engine values visible', () => {
+test('clamps engine braking and vacuum values to the Forza-style zero floor', () => {
   assert.equal(formatBoost(0), '0.00 BAR')
-  assert.equal(formatBoost(-1), '-0.07 BAR')
-  assert.equal(formatPower(-500), '-1 KW')
-  assert.equal(formatTorque(-12.6), '-13 NM')
+  assert.equal(formatBoost(-1), '0.00 BAR')
+  assert.equal(formatPower(-500), '0 HP')
+  assert.equal(formatTorque(-12.6), '0 NM')
 })
 
 test('uses a stable placeholder for unavailable or invalid engine values', () => {

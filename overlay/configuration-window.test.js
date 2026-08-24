@@ -31,7 +31,7 @@ test('Engine visibility is part of the safe HUD component contract', () => {
   const preferences = fs.readFileSync(path.join(__dirname, 'hud-preferences.js'), 'utf8')
 
   assert.match(preferences, /const COMPONENTS = \['tires', 'pedals', 'steering', 'gear', 'engine', 'history'\]/)
-  assert.match(preferences, /engine: '126px'/)
+  assert.match(preferences, /engine: '116px'/)
   assert.match(tauriMain, /"tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
 })
 

@@ -10,7 +10,7 @@
     pedals: '46px',
     steering: '68px',
     gear: '92px',
-    engine: '126px',
+    engine: '116px',
     history: '342px'
   }
   const DEFAULT_STATE = COMPONENTS.reduce((state, name) => {
