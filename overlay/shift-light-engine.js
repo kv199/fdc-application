@@ -34,6 +34,8 @@ var HudShiftLight = (() => {
   var MIN_POWER_SAMPLES = 3;
   var MAX_RATIO_SAMPLES = 240;
   var MIN_RATIO_SAMPLES = 20;
+  var MIN_GEARBOX_SIGNATURE_DROPS = 2;
+  var MAX_GEARBOX_SIGNATURE_DROPS = 4;
   var MIN_DRIVEN_WHEEL_RAD_S = 5;
   var MIN_ENGINE_RPM = 1200;
   var MAX_CLUTCH = 0.05;
@@ -93,6 +95,22 @@ var HudShiftLight = (() => {
         ratioDrop,
         evidence: Math.min(currentSamples.length, nextSamples.length)
       };
+    }
+    /**
+     * Returns a bounded, stable fingerprint once enough adjacent gear ratios
+     * have been observed. The learner uses this for every profile method, not
+     * only optimal targets, so partial observed evidence cannot cross gearbox
+     * variants with the same car identity.
+     */
+    getGearboxSignature() {
+      const drops = [];
+      for (let gear = FORWARD_GEAR_MIN; gear < FORWARD_GEAR_MAX; gear += 1) {
+        const ratio = this.getRatioDrop(gear);
+        if (!ratio) continue;
+        drops.push(`${gear}:${ratio.ratioDrop.toFixed(4)}`);
+        if (drops.length >= MAX_GEARBOX_SIGNATURE_DROPS) break;
+      }
+      return drops.length >= MIN_GEARBOX_SIGNATURE_DROPS ? drops.join("|") : null;
     }
     diagnose(gear) {
       const currentSamples = this.ratioSamples.get(gear) ?? [];
@@ -253,6 +271,9 @@ var HudShiftLight = (() => {
   function roundRpm(value) {
     return Math.max(0, Math.round(value));
   }
+  function normalizeGearboxSignature(signature) {
+    return typeof signature === "string" && signature.length > 0 ? signature : null;
+  }
   function getShiftLightCarKey(telemetry) {
     const ordinal = telemetry.car?.ordinal;
     const pi = telemetry.car?.pi;
@@ -288,6 +309,7 @@ var HudShiftLight = (() => {
     optimalCandidates = /* @__PURE__ */ new Map();
     optimalEstimator = new OptimalShiftEstimator();
     mismatchedOptimalGears = /* @__PURE__ */ new Set();
+    storedGearboxSignatures = /* @__PURE__ */ new Map();
     previous = null;
     pullGear = null;
     pullPeakRpm = 0;
@@ -295,6 +317,7 @@ var HudShiftLight = (() => {
     limiterCandidate = null;
     pendingUpshift = null;
     rpmRate = null;
+    gearboxSignature = null;
     dirtyGears = /* @__PURE__ */ new Set();
     /** Compatibility helper for callers that only have one stored profile. */
     setProfile(profile) {
@@ -324,8 +347,10 @@ var HudShiftLight = (() => {
           status: calibrated ? "calibrated" : "learning",
           samples,
           method,
-          ratioDrop: Number.isFinite(profile.ratioDrop) ? profile.ratioDrop : null
+          ratioDrop: Number.isFinite(profile.ratioDrop) ? profile.ratioDrop : null,
+          gearboxSignature: normalizeGearboxSignature(profile.gearboxSignature)
         };
+        this.storedGearboxSignatures.set(normalized.gear, normalized.gearboxSignature ?? null);
         if (!calibrated) {
           if (samples.length > 0) this.samples.set(normalized.gear, samples);
           this.observedGears.add(normalized.gear);
@@ -350,8 +375,10 @@ var HudShiftLight = (() => {
       this.observedGears.clear();
       this.optimalCandidates.clear();
       this.mismatchedOptimalGears.clear();
+      this.storedGearboxSignatures.clear();
       this.dirtyGears.clear();
       this.optimalEstimator.reset();
+      this.gearboxSignature = null;
       this.resetPull();
       this.previous = null;
       this.rpmRate = null;
@@ -376,6 +403,9 @@ var HudShiftLight = (() => {
       const neutral = telemetry.gear === NEUTRAL_GEAR;
       if (forward) this.observedGears.add(telemetry.gear);
       this.optimalEstimator.ingest(telemetry);
+      if (!this.gearboxSignature) {
+        this.gearboxSignature = this.optimalEstimator.getGearboxSignature();
+      }
       this.activateStoredOptimalProfiles();
       this.updateOptimalProfiles();
       this.updateRpmRate(previous, telemetry, wot, forward);
@@ -387,7 +417,7 @@ var HudShiftLight = (() => {
           return this.snapshot(telemetry);
         }
         if (transition && transition.peakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION) {
-          this.recordSample(transition.sourceGear, transition.peakRpm);
+          if (!this.limiterCommitted) this.recordSample(transition.sourceGear, transition.peakRpm);
           this.limiterCandidate = null;
         }
         this.pendingUpshift = null;
@@ -397,8 +427,13 @@ var HudShiftLight = (() => {
           this.limiterCommitted = false;
           this.limiterCandidate = null;
         }
+        if (telemetry.rpm < this.pullPeakRpm * REARM_FRACTION) {
+          this.pullPeakRpm = 0;
+          this.limiterCommitted = false;
+          this.limiterCandidate = null;
+        }
         const rpmDrop = Math.max(MIN_RPM_DROP, telemetry.rpmMax * RPM_DROP_FRACTION);
-        if (!this.profiles.has(telemetry.gear) && !this.limiterCommitted && this.pullPeakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION && this.pullPeakRpm - telemetry.rpm >= rpmDrop) {
+        if (!this.hasCompatibleProfile(telemetry.gear) && !this.limiterCommitted && this.pullPeakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION && this.pullPeakRpm - telemetry.rpm >= rpmDrop) {
           if (this.limiterCandidate?.gear === telemetry.gear) {
             this.recordSample(telemetry.gear, this.limiterCandidate.peakRpm);
             this.limiterCandidate = null;
@@ -409,10 +444,6 @@ var HudShiftLight = (() => {
               peakRpm: this.pullPeakRpm
             };
           }
-        }
-        if (telemetry.rpm < this.pullPeakRpm * REARM_FRACTION) {
-          this.pullPeakRpm = 0;
-          this.limiterCommitted = false;
         }
         this.pullPeakRpm = Math.max(this.pullPeakRpm, telemetry.rpm);
       } else if (neutral && this.pullGear !== null && this.pullPeakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION) {
@@ -438,8 +469,9 @@ var HudShiftLight = (() => {
     snapshot(telemetry = this.previous) {
       const identity = this.parseIdentity();
       const currentGear = telemetry && isForwardGear2(telemetry.gear) ? telemetry.gear : null;
-      const activeProfile = currentGear === null ? this.profiles.get(0) : this.profiles.get(currentGear) ?? this.profiles.get(0);
-      const currentSamples = currentGear === null ? [] : this.samples.get(currentGear) ?? [];
+      const activeStoredProfile = currentGear === null ? this.profiles.get(0) : this.profiles.get(currentGear) ?? this.profiles.get(0);
+      const activeProfile = activeStoredProfile && this.isGearboxCompatible(activeStoredProfile.gearboxSignature) ? activeStoredProfile : null;
+      const currentSamples = currentGear === null || !this.isGearboxCompatible(this.storedGearboxSignatures.get(currentGear)) ? [] : this.samples.get(currentGear) ?? [];
       const status = activeProfile ? "calibrated" : "learning";
       const shiftRpm = activeProfile?.shiftRpm ?? null;
       let phase = fallbackPhase(telemetry?.rpm ?? 0, telemetry?.rpmMax ?? 0);
@@ -463,6 +495,7 @@ var HudShiftLight = (() => {
         carOrdinal: identity?.carOrdinal ?? null,
         pi: identity?.pi ?? null,
         rpmMax: identity?.rpmMax ?? null,
+        gearboxSignature: this.gearboxSignature,
         currentGear,
         method: activeProfile?.method ?? null,
         gears: this.getGearStates(),
@@ -482,18 +515,22 @@ var HudShiftLight = (() => {
       const gears = /* @__PURE__ */ new Set([
         ...this.observedGears,
         ...this.samples.keys(),
-        ...[...this.profiles.keys()].filter((gear) => gear > 0)
+        ...[...this.profiles.keys()].filter((gear) => gear > 0),
+        ...this.storedGearboxSignatures.keys()
       ]);
       return [...gears].sort((left, right) => left - right).map((gear) => {
         const profile = this.profiles.get(gear);
-        const samples = this.samples.get(gear) ?? [];
+        const compatible = this.isGearboxCompatible(
+          profile ? profile.gearboxSignature : this.storedGearboxSignatures.get(gear)
+        );
+        const samples = compatible ? this.samples.get(gear) ?? [] : [];
         return {
           gear,
-          status: profile ? "calibrated" : "learning",
-          shiftRpm: profile?.shiftRpm ?? null,
-          sampleCount: profile?.sampleCount ?? samples.length,
-          method: profile?.method ?? null,
-          ratioDrop: profile?.ratioDrop ?? null
+          status: compatible && profile ? "calibrated" : "learning",
+          shiftRpm: compatible ? profile?.shiftRpm ?? null : null,
+          sampleCount: compatible ? profile?.sampleCount ?? samples.length : 0,
+          method: compatible ? profile?.method ?? null : null,
+          ratioDrop: compatible ? profile?.ratioDrop ?? null : null
         };
       });
     }
@@ -502,14 +539,18 @@ var HudShiftLight = (() => {
         ...this.observedGears,
         ...this.samples.keys(),
         ...this.profiles.keys(),
-        ...this.pendingOptimalProfiles.keys()
+        ...this.pendingOptimalProfiles.keys(),
+        ...this.storedGearboxSignatures.keys()
       ]);
       return [...gears].filter((gear) => gear > 0).sort((left, right) => left - right).map((gear) => {
-        const profile = this.profiles.get(gear);
+        const storedProfile = this.profiles.get(gear);
+        const storedSignature = storedProfile ? storedProfile.gearboxSignature : this.storedGearboxSignatures.get(gear);
+        const compatible = this.isGearboxCompatible(storedSignature);
+        const profile = compatible ? storedProfile : void 0;
         const diagnostics = this.optimalEstimator.diagnose(gear);
         const storedRatioMismatch = profile?.method === "optimal" && typeof profile.ratioDrop === "number" && diagnostics.ratioDrop !== null && Math.abs(diagnostics.ratioDrop - profile.ratioDrop) / profile.ratioDrop > 0.025;
         let status;
-        if (storedRatioMismatch || this.mismatchedOptimalGears.has(gear)) status = "gearbox-mismatch";
+        if (!compatible || storedRatioMismatch || this.mismatchedOptimalGears.has(gear)) status = "gearbox-mismatch";
         else if (profile?.method === "optimal") status = "optimal";
         else if (diagnostics.powerBinCount === 0 || diagnostics.powerCurveCoverage < 0.9) status = "waiting-for-wot";
         else if (diagnostics.currentRatioSamples < 20 || diagnostics.nextRatioSamples < 20 || diagnostics.ratioDrop === null) status = "waiting-for-ratio";
@@ -525,6 +566,11 @@ var HudShiftLight = (() => {
     }
     activateStoredOptimalProfiles() {
       for (const [gear, profile] of this.pendingOptimalProfiles) {
+        if (!this.isGearboxCompatible(profile.gearboxSignature)) {
+          this.pendingOptimalProfiles.delete(gear);
+          this.mismatchedOptimalGears.add(gear);
+          continue;
+        }
         const ratio = this.optimalEstimator.getRatioDrop(gear);
         if (!ratio || profile.ratioDrop === null || profile.ratioDrop === void 0) continue;
         this.pendingOptimalProfiles.delete(gear);
@@ -547,7 +593,7 @@ var HudShiftLight = (() => {
         const target = roundRpm(targetValues.reduce((sum, value) => sum + value, 0) / targetValues.length);
         const latest = candidates.at(-1);
         const existing = this.profiles.get(gear);
-        if (existing?.method === "optimal" && existing.shiftRpm !== null && Math.abs(existing.shiftRpm - target) < OPTIMAL_UPDATE_RPM) continue;
+        if (existing?.method === "optimal" && this.isGearboxCompatible(existing.gearboxSignature) && existing.shiftRpm !== null && Math.abs(existing.shiftRpm - target) < OPTIMAL_UPDATE_RPM) continue;
         const profile = {
           key: this.key,
           gear,
@@ -556,7 +602,8 @@ var HudShiftLight = (() => {
           status: "calibrated",
           samples: [],
           method: "optimal",
-          ratioDrop: latest.ratioDrop
+          ratioDrop: latest.ratioDrop,
+          gearboxSignature: this.gearboxSignature
         };
         this.pendingOptimalProfiles.delete(gear);
         this.profiles.set(gear, profile);
@@ -584,11 +631,12 @@ var HudShiftLight = (() => {
       this.pendingUpshift = null;
     }
     recordSample(gear, observedRpm) {
-      if (gear < 1 || gear > 10 || this.profiles.has(gear) || !Number.isFinite(observedRpm)) return;
+      if (gear < 1 || gear > 10 || this.hasCompatibleProfile(gear) || !Number.isFinite(observedRpm)) return;
       const gearSamples = this.samples.get(gear) ?? [];
       if (gearSamples.length >= REQUIRED_SAMPLES) return;
       gearSamples.push(roundRpm(observedRpm));
       this.samples.set(gear, gearSamples);
+      this.storedGearboxSignatures.set(gear, this.gearboxSignature);
       this.observedGears.add(gear);
       this.dirtyGears.add(gear);
       if (gearSamples.length < REQUIRED_SAMPLES) {
@@ -600,7 +648,8 @@ var HudShiftLight = (() => {
           status: "learning",
           samples: [...gearSamples],
           method: "observed",
-          ratioDrop: null
+          ratioDrop: null,
+          gearboxSignature: this.gearboxSignature
         });
         return;
       }
@@ -613,7 +662,8 @@ var HudShiftLight = (() => {
         status: "calibrated",
         samples: [...gearSamples],
         method: "observed",
-        ratioDrop: null
+        ratioDrop: null,
+        gearboxSignature: this.gearboxSignature
       };
       this.profiles.set(gear, profile);
       this.options.onProgress?.(profile);
@@ -622,6 +672,13 @@ var HudShiftLight = (() => {
     normalizeSamples(samples) {
       if (!Array.isArray(samples)) return [];
       return samples.filter((sample) => Number.isFinite(sample)).slice(0, MAX_EVIDENCE_SAMPLES).map((sample) => roundRpm(sample));
+    }
+    isGearboxCompatible(signature) {
+      return !this.gearboxSignature || normalizeGearboxSignature(signature) === this.gearboxSignature;
+    }
+    hasCompatibleProfile(gear) {
+      const profile = this.profiles.get(gear);
+      return profile !== void 0 && this.isGearboxCompatible(profile.gearboxSignature);
     }
     hasContinuousTimestamp(previous, telemetry) {
       const previousTimestampMs = previous.timestampMs;

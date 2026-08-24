@@ -12,7 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, Error as SqliteError, params};
 use serde::{Deserialize, Serialize};
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, Runtime, State, WebviewWindow, WindowEvent,
@@ -352,6 +352,8 @@ struct ShiftLightProfile {
     samples: Vec<i32>,
     method: String,
     ratio_drop: Option<f64>,
+    #[serde(default)]
+    gearbox_signature: Option<String>,
 }
 
 fn default_shift_light_status() -> String {
@@ -376,6 +378,26 @@ fn parse_shift_light_key(key: &str) -> Result<(i32, i32, i32), String> {
         return Err("invalid Shift Light profile key".to_string());
     }
     Ok((car_ordinal, pi, rpm_max))
+}
+
+fn find_shift_light_variant_id(
+    connection: &Connection,
+    car_ordinal: i32,
+    pi: i32,
+    rpm_max: i32,
+    gearbox_signature: &str,
+) -> Result<Option<i64>, String> {
+    match connection.query_row(
+        "SELECT id FROM shift_light_variants
+         WHERE game_id = 'fh6' AND car_ordinal = ?1 AND pi = ?2 AND rpm_max = ?3
+           AND gearbox_signature = ?4",
+        params![car_ordinal, pi, rpm_max, gearbox_signature],
+        |row| row.get::<_, i64>(0),
+    ) {
+        Ok(variant_id) => Ok(Some(variant_id)),
+        Err(SqliteError::QueryReturnedNoRows) => Ok(None),
+        Err(error) => Err(format!("unable to resolve HUD car variant: {error}")),
+    }
 }
 
 fn table_exists(connection: &Connection, table: &str) -> Result<bool, String> {
@@ -553,27 +575,24 @@ fn open_shift_light_db<R: Runtime>(app: &AppHandle<R>) -> Result<Connection, Str
 fn load_shift_light_profiles(
     app: AppHandle,
     key: String,
+    gearbox_signature: Option<String>,
 ) -> Result<Vec<ShiftLightProfile>, String> {
     let (car_ordinal, pi, rpm_max) = parse_shift_light_key(&key)?;
     let connection = open_shift_light_db(&app)?;
-    let variant_id = connection
-        .query_row(
-            "SELECT id FROM shift_light_variants
-             WHERE game_id = 'fh6' AND car_ordinal = ?1 AND pi = ?2 AND rpm_max = ?3
-               AND gearbox_signature = ''",
-            params![car_ordinal, pi, rpm_max],
-            |row| row.get::<_, i64>(0),
-        )
-        .ok();
+    let gearbox_signature = gearbox_signature.unwrap_or_default();
+    let variant_id =
+        find_shift_light_variant_id(&connection, car_ordinal, pi, rpm_max, &gearbox_signature)?;
     let Some(variant_id) = variant_id else {
         return Ok(Vec::new());
     };
     let mut statement = connection
         .prepare(
-            "SELECT gear, status, shift_rpm, sample_count, method, ratio_drop
-             FROM shift_light_profiles
-             WHERE variant_id = ?1
-             ORDER BY gear",
+            "SELECT p.gear, p.status, p.shift_rpm, p.sample_count, p.method, p.ratio_drop,
+                    v.gearbox_signature
+             FROM shift_light_profiles AS p
+             JOIN shift_light_variants AS v ON v.id = p.variant_id
+             WHERE p.variant_id = ?1
+             ORDER BY p.gear",
         )
         .map_err(|error| format!("unable to prepare Shift Light profile query: {error}"))?;
     let rows = statement
@@ -586,6 +605,10 @@ fn load_shift_light_profiles(
                 sample_count: row.get(3)?,
                 method: row.get(4)?,
                 ratio_drop: row.get(5)?,
+                gearbox_signature: {
+                    let signature: String = row.get(6)?;
+                    (!signature.is_empty()).then_some(signature)
+                },
                 samples: Vec::new(),
             })
         })
@@ -617,6 +640,7 @@ fn load_shift_light_profiles(
 #[tauri::command]
 fn save_shift_light_profile(app: AppHandle, profile: ShiftLightProfile) -> Result<(), String> {
     let (car_ordinal, pi, rpm_max) = parse_shift_light_key(&profile.key)?;
+    let gearbox_signature = profile.gearbox_signature.as_deref().unwrap_or("");
     let persisted_status =
         if profile.status == "learning" && profile.sample_count >= 5 && profile.shift_rpm.is_some()
         {
@@ -633,6 +657,7 @@ fn save_shift_light_profile(app: AppHandle, profile: ShiftLightProfile) -> Resul
         || persisted_status == "calibrated" && profile.shift_rpm.is_none()
         || persisted_status == "learning" && profile.sample_count > 5
         || !["observed", "optimal"].contains(&profile.method.as_str())
+        || gearbox_signature.len() > 256
     {
         return Err("invalid Shift Light profile".to_string());
     }
@@ -652,19 +677,19 @@ fn save_shift_light_profile(app: AppHandle, profile: ShiftLightProfile) -> Resul
     transaction
         .execute(
             "INSERT INTO shift_light_variants
-               (game_id, car_ordinal, pi, rpm_max)
-             VALUES ('fh6', ?1, ?2, ?3)
+               (game_id, car_ordinal, pi, rpm_max, gearbox_signature)
+             VALUES ('fh6', ?1, ?2, ?3, ?4)
              ON CONFLICT (game_id, car_ordinal, pi, rpm_max, gearbox_signature)
              DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP",
-            params![car_ordinal, pi, rpm_max],
+            params![car_ordinal, pi, rpm_max, gearbox_signature],
         )
         .map_err(|error| format!("unable to register HUD car variant: {error}"))?;
     let variant_id: i64 = transaction
         .query_row(
             "SELECT id FROM shift_light_variants
              WHERE game_id = 'fh6' AND car_ordinal = ?1 AND pi = ?2 AND rpm_max = ?3
-               AND gearbox_signature = ''",
-            params![car_ordinal, pi, rpm_max],
+               AND gearbox_signature = ?4",
+            params![car_ordinal, pi, rpm_max, gearbox_signature],
             |row| row.get(0),
         )
         .map_err(|error| format!("unable to resolve HUD car variant: {error}"))?;
@@ -714,8 +739,16 @@ fn save_shift_light_profile(app: AppHandle, profile: ShiftLightProfile) -> Resul
 }
 
 #[tauri::command]
-fn register_shift_light_variant(app: AppHandle, key: String) -> Result<(), String> {
+fn register_shift_light_variant(
+    app: AppHandle,
+    key: String,
+    gearbox_signature: Option<String>,
+) -> Result<(), String> {
     let (car_ordinal, pi, rpm_max) = parse_shift_light_key(&key)?;
+    let gearbox_signature = gearbox_signature.unwrap_or_default();
+    if gearbox_signature.len() > 256 {
+        return Err("invalid Shift Light gearbox signature".to_string());
+    }
     let connection = open_shift_light_db(&app)?;
     connection
         .execute(
@@ -728,29 +761,27 @@ fn register_shift_light_variant(app: AppHandle, key: String) -> Result<(), Strin
     connection
         .execute(
             "INSERT INTO shift_light_variants
-               (game_id, car_ordinal, pi, rpm_max)
-             VALUES ('fh6', ?1, ?2, ?3)
+               (game_id, car_ordinal, pi, rpm_max, gearbox_signature)
+             VALUES ('fh6', ?1, ?2, ?3, ?4)
              ON CONFLICT (game_id, car_ordinal, pi, rpm_max, gearbox_signature)
              DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP",
-            params![car_ordinal, pi, rpm_max],
+            params![car_ordinal, pi, rpm_max, gearbox_signature],
         )
         .map_err(|error| format!("unable to register HUD car variant: {error}"))?;
     Ok(())
 }
 
 #[tauri::command]
-fn reset_shift_light_profiles(app: AppHandle, key: String) -> Result<(), String> {
+fn reset_shift_light_profiles(
+    app: AppHandle,
+    key: String,
+    gearbox_signature: Option<String>,
+) -> Result<(), String> {
     let (car_ordinal, pi, rpm_max) = parse_shift_light_key(&key)?;
     let connection = open_shift_light_db(&app)?;
-    let variant_id = connection
-        .query_row(
-            "SELECT id FROM shift_light_variants
-             WHERE game_id = 'fh6' AND car_ordinal = ?1 AND pi = ?2 AND rpm_max = ?3
-               AND gearbox_signature = ''",
-            params![car_ordinal, pi, rpm_max],
-            |row| row.get::<_, i64>(0),
-        )
-        .ok();
+    let gearbox_signature = gearbox_signature.unwrap_or_default();
+    let variant_id =
+        find_shift_light_variant_id(&connection, car_ordinal, pi, rpm_max, &gearbox_signature)?;
     let Some(variant_id) = variant_id else {
         return Ok(());
     };
@@ -1126,6 +1157,42 @@ mod tests {
     }
 
     #[test]
+    fn distinguishes_missing_variant_from_sqlite_lookup_errors() {
+        let connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&connection).unwrap();
+
+        assert_eq!(
+            find_shift_light_variant_id(&connection, 260, 600, 8500, ""),
+            Ok(None)
+        );
+
+        connection
+            .execute(
+                "INSERT INTO shift_light_cars (game_id, car_ordinal) VALUES ('fh6', 260)",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO shift_light_variants
+                   (game_id, car_ordinal, pi, rpm_max, gearbox_signature)
+                 VALUES ('fh6', 260, 600, 8500, '2:0.8000|3:0.8750')",
+                [],
+            )
+            .unwrap();
+        assert!(
+            find_shift_light_variant_id(&connection, 260, 600, 8500, "")
+                .unwrap()
+                .is_none()
+        );
+
+        connection
+            .execute_batch("DROP TABLE shift_light_variants")
+            .unwrap();
+        assert!(find_shift_light_variant_id(&connection, 260, 600, 8500, "").is_err());
+    }
+
+    #[test]
     fn migrates_calibrated_profiles_without_deleting_legacy_rows() {
         let connection = Connection::open_in_memory().unwrap();
         connection
@@ -1183,8 +1250,11 @@ mod tests {
             .unwrap();
         connection
             .execute(
-                "INSERT INTO shift_light_variants (game_id, car_ordinal, pi, rpm_max)
-                 VALUES ('fh6', 260, 600, 8500), ('fh6', 260, 700, 9000)",
+                "INSERT INTO shift_light_variants
+                   (game_id, car_ordinal, pi, rpm_max, gearbox_signature)
+                 VALUES
+                   ('fh6', 260, 600, 8500, '2:0.8000|3:0.8750'),
+                   ('fh6', 260, 600, 8500, '2:0.7500|3:0.8500')",
                 [],
             )
             .unwrap();

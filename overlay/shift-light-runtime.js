@@ -11,6 +11,7 @@
     carOrdinal: null,
     pi: null,
     rpmMax: null,
+    gearboxSignature: null,
     currentGear: null,
     method: null,
     gears: [],
@@ -27,6 +28,7 @@
   let profileMutationQueue = Promise.resolve()
   let resettingLearner = null
   let lastVariantRegistrationAt = 0
+  let currentVariantSignature = null
 
   function invokeCommand(command, args) {
     if (typeof invoke !== 'function') return Promise.reject(new Error('Tauri commands are unavailable'))
@@ -67,15 +69,17 @@
       if (
         expectedLearner === resettingLearner
       ) return undefined
-      return invokeCommand('save_shift_light_profile', profile)
+      return invokeCommand('save_shift_light_profile', { profile })
     }).catch(() => {})
   }
 
-  function registerVariant(key, expectedLearner) {
+  function registerVariant(key, expectedLearner, gearboxSignature = currentVariantSignature) {
     if (!key || expectedLearner === resettingLearner) return
     enqueueProfileMutation(() => {
       if (expectedLearner === resettingLearner) return undefined
-      return invokeCommand('register_shift_light_variant', { key })
+      const args = { key }
+      if (gearboxSignature) args.gearboxSignature = gearboxSignature
+      return invokeCommand('register_shift_light_variant', args)
     }).catch(() => {})
     lastVariantRegistrationAt = Date.now()
   }
@@ -91,6 +95,7 @@
     })
     learner = localLearner
     currentKey = key
+    currentVariantSignature = null
     lastVariantRegistrationAt = 0
     registerVariant(key, localLearner)
     latestState = localLearner.snapshot(latestTelemetry)
@@ -112,6 +117,33 @@
       })
   }
 
+  function syncVariantSignature(key, state, expectedLearner) {
+    const signature = typeof state?.gearboxSignature === 'string' && state.gearboxSignature.length > 0
+      ? state.gearboxSignature
+      : null
+    if (!signature || signature === currentVariantSignature || expectedLearner !== learner) return
+
+    currentVariantSignature = signature
+    const requestedLoadGeneration = ++loadGeneration
+    registerVariant(key, expectedLearner, signature)
+    invokeCommand('load_shift_light_profiles', {
+      key,
+      gearboxSignature: signature
+    })
+      .then(profiles => {
+        if (
+          key !== currentKey
+          || requestedLoadGeneration !== loadGeneration
+          || expectedLearner !== learner
+        ) return
+        if (Array.isArray(profiles)) expectedLearner.setProfiles(profiles)
+        publish(expectedLearner.snapshot(latestTelemetry))
+      })
+      .catch(() => {
+        // The live learner remains usable when the signed variant is not yet persisted.
+      })
+  }
+
   function update(telemetry) {
     const key = telemetry ? globalScope.HudShiftLight.getShiftLightCarKey(telemetry) : null
     if (!key) {
@@ -123,7 +155,9 @@
     latestTelemetry = telemetry
     if (key !== currentKey || !learner) createLearner(key)
     else if (Date.now() - lastVariantRegistrationAt >= 1000) registerVariant(key, learner)
-    return publish(learner.update(telemetry))
+    const state = learner.update(telemetry)
+    syncVariantSignature(key, state, learner)
+    return publish(state)
   }
 
   function resetTransient() {
@@ -142,9 +176,13 @@
     }
     const key = currentKey
     const currentLearner = learner
+    const gearboxSignature = currentVariantSignature
     resettingLearner = currentLearner
     try {
-      await enqueueProfileMutation(() => invokeCommand('reset_shift_light_profiles', { key }))
+      await enqueueProfileMutation(() => invokeCommand('reset_shift_light_profiles', {
+        key,
+        ...(gearboxSignature ? { gearboxSignature } : {})
+      }))
     } catch (error) {
       if (resettingLearner === currentLearner) resettingLearner = null
       return publishResetResult({
@@ -165,6 +203,7 @@
 
     loadGeneration += 1
     currentLearner.reset()
+    currentVariantSignature = null
     lastVariantRegistrationAt = 0
     publish({ ...currentLearner.snapshot(latestTelemetry), phase: 'normal' })
     if (resettingLearner === currentLearner) resettingLearner = null

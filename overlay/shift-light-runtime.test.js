@@ -75,6 +75,9 @@ function createRuntime(options = {}) {
         profiles = []
         return undefined
       }
+      if (command === 'save_shift_light_profile' && !args?.profile) {
+        throw new Error('missing named profile argument')
+      }
       if (command === 'save_shift_light_profile' && options.savePromise) {
         await options.savePromise
       }
@@ -245,9 +248,9 @@ test('registers a variant on its first valid packet and saves old progress after
   await flushPromises()
 
   const saved = calls.find(call => call.command === 'save_shift_light_profile')
-  assert.equal(saved?.args.key, 'fh6:123:800:8000')
-  assert.equal(saved?.args.status, 'learning')
-  assert.equal(saved?.args.sampleCount, 1)
+  assert.equal(saved?.args.profile.key, 'fh6:123:800:8000')
+  assert.equal(saved?.args.profile.status, 'learning')
+  assert.equal(saved?.args.profile.sampleCount, 1)
 })
 
 test('does not let a late SQLite load overwrite samples collected in memory', async () => {

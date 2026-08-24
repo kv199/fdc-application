@@ -62,7 +62,20 @@ test('does not double-count a limiter candidate followed by an upshift', () => {
   const learner = new ShiftLightLearner('fh6:123:800:8000')
   learner.update(frame({ gear: 2, rpm: 8000, timestampMs: 0 }))
   learner.update(frame({ gear: 2, rpm: 7800, timestampMs: 16 }))
-  const snapshot = learner.update(frame({ gear: 3, rpm: 6000, timestampMs: 32 }))
+  learner.update(frame({ gear: 2, rpm: 7750, timestampMs: 32 }))
+  learner.update(frame({ gear: 11, rpm: 7600, timestampMs: 48 }))
+  const snapshot = learner.update(frame({ gear: 3, rpm: 6000, timestampMs: 64 }))
+  assert.equal(snapshot.gears.find(gear => gear.gear === 2)?.sampleCount, 1)
+})
+
+test('clears a stale limiter candidate when the pull rearms below 85 percent', () => {
+  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  learner.update(frame({ gear: 2, rpm: 8000, timestampMs: 0 }))
+  learner.update(frame({ gear: 2, rpm: 7800, timestampMs: 16 }))
+  learner.update(frame({ gear: 2, rpm: 6700, timestampMs: 32 }))
+  learner.update(frame({ gear: 2, rpm: 8000, timestampMs: 48 }))
+  learner.update(frame({ gear: 2, rpm: 7800, timestampMs: 64 }))
+  const snapshot = learner.update(frame({ gear: 3, rpm: 6000, timestampMs: 80 }))
   assert.equal(snapshot.gears.find(gear => gear.gear === 2)?.sampleCount, 1)
 })
 
@@ -158,6 +171,29 @@ test('keeps an optimal target only when the live gearbox matches', () => {
   assert.equal(matching.snapshot(ratioFrame(2, 60, 7000, 3000)).method, 'optimal')
   assert.equal(mismatching.snapshot(ratioFrame(2, 60, 7000, 3000)).status, 'learning')
   assert.equal(mismatching.snapshot(ratioFrame(2, 60, 7000, 3000)).diagnostics.find(row => row.gear === 2).status, 'gearbox-mismatch')
+})
+
+test('rejects an observed profile when the confirmed gearbox signature differs', () => {
+  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  learner.setProfile({
+    key: 'fh6:123:800:8000',
+    gear: 2,
+    shiftRpm: 7600,
+    sampleCount: 5,
+    method: 'observed',
+    gearboxSignature: '2:0.8000|3:0.7000'
+  })
+
+  for (let sample = 0; sample < 20; sample += 1) {
+    learner.update(ratioFrame(2, 60, 4000 + sample, 1000 + sample * 32))
+    learner.update(ratioFrame(3, 48, 4000 + sample, 2000 + sample * 32))
+    learner.update(ratioFrame(4, 42, 4000 + sample, 3000 + sample * 32))
+  }
+
+  const snapshot = learner.snapshot(ratioFrame(2, 60, 7000, 4000))
+  assert.equal(snapshot.gearboxSignature, '2:0.8000|3:0.8750')
+  assert.equal(snapshot.status, 'learning')
+  assert.equal(snapshot.diagnostics.find(row => row.gear === 2).status, 'gearbox-mismatch')
 })
 
 test('projects the optimal cue while RPM is rising quickly', () => {

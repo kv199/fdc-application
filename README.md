@@ -119,7 +119,9 @@ HUD-local `hud.sqlite` under the Windows AppData directory, never in the
 provider's `runtime/data` database. The schema separates `Car` (`gameId` plus
 `carOrdinal`), tune/gearbox `Variant` (`PI` plus `RPM max`), and bounded per-gear
 learning evidence. A car and variant are registered on the first valid packet,
-before calibration is complete.
+before calibration is complete. After enough adjacent ratios are confirmed,
+the HUD adds a bounded gearbox signature to the variant and only activates
+observed, partial, or optimal evidence with a matching signature.
 The `SHIFT LIGHT` tab listens to HUD-local events for the current per-gear table and the
 reset action clears only the active variant. The provider no longer sends a
 `shift_light` WebSocket message or owns Shift Light persistence.
