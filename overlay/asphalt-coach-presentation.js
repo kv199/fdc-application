@@ -153,6 +153,7 @@
       this.activeBrief = null
       this.cooldownUntilMs = 0
       this.lastView = createEmptyView(readiness)
+      this.lastView.focus = this.focus
       return this.lastView
     }
 
@@ -161,6 +162,7 @@
       this.activeBrief = null
       this.cooldownUntilMs = 0
       this.lastView = createEmptyView('calibrating')
+      this.lastView.focus = this.focus
       return this.lastView
     }
 

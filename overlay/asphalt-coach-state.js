@@ -25,8 +25,10 @@
     envelopeWindowSize: 24,
     calibrationMinSamples: 36,
     calibrationMinBins: 3,
-    surfaceVerticalRateFloor: 0.5,
-    surfaceVerticalRateRatio: 2.5
+    calibrationMinBinSamples: 8,
+    surfaceTransientRateFloor: 20,
+    surfaceTransientRateRatio: 2.5,
+    calibrationTransientRateMax: 5
   })
 
   function finite(value) {
@@ -134,7 +136,10 @@
       drivenSlipP90: percentile(bin.drivenSlip, 0.9),
       frontCombinedSlipP90: percentile(bin.frontCombinedSlip, 0.9),
       verticalResponseP90: percentile(bin.verticalResponse, 0.9),
-      verticalChangeRateP90: percentile(bin.verticalChangeRate, 0.9)
+      verticalChangeRateP90: percentile(bin.verticalChangeRate, 0.9),
+      lateralChangeRateP90: percentile(bin.lateralChangeRate, 0.9),
+      longitudinalChangeRateP90: percentile(bin.longitudinalChangeRate, 0.9),
+      ready: bin.calibrationFrozen
     }
   }
 
@@ -163,6 +168,7 @@
         speedMinKmh: index * thresholds.speedBinKmh,
         speedMaxKmh: (index + 1) * thresholds.speedBinKmh,
         samples: 0,
+        calibrationFrozen: false,
         maxLateralResponse: 0,
         maxYawRate: 0,
         maxEffectiveAcceleration: 0,
@@ -174,7 +180,9 @@
         drivenSlip: createPercentile(thresholds.envelopeWindowSize),
         frontCombinedSlip: createPercentile(thresholds.envelopeWindowSize),
         verticalResponse: createPercentile(thresholds.envelopeWindowSize),
-        verticalChangeRate: createPercentile(thresholds.envelopeWindowSize)
+        verticalChangeRate: createPercentile(thresholds.envelopeWindowSize),
+        lateralChangeRate: createPercentile(thresholds.envelopeWindowSize),
+        longitudinalChangeRate: createPercentile(thresholds.envelopeWindowSize)
       })
     }
     return {
@@ -258,7 +266,6 @@
       this.previousSample = null
       this.activeAttempt = false
       this.attemptId = 0
-      this.calibrationFrozen = false
       this.envelope = createEnvelope(this.thresholds)
       this.lastResetReason = reason
       return this.getSnapshot(null, reason)
@@ -362,7 +369,14 @@
       sample.verticalChangeRate = previousSample === null || deltaSeconds === null
         ? null
         : Math.abs((sample.verticalResponse ?? 0) - (previousSample.verticalResponse ?? 0)) / deltaSeconds
+      sample.lateralChangeRate = previousSample === null || deltaSeconds === null
+        ? null
+        : Math.abs((sample.lateralResponse ?? 0) - (previousSample.lateralResponse ?? 0)) / deltaSeconds
+      sample.longitudinalChangeRate = previousSample === null || deltaSeconds === null
+        ? null
+        : Math.abs((sample.longitudinalResponse ?? 0) - (previousSample.longitudinalResponse ?? 0)) / deltaSeconds
       sample.surfaceDisturbed = this.isSurfaceDisturbed(sample)
+      sample.calibrationEligible = this.isCalibrationEligible(sample, previousSample)
 
       const previousPhase = this.phase
       const nextPhase = this.classifyPhase(sample, previousSample, deltaSeconds)
@@ -421,9 +435,14 @@
     }
 
     updateEnvelope(sample) {
-      if (this.calibrationFrozen || sample.speedKmh < this.thresholds.minSpeedKmh || sample.surfaceDisturbed) return
+      if (
+        sample.speedKmh < this.thresholds.minSpeedKmh
+        || sample.surfaceDisturbed
+        || sample.calibrationEligible !== true
+      ) return
       const binIndex = this.getBinIndex(sample.speedKmh)
       const bin = this.envelope.bins[binIndex]
+      if (bin.calibrationFrozen) return
       if (bin.samples === 0) this.envelope.binsWithSamples += 1
       bin.samples += 1
       this.envelope.samples += 1
@@ -447,10 +466,16 @@
       addPercentile(bin.frontCombinedSlip, sample.frontCombinedSlip)
       addPercentile(bin.verticalResponse, sample.verticalResponse)
       addPercentile(bin.verticalChangeRate, sample.verticalChangeRate)
+      addPercentile(bin.lateralChangeRate, sample.lateralChangeRate)
+      addPercentile(bin.longitudinalChangeRate, sample.longitudinalChangeRate)
       if (
         this.envelope.samples >= this.thresholds.calibrationMinSamples
         && this.envelope.binsWithSamples >= this.thresholds.calibrationMinBins
-      ) this.calibrationFrozen = true
+      ) {
+        for (const candidate of this.envelope.bins) {
+          if (candidate.samples >= this.thresholds.calibrationMinBinSamples) candidate.calibrationFrozen = true
+        }
+      }
     }
 
     getBinIndex(speedKmh) {
@@ -465,20 +490,56 @@
 
     isSurfaceDisturbed(sample) {
       if (sample.rumbleContact || (sample.puddleDepth !== null && sample.puddleDepth > 0)) return true
-      if (sample.verticalChangeRate === null || sample.speedKmh < this.thresholds.minSpeedKmh) return false
+      if (sample.speedKmh < this.thresholds.minSpeedKmh) return false
 
       const bin = this.envelope.bins[this.getBinIndex(sample.speedKmh)]
-      const learnedRate = percentile(bin.verticalChangeRate, 0.9)
+      if (bin.samples < this.thresholds.calibrationMinBinSamples) return false
+
+      return this.exceedsLearnedRate(bin.verticalChangeRate, sample.verticalChangeRate)
+        || this.exceedsLearnedRate(bin.lateralChangeRate, sample.lateralChangeRate)
+        || this.exceedsLearnedRate(bin.longitudinalChangeRate, sample.longitudinalChangeRate)
+    }
+
+    exceedsLearnedRate(metric, value) {
+      const learnedRate = percentile(metric, 0.9)
       return learnedRate !== null
-        && bin.samples >= 8
-        && sample.verticalChangeRate >= this.thresholds.surfaceVerticalRateFloor
-        && sample.verticalChangeRate > learnedRate * this.thresholds.surfaceVerticalRateRatio
+        && value !== null
+        && value >= this.thresholds.surfaceTransientRateFloor
+        && value > learnedRate * this.thresholds.surfaceTransientRateRatio
+    }
+
+    isCalibrationEligible(sample, previousSample) {
+      const frontFailure = sample.steerMagnitude >= 0.28
+        && sample.frontSlip !== null
+        && sample.frontSlip >= 0.16
+      const powerFailure = sample.throttle >= 0.65
+        && sample.drivenSlip !== null
+        && sample.drivenSlip >= 0.12
+      const combinedFailure = sample.brake >= 0.25
+        && sample.steerMagnitude >= 0.22
+        && sample.frontCombinedSlip !== null
+        && sample.frontCombinedSlip >= 0.85
+      const abruptRelease = previousSample !== null
+        && previousSample.brake >= 0.35
+        && sample.brakeRate !== null
+        && sample.brakeRate <= -1.5
+      const transientRate = Math.max(
+        sample.lateralChangeRate ?? 0,
+        sample.longitudinalChangeRate ?? 0,
+        sample.verticalChangeRate ?? 0
+      )
+
+      return !frontFailure
+        && !powerFailure
+        && !combinedFailure
+        && !abruptRelease
+        && transientRate < this.thresholds.calibrationTransientRateMax
     }
 
     getSnapshot(sample, resetReason = null, overrides = {}) {
       const binIndex = sample === null
         ? null
-        : Math.max(0, Math.min(this.thresholds.speedBinCount - 1, Math.floor(sample.speedKmh / this.thresholds.speedBinKmh)))
+        : this.getBinIndex(sample.speedKmh)
       const bin = binIndex === null ? null : summarizeBin(this.envelope.bins[binIndex])
       return {
         valid: sample !== null,
@@ -494,7 +555,8 @@
         previousSample: overrides.previousSample ?? null,
         calibration: {
           ready: this.envelope.samples >= this.thresholds.calibrationMinSamples
-            && this.envelope.binsWithSamples >= this.thresholds.calibrationMinBins,
+            && this.envelope.binsWithSamples >= this.thresholds.calibrationMinBins
+            && bin?.ready === true,
           sampleCount: this.envelope.samples,
           binsWithSamples: this.envelope.binsWithSamples,
           binIndex,

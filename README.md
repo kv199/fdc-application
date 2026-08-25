@@ -23,17 +23,21 @@ Direct Forza UDP and co-driver Suite normalized telemetry enter the same
 `queueTelemetry` path, so the state machine and findings are source-neutral. It
 observes the bounded lifecycle `STRAIGHT → BRAKING → TURN-IN → ROTATION → EXIT`
 without a map. A session-scoped observed car envelope is calibrated in fixed
-speed bins with bounded rolling percentile evidence. Once the minimum envelope
-is ready, that car-local profile is held stable for the session so a bad corner
-cannot train its own threshold. It is discarded on restart, rewind, source
-switch, or incompatible car identity. It is not written to `hud.sqlite`.
+speed bins with bounded rolling percentile evidence. Each bin becomes ready only
+after enough eligible local evidence; learned bins are then held stable, while
+an unseen speed range remains silent and continues calibrating. Obvious failure
+signatures, rumble/puddle contact, and sharp lateral, longitudinal, or vertical
+transient spikes are excluded from calibration. The envelope is discarded on
+restart, rewind, source switch, or incompatible car identity. It is not written
+to `hud.sqlite`.
 
 After enough valid evidence, one high-confidence cue may appear briefly. The
 first version covers `FRONT SCRUB`, `EXIT WHEELSPIN`, `BRAKE + STEERING
 OVERLOAD`, and `ABRUPT BRAKE RELEASE`, plus positive `CLEAN EXIT` and
 `CONTROLLED RELEASE` evidence. It stays silent on straights, before
-calibration, paused/menu or rewound telemetry, gaps, rumble/puddle contact,
-and conservative vertical-transient gates for jumps or impacts. It does not
+calibration, paused/menu or rewound telemetry, gaps, rumble/puddle contact, and
+conservative lateral, longitudinal, and vertical transient gates for jumps or
+impacts. It does not
 show exact metres, seconds, late-throttle claims, wrong-apex/line claims, or
 optimal gear advice.
 

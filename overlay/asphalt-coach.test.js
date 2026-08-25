@@ -271,6 +271,43 @@ test('calibration is bounded by speed bins and becomes ready only after evidence
   assert.equal(state.envelope.bins.length, 12)
 })
 
+test('an unseen speed bin stays silent until its own local evidence is ready', () => {
+  const state = new AsphaltCoachState()
+  for (const input of calibrationPrefix()) state.update(input)
+
+  let snapshot = state.update(frame(720, { speedKmh: 180 }))
+  assert.equal(snapshot.calibration.ready, false)
+  assert.equal(snapshot.calibration.bin.samples, 1)
+  assert.equal(snapshot.calibration.bin.ready, false)
+
+  for (let index = 1; index < 8; index += 1) {
+    snapshot = state.update(frame(720 + index * 20, { speedKmh: 180 + index * 0.05 }))
+  }
+  assert.equal(snapshot.calibration.ready, true)
+  assert.equal(snapshot.calibration.bin.samples, 8)
+  assert.equal(snapshot.calibration.bin.ready, true)
+})
+
+test('an invalid first maneuver cannot train a new speed bin', () => {
+  const state = new AsphaltCoachState()
+  for (const input of calibrationPrefix()) state.update(input)
+
+  const bad = state.update(frame(720, {
+    speedKmh: 180,
+    steer: 0.4,
+    slipAngle: { fl: 0.4, fr: 0.4, rl: 0.05, rr: 0.05 },
+    combinedSlip: { fl: 0.95, fr: 0.95, rl: 0.1, rr: 0.1 }
+  }))
+  assert.equal(bad.calibration.bin.samples, 0)
+
+  let snapshot = bad
+  for (let index = 1; index <= 8; index += 1) {
+    snapshot = state.update(frame(720 + index * 20, { speedKmh: 180 + index * 0.05 }))
+  }
+  assert.equal(snapshot.calibration.bin.samples, 8)
+  assert.equal(snapshot.calibration.bin.ready, true)
+})
+
 test('learned envelope scales response thresholds instead of only changing readiness', () => {
   const learned = learnedThresholds({
     responseFlatDelta: 0.03,
@@ -327,6 +364,16 @@ test('findings stay silent before calibration and on rumble-disturbed replay', (
     acceleration: { ...(input.acceleration || { x: 1, z: 1 }), y: index % 2 }
   }))
   assert.equal(runFrames(verticalTransient).events.length, 0)
+  const lateralImpact = frontScrubScenario(true).map((input, index) => ({
+    ...input,
+    acceleration: { x: index % 2 === 0 ? 1 : 5, y: 0, z: 1 }
+  }))
+  assert.equal(runFrames(lateralImpact).events.length, 0)
+  const longitudinalImpact = frontScrubScenario(true).map((input, index) => ({
+    ...input,
+    acceleration: { x: 1, y: 0, z: index % 2 === 0 ? 1 : 5 }
+  }))
+  assert.equal(runFrames(longitudinalImpact).events.length, 0)
 })
 
 test('beginning a new attempt clears evidence counts without requiring a process reset', () => {
@@ -345,6 +392,13 @@ test('beginning a new attempt clears evidence counts without requiring a process
     negativeEvidence: 0,
     positiveEvidence: 0
   })
+})
+
+test('an ordinary lap boundary preserves accumulated finding evidence', () => {
+  const result = runFrames(frontScrubScenario(true))
+  const before = result.findings.getSummary()
+  result.findings.resetTransient()
+  assert.deepEqual(result.findings.getSummary(), before)
 })
 
 test('Direct and Suite normalized replays produce identical zero-reference findings', () => {

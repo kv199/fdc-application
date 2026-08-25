@@ -804,4 +804,4 @@ var HudShiftLight = (() => {
   };
   return __toCommonJS(shift_light_exports);
 })();
-if (typeof globalThis !== undefined) globalThis.HudShiftLight = HudShiftLight; if (typeof module !== undefined) module.exports = HudShiftLight;
+if (typeof globalThis !== "undefined") globalThis.HudShiftLight = HudShiftLight; if (typeof module !== "undefined") module.exports = HudShiftLight;

@@ -12,13 +12,13 @@ test('confirmed final circuit packet wins over the ordinary lap-boundary branch'
   }), 'brief')
 })
 
-test('ordinary multi-lap boundary starts the next attempt without a full brief', () => {
+test('ordinary multi-lap boundary resets transient state without starting a new attempt', () => {
   assert.equal(resolveLapAction({
     previousTimingState: { phase: 'live' },
     timingState: { phase: 'live' },
     previousLapNumber: 5,
     telemetry: { isRaceOn: true, lap: { number: 6 } }
-  }), 'begin_attempt')
+  }), 'lap_boundary')
 })
 
 test('a live packet after a confirmed finish starts a fresh attempt', () => {

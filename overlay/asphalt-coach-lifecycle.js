@@ -16,13 +16,15 @@
     const wasComplete = previousPhase === 'circuit_complete' || previousPhase === 'sprint_complete'
     const isComplete = currentPhase === 'circuit_complete' || currentPhase === 'sprint_complete'
     const currentLapNumber = finite(telemetry?.lap?.number)
-    const lapAdvanced = finite(previousLapNumber) !== null
+    const previousLap = finite(previousLapNumber)
+    const lapAdvanced = previousLap !== null
       && currentLapNumber !== null
-      && currentLapNumber > finite(previousLapNumber)
+      && currentLapNumber > previousLap
     const nextAttemptStarted = wasComplete && currentPhase === 'live' && telemetry?.isRaceOn === true
 
     if (isComplete && !wasComplete && telemetry?.isRaceOn !== true) return 'brief'
-    if (lapAdvanced || nextAttemptStarted) return 'begin_attempt'
+    if (lapAdvanced) return 'lap_boundary'
+    if (nextAttemptStarted) return 'begin_attempt'
     return 'none'
   }
 

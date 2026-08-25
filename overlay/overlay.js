@@ -457,8 +457,19 @@ function beginAsphaltAttempt() {
   }
   asphaltCoachState.beginAttempt()
   asphaltCoachFindings.beginAttempt(asphaltCoachState.attemptId)
-  asphaltCoachPresentation.beginAttempt()
-  latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
+  latestAsphaltCoach = asphaltCoachPresentation.beginAttempt()
+  lastAsphaltBriefToken = null
+}
+
+function beginAsphaltLapBoundary() {
+  if (asphaltBriefTimer !== null) {
+    window.clearTimeout(asphaltBriefTimer)
+    asphaltBriefTimer = null
+  }
+  asphaltCoachState.resetTransient('lap_boundary')
+  asphaltCoachFindings.resetTransient()
+  const readiness = latestAsphaltCoach?.readiness === 'ready' ? 'ready' : 'calibrating'
+  latestAsphaltCoach = asphaltCoachPresentation.resetTransient(readiness)
   lastAsphaltBriefToken = null
 }
 
@@ -528,6 +539,11 @@ function handleAsphaltLapLifecycle(previousTimingState, previousLapNumber, telem
 
   if (action === 'brief') {
     showAsphaltBriefIfConfirmed(`${lapTimingState.phase}:${lapTimingState.lapNumber}:${lapTimingState.finalTimeMs}`)
+    return
+  }
+
+  if (action === 'lap_boundary') {
+    beginAsphaltLapBoundary()
     return
   }
 
