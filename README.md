@@ -27,8 +27,10 @@ speed bins with bounded rolling percentile evidence. Each bin becomes ready only
 after enough eligible local evidence; learned bins are then held stable, while
 an unseen speed range remains silent and continues calibrating. Acceleration
 rates use a bounded three-frame median, so ordinary FH6 frame noise does not
-become a hard calibration failure. Obvious failure signatures, rumble/puddle
-contact, and local transient outliers are excluded from calibration; the
+become a hard calibration failure. Repeated packets from one FH game-clock tick
+are coalesced without advancing evidence time, and the latest normalized sample
+is retained for the next tick. Obvious failure signatures, rumble/puddle
+contact, four-wheel full suspension extension, and local transient outliers are excluded from calibration; the
 collision gate compares each axis with the learned per-speed-bin noise profile
 instead of using a fixed global jerk cutoff. The envelope is discarded on
 restart, rewind, source switch, or incompatible car identity. It is not written
@@ -66,12 +68,13 @@ are not used by this zero-reference Coach. `EXCESSIVE COAST` is intentionally
 outside this first version because it cannot yet be separated reliably from
 correct front-axle recovery.
 
-The checked-in `overlay/asphalt-coach-fixtures.js` contains a rounded,
-coordinate-free segment derived from a saved FH6 replay. Automated tests use
-it as a clean negative replay alongside strong and borderline synthetic
-episodes. A passing test run proves normalized Direct/Suite parity and the
-confidence gate; it does not prove live Forza behavior or classify road
-surface from telemetry.
+The checked-in `overlay/asphalt-coach-fixtures.js` contains rounded,
+coordinate-free grounded and airborne segments derived from saved FH6 replays.
+Automated tests use the responsive grounded braking turn as a non-empty negative
+replay and the airborne segment to verify contact-loss exclusion, alongside
+strong and borderline synthetic episodes. A passing test run proves normalized
+Direct/Suite parity and the confidence gate; it does not prove live Forza
+behavior or classify road surface from telemetry.
 
 The Coach card, lap-delta strip, and telemetry HUD are independently movable
 overlay targets. The HUD icon's tray menu opens `Configuration`; the window is

@@ -71,6 +71,11 @@
     return values.length === 0 ? null : Math.max(...values)
   }
 
+  function allQuadAtOrBelow(quad, threshold = 0) {
+    const values = [finite(quad?.fl), finite(quad?.fr), finite(quad?.rl), finite(quad?.rr)]
+    return values.every(value => value !== null && value <= threshold)
+  }
+
   function median3(first, second, third) {
     const a = finite(first)
     const b = finite(second)
@@ -232,6 +237,7 @@
       phaseDurationMs: 0,
       attemptId: 0,
       newAttempt: false,
+      ignored: false,
       sample: null,
       previousSample: null,
       calibration: {
@@ -270,6 +276,7 @@
       longitudinalResponse: accelerationZ === null ? null : Math.abs(accelerationZ),
       rumbleContact: anyRumble(frame?.rumble),
       puddleDepth: maxQuad(frame?.puddle),
+      suspensionFullyExtended: allQuadAtOrBelow(frame?.suspension),
       yawRate: yawRate === null ? null : Math.abs(yawRate),
       carIdentity: vehicleIdentity(frame),
       lapRaceTimeS: finite(frame?.lap?.raceTime),
@@ -352,8 +359,8 @@
 
       if (this.lastTimestampMs !== null) {
         const frameGapMs = sample.timestampMs - this.lastTimestampMs
-        if (frameGapMs <= 0 || frameGapMs > this.thresholds.maxFrameGapMs) {
-          this.resetTransient(frameGapMs <= 0 ? 'timestamp_rewind' : 'telemetry_gap')
+        if (frameGapMs < 0 || frameGapMs > this.thresholds.maxFrameGapMs) {
+          this.resetTransient(frameGapMs < 0 ? 'timestamp_rewind' : 'telemetry_gap')
           return this.getSnapshot(null, this.lastResetReason)
         }
         if (
@@ -379,6 +386,14 @@
         ) {
           this.reset('lap_distance_rewind')
           return this.getSnapshot(null, 'lap_distance_rewind')
+        }
+        if (frameGapMs === 0) {
+          sample.steerMagnitude = Math.abs(sample.steer)
+          this.previousSample = sample
+          if (sample.lapRaceTimeS !== null) this.lastRaceTimeS = sample.lapRaceTimeS
+          if (sample.lapNumber !== null) this.lastLapNumber = sample.lapNumber
+          if (sample.lapDistanceM !== null) this.lastDistanceM = sample.lapDistanceM
+          return this.getSnapshot(null, null, { ignored: true })
         }
       }
 
@@ -569,7 +584,11 @@
     }
 
     isSurfaceDisturbed(sample) {
-      if (sample.rumbleContact || (sample.puddleDepth !== null && sample.puddleDepth > 0)) return true
+      if (
+        sample.rumbleContact
+        || (sample.puddleDepth !== null && sample.puddleDepth > 0)
+        || sample.suspensionFullyExtended
+      ) return true
       if (sample.speedKmh < this.thresholds.minSpeedKmh) return false
 
       const bin = this.envelope.bins[this.getBinIndex(sample.speedKmh)]
@@ -632,6 +651,7 @@
         phaseDurationMs: overrides.phaseDurationMs ?? 0,
         attemptId: this.attemptId,
         newAttempt: overrides.newAttempt === true,
+        ignored: overrides.ignored === true,
         sample,
         previousSample: overrides.previousSample ?? null,
         calibration: {

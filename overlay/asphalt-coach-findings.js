@@ -261,6 +261,16 @@
     }
 
     update(snapshot) {
+      if (snapshot?.ignored === true) {
+        return {
+          events: [],
+          counts: copyCounts(this.counts),
+          calibration: snapshot.calibration ?? null,
+          phase: snapshot.phase,
+          ignored: true
+        }
+      }
+
       if (!snapshot?.valid || !snapshot.sample) {
         this.resetTransient()
         return {
@@ -568,6 +578,18 @@
     updatePendingRelease(snapshot, events) {
       const sample = snapshot.sample
       const previous = snapshot.previousSample
+      const brakeRate = sample.brakeRate
+      const brakeReapplication = brakeRate !== null && brakeRate > 0
+      if (this.pendingRelease !== null && brakeReapplication) this.pendingRelease = null
+
+      const releaseRate = brakeRate !== null
+        && brakeRate <= -this.thresholds.brakeReleaseDropPerSecond
+        ? Math.abs(brakeRate)
+        : null
+      if (this.pendingRelease !== null && releaseRate !== null) {
+        this.pendingRelease.releaseRate = Math.max(this.pendingRelease.releaseRate, releaseRate)
+      }
+
       if (this.pendingRelease !== null) {
         const elapsedMs = sample.timestampMs - this.pendingRelease.timestampMs
         if (elapsedMs < 0 || elapsedMs > this.thresholds.brakeReleaseWindowMs) {
@@ -585,19 +607,14 @@
         }
       }
 
-      const releaseRate = sample.brakeRate === null ? null : Math.abs(sample.brakeRate)
       if (
         previous === null
         || !phaseIsTurning(snapshot.phase)
         || previous.brake < this.thresholds.brakeReleaseMin
         || releaseRate === null
-        || releaseRate < this.thresholds.brakeReleaseDropPerSecond
       ) return
 
-      if (this.pendingRelease !== null) {
-        this.pendingRelease.releaseRate = Math.max(this.pendingRelease.releaseRate, releaseRate)
-        return
-      }
+      if (this.pendingRelease !== null) return
 
       this.pendingRelease = {
         timestampMs: sample.timestampMs,

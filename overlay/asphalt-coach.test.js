@@ -16,7 +16,10 @@ const {
   buildDriverBrief,
   CUE_META
 } = require('./asphalt-coach-presentation.js')
-const { CLEAN_REAL_SEGMENT } = require('./asphalt-coach-fixtures.js')
+const {
+  AIRBORNE_REAL_SEGMENT,
+  GROUNDED_RESPONSIVE_REAL_SEGMENT
+} = require('./asphalt-coach-fixtures.js')
 
 function frame(timestampMs, overrides = {}) {
   return {
@@ -32,6 +35,7 @@ function frame(timestampMs, overrides = {}) {
     combinedSlip: { fl: 0.2, fr: 0.2, rl: 0.15, rr: 0.15 },
     acceleration: { x: 1, y: 0, z: 1 },
     angularVelocity: { y: 0.3 },
+    suspension: { fl: 0.3, fr: 0.3, rl: 0.3, rr: 0.3 },
     car: { ordinal: 1, pi: 800, drivetrain: 1 },
     lap: { raceTime: timestampMs / 1000, number: 1, distance: timestampMs },
     ...overrides
@@ -166,7 +170,7 @@ function overloadScenario(positive) {
 }
 
 function abruptReleaseScenario(positive) {
-  const frames = rotationFrames({ brake: 0.5, steer: 0.25 })
+  const frames = releasePrelude()
   frames.push(frame(100, {
     brake: 0.5,
     steer: 0.25,
@@ -292,6 +296,58 @@ function smoothReleaseWithImpulseScenario() {
   return frames
 }
 
+function brakeApplicationWithResponseLossScenario() {
+  const frames = rotationFrames({ brake: 0.4, steer: 0.25 })
+  frames.push(frame(100, {
+    brake: 0.4,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(120, {
+    brake: 0.5,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(140, {
+    brake: 0.5,
+    steer: 0.25,
+    acceleration: { x: 0.2, y: 0, z: 1 },
+    angularVelocity: { y: 0.1 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.2, rr: 0.2 }
+  }))
+  return frames
+}
+
+function releaseThenReapplyScenario() {
+  const frames = releasePrelude()
+  frames.push(frame(100, {
+    brake: 0.5,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(120, {
+    brake: 0.35,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(140, {
+    brake: 0.4,
+    steer: 0.25,
+    acceleration: { x: 0.2, y: 0, z: 1 },
+    angularVelocity: { y: 0.1 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.2, rr: 0.2 }
+  }))
+  return frames
+}
+
 function controlledReleaseScenario(positive) {
   const frames = turnInFrames({
     brake: 0.3,
@@ -400,6 +456,19 @@ test('lateral response uses FH6 local X and keeps longitudinal response on Z', (
   assert.equal(sample.longitudinalResponse, 9.5)
 })
 
+test('all-wheel full suspension extension is normalized only from complete evidence', () => {
+  assert.equal(normalizeFrame(frame(0, {
+    suspension: { fl: 0, fr: 0, rl: 0, rr: 0 }
+  })).suspensionFullyExtended, true)
+  assert.equal(normalizeFrame(frame(0, {
+    suspension: { fl: 0, fr: 0, rl: 0, rr: 0.01 }
+  })).suspensionFullyExtended, false)
+  assert.equal(normalizeFrame(frame(0, { suspension: undefined })).suspensionFullyExtended, false)
+  assert.equal(normalizeFrame(frame(0, {
+    suspension: { fl: 0, fr: 0, rl: 0 }
+  })).suspensionFullyExtended, false)
+})
+
 test('exit wheelspin requires driven slip and a weak speed response after a clean baseline', () => {
   assert.equal(hasFinding(wheelspinScenario(true), FINDINGS.EXIT_WHEELSPIN), true)
   assert.equal(hasFinding(wheelspinScenario(false), FINDINGS.EXIT_WHEELSPIN), false)
@@ -434,6 +503,14 @@ test('multi-frame abrupt release preserves the first evidence timestamp and maxi
 
 test('smooth brake release followed by a road impulse does not become abrupt release', () => {
   assert.equal(hasFinding(smoothReleaseWithImpulseScenario(), FINDINGS.ABRUPT_BRAKE_RELEASE), false)
+})
+
+test('brake application cannot open an abrupt-release evidence window', () => {
+  assert.equal(hasFinding(brakeApplicationWithResponseLossScenario(), FINDINGS.ABRUPT_BRAKE_RELEASE), false)
+})
+
+test('brake re-application cancels pending abrupt-release evidence', () => {
+  assert.equal(hasFinding(releaseThenReapplyScenario(), FINDINGS.ABRUPT_BRAKE_RELEASE), false)
 })
 
 test('controlled release is a positive finding only when brake release is progressive', () => {
@@ -626,6 +703,53 @@ test('Direct and Suite normalized replays produce identical zero-reference findi
   assert.deepEqual(direct.findings.getSummary(), suite.findings.getSummary())
 })
 
+test('equal FH timestamps preserve evidence and use the latest tick sample', () => {
+  const source = frontScrubScenario(true)
+  const repeated = source.flatMap(input => [
+    input,
+    {
+      ...input,
+      brake: Math.max(0, input.brake - 0.01),
+      speedKmh: input.speedKmh + 0.01
+    }
+  ])
+  const baseline = runFrames(source)
+  const duplicateReplay = runFrames(repeated)
+  assert.deepEqual(
+    duplicateReplay.events.map(event => ({ kind: event.kind, evidenceMs: event.evidenceMs })),
+    baseline.events.map(event => ({ kind: event.kind, evidenceMs: event.evidenceMs }))
+  )
+  assert.equal(duplicateReplay.state.envelope.samples, baseline.state.envelope.samples)
+  assert.deepEqual(duplicateReplay.findings.getSummary(), baseline.findings.getSummary())
+
+  const state = new AsphaltCoachState()
+  const findings = new AsphaltCoachFindings()
+  findings.update(state.update(frame(0, { brake: 0.4, steer: 0.2, speedKmh: 90 })))
+  const duplicate = state.update(frame(0, { brake: 0.3, steer: 0.25, speedKmh: 91 }))
+  const ignored = findings.update(duplicate)
+  assert.equal(duplicate.ignored, true)
+  assert.equal(duplicate.resetReason, null)
+  assert.equal(ignored.ignored, true)
+
+  const next = state.update(frame(20, { brake: 0.2, steer: 0.3, speedKmh: 92 }))
+  assert.equal(next.previousSample.brake, 0.3)
+  assert.equal(next.previousSample.speedKmh, 91)
+  assert.ok(Math.abs(next.sample.brakeRate + 5) < 0.001)
+  assert.ok(Math.abs(next.sample.steerRate - 2.5) < 0.001)
+})
+
+test('equal packet timestamps do not hide race-clock rewinds', () => {
+  const state = new AsphaltCoachState()
+  state.update(frame(100, {
+    lap: { raceTime: 10, number: 1, distance: 100 }
+  }))
+  const rewind = state.update(frame(100, {
+    lap: { raceTime: 0, number: 1, distance: 0 }
+  }))
+  assert.equal(rewind.ignored, false)
+  assert.equal(rewind.resetReason, 'race_clock_rewind')
+})
+
 test('Direct and Suite preserve delayed abrupt-release evidence identically', () => {
   const replay = delayedAbruptReleaseScenario()
   const direct = runFrames(replay)
@@ -642,23 +766,58 @@ test('Direct and Suite preserve delayed abrupt-release evidence identically', ()
   assert.deepEqual(select(direct.events), select(suite.events))
 })
 
-test('a sanitized real FH6 clean segment produces no negative cue stream', () => {
-  const replay = CLEAN_REAL_SEGMENT.map((input, index) => frame(index * 20, input))
-  const phaseState = new AsphaltCoachState()
-  let currentTurningFrames = 0
-  let longestTurningFrames = 0
-  for (const input of calibratedReplay(replay)) {
-    const phase = phaseState.update(input).phase
-    if (phase === PHASES.TURN_IN || phase === PHASES.ROTATION) {
-      currentTurningFrames += 1
-      longestTurningFrames = Math.max(longestTurningFrames, currentTurningFrames)
-    } else {
-      currentTurningFrames = 0
-    }
+test('a grounded real FH6 braking turn stays analyzable without a false negative cue', () => {
+  const replay = GROUNDED_RESPONSIVE_REAL_SEGMENT.map((input, index) => frame(index * 20, input))
+  const state = new AsphaltCoachState()
+  const findings = new AsphaltCoachFindings()
+  const snapshots = []
+  const events = []
+  const fullReplay = calibratedReplay(replay)
+  for (let index = 0; index < fullReplay.length; index += 1) {
+    const snapshot = state.update(fullReplay[index])
+    const result = findings.update(snapshot)
+    events.push(...result.events)
+    if (index >= fullReplay.length - replay.length) snapshots.push(snapshot)
   }
-  assert.equal((longestTurningFrames - 1) * 20 > new AsphaltCoachFindings().thresholds.minEvidenceMs, true)
-  const result = runFrames(replay)
-  assert.equal(result.events.filter(event => !event.positive).length, 0)
+
+  assert.equal(snapshots.length, 14)
+  assert.equal(snapshots.every(snapshot => snapshot.calibration.ready), true)
+  assert.equal(snapshots.every(snapshot => snapshot.sample.suspensionFullyExtended === false), true)
+  const analyzable = snapshots.slice(2)
+  assert.equal(analyzable.length, 12)
+  assert.equal(analyzable.every(snapshot => snapshot.sample.surfaceDisturbed === false), true)
+  assert.equal(analyzable.every(snapshot => snapshot.phase === PHASES.TURN_IN || snapshot.phase === PHASES.ROTATION), true)
+  assert.equal((analyzable.length - 1) * 20 > findings.thresholds.minEvidenceMs, true)
+  assert.equal(events.filter(event => !event.positive).length, 0)
+})
+
+test('a real FH6 airborne segment is excluded from calibration and findings', () => {
+  const replay = AIRBORNE_REAL_SEGMENT.map((input, index) => frame(index * 20, input))
+  const state = new AsphaltCoachState()
+  const findings = new AsphaltCoachFindings()
+  for (const input of calibrationPrefix()) findings.update(state.update(input))
+  const samplesBefore = state.envelope.samples
+  const events = []
+  const snapshots = []
+  for (const input of replay.map(input => ({
+    ...input,
+    timestampMs: input.timestampMs + 740,
+    lap: {
+      ...input.lap,
+      raceTime: (input.timestampMs + 740) / 1000,
+      distance: input.timestampMs + 740
+    }
+  }))) {
+    const snapshot = state.update(input)
+    snapshots.push(snapshot)
+    events.push(...findings.update(snapshot).events)
+  }
+
+  assert.equal(snapshots.every(snapshot => snapshot.sample.suspensionFullyExtended), true)
+  assert.equal(snapshots.every(snapshot => snapshot.sample.surfaceDisturbed), true)
+  assert.equal(snapshots.every(snapshot => snapshot.sample.calibrationEligible === false), true)
+  assert.equal(state.envelope.samples, samplesBefore)
+  assert.equal(events.length, 0)
 })
 
 test('straight, inactive and telemetry gaps produce no findings', () => {

@@ -475,6 +475,7 @@ function beginAsphaltLapBoundary() {
 
 function updateAsphaltCoach(telemetry) {
   const snapshot = asphaltCoachState.update(telemetry)
+  if (snapshot.ignored) return snapshot
   if (
     snapshot.resetReason === 'car_identity_change'
     || snapshot.resetReason === 'race_clock_rewind'
