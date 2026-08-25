@@ -25,9 +25,12 @@ observes the bounded lifecycle `STRAIGHT → BRAKING → TURN-IN → ROTATION �
 without a map. A session-scoped observed car envelope is calibrated in fixed
 speed bins with bounded rolling percentile evidence. Each bin becomes ready only
 after enough eligible local evidence; learned bins are then held stable, while
-an unseen speed range remains silent and continues calibrating. Obvious failure
-signatures, rumble/puddle contact, and sharp lateral, longitudinal, or vertical
-transient spikes are excluded from calibration. The envelope is discarded on
+an unseen speed range remains silent and continues calibrating. Acceleration
+rates use a bounded three-frame median, so ordinary FH6 frame noise does not
+become a hard calibration failure. Obvious failure signatures, rumble/puddle
+contact, and local transient outliers are excluded from calibration; the
+collision gate compares each axis with the learned per-speed-bin noise profile
+instead of using a fixed global jerk cutoff. The envelope is discarded on
 restart, rewind, source switch, or incompatible car identity. It is not written
 to `hud.sqlite`.
 

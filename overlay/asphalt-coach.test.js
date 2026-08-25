@@ -38,9 +38,20 @@ function frame(timestampMs, overrides = {}) {
 }
 
 function calibrationPrefix() {
+  const accelerationNoise = [
+    { x: 1, y: 0, z: 1 },
+    { x: 1.32, y: 0.16, z: 1.24 },
+    { x: 1.08, y: 0.02, z: 1.02 },
+    { x: 1.28, y: 0.14, z: 1.22 },
+    { x: 1.04, y: 0.01, z: 1.04 },
+    { x: 1.3, y: 0.15, z: 1.2 },
+    { x: 1.12, y: 0.03, z: 1.06 },
+    { x: 1.26, y: 0.13, z: 1.18 },
+    { x: 1, y: 0, z: 1 }
+  ]
   return Array.from({ length: 36 }, (_, index) => frame(index * 20, {
     speedKmh: 30 + Math.floor(index / 9) * 25 + (index % 9) * 0.05,
-    acceleration: { x: 1, y: 0, z: 1 }
+    acceleration: accelerationNoise[index % accelerationNoise.length]
   }))
 }
 
@@ -269,6 +280,18 @@ test('calibration is bounded by speed bins and becomes ready only after evidence
   assert.equal(snapshot.calibration.ready, true)
   assert.equal(snapshot.calibration.binsWithSamples >= 3, true)
   assert.equal(state.envelope.bins.length, 12)
+})
+
+test('calibration tolerates bounded acceleration noise without a fixed jerk cutoff', () => {
+  const state = new AsphaltCoachState()
+  let eligible = 0
+  let snapshot = null
+  for (const input of calibrationPrefix()) {
+    snapshot = state.update(input)
+    if (snapshot.sample.calibrationEligible) eligible += 1
+  }
+  assert.equal(eligible >= 30, true)
+  assert.equal(snapshot.calibration.ready, true)
 })
 
 test('an unseen speed bin stays silent until its own local evidence is ready', () => {

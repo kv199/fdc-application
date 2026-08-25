@@ -26,9 +26,7 @@
     calibrationMinSamples: 36,
     calibrationMinBins: 3,
     calibrationMinBinSamples: 8,
-    surfaceTransientRateFloor: 20,
-    surfaceTransientRateRatio: 2.5,
-    calibrationTransientRateMax: 5
+    surfaceTransientRateRatio: 2.5
   })
 
   function finite(value) {
@@ -71,6 +69,16 @@
       .filter(value => value !== null)
       .map(value => Math.abs(value))
     return values.length === 0 ? null : Math.max(...values)
+  }
+
+  function median3(first, second, third) {
+    const a = finite(first)
+    const b = finite(second)
+    const c = finite(third)
+    if (a === null) return b === null ? c : c === null ? b : (b + c) / 2
+    if (b === null) return c === null ? a : (a + c) / 2
+    if (c === null) return (a + b) / 2
+    return Math.max(Math.min(a, b), Math.min(Math.max(a, b), c))
   }
 
   function createPercentile(windowSize) {
@@ -263,10 +271,15 @@
       this.identity = null
       this.phase = PHASES.STRAIGHT
       this.phaseSinceMs = null
+      this.previousPreviousSample = null
       this.previousSample = null
+      this.lastFilteredLateralResponse = null
+      this.lastFilteredLongitudinalResponse = null
+      this.lastFilteredVerticalResponse = null
       this.activeAttempt = false
       this.attemptId = 0
       this.envelope = createEnvelope(this.thresholds)
+      this.recentTransientRate = createPercentile(this.thresholds.envelopeWindowSize)
       this.lastResetReason = reason
       return this.getSnapshot(null, reason)
     }
@@ -278,7 +291,11 @@
       this.lastDistanceM = null
       this.phase = PHASES.STRAIGHT
       this.phaseSinceMs = null
+      this.previousPreviousSample = null
       this.previousSample = null
+      this.lastFilteredLateralResponse = null
+      this.lastFilteredLongitudinalResponse = null
+      this.lastFilteredVerticalResponse = null
       this.activeAttempt = false
       this.lastResetReason = reason
       return this.getSnapshot(null, reason)
@@ -287,7 +304,11 @@
     beginAttempt() {
       this.phase = PHASES.STRAIGHT
       this.phaseSinceMs = null
+      this.previousPreviousSample = null
       this.previousSample = null
+      this.lastFilteredLateralResponse = null
+      this.lastFilteredLongitudinalResponse = null
+      this.lastFilteredVerticalResponse = null
       this.activeAttempt = false
       this.lastTimestampMs = null
       this.lastRaceTimeS = null
@@ -366,17 +387,38 @@
       sample.brakeRate = previousSample === null || deltaSeconds === null
         ? null
         : (sample.brake - previousSample.brake) / deltaSeconds
-      sample.verticalChangeRate = previousSample === null || deltaSeconds === null
+      const filteredLateralResponse = median3(
+        this.previousPreviousSample?.lateralResponse,
+        previousSample?.lateralResponse,
+        sample.lateralResponse
+      )
+      const filteredLongitudinalResponse = median3(
+        this.previousPreviousSample?.longitudinalResponse,
+        previousSample?.longitudinalResponse,
+        sample.longitudinalResponse
+      )
+      const filteredVerticalResponse = median3(
+        this.previousPreviousSample?.verticalResponse,
+        previousSample?.verticalResponse,
+        sample.verticalResponse
+      )
+      sample.verticalChangeRate = previousSample === null || deltaSeconds === null || this.lastFilteredVerticalResponse === null
         ? null
-        : Math.abs((sample.verticalResponse ?? 0) - (previousSample.verticalResponse ?? 0)) / deltaSeconds
-      sample.lateralChangeRate = previousSample === null || deltaSeconds === null
+        : Math.abs((filteredVerticalResponse ?? 0) - this.lastFilteredVerticalResponse) / deltaSeconds
+      sample.lateralChangeRate = previousSample === null || deltaSeconds === null || this.lastFilteredLateralResponse === null
         ? null
-        : Math.abs((sample.lateralResponse ?? 0) - (previousSample.lateralResponse ?? 0)) / deltaSeconds
-      sample.longitudinalChangeRate = previousSample === null || deltaSeconds === null
+        : Math.abs((filteredLateralResponse ?? 0) - this.lastFilteredLateralResponse) / deltaSeconds
+      sample.longitudinalChangeRate = previousSample === null || deltaSeconds === null || this.lastFilteredLongitudinalResponse === null
         ? null
-        : Math.abs((sample.longitudinalResponse ?? 0) - (previousSample.longitudinalResponse ?? 0)) / deltaSeconds
+        : Math.abs((filteredLongitudinalResponse ?? 0) - this.lastFilteredLongitudinalResponse) / deltaSeconds
+      sample.transientRate = Math.max(
+        sample.lateralChangeRate ?? 0,
+        sample.longitudinalChangeRate ?? 0,
+        sample.verticalChangeRate ?? 0
+      )
       sample.surfaceDisturbed = this.isSurfaceDisturbed(sample)
       sample.calibrationEligible = this.isCalibrationEligible(sample, previousSample)
+      if (sample.calibrationEligible && sample.transientRate > 0) addPercentile(this.recentTransientRate, sample.transientRate)
 
       const previousPhase = this.phase
       const nextPhase = this.classifyPhase(sample, previousSample, deltaSeconds)
@@ -390,7 +432,11 @@
       this.lastRaceTimeS = sample.lapRaceTimeS
       this.lastLapNumber = sample.lapNumber
       this.lastDistanceM = sample.lapDistanceM
+      this.previousPreviousSample = previousSample
       this.previousSample = sample
+      this.lastFilteredLateralResponse = filteredLateralResponse
+      this.lastFilteredLongitudinalResponse = filteredLongitudinalResponse
+      this.lastFilteredVerticalResponse = filteredVerticalResponse
       this.lastResetReason = null
 
       return this.getSnapshot(sample, null, {
@@ -503,8 +549,8 @@
     exceedsLearnedRate(metric, value) {
       const learnedRate = percentile(metric, 0.9)
       return learnedRate !== null
+        && learnedRate > 0
         && value !== null
-        && value >= this.thresholds.surfaceTransientRateFloor
         && value > learnedRate * this.thresholds.surfaceTransientRateRatio
     }
 
@@ -523,17 +569,18 @@
         && previousSample.brake >= 0.35
         && sample.brakeRate !== null
         && sample.brakeRate <= -1.5
-      const transientRate = Math.max(
-        sample.lateralChangeRate ?? 0,
-        sample.longitudinalChangeRate ?? 0,
-        sample.verticalChangeRate ?? 0
-      )
+      const learnedTransientRate = percentile(this.recentTransientRate, 0.9)
+      const transientOutlier = learnedTransientRate !== null
+        && learnedTransientRate > 0
+        && sample.transientRate > learnedTransientRate * this.thresholds.surfaceTransientRateRatio
 
-      return !frontFailure
+      return sample.speedKmh >= this.thresholds.minSpeedKmh
+        && !sample.surfaceDisturbed
+        && !frontFailure
         && !powerFailure
         && !combinedFailure
         && !abruptRelease
-        && transientRate < this.thresholds.calibrationTransientRateMax
+        && !transientOutlier
     }
 
     getSnapshot(sample, resetReason = null, overrides = {}) {
