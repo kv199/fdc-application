@@ -16,6 +16,7 @@ const {
   buildDriverBrief,
   CUE_META
 } = require('./asphalt-coach-presentation.js')
+const { CLEAN_REAL_SEGMENT } = require('./asphalt-coach-fixtures.js')
 
 function frame(timestampMs, overrides = {}) {
   return {
@@ -174,8 +175,8 @@ function abruptReleaseScenario(positive) {
     frames.push(frame(140 + index * 20, {
       brake: 0.3,
       steer: 0.25,
-      acceleration: { x: positive ? 0.7 : 1, y: 0, z: 1 },
-      angularVelocity: { y: positive ? 0.2 : 0.5 },
+      acceleration: { x: positive ? 0.2 : 1, y: 0, z: 1 },
+      angularVelocity: { y: positive ? 0.1 : 0.5 },
       slipAngle: { fl: 0.12, fr: 0.12, rl: positive ? 0.2 : 0.05, rr: positive ? 0.2 : 0.05 }
     }))
   }
@@ -234,6 +235,52 @@ test('state emits the map-free STRAIGHT to BRAKING to TURN-IN to ROTATION to EXI
 test('front scrub requires growing steering and front slip without improving response', () => {
   assert.equal(hasFinding(frontScrubScenario(true), FINDINGS.FRONT_SCRUB), true)
   assert.equal(hasFinding(frontScrubScenario(false), FINDINGS.FRONT_SCRUB), false)
+})
+
+test('finding confidence is evidence-driven and conservative', () => {
+  const findings = new AsphaltCoachFindings()
+  const weak = findings.evidenceConfidence({
+    components: { steeringGrowth: 0.7, slipGrowth: 0.9, responseLoss: 0.9 }
+  }, 160, 140)
+  const strongerMargin = findings.evidenceConfidence({
+    components: { steeringGrowth: 0.9, slipGrowth: 0.9, responseLoss: 0.9 }
+  }, 160, 140)
+  const longerEvidence = findings.evidenceConfidence({
+    components: { steeringGrowth: 1, slipGrowth: 1, responseLoss: 1 }
+  }, 300, 140)
+  assert.equal(weak < findings.thresholds.cueMinConfidence, true)
+  assert.equal(strongerMargin > weak, true)
+  assert.equal(longerEvidence > strongerMargin, true)
+  assert.equal(findings.evidenceConfidence({
+    components: { steeringGrowth: 0.95, slipGrowth: 0.7, responseLoss: 0.95 }
+  }, 300, 140), 0.7)
+})
+
+test('a borderline front-scrub episode stays below the cue gate', () => {
+  const borderline = frontScrubScenario(true).map((input, index) => input.timestampMs < 80
+    ? input
+    : {
+        ...input,
+        acceleration: { x: 1 + (index - 4) * 0.01, y: 0, z: 1 },
+        angularVelocity: { y: 0.3 + (index - 4) * 0.01 }
+      })
+  const result = runFrames(borderline)
+  assert.equal(result.events.some(event => event.kind === FINDINGS.FRONT_SCRUB), false)
+})
+
+test('strong findings expose dynamic confidence and component evidence', () => {
+  for (const [frames, kind] of [
+    [frontScrubScenario(true), FINDINGS.FRONT_SCRUB],
+    [wheelspinScenario(true), FINDINGS.EXIT_WHEELSPIN],
+    [overloadScenario(true), FINDINGS.BRAKE_STEERING_OVERLOAD],
+    [abruptReleaseScenario(true), FINDINGS.ABRUPT_BRAKE_RELEASE]
+  ]) {
+    const event = runFrames(frames).events.find(candidate => candidate.kind === kind)
+    assert.ok(event)
+    assert.equal(event.confidence > 0.84, true, `${kind}: ${event.confidence}`)
+    assert.equal(Object.keys(event.evidence.components).length >= 3, true)
+    assert.equal(event.evidenceMs > 140 || kind === FINDINGS.ABRUPT_BRAKE_RELEASE, true)
+  }
 })
 
 test('lateral response uses FH6 local X and keeps longitudinal response on Z', () => {
@@ -433,10 +480,26 @@ test('Direct and Suite normalized replays produce identical zero-reference findi
   const direct = runFrames(replay)
   const suite = runFrames(replay.map(input => ({ ...input })))
   assert.deepEqual(
-    direct.events.map(event => event.kind),
-    suite.events.map(event => event.kind)
+    direct.events.map(event => ({
+      kind: event.kind,
+      confidence: event.confidence,
+      evidenceMs: event.evidenceMs,
+      components: event.evidence.components
+    })),
+    suite.events.map(event => ({
+      kind: event.kind,
+      confidence: event.confidence,
+      evidenceMs: event.evidenceMs,
+      components: event.evidence.components
+    }))
   )
   assert.deepEqual(direct.findings.getSummary(), suite.findings.getSummary())
+})
+
+test('a sanitized real FH6 clean segment produces no negative cue stream', () => {
+  const replay = CLEAN_REAL_SEGMENT.map((input, index) => frame(index * 20, input))
+  const result = runFrames(replay)
+  assert.equal(result.events.filter(event => !event.positive).length, 0)
 })
 
 test('straight, inactive and telemetry gaps produce no findings', () => {

@@ -40,7 +40,11 @@ OVERLOAD`, and `ABRUPT BRAKE RELEASE`, plus positive `CLEAN EXIT` and
 `CONTROLLED RELEASE` evidence. It stays silent on straights, before
 calibration, paused/menu or rewound telemetry, gaps, rumble/puddle contact, and
 conservative lateral, longitudinal, and vertical transient gates for jumps or
-impacts. It does not
+impacts. A cue's confidence is calculated from the minimum of independent
+evidence components: local speed-bin percentile/rank for steering, slip and
+load, measured response loss, and sustained evidence duration. A borderline
+signal therefore remains below the cue gate; no finding receives a fixed
+confidence constant. It does not
 show exact metres, seconds, late-throttle claims, wrong-apex/line claims, or
 optimal gear advice.
 
@@ -61,6 +65,13 @@ comparison and exact time-loss calculations remain provider-owned features and
 are not used by this zero-reference Coach. `EXCESSIVE COAST` is intentionally
 outside this first version because it cannot yet be separated reliably from
 correct front-axle recovery.
+
+The checked-in `overlay/asphalt-coach-fixtures.js` contains a rounded,
+coordinate-free segment derived from a saved FH6 replay. Automated tests use
+it as a clean negative replay alongside strong and borderline synthetic
+episodes. A passing test run proves normalized Direct/Suite parity and the
+confidence gate; it does not prove live Forza behavior or classify road
+surface from telemetry.
 
 The Coach card, lap-delta strip, and telemetry HUD are independently movable
 overlay targets. The HUD icon's tray menu opens `Configuration`; the window is

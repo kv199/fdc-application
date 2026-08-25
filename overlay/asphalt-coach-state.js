@@ -137,11 +137,27 @@
       maxYawRate: bin.maxYawRate,
       maxEffectiveAcceleration: bin.maxEffectiveAcceleration,
       minFrontSlip: bin.minFrontSlip,
+      steerMagnitudeP50: percentile(bin.steerMagnitude, 0.5),
+      steerMagnitudeP90: percentile(bin.steerMagnitude, 0.9),
+      steerRateP50: percentile(bin.steerRate, 0.5),
+      steerRateP90: percentile(bin.steerRate, 0.9),
+      brakeP50: percentile(bin.brake, 0.5),
+      brakeP90: percentile(bin.brake, 0.9),
       lateralResponseP90: percentile(bin.lateralResponse, 0.9),
+      lateralResponseP50: percentile(bin.lateralResponse, 0.5),
       yawRateP90: percentile(bin.yawRate, 0.9),
+      yawRateP50: percentile(bin.yawRate, 0.5),
       effectiveAccelerationP90: percentile(bin.effectiveAcceleration, 0.9),
+      effectiveAccelerationP50: percentile(bin.effectiveAcceleration, 0.5),
       frontSlipP90: percentile(bin.frontSlip, 0.9),
+      frontSlipP50: percentile(bin.frontSlip, 0.5),
+      frontSlipGrowthRateP50: percentile(bin.frontSlipGrowthRate, 0.5),
+      frontSlipGrowthRateP90: percentile(bin.frontSlipGrowthRate, 0.9),
       drivenSlipP90: percentile(bin.drivenSlip, 0.9),
+      drivenSlipP50: percentile(bin.drivenSlip, 0.5),
+      drivenSlipGrowthRateP50: percentile(bin.drivenSlipGrowthRate, 0.5),
+      drivenSlipGrowthRateP90: percentile(bin.drivenSlipGrowthRate, 0.9),
+      frontCombinedSlipP50: percentile(bin.frontCombinedSlip, 0.5),
       frontCombinedSlipP90: percentile(bin.frontCombinedSlip, 0.9),
       verticalResponseP90: percentile(bin.verticalResponse, 0.9),
       verticalChangeRateP90: percentile(bin.verticalChangeRate, 0.9),
@@ -181,11 +197,16 @@
         maxYawRate: 0,
         maxEffectiveAcceleration: 0,
         minFrontSlip: null,
+        steerMagnitude: createPercentile(thresholds.envelopeWindowSize),
+        steerRate: createPercentile(thresholds.envelopeWindowSize),
+        brake: createPercentile(thresholds.envelopeWindowSize),
         lateralResponse: createPercentile(thresholds.envelopeWindowSize),
         yawRate: createPercentile(thresholds.envelopeWindowSize),
         effectiveAcceleration: createPercentile(thresholds.envelopeWindowSize),
         frontSlip: createPercentile(thresholds.envelopeWindowSize),
+        frontSlipGrowthRate: createPercentile(thresholds.envelopeWindowSize),
         drivenSlip: createPercentile(thresholds.envelopeWindowSize),
+        drivenSlipGrowthRate: createPercentile(thresholds.envelopeWindowSize),
         frontCombinedSlip: createPercentile(thresholds.envelopeWindowSize),
         verticalResponse: createPercentile(thresholds.envelopeWindowSize),
         verticalChangeRate: createPercentile(thresholds.envelopeWindowSize),
@@ -381,6 +402,14 @@
       sample.steerRate = previousSample === null || deltaSeconds === null
         ? null
         : (sample.steerMagnitude - previousSample.steerMagnitude) / deltaSeconds
+      sample.frontSlipGrowthRate = previousSample === null || deltaSeconds === null
+        || sample.frontSlip === null || previousSample.frontSlip === null
+        ? null
+        : (sample.frontSlip - previousSample.frontSlip) / deltaSeconds
+      sample.drivenSlipGrowthRate = previousSample === null || deltaSeconds === null
+        || sample.drivenSlip === null || previousSample.drivenSlip === null
+        ? null
+        : (sample.drivenSlip - previousSample.drivenSlip) / deltaSeconds
       sample.throttleRate = previousSample === null || deltaSeconds === null
         ? null
         : (sample.throttle - previousSample.throttle) / deltaSeconds
@@ -492,6 +521,9 @@
       if (bin.samples === 0) this.envelope.binsWithSamples += 1
       bin.samples += 1
       this.envelope.samples += 1
+      addPercentile(bin.steerMagnitude, sample.steerMagnitude)
+      addPercentile(bin.steerRate, sample.steerRate)
+      addPercentile(bin.brake, sample.brake)
       if (sample.lateralResponse !== null) bin.maxLateralResponse = Math.max(bin.maxLateralResponse, sample.lateralResponse)
       if (sample.yawRate !== null) bin.maxYawRate = Math.max(bin.maxYawRate, sample.yawRate)
       if (sample.effectiveAcceleration !== null && sample.effectiveAcceleration > 0) {
@@ -508,7 +540,9 @@
         addPercentile(bin.effectiveAcceleration, sample.effectiveAcceleration)
       }
       addPercentile(bin.frontSlip, sample.frontSlip)
+      addPercentile(bin.frontSlipGrowthRate, sample.frontSlipGrowthRate)
       addPercentile(bin.drivenSlip, sample.drivenSlip)
+      addPercentile(bin.drivenSlipGrowthRate, sample.drivenSlipGrowthRate)
       addPercentile(bin.frontCombinedSlip, sample.frontCombinedSlip)
       addPercentile(bin.verticalResponse, sample.verticalResponse)
       addPercentile(bin.verticalChangeRate, sample.verticalChangeRate)
