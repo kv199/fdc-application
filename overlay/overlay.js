@@ -15,6 +15,7 @@ const steeringCanvas = document.getElementById('steering-canvas')
 const historyCanvas = document.getElementById('history-canvas')
 const coachCard = document.getElementById('coach-card')
 const coachbar = document.getElementById('coachbar')
+const coachKicker = document.getElementById('coach-kicker')
 const coachStatus = document.getElementById('coach-status')
 const cornerIdentity = document.getElementById('corner-identity')
 const cornerDistance = document.getElementById('corner-distance')
@@ -46,12 +47,15 @@ const DEMO_MODE = new URLSearchParams(window.location.search).has('demo')
 const DEMO_SIGNAL_FROM_URL = new URLSearchParams(window.location.search).get('signal')
 const DEMO_CORNER_FROM_URL = new URLSearchParams(window.location.search).get('corner')
 const DEMO_REFERENCE_FROM_URL = new URLSearchParams(window.location.search).get('reference')
+const DEMO_COACH_FROM_URL = new URLSearchParams(window.location.search).get('coach')
 const DEMO_SIGNALS = ['normal', 'redline', 'shift']
 const DEMO_CORNERS = ['between', 'approach', 'entry', 'apex', 'exit']
 const DEMO_REFERENCES = ['brake-late', 'release', 'apex-slow', 'throttle-late', 'good', 'summary']
+const DEMO_COACHES = ['calibrating', 'front-scrub', 'exit-wheelspin', 'brake-overload', 'abrupt-release', 'clean-exit', 'controlled-release', 'brief', 'focus']
 const REDLINE_RPM_FRACTION = 0.85
 const SHIFT_RPM_FRACTION = 0.98
 const LAP_SUMMARY_DURATION_MS = 4000
+const ASPHALT_BRIEF_DURATION_MS = 25000
 const DEMO_LAP_SUMMARY_FROM_URL = new URLSearchParams(window.location.search).get('lapSummary') === '1'
 
 let latestTelemetry = null
@@ -82,6 +86,7 @@ let steeringWheelImageReady = false
 let demoSignal = DEMO_SIGNALS.includes(DEMO_SIGNAL_FROM_URL) ? DEMO_SIGNAL_FROM_URL : 'normal'
 let demoCorner = DEMO_CORNERS.includes(DEMO_CORNER_FROM_URL) ? DEMO_CORNER_FROM_URL : null
 let demoReference = DEMO_REFERENCES.includes(DEMO_REFERENCE_FROM_URL) ? DEMO_REFERENCE_FROM_URL : null
+let demoCoach = DEMO_COACHES.includes(DEMO_COACH_FROM_URL) ? DEMO_COACH_FROM_URL : null
 let activeRpmSignal = null
 let latestShiftLight = {
   status: 'fallback',
@@ -100,6 +105,12 @@ let shiftLightLatchTimer = null
 let latestCornerTemplate = null
 let latestCornerState = null
 let latestReference = window.ReferenceCoach.createEmptyReference()
+let asphaltCoachState = new window.AsphaltCoachState.AsphaltCoachState()
+let asphaltCoachFindings = new window.AsphaltCoachFindings.AsphaltCoachFindings()
+let asphaltCoachPresentation = new window.AsphaltCoachPresentation.AsphaltCoachPresentation()
+let latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
+let lastAsphaltBriefToken = null
+let asphaltBriefTimer = null
 let lapDeltaState = 'neutral'
 let lapSummaryReference = null
 let lapSummaryExpiresAt = 0
@@ -286,6 +297,12 @@ function queueLapComplete(payload) {
   latestReference = window.ReferenceCoach.createEmptyReference()
   lastAvailableReference = null
   clearLapSummary({ promotePending: false })
+  if (
+    latestTelemetry?.isRaceOn !== true
+    && (lapTimingState.phase === 'circuit_complete' || lapTimingState.phase === 'sprint_complete')
+  ) {
+    showAsphaltBriefIfConfirmed(`provider:${lapComplete.lapNumber}:${lapComplete.lapTimeMs}`)
+  }
   scheduleTelemetryRender()
 }
 
@@ -301,17 +318,36 @@ function getDisplayedReference() {
 
 function renderCoach(reference, isSummary = false) {
   const hasReference = reference?.available === true
-  const hasCoachGuidance = window.ReferenceCoach.hasLiveCoachGuidance(reference, isSummary)
+  const hasAsphaltGuidance = latestAsphaltCoach.mode === 'cue' || latestAsphaltCoach.mode === 'brief'
   const isCoachEditing = window.HudLayout?.isEditing?.('coach') === true
   const isCoachVisible = window.HudPreferences?.isOverlayVisible?.('coach') !== false
   const isDeltaVisible = window.HudPreferences?.isOverlayVisible?.('delta') !== false
-  coachCard.dataset.hasReference = hasReference ? 'true' : 'false'
-  coachCard.hidden = !isCoachEditing && (!isCoachVisible || !hasCoachGuidance)
-  deltaStrip.hidden = !isDeltaVisible
+  coachCard.dataset.hasReference = hasAsphaltGuidance || isCoachEditing ? 'true' : 'false'
+  coachCard.dataset.coachMode = latestAsphaltCoach.mode
+  coachCard.hidden = !isCoachEditing && (!isCoachVisible || !hasAsphaltGuidance)
+  deltaStrip.hidden = !isDeltaVisible || (!hasReference && !hasAsphaltGuidance)
 
-  if (!hasReference) {
-    coachbar.dataset.cueKind = ''
-    coachbar.dataset.phase = ''
+  if (hasAsphaltGuidance) {
+    const cue = latestAsphaltCoach.cue
+    const brief = latestAsphaltCoach.brief
+    coachKicker.textContent = latestAsphaltCoach.mode === 'brief'
+      ? brief.title
+      : `${cue.code} · ${cue.label}`
+    coachStatus.dataset.phase = 'asphalt'
+    coachStatus.dataset.cueKind = cue?.kind || brief?.mainKind || ''
+    coachStatus.textContent = latestAsphaltCoach.mode === 'brief'
+      ? `MAIN HABIT — ${brief.mainText}\nSTRONG — ${brief.strengthText}\nNEXT RUN — ${brief.nextText}`
+      : cue.instruction
+  } else {
+    coachKicker.textContent = isCoachEditing ? 'ASPHALT ONLY' : ''
+    coachStatus.dataset.phase = ''
+    coachStatus.dataset.cueKind = ''
+    coachStatus.textContent = isCoachEditing ? 'No live cue' : '\u2014'
+  }
+
+  if (!hasReference || hasAsphaltGuidance) {
+    coachbar.dataset.cueKind = hasAsphaltGuidance ? (latestAsphaltCoach.cue?.kind || latestAsphaltCoach.brief?.mainKind || '') : ''
+    coachbar.dataset.phase = hasAsphaltGuidance ? 'asphalt' : ''
     lapDeltaState = 'neutral'
     deltaStrip.dataset.deltaState = 'neutral'
     lapDeltaMarker.style.left = '50%'
@@ -320,7 +356,7 @@ function renderCoach(reference, isSummary = false) {
     deltaStrip.setAttribute('aria-label', 'Reference delta')
     lapDeltaValue.setAttribute('aria-label', 'Current reference delta')
     window.HudLayout.refreshPosition?.()
-    return
+    if (hasAsphaltGuidance || !hasReference) return
   }
 
   const phase = reference.phase || 'between'
@@ -373,6 +409,122 @@ function renderCorner(template, state, reference, isSummary = false) {
     element.textContent = text
     element.hidden = !mergedReadout.visible || text === ''
     element.dataset.phase = mergedReadout.phaseClass
+  }
+}
+
+function resetAsphaltCoach(reason = 'reset') {
+  if (asphaltBriefTimer !== null) {
+    window.clearTimeout(asphaltBriefTimer)
+    asphaltBriefTimer = null
+  }
+  asphaltCoachState.reset(reason)
+  asphaltCoachFindings.reset()
+  asphaltCoachPresentation.reset()
+  latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
+  lastAsphaltBriefToken = null
+}
+
+function resetAsphaltCoachTransient(reason = 'telemetry_gap') {
+  const snapshot = asphaltCoachState.resetTransient(reason)
+  asphaltCoachFindings.resetTransient()
+  if (asphaltCoachPresentation.activeBrief !== null) {
+    latestAsphaltCoach = asphaltCoachPresentation.update({
+      valid: false,
+      events: [],
+      calibration: { ready: true }
+    }, performance.now())
+  } else {
+    latestAsphaltCoach = asphaltCoachPresentation.resetTransient('calibrating')
+  }
+  return snapshot
+}
+
+function beginAsphaltAttempt() {
+  if (asphaltBriefTimer !== null) {
+    window.clearTimeout(asphaltBriefTimer)
+    asphaltBriefTimer = null
+  }
+  asphaltCoachState.beginAttempt()
+  asphaltCoachFindings.beginAttempt(asphaltCoachState.attemptId + 1)
+  asphaltCoachPresentation.beginAttempt()
+  latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
+  lastAsphaltBriefToken = null
+}
+
+function updateAsphaltCoach(telemetry) {
+  const snapshot = asphaltCoachState.update(telemetry)
+  if (
+    snapshot.resetReason === 'car_identity_change'
+    || snapshot.resetReason === 'race_clock_rewind'
+    || snapshot.resetReason === 'lap_number_rewind'
+    || snapshot.resetReason === 'lap_distance_rewind'
+    || snapshot.resetReason === 'timestamp_rewind'
+  ) {
+    asphaltCoachFindings.reset()
+    asphaltCoachPresentation.reset()
+    latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
+    lastAsphaltBriefToken = null
+    return snapshot
+  }
+
+  if (!snapshot.valid) {
+    asphaltCoachFindings.resetTransient()
+    if (asphaltCoachPresentation.activeBrief !== null) {
+      latestAsphaltCoach = asphaltCoachPresentation.update({
+        valid: false,
+        events: [],
+        calibration: { ready: true }
+      }, performance.now())
+    } else {
+      latestAsphaltCoach = asphaltCoachPresentation.resetTransient('calibrating')
+    }
+    return snapshot
+  }
+
+  if (snapshot.newAttempt) asphaltCoachPresentation.beginAttempt()
+  const result = asphaltCoachFindings.update(snapshot)
+  latestAsphaltCoach = asphaltCoachPresentation.update({
+    ...result,
+    valid: true
+  }, performance.now())
+  return snapshot
+}
+
+function showAsphaltBriefIfConfirmed(token) {
+  if (!token || token === lastAsphaltBriefToken) return false
+  lastAsphaltBriefToken = token
+  latestAsphaltCoach = asphaltCoachPresentation.showBrief(
+    asphaltCoachFindings.getSummary(),
+    performance.now()
+  )
+  if (asphaltBriefTimer !== null) window.clearTimeout(asphaltBriefTimer)
+  asphaltBriefTimer = window.setTimeout(() => {
+    asphaltBriefTimer = null
+    latestAsphaltCoach = asphaltCoachPresentation.resetTransient('ready')
+    scheduleTelemetryRender()
+  }, ASPHALT_BRIEF_DURATION_MS)
+  scheduleTelemetryRender()
+  return true
+}
+
+function handleAsphaltLapLifecycle(previousTimingState, previousLapNumber, telemetry) {
+  const currentPhase = lapTimingState.phase
+  const wasComplete = previousTimingState.phase === 'circuit_complete'
+    || previousTimingState.phase === 'sprint_complete'
+  const isComplete = currentPhase === 'circuit_complete' || currentPhase === 'sprint_complete'
+  const currentLapNumber = finiteStateNumber(telemetry?.lap?.number)
+  const lapAdvanced = previousLapNumber !== null
+    && currentLapNumber !== null
+    && currentLapNumber > previousLapNumber
+  const nextAttemptStarted = wasComplete && currentPhase === 'live' && telemetry?.isRaceOn === true
+
+  if (lapAdvanced || nextAttemptStarted) {
+    beginAsphaltAttempt()
+    return
+  }
+
+  if (isComplete && !wasComplete && telemetry?.isRaceOn !== true) {
+    showAsphaltBriefIfConfirmed(`${currentPhase}:${lapTimingState.lapNumber}:${lapTimingState.finalTimeMs}`)
   }
 }
 
@@ -590,10 +742,16 @@ function queueTelemetry(telemetry) {
 
   const shiftLightState = window.HudShiftLightRuntime?.update?.(telemetry)
   if (shiftLightState) queueShiftLight(shiftLightState)
+  const previousTimingState = lapTimingState
+  const previousLapNumber = finiteStateNumber(latestTelemetry?.lap?.number)
   lapTimingState = window.HudLapTiming.update(lapTimingState, telemetry)
   const raceRestart = window.ReferenceCoach.isRaceRestart(latestTelemetry, telemetry)
   const displayedTimeMs = window.HudLapTiming.displayTimeMs(lapTimingState)
   if (displayedTimeMs !== null) latestLiveLapTimeSeconds = displayedTimeMs / 1000
+
+  if (raceRestart) resetAsphaltCoach('race_restart')
+  else updateAsphaltCoach(telemetry)
+  handleAsphaltLapLifecycle(previousTimingState, previousLapNumber, telemetry)
 
   const telemetryLapNumber = finiteStateNumber(telemetry?.lap?.number)
   if (
@@ -641,6 +799,7 @@ function resetCornerState({ preserveLapSummary = false, promotePending = true } 
 function resetSourcePresentation() {
   latestTelemetry = null
   latestLiveLapTimeSeconds = null
+  resetAsphaltCoach('source_switch')
   lapTimingState = window.HudLapTiming.resetForSourceSwitch()
   latestSteer = 0
   historySamples = []
@@ -760,17 +919,20 @@ async function listenDirectEvents(generation) {
         publishRouteStatus({ phase: 'live', message: '' })
       } else if (state === 'is-waiting') {
         forzaConnected = false
+        resetAsphaltCoachTransient('waiting')
         setConnection('is-waiting')
         publishRouteStatus({ phase: 'waiting', message: '' })
         scheduleTelemetryRender()
       } else if (state === 'is-stale') {
         forzaConnected = false
+        resetAsphaltCoachTransient('telemetry_gap')
         window.HudShiftLightRuntime?.resetTransient?.()
         setConnection('is-waiting')
         publishRouteStatus({ phase: 'stale', message: '' })
         scheduleTelemetryRender()
       } else {
         forzaConnected = false
+        resetAsphaltCoachTransient('offline')
         window.HudShiftLightRuntime?.resetTransient?.()
         setConnection('is-offline')
         publishRouteStatus({
@@ -902,6 +1064,7 @@ function connectSuite() {
           return
         }
         resetCornerState({ promotePending: false })
+        resetAsphaltCoachTransient('suite_waiting')
         window.HudShiftLightRuntime?.resetTransient?.()
         setConnection('is-waiting')
         publishRouteStatus({
@@ -921,6 +1084,7 @@ function connectSuite() {
     socket = null
     forzaConnected = false
     window.HudShiftLightRuntime?.resetTransient?.()
+    resetAsphaltCoachTransient('suite_offline')
     resetCornerState({ promotePending: false })
     setConnection('is-offline')
     publishRouteStatus({ phase: 'offline', suiteState: 'unavailable', message: '' })
@@ -1019,6 +1183,68 @@ function setDemoReference(reference, schedule = true) {
   if (schedule) scheduleTelemetryRender()
 }
 
+function setDemoCoach(coach, schedule = true) {
+  if (!DEMO_MODE) return
+
+  demoCoach = DEMO_COACHES.includes(coach) ? coach : null
+  asphaltCoachPresentation.reset()
+  const now = performance.now()
+  if (demoCoach === null || demoCoach === 'calibrating') {
+    latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
+  } else if (demoCoach === 'brief') {
+    latestAsphaltCoach = asphaltCoachPresentation.showBrief({
+      counts: {
+        front_scrub: 3,
+        exit_wheelspin: 1,
+        brake_steering_overload: 0,
+        abrupt_brake_release: 0,
+        clean_exit: 2,
+        controlled_release: 1
+      }
+    }, now)
+  } else if (demoCoach === 'focus') {
+    asphaltCoachPresentation.showBrief({
+      counts: {
+        front_scrub: 2,
+        exit_wheelspin: 1,
+        brake_steering_overload: 0,
+        abrupt_brake_release: 0,
+        clean_exit: 1,
+        controlled_release: 0
+      }
+    }, now)
+    asphaltCoachPresentation.beginAttempt()
+    latestAsphaltCoach = asphaltCoachPresentation.update({
+      valid: true,
+      calibration: { ready: true },
+      events: [
+        { kind: 'exit_wheelspin', confidence: 0.9, eventToken: 'demo-wheelspin' },
+        { kind: 'front_scrub', confidence: 0.9, eventToken: 'demo-focus-front' }
+      ]
+    }, now + 1)
+  } else {
+    const kindByDemoName = {
+      'front-scrub': 'front_scrub',
+      'exit-wheelspin': 'exit_wheelspin',
+      'brake-overload': 'brake_steering_overload',
+      'abrupt-release': 'abrupt_brake_release',
+      'clean-exit': 'clean_exit',
+      'controlled-release': 'controlled_release'
+    }
+    latestAsphaltCoach = asphaltCoachPresentation.update({
+      valid: true,
+      calibration: { ready: true },
+      events: [{
+        kind: kindByDemoName[demoCoach],
+        confidence: 0.92,
+        eventToken: `demo-${demoCoach}`,
+        evidenceCount: 2
+      }]
+    }, now)
+  }
+  if (schedule) scheduleTelemetryRender()
+}
+
 function startDemo() {
   const start = performance.now() - HISTORY_MS
   for (let index = 0; index <= 240; index += 1) {
@@ -1057,6 +1283,7 @@ function startDemo() {
   latestLiveLapTimeSeconds = latestTelemetry.lap.current
   setDemoCorner(demoCorner, false)
   setDemoReference(demoReference, false)
+  setDemoCoach(demoCoach, false)
   if (DEMO_LAP_SUMMARY_FROM_URL) {
     beginLapSummary()
     latestReference = window.ReferenceCoach.createEmptyReference()
@@ -1096,6 +1323,7 @@ window.HudOverlay = {
   setDisplayPreferences,
   setTelemetrySource,
   retryTelemetrySource: () => setTelemetrySource(telemetrySource, { force: true }),
+  setDemoCoach,
   resetShiftLight: async () => {
     try {
       return await window.HudShiftLightRuntime?.reset?.() === true

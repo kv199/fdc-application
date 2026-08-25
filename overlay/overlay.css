@@ -317,6 +317,15 @@ body {
   margin-top: 6px;
 }
 
+.coach__kicker {
+  color: #facc15;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .coachbar output {
   overflow: hidden;
   border-radius: 0;
@@ -560,6 +569,28 @@ body.is-editing .coachbar {
 
 .coach__status {
   font-size: 28px;
+}
+
+.coach-card[data-coach-mode='cue'] .coach__status {
+  color: #f8fafc;
+  font-size: 24px;
+  line-height: 1.05;
+}
+
+.coach-card[data-coach-mode='brief'] .coachbar {
+  min-height: 156px;
+}
+
+.coach-card[data-coach-mode='brief'] .coach__kicker {
+  color: #f8fafc;
+  font-size: 15px;
+}
+
+.coach-card[data-coach-mode='brief'] .coach__status {
+  color: #f8fafc;
+  font-size: 15px;
+  line-height: 1.45;
+  white-space: pre-line;
 }
 
 .delta-strip {
@@ -833,7 +864,7 @@ body.is-editing .coachbar {
     font-size: 15px;
   }
 }
-body[data-telemetry-source='direct'] #coach-card,
+body[data-telemetry-source='direct'] #coach-card[data-legacy-reference='true'],
 body[data-telemetry-source='direct'] #delta-strip .delta-strip__labels,
 body[data-telemetry-source='direct'] #delta-strip .delta-strip__track {
   display: none;

@@ -11,13 +11,54 @@ This directory is the HUD application inside Forza Horizon 6 Suite. It remains
 self-contained so it can be exported and published as a standalone repository,
 while the Suite root owns local runtime startup and end-to-end workflow.
 
-## Driver Coach MVP
+## Asphalt Zero-reference Driving Coach
 
-The Coach card is a compact at-a-glance instruction surface. It shows one large
-actionable instruction, the corner identity, and at most one numeric context.
-Technical matcher phases and absolute `REF` / `YOU` lap positions are not drawn
-in game. When a correction already includes a distance or speed, the secondary
-corner distance is hidden so the card never competes with itself.
+The Coach is **Asphalt only**. It is a current-run, zero-reference technique
+assistant for Road, Street, Rivals, Circuit and Sprint asphalt events. The HUD
+does not classify Dirt or Cross Country from telemetry; the driver must use it
+only for asphalt. It does not attempt to infer an ideal line, a track identity,
+or a single driving score.
+
+Direct Forza UDP and co-driver Suite normalized telemetry enter the same
+`queueTelemetry` path, so the state machine and findings are source-neutral. It
+observes the bounded lifecycle `STRAIGHT → BRAKING → TURN-IN → ROTATION → EXIT`
+without a map. A session-scoped observed car envelope is calibrated in fixed
+speed bins and is discarded on restart, rewind, source switch, or incompatible
+car identity. It is not written to `hud.sqlite`.
+
+After enough valid evidence, one high-confidence cue may appear briefly. The
+first version covers `FRONT SCRUB`, `EXIT WHEELSPIN`, `BRAKE + STEERING
+OVERLOAD`, and `ABRUPT BRAKE RELEASE`, plus positive `CLEAN EXIT` and
+`CONTROLLED RELEASE` evidence. It stays silent on straights, paused/menu or
+rewound telemetry, gaps, and immediately after switching sources. It does not
+show exact metres, seconds, late-throttle claims, wrong-apex/line claims, or
+optimal gear advice.
+
+At a confirmed attempt finish, the same card can show a compact
+`DRIVER BRIEF · ASPHALT` for about 25 seconds:
+
+```text
+DRIVER BRIEF · ASPHALT
+MAIN HABIT — recurring finding + evidence count
+STRONG — one demonstrated positive pattern
+NEXT RUN — one focused technique instruction
+```
+
+The next live attempt hides the brief immediately and keeps its selected focus
+for cue arbitration. Ordinary multi-lap boundaries do not show a full brief;
+`HudLapTiming` remains the only finish authority. Historical/reference track
+comparison and exact time-loss calculations remain provider-owned features and
+are not used by this zero-reference Coach. `EXCESSIVE COAST` is intentionally
+outside this first version because it cannot yet be separated reliably from
+correct front-axle recovery.
+
+The Coach card, lap-delta strip, and telemetry HUD are independently movable
+overlay targets. The HUD icon's tray menu opens `Configuration`; the window is
+shown automatically on the first launch and hides to the tray when closed.
+Use `EDIT` in Configuration, drag the selected target in the overlay, then press
+`SAVE` in Configuration or on the target itself. Closing Configuration during an edit
+cancels the uncommitted position. Positions are stored locally and clamped to
+the primary monitor. Configuration is the only layout entry point in the native HUD.
 
 The Driver Coach, lap-delta strip, and telemetry HUD are independently movable
 overlay targets. The HUD icon's tray menu opens `Configuration`; the window is
@@ -36,9 +77,12 @@ tab controls the displayed speed unit (`km/h` by default or `mph`), the selected
 telemetry route, endpoint, lifecycle state, and Suite
 coexistence diagnostics; no route status is drawn over the in-game HUD.
 Display and visibility choices are stored locally. In a browser preview, use
-`?demo=1&corner=entry&edit=1` to edit the Coach.
+`?demo=1&coach=front-scrub` to preview the zero-reference cue, or
+`?demo=1&coach=brief` to preview the finish brief. The available Coach demos
+are `calibrating`, `front-scrub`, `exit-wheelspin`, `brake-overload`,
+`abrupt-release`, `clean-exit`, `controlled-release`, `brief`, and `focus`.
 
-The Reference Coach can be previewed without Forza in demo mode:
+The historical Reference Coach can still be previewed without Forza in demo mode:
 
 ```text
 ?demo=1&reference=brake-late
@@ -48,13 +92,11 @@ The Reference Coach can be previewed without Forza in demo mode:
 ?demo=1&reference=good
 ```
 
-The Driver Coach card is shown when a matching reference is available or when a
-completed-lap result is being held. A provider `lap_complete` message anchors
-the final delta to the game's lap boundary; the HUD keeps the `LAP COMPLETE`
-card and final lap delta until the next live lap or recording. Without a
-reference, the HUD keeps ordinary telemetry and corner readout without
-inventing coaching advice. The older short summary fallback remains for
-transitions where no finish result was received.
+Reference messages remain a separate Suite historical layer for the lap-delta
+strip and corner context. The zero-reference card never consumes a reference
+cue or reconstructs provider history. A provider `lap_complete` message still
+anchors the existing final delta to the game's lap boundary; it does not by
+itself create an Asphalt Coach brief while the car is live.
 
 The lap clock is source-neutral and game-clock based. Direct and Suite telemetry
 both use `lap.current` for the live clock, preserve the last useful value during
@@ -63,8 +105,8 @@ Suite `lap_complete.timeSource=forza_lap_last` represents a circuit boundary;
 `forza_lap_current` represents a validated point-to-point completion. The HUD
 does not infer a sprint finish from `isRaceOn=false` alone: an advancing
 `LastLap` is authoritative, while a CurrentLap-only finish needs the same
-non-live value twice and is cancelled if live driving resumes. Direct keeps the
-game lap clock visible but hides the Suite-only reference track and Coach.
+non-live value twice and is cancelled if live driving resumes. The Asphalt
+Coach uses that existing `HudLapTiming` result in both Direct and Suite modes.
 
 The RPM preview can be combined with a reference state, for example
 `?demo=1&signal=shift&reference=brake-late`. In demo mode, keys `1`–`3` select
@@ -82,8 +124,8 @@ Corner context can be previewed with the same demo page:
 
 The corner readout consumes `corner_template` and `corner_state` messages from
 the local WebSocket. `co-driver` remains responsible for matching telemetry to
-track corners; the HUD presents the number, direction, one relevant distance,
-and any explicit reference cue supplied by the backend.
+track corners; that historical context is separate from the map-free Asphalt
+Coach technique state.
 
 ## Telemetry sources and Shift Light
 
@@ -92,11 +134,12 @@ in `Configuration > SETTINGS`:
 
 - `Direct Forza` binds `127.0.0.1:5301`, decodes FH6 Data Out packets locally,
   and works without Docker or co-driver. It renders the compact telemetry HUD
-  and HUD-owned Shift Light; Coach, reference, corner, and lap-delta surfaces
-  stay hidden because they require the Suite analysis path.
+  and HUD-owned Shift Light. The same Asphalt-only zero-reference Coach runs
+  locally after the normalized Direct frame.
 - `co-driver Suite` connects to `ws://127.0.0.1:3001/_ws` and preserves the
-  existing Coach, reference, corner, and lap-delta behavior. The HUD does not
-  bind UDP in this mode.
+  normalized telemetry path. The same Asphalt Coach runs after the WebSocket
+  frame; provider-owned historical reference/corner context remains separate.
+  The HUD does not bind UDP in this mode.
 
 The HUD source modes are mutually exclusive inside the executable: Direct never
 reads the Suite WebSocket, and Suite never starts the HUD UDP receiver. Docker
@@ -144,7 +187,7 @@ The checked-in `overlay/shift-light-engine.js` is generated from
 the standalone HUD. Its learner behavior is covered by
 `overlay/shift-light-engine.test.js`.
 
-## Reference Coach contract
+## Historical Reference contract (Suite context)
 
 The HUD accepts an optional WebSocket message with this envelope:
 
@@ -189,17 +232,15 @@ separately:
 This `deltaMs` is a `REFERENCE DELTA` against the stored reference lap, not the
 game's displayed Rivals time.
 
-Supported cue kinds are `brake_late`, `brake_early`, `release_late`,
+Supported provider cue kinds are `brake_late`, `brake_early`, `release_late`,
 `apex_too_fast`, `apex_too_slow`, `throttle_late`, `throttle_early`, and
-`good`. If `available` is not `true` and no short post-lap summary is active,
-the HUD hides the Coach and lap-delta strip and keeps the ordinary HUD. The HUD
-does not derive advice from raw telemetry.
+`good`. These remain historical/reference context for the Suite delta and
+corner surfaces. They are not reinterpreted as Asphalt zero-reference cues,
+and the HUD does not derive reference advice from raw telemetry.
 
-The Coach shows one phase-specific action at a time: brake on approach, release
-brake on entry, apex guidance at the apex, and throttle pickup on exit. Reference
-and observed pedal points remain provider data but are not displayed as raw
-lap-relative coordinates in the in-game card. The browser demo covers the same
-states:
+Reference and observed pedal points remain provider data and are not displayed
+as raw lap-relative coordinates in the Asphalt Coach card. The historical demo
+states remain available for the separate Suite context:
 
 ```text
 ?demo=1&reference=brake-late
@@ -220,7 +261,8 @@ the rolling value after the finish. The Coach does not use the local corner
 instruction. `targets` and `observed` remain in the provider contract and are
 not recomputed from telemetry.
 
-To preview the short post-lap state in a browser, add `lapSummary=1`, for example:
+To preview the historical short post-lap state in a browser, add `lapSummary=1`,
+for example:
 
 ```text
 ?demo=1&reference=good&lapSummary=1
@@ -244,9 +286,10 @@ features. In Direct mode the HUD periodically probes the Suite WebSocket only
 for its immediate `forza_status`, closes the probe immediately after that
 snapshot, and ignores every other message. The `SETTINGS` tab reports whether
 co-driver is also online or receiving Forza packets; probe data never enters the HUD telemetry
-pipeline. The overlay owns its Shift Light
-learner and local profile database; it does not read the provider database or
-duplicate provider corner/Coach analysis.
+pipeline. The overlay owns its Shift Light learner and local profile database;
+it does not read the provider database or duplicate provider historical
+reference analysis. The Asphalt Coach itself is HUD-owned, bounded, current-run
+analysis in both source modes.
 
 From the Suite root:
 
