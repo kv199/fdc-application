@@ -585,20 +585,27 @@
         }
       }
 
+      const releaseRate = sample.brakeRate === null ? null : Math.abs(sample.brakeRate)
       if (
-        previous !== null
-        && phaseIsTurning(snapshot.phase)
-        && previous.brake >= this.thresholds.brakeReleaseMin
-        && sample.brakeRate !== null
-        && sample.brakeRate <= -this.thresholds.brakeReleaseDropPerSecond
-      ) {
-        this.pendingRelease = {
-          timestampMs: sample.timestampMs,
-          lateralResponse: previous.lateralResponse,
-          yawRate: previous.yawRate,
-          rearSlip: previous.rearSlip,
-          issued: false
-        }
+        previous === null
+        || !phaseIsTurning(snapshot.phase)
+        || previous.brake < this.thresholds.brakeReleaseMin
+        || releaseRate === null
+        || releaseRate < this.thresholds.brakeReleaseDropPerSecond
+      ) return
+
+      if (this.pendingRelease !== null) {
+        this.pendingRelease.releaseRate = Math.max(this.pendingRelease.releaseRate, releaseRate)
+        return
+      }
+
+      this.pendingRelease = {
+        timestampMs: sample.timestampMs,
+        releaseRate,
+        lateralResponse: previous.lateralResponse,
+        yawRate: previous.yawRate,
+        rearSlip: previous.rearSlip,
+        issued: false
       }
     }
 
@@ -628,12 +635,12 @@
           responseLoss,
           yawLoss,
           rearSlipRise: rearSlipRise ? rearSlipRiseValue : 0,
-          releaseRate: sample.brakeRate,
+          releaseRate: this.pendingRelease.releaseRate,
           evidenceMs: elapsedMs,
           components: {
             responseLoss: marginAbove(responseLoss, learned.brakeReleaseResponseDrop, learned.brakeReleaseResponseDrop * 0.5),
             stabilityLoss: Math.max(yawEvidence, rearEvidence),
-            releaseAbruptness: marginAbove(Math.abs(sample.brakeRate), this.thresholds.brakeReleaseDropPerSecond, this.thresholds.brakeReleaseDropPerSecond * 0.5)
+            releaseAbruptness: marginAbove(this.pendingRelease.releaseRate, this.thresholds.brakeReleaseDropPerSecond, this.thresholds.brakeReleaseDropPerSecond * 0.5)
           }
         }
       }

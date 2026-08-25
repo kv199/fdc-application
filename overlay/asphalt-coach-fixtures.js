@@ -1,152 +1,240 @@
 /*
- * Sanitized from the real FH6 lap-465 replay used during Stage 1 review.
+ * Sanitized from a real FH6 lap-460 replay used during Stage 1 review.
  * Coordinates, timing identity, and non-coaching channels are removed; the
  * values are rounded and replayed at a regular 20 ms cadence in the tests.
- * This is a short clean high-speed segment, not a reference or an ideal line.
+ * This is a clean turning segment, not a reference or an ideal line.
  */
 const CLEAN_REAL_SEGMENT = Object.freeze([
   {
-    speedKmh: 192.257,
-    throttle: 1,
+    speedKmh: 131.178,
+    throttle: 0.027,
     brake: 0,
-    steer: -0.213,
-    slipRatio: { fl: -0.003, fr: -0.001, rl: 0.165, rr: 0.125 },
-    slipAngle: { fl: -0.136, fr: -0.131, rl: -0.165, rr: -0.152 },
-    combinedSlip: { fl: 0.136, fr: 0.131, rl: 0.234, rr: 0.196 },
-    acceleration: { x: -6.236, y: -0.115, z: 1.746 },
-    angularVelocity: { y: -0.169 }
+    steer: -0.205,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.07, y: -13.031, z: -0.849 },
+    angularVelocity: { x: 0.196, y: -0.115, z: 0.028 }
   },
   {
-    speedKmh: 192.29,
-    throttle: 1,
+    speedKmh: 131.172,
+    throttle: 0.008,
     brake: 0,
-    steer: -0.591,
-    slipRatio: { fl: -0.003, fr: -0.001, rl: 0.169, rr: 0.128 },
-    slipAngle: { fl: -0.149, fr: -0.143, rl: -0.167, rr: -0.153 },
-    combinedSlip: { fl: 0.149, fr: 0.143, rl: 0.237, rr: 0.199 },
-    acceleration: { x: -6.398, y: -0.202, z: 1.784 },
-    angularVelocity: { y: -0.166 }
+    steer: -0.583,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.061, y: -13.055, z: -0.628 },
+    angularVelocity: { x: 0.195, y: -0.115, z: 0.028 }
   },
   {
-    speedKmh: 192.323,
-    throttle: 1,
+    speedKmh: 131.167,
+    throttle: 0.004,
     brake: 0,
-    steer: -0.85,
-    slipRatio: { fl: -0.002, fr: 0, rl: 0.172, rr: 0.13 },
-    slipAngle: { fl: -0.165, fr: -0.158, rl: -0.168, rr: -0.154 },
-    combinedSlip: { fl: 0.165, fr: 0.158, rl: 0.241, rr: 0.202 },
-    acceleration: { x: -6.144, y: -0.275, z: 1.62 },
-    angularVelocity: { y: -0.164 }
+    steer: -0.882,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: 0.142, y: -13.083, z: -0.434 },
+    angularVelocity: { x: 0.194, y: -0.115, z: 0.028 }
   },
   {
-    speedKmh: 192.356,
-    throttle: 1,
+    speedKmh: 131.162,
+    throttle: 0,
     brake: 0,
     steer: -1,
-    slipRatio: { fl: -0.002, fr: 0, rl: 0.175, rr: 0.132 },
-    slipAngle: { fl: -0.182, fr: -0.173, rl: -0.17, rr: -0.155 },
-    combinedSlip: { fl: 0.182, fr: 0.173, rl: 0.244, rr: 0.204 },
-    acceleration: { x: -6.094, y: -0.338, z: 1.455 },
-    angularVelocity: { y: -0.163 }
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.121, y: -13.096, z: -0.64 },
+    angularVelocity: { x: 0.194, y: -0.115, z: 0.028 }
   },
   {
-    speedKmh: 192.39,
-    throttle: 1,
+    speedKmh: 131.159,
+    throttle: 0,
     brake: 0,
     steer: -1,
-    slipRatio: { fl: -0.001, fr: 0, rl: 0.177, rr: 0.134 },
-    slipAngle: { fl: -0.198, fr: -0.188, rl: -0.171, rr: -0.156 },
-    combinedSlip: { fl: 0.198, fr: 0.188, rl: 0.246, rr: 0.206 },
-    acceleration: { x: -6.39, y: -0.374, z: 1.647 },
-    angularVelocity: { y: -0.163 }
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: 0.015, y: -13.105, z: -0.604 },
+    angularVelocity: { x: 0.193, y: -0.115, z: 0.028 }
   },
   {
-    speedKmh: 192.426,
-    throttle: 1,
+    speedKmh: 131.157,
+    throttle: 0,
     brake: 0,
     steer: -1,
-    slipRatio: { fl: -0.001, fr: -0.001, rl: 0.178, rr: 0.135 },
-    slipAngle: { fl: -0.215, fr: -0.204, rl: -0.172, rr: -0.158 },
-    combinedSlip: { fl: 0.215, fr: 0.204, rl: 0.247, rr: 0.208 },
-    acceleration: { x: -6.599, y: -0.421, z: 1.72 },
-    angularVelocity: { y: -0.165 }
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: 0.065, y: -13.114, z: -0.359 },
+    angularVelocity: { x: 0.192, y: -0.115, z: 0.027 }
   },
   {
-    speedKmh: 192.541,
-    throttle: 1,
+    speedKmh: 131.155,
+    throttle: 0,
     brake: 0,
     steer: -1,
-    slipRatio: { fl: 0, fr: -0.001, rl: 0.178, rr: 0.133 },
-    slipAngle: { fl: -0.263, fr: -0.248, rl: -0.176, rr: -0.16 },
-    combinedSlip: { fl: 0.263, fr: 0.248, rl: 0.25, rr: 0.208 },
-    acceleration: { x: -6.643, y: -0.33, z: 1.706 },
-    angularVelocity: { y: -0.176 }
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: 0.114, y: -13.137, z: -0.358 },
+    angularVelocity: { x: 0.192, y: -0.115, z: 0.027 }
   },
   {
-    speedKmh: 192.618,
-    throttle: 1,
+    speedKmh: 131.154,
+    throttle: 0,
     brake: 0,
     steer: -1,
-    slipRatio: { fl: 0, fr: -0.001, rl: 0.176, rr: 0.13 },
-    slipAngle: { fl: -0.296, fr: -0.278, rl: -0.178, rr: -0.162 },
-    combinedSlip: { fl: 0.296, fr: 0.278, rl: 0.251, rr: 0.208 },
-    acceleration: { x: -6.499, y: -0.197, z: 1.483 },
-    angularVelocity: { y: -0.186 }
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.133, y: -13.15, z: -0.576 },
+    angularVelocity: { x: 0.191, y: -0.115, z: 0.027 }
   },
   {
-    speedKmh: 192.696,
-    throttle: 1,
+    speedKmh: 131.154,
+    throttle: 0,
     brake: 0,
     steer: -1,
-    slipRatio: { fl: 0.001, fr: -0.001, rl: 0.174, rr: 0.125 },
-    slipAngle: { fl: -0.339, fr: -0.316, rl: -0.182, rr: -0.164 },
-    combinedSlip: { fl: 0.339, fr: 0.316, rl: 0.252, rr: 0.206 },
-    acceleration: { x: -7.231, y: -0.033, z: 1.668 },
-    angularVelocity: { y: -0.198 }
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.058, y: -13.148, z: -0.73 },
+    angularVelocity: { x: 0.19, y: -0.115, z: 0.027 }
   },
   {
-    speedKmh: 192.772,
-    throttle: 1,
+    speedKmh: 131.156,
+    throttle: 0,
     brake: 0,
     steer: -1,
-    slipRatio: { fl: 0.002, fr: 0, rl: 0.171, rr: 0.121 },
-    slipAngle: { fl: -0.376, fr: -0.35, rl: -0.186, rr: -0.166 },
-    combinedSlip: { fl: 0.377, fr: 0.35, rl: 0.279, rr: 0.232 },
-    acceleration: { x: -7.629, y: -0.317, z: 1.47 },
-    angularVelocity: { y: -0.216 }
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.043, y: -13.177, z: -0.32 },
+    angularVelocity: { x: 0.19, y: -0.115, z: 0.027 }
   },
   {
-    speedKmh: 192.847,
-    throttle: 1,
+    speedKmh: 131.158,
+    throttle: 0,
     brake: 0,
-    steer: -0.819,
-    slipRatio: { fl: 0.003, fr: 0.001, rl: 0.17, rr: 0.119 },
-    slipAngle: { fl: -0.42, fr: -0.391, rl: -0.191, rr: -0.17 },
-    combinedSlip: { fl: 0.42, fr: 0.391, rl: 0.255, rr: 0.208 },
-    acceleration: { x: -7.615, y: 0.17, z: 1.623 },
-    angularVelocity: { y: -0.222 }
+    steer: -1,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: 0.051, y: -13.157, z: -0.285 },
+    angularVelocity: { x: 0.189, y: -0.115, z: 0.027 }
   },
   {
-    speedKmh: 192.923,
-    throttle: 1,
+    speedKmh: 131.161,
+    throttle: 0,
     brake: 0,
-    steer: -0.181,
-    slipRatio: { fl: 0, fr: -0.002, rl: 0.17, rr: 0.118 },
-    slipAngle: { fl: -0.409, fr: -0.382, rl: -0.197, rr: -0.176 },
-    combinedSlip: { fl: 0.409, fr: 0.382, rl: 0.26, rr: 0.212 },
-    acceleration: { x: -7.803, y: 0.093, z: 1.562 },
-    angularVelocity: { y: -0.23 }
+    steer: -1,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.117, y: -13.18, z: -0.754 },
+    angularVelocity: { x: 0.188, y: -0.115, z: 0.026 }
   },
   {
-    speedKmh: 192.998,
-    throttle: 1,
+    speedKmh: 131.165,
+    throttle: 0,
     brake: 0,
-    steer: 0,
-    slipRatio: { fl: -0.013, fr: -0.011, rl: 0.173, rr: 0.12 },
-    slipAngle: { fl: -0.184, fr: -0.175, rl: -0.206, rr: -0.184 },
-    combinedSlip: { fl: 0.185, fr: 0.175, rl: 0.269, rr: 0.22 },
-    acceleration: { x: -8.026, y: -0.082, z: 1.708 },
-    angularVelocity: { y: -0.23 }
+    steer: -1,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.132, y: -13.165, z: -0.447 },
+    angularVelocity: { x: 0.187, y: -0.115, z: 0.026 }
+  },
+  {
+    speedKmh: 131.17,
+    throttle: 0,
+    brake: 0,
+    steer: -1,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: 0.034, y: -13.185, z: -0.35 },
+    angularVelocity: { x: 0.187, y: -0.115, z: 0.026 }
+  },
+  {
+    speedKmh: 131.175,
+    throttle: 0,
+    brake: 0,
+    steer: -1,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.043, y: -13.188, z: -0.281 },
+    angularVelocity: { x: 0.186, y: -0.115, z: 0.026 }
+  },
+  {
+    speedKmh: 131.182,
+    throttle: 0,
+    brake: 0,
+    steer: -1,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.183, y: -13.209, z: -0.494 },
+    angularVelocity: { x: 0.185, y: -0.115, z: 0.026 }
+  },
+  {
+    speedKmh: 131.19,
+    throttle: 0,
+    brake: 0,
+    steer: -1,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: 0.059, y: -13.202, z: 0.069 },
+    angularVelocity: { x: 0.185, y: -0.115, z: 0.026 }
+  },
+  {
+    speedKmh: 131.198,
+    throttle: 0,
+    brake: 0,
+    steer: -1,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.101, y: -13.211, z: -0.546 },
+    angularVelocity: { x: 0.184, y: -0.115, z: 0.026 }
+  },
+  {
+    speedKmh: 131.208,
+    throttle: 0,
+    brake: 0,
+    steer: -1,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.105, y: -13.206, z: -0.229 },
+    angularVelocity: { x: 0.183, y: -0.115, z: 0.025 }
+  },
+  {
+    speedKmh: 131.218,
+    throttle: 0,
+    brake: 0,
+    steer: -1,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.052, y: -13.217, z: -0.383 },
+    angularVelocity: { x: 0.183, y: -0.115, z: 0.025 }
+  },
+  {
+    speedKmh: 131.229,
+    throttle: 0,
+    brake: 0,
+    steer: -1,
+    slipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    slipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    acceleration: { x: -0.046, y: -13.224, z: -0.2 },
+    angularVelocity: { x: 0.182, y: -0.115, z: 0.025 }
   }
 ])
 

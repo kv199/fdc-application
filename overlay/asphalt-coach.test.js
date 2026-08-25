@@ -107,6 +107,16 @@ function exitFrames() {
   ]
 }
 
+function releasePrelude() {
+  return [
+    frame(0, { brake: 0.5 }),
+    frame(20, { brake: 0.5, steer: 0.1 }),
+    frame(40, { brake: 0.5, steer: 0.2 }),
+    frame(60, { brake: 0.5, steer: 0.25 }),
+    frame(80, { brake: 0.5, steer: 0.25 })
+  ]
+}
+
 function frontScrubScenario(positive) {
   const frames = turnInFrames({
     slipAngle: { fl: 0.15, fr: 0.15, rl: 0.05, rr: 0.05 },
@@ -180,6 +190,105 @@ function abruptReleaseScenario(positive) {
       slipAngle: { fl: 0.12, fr: 0.12, rl: positive ? 0.2 : 0.05, rr: positive ? 0.2 : 0.05 }
     }))
   }
+  return frames
+}
+
+function delayedAbruptReleaseScenario() {
+  const frames = releasePrelude()
+  frames.push(frame(100, {
+    brake: 0.5,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(120, {
+    brake: 0.35,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(140, {
+    brake: 0.35,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(160, {
+    brake: 0.35,
+    steer: 0.25,
+    acceleration: { x: 0.2, y: 0, z: 1 },
+    angularVelocity: { y: 0.1 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.2, rr: 0.2 }
+  }))
+  return frames
+}
+
+function multiFrameAbruptReleaseScenario() {
+  const frames = releasePrelude()
+  frames.push(frame(100, {
+    brake: 0.5,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(120, {
+    brake: 0.42,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(140, {
+    brake: 0.35,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(160, {
+    brake: 0.35,
+    steer: 0.25,
+    acceleration: { x: 0.2, y: 0, z: 1 },
+    angularVelocity: { y: 0.1 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.2, rr: 0.2 }
+  }))
+  return frames
+}
+
+function smoothReleaseWithImpulseScenario() {
+  const frames = releasePrelude()
+  frames.push(frame(100, {
+    brake: 0.5,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(120, {
+    brake: 0.48,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(140, {
+    brake: 0.46,
+    steer: 0.25,
+    acceleration: { x: 1, y: 0, z: 1 },
+    angularVelocity: { y: 0.5 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
+  }))
+  frames.push(frame(160, {
+    brake: 0.46,
+    steer: 0.25,
+    acceleration: { x: 0.2, y: 0, z: 1 },
+    angularVelocity: { y: 0.1 },
+    slipAngle: { fl: 0.12, fr: 0.12, rl: 0.2, rr: 0.2 }
+  }))
   return frames
 }
 
@@ -304,6 +413,27 @@ test('brake plus steering overload requires front combined slip and stalled resp
 test('abrupt brake release requires a measured response or stability deterioration', () => {
   assert.equal(hasFinding(abruptReleaseScenario(true), FINDINGS.ABRUPT_BRAKE_RELEASE), true)
   assert.equal(hasFinding(abruptReleaseScenario(false), FINDINGS.ABRUPT_BRAKE_RELEASE), false)
+})
+
+test('abrupt brake release keeps first-frame evidence for delayed deterioration', () => {
+  const event = runFrames(delayedAbruptReleaseScenario()).events.find(candidate => candidate.kind === FINDINGS.ABRUPT_BRAKE_RELEASE)
+  assert.ok(event)
+  assert.ok(Math.abs(event.releaseRate - 7.5) < 0.001)
+  assert.ok(Math.abs(event.evidence.releaseRate - 7.5) < 0.001)
+  assert.equal(event.evidence.components.releaseAbruptness > 0, true)
+  assert.equal(event.confidence > 0.84, true)
+})
+
+test('multi-frame abrupt release preserves the first evidence timestamp and maximum rate', () => {
+  const event = runFrames(multiFrameAbruptReleaseScenario()).events.find(candidate => candidate.kind === FINDINGS.ABRUPT_BRAKE_RELEASE)
+  assert.ok(event)
+  assert.equal(event.evidenceMs, 40)
+  assert.ok(Math.abs(event.releaseRate - 4) < 0.001)
+  assert.ok(Math.abs(event.evidence.releaseRate - 4) < 0.001)
+})
+
+test('smooth brake release followed by a road impulse does not become abrupt release', () => {
+  assert.equal(hasFinding(smoothReleaseWithImpulseScenario(), FINDINGS.ABRUPT_BRAKE_RELEASE), false)
 })
 
 test('controlled release is a positive finding only when brake release is progressive', () => {
@@ -496,8 +626,37 @@ test('Direct and Suite normalized replays produce identical zero-reference findi
   assert.deepEqual(direct.findings.getSummary(), suite.findings.getSummary())
 })
 
+test('Direct and Suite preserve delayed abrupt-release evidence identically', () => {
+  const replay = delayedAbruptReleaseScenario()
+  const direct = runFrames(replay)
+  const suite = runFrames(replay.map(input => ({ ...input })))
+  const select = events => events
+    .filter(event => event.kind === FINDINGS.ABRUPT_BRAKE_RELEASE)
+    .map(event => ({
+      kind: event.kind,
+      releaseRate: event.releaseRate,
+      confidence: event.confidence,
+      evidenceMs: event.evidenceMs,
+      components: event.evidence.components
+    }))
+  assert.deepEqual(select(direct.events), select(suite.events))
+})
+
 test('a sanitized real FH6 clean segment produces no negative cue stream', () => {
   const replay = CLEAN_REAL_SEGMENT.map((input, index) => frame(index * 20, input))
+  const phaseState = new AsphaltCoachState()
+  let currentTurningFrames = 0
+  let longestTurningFrames = 0
+  for (const input of calibratedReplay(replay)) {
+    const phase = phaseState.update(input).phase
+    if (phase === PHASES.TURN_IN || phase === PHASES.ROTATION) {
+      currentTurningFrames += 1
+      longestTurningFrames = Math.max(longestTurningFrames, currentTurningFrames)
+    } else {
+      currentTurningFrames = 0
+    }
+  }
+  assert.equal((longestTurningFrames - 1) * 20 > new AsphaltCoachFindings().thresholds.minEvidenceMs, true)
   const result = runFrames(replay)
   assert.equal(result.events.filter(event => !event.positive).length, 0)
 })
