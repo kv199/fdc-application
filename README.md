@@ -23,14 +23,17 @@ Direct Forza UDP and co-driver Suite normalized telemetry enter the same
 `queueTelemetry` path, so the state machine and findings are source-neutral. It
 observes the bounded lifecycle `STRAIGHT → BRAKING → TURN-IN → ROTATION → EXIT`
 without a map. A session-scoped observed car envelope is calibrated in fixed
-speed bins and is discarded on restart, rewind, source switch, or incompatible
-car identity. It is not written to `hud.sqlite`.
+speed bins with bounded rolling percentile evidence. Once the minimum envelope
+is ready, that car-local profile is held stable for the session so a bad corner
+cannot train its own threshold. It is discarded on restart, rewind, source
+switch, or incompatible car identity. It is not written to `hud.sqlite`.
 
 After enough valid evidence, one high-confidence cue may appear briefly. The
 first version covers `FRONT SCRUB`, `EXIT WHEELSPIN`, `BRAKE + STEERING
 OVERLOAD`, and `ABRUPT BRAKE RELEASE`, plus positive `CLEAN EXIT` and
-`CONTROLLED RELEASE` evidence. It stays silent on straights, paused/menu or
-rewound telemetry, gaps, and immediately after switching sources. It does not
+`CONTROLLED RELEASE` evidence. It stays silent on straights, before
+calibration, paused/menu or rewound telemetry, gaps, rumble/puddle contact,
+and conservative vertical-transient gates for jumps or impacts. It does not
 show exact metres, seconds, late-throttle claims, wrong-apex/line claims, or
 optimal gear advice.
 
@@ -92,9 +95,11 @@ The historical Reference Coach can still be previewed without Forza in demo mode
 ?demo=1&reference=good
 ```
 
-Reference messages remain a separate Suite historical layer for the lap-delta
-strip and corner context. The zero-reference card never consumes a reference
-cue or reconstructs provider history. A provider `lap_complete` message still
+Reference messages remain a separate Suite historical layer. If no local
+Asphalt cue is active, the existing provider reference guidance remains
+visible in the same Coach card; a local Asphalt cue takes presentation
+priority. The zero-reference analysis never consumes a reference cue or
+reconstructs provider history. A provider `lap_complete` message still
 anchors the existing final delta to the game's lap boundary; it does not by
 itself create an Asphalt Coach brief while the car is live.
 

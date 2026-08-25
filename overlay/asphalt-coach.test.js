@@ -3,15 +3,18 @@ const test = require('node:test')
 
 const {
   AsphaltCoachState,
-  PHASES
+  PHASES,
+  normalizeFrame
 } = require('./asphalt-coach-state.js')
 const {
   AsphaltCoachFindings,
-  FINDINGS
+  FINDINGS,
+  learnedThresholds
 } = require('./asphalt-coach-findings.js')
 const {
   AsphaltCoachPresentation,
-  buildDriverBrief
+  buildDriverBrief,
+  CUE_META
 } = require('./asphalt-coach-presentation.js')
 
 function frame(timestampMs, overrides = {}) {
@@ -26,7 +29,7 @@ function frame(timestampMs, overrides = {}) {
     slipRatio: { fl: 0.02, fr: 0.02, rl: 0.02, rr: 0.02 },
     slipAngle: { fl: 0.05, fr: 0.05, rl: 0.04, rr: 0.04 },
     combinedSlip: { fl: 0.2, fr: 0.2, rl: 0.15, rr: 0.15 },
-    acceleration: { z: 1 },
+    acceleration: { x: 1, y: 0, z: 1 },
     angularVelocity: { y: 0.3 },
     car: { ordinal: 1, pi: 800, drivetrain: 1 },
     lap: { raceTime: timestampMs / 1000, number: 1, distance: timestampMs },
@@ -34,11 +37,32 @@ function frame(timestampMs, overrides = {}) {
   }
 }
 
-function runFrames(frames) {
+function calibrationPrefix() {
+  return Array.from({ length: 36 }, (_, index) => frame(index * 20, {
+    speedKmh: 30 + Math.floor(index / 9) * 25 + (index % 9) * 0.05,
+    acceleration: { x: 1, y: 0, z: 1 }
+  }))
+}
+
+function calibratedReplay(frames) {
+  const offsetMs = 740
+  return calibrationPrefix().concat(frames.map(input => ({
+    ...input,
+    timestampMs: input.timestampMs + offsetMs,
+    lap: {
+      ...input.lap,
+      raceTime: (input.timestampMs + offsetMs) / 1000,
+      distance: input.timestampMs + offsetMs
+    }
+  })))
+}
+
+function runFrames(frames, options = {}) {
   const state = new AsphaltCoachState()
   const findings = new AsphaltCoachFindings()
   const events = []
-  for (const input of frames) {
+  const replay = options.calibrated === false ? frames : calibratedReplay(frames)
+  for (const input of replay) {
     const snapshot = state.update(input)
     const result = findings.update(snapshot)
     events.push(...result.events)
@@ -83,7 +107,7 @@ function frontScrubScenario(positive) {
       steer: 0.3 + (positive ? index * 0.01 : 0),
       slipAngle: { fl: 0.16 + growth, fr: 0.16 + growth, rl: 0.05, rr: 0.05 },
       combinedSlip: { fl: 0.7, fr: 0.7, rl: 0.1, rr: 0.1 },
-      acceleration: { z: positive ? 1 : 1 + index * 0.02 },
+      acceleration: { x: positive ? 1 : 1 + index * 0.02, y: 0, z: 1 },
       angularVelocity: { y: positive ? 0.3 : 0.3 + index * 0.02 }
     }))
   }
@@ -112,7 +136,7 @@ function overloadScenario(positive) {
       brake: 0.3,
       steer: 0.3,
       combinedSlip: { fl: positive ? 0.9 : 0.7, fr: positive ? 0.9 : 0.7, rl: 0.1, rr: 0.1 },
-      acceleration: { z: positive ? 1 : 1 + index * 0.02 },
+      acceleration: { x: positive ? 1 : 1 + index * 0.02, y: 0, z: 1 },
       angularVelocity: { y: positive ? 0.3 : 0.3 + index * 0.02 }
     }))
   }
@@ -124,14 +148,14 @@ function abruptReleaseScenario(positive) {
   frames.push(frame(100, {
     brake: 0.5,
     steer: 0.25,
-    acceleration: { z: 1 },
+    acceleration: { x: 1, y: 0, z: 1 },
     angularVelocity: { y: 0.5 },
     slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
   }))
   frames.push(frame(120, {
     brake: 0.35,
     steer: 0.25,
-    acceleration: { z: 1 },
+    acceleration: { x: 1, y: 0, z: 1 },
     angularVelocity: { y: 0.5 },
     slipAngle: { fl: 0.12, fr: 0.12, rl: 0.05, rr: 0.05 }
   }))
@@ -139,7 +163,7 @@ function abruptReleaseScenario(positive) {
     frames.push(frame(140 + index * 20, {
       brake: 0.3,
       steer: 0.25,
-      acceleration: { z: positive ? 0.7 : 1 },
+      acceleration: { x: positive ? 0.7 : 1, y: 0, z: 1 },
       angularVelocity: { y: positive ? 0.2 : 0.5 },
       slipAngle: { fl: 0.12, fr: 0.12, rl: positive ? 0.2 : 0.05, rr: positive ? 0.2 : 0.05 }
     }))
@@ -158,7 +182,7 @@ function controlledReleaseScenario(positive) {
       brake: positive ? 0.3 - index * 0.01 : 0.3,
       steer: 0.25,
       combinedSlip: { fl: 0.6, fr: 0.6, rl: 0.1, rr: 0.1 },
-      acceleration: { z: 1 + (positive ? index * 0.01 : 0) }
+      acceleration: { x: 1, y: 0, z: 1 + (positive ? index * 0.01 : 0) }
     }))
   }
   return frames
@@ -201,6 +225,14 @@ test('front scrub requires growing steering and front slip without improving res
   assert.equal(hasFinding(frontScrubScenario(false), FINDINGS.FRONT_SCRUB), false)
 })
 
+test('lateral response uses FH6 local X and keeps longitudinal response on Z', () => {
+  const sample = normalizeFrame(frame(0, {
+    acceleration: { x: 2.5, y: 0.2, z: 9.5 }
+  }))
+  assert.equal(sample.lateralResponse, 2.5)
+  assert.equal(sample.longitudinalResponse, 9.5)
+})
+
 test('exit wheelspin requires driven slip and a weak speed response after a clean baseline', () => {
   assert.equal(hasFinding(wheelspinScenario(true), FINDINGS.EXIT_WHEELSPIN), true)
   assert.equal(hasFinding(wheelspinScenario(false), FINDINGS.EXIT_WHEELSPIN), false)
@@ -237,6 +269,82 @@ test('calibration is bounded by speed bins and becomes ready only after evidence
   assert.equal(snapshot.calibration.ready, true)
   assert.equal(snapshot.calibration.binsWithSamples >= 3, true)
   assert.equal(state.envelope.bins.length, 12)
+})
+
+test('learned envelope scales response thresholds instead of only changing readiness', () => {
+  const learned = learnedThresholds({
+    responseFlatDelta: 0.03,
+    responseFlatRatio: 0.04,
+    yawFlatDelta: 0.04,
+    yawFlatRatio: 0.04,
+    frontSlipMin: 0.16,
+    frontSlipEnvelopeRatio: 0.9,
+    drivenSlipMin: 0.12,
+    drivenSlipEnvelopeRatio: 1.25,
+    drivenSlipCleanMax: 0.08,
+    cleanSlipEnvelopeRatio: 1.1,
+    frontCombinedOverload: 0.85,
+    combinedSlipEnvelopeRatio: 1.15,
+    wheelspinMinAcceleration: 0.5,
+    wheelspinAccelerationRatio: 0.65,
+    brakeReleaseResponseDrop: 0.15,
+    brakeReleaseResponseRatio: 0.18,
+    brakeReleaseYawDrop: 0.2,
+    brakeReleaseYawRatio: 0.25,
+    cleanExitAccelerationMin: 0.5,
+    cleanExitAccelerationRatio: 0.45
+  }, {
+    calibration: {
+      bin: {
+        lateralResponseP90: 5,
+        yawRateP90: 4,
+        effectiveAccelerationP90: 3,
+        frontSlipP90: 0.3,
+        drivenSlipP90: 0.15,
+        frontCombinedSlipP90: 0.9
+      }
+    }
+  })
+  assert.equal(learned.responseFlatDelta, 0.2)
+  assert.equal(learned.yawFlatDelta, 0.16)
+  assert.equal(learned.cleanExitAccelerationMin, 1.35)
+})
+
+test('findings stay silent before calibration and on rumble-disturbed replay', () => {
+  assert.equal(runFrames(frontScrubScenario(true), { calibrated: false }).events.length, 0)
+  const disturbed = frontScrubScenario(true).map(input => ({
+    ...input,
+    rumble: { fl: true, fr: false, rl: false, rr: false }
+  }))
+  assert.equal(runFrames(disturbed).events.length, 0)
+  const puddle = frontScrubScenario(true).map(input => ({
+    ...input,
+    puddle: { fl: 0.01, fr: 0, rl: 0, rr: 0 }
+  }))
+  assert.equal(runFrames(puddle).events.length, 0)
+  const verticalTransient = frontScrubScenario(true).map((input, index) => ({
+    ...input,
+    acceleration: { ...(input.acceleration || { x: 1, z: 1 }), y: index % 2 }
+  }))
+  assert.equal(runFrames(verticalTransient).events.length, 0)
+})
+
+test('beginning a new attempt clears evidence counts without requiring a process reset', () => {
+  const result = runFrames(frontScrubScenario(true))
+  assert.equal(result.findings.getSummary().negativeEvidence > 0, true)
+  result.findings.beginAttempt(2)
+  assert.deepEqual(result.findings.getSummary(), {
+    counts: {
+      front_scrub: 0,
+      exit_wheelspin: 0,
+      brake_steering_overload: 0,
+      abrupt_brake_release: 0,
+      clean_exit: 0,
+      controlled_release: 0
+    },
+    negativeEvidence: 0,
+    positiveEvidence: 0
+  })
 })
 
 test('Direct and Suite normalized replays produce identical zero-reference findings', () => {
@@ -333,4 +441,19 @@ test('driver brief is asphalt-only, evidence-based and has no score or exact los
   assert.match(brief.strengthText, /CLEAN EXIT · 3 EVIDENCE/)
   assert.match(brief.nextText, /Reduce steering/)
   assert.doesNotMatch(JSON.stringify(brief), /seconds|metres|meters|score|late throttle|wrong apex/i)
+})
+
+test('empty brief reports insufficient evidence without inventing a strength or focus', () => {
+  const brief = buildDriverBrief({ counts: {} })
+  assert.equal(brief.mainKind, null)
+  assert.equal(brief.strengthKind, null)
+  assert.equal(brief.nextFocus, null)
+  assert.match(brief.strengthText, /NO POSITIVE EVIDENCE/)
+  assert.doesNotMatch(JSON.stringify(brief), /KEEP.*THROTTLE|CLEAN EXIT/i)
+})
+
+test('live cue labels do not look like track corner numbers', () => {
+  assert.equal(CUE_META.front_scrub.code, 'ASPHALT')
+  assert.equal(CUE_META.exit_wheelspin.code, 'ASPHALT')
+  assert.doesNotMatch(JSON.stringify(CUE_META), /C[0-9]/)
 })

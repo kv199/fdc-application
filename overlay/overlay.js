@@ -319,12 +319,14 @@ function getDisplayedReference() {
 function renderCoach(reference, isSummary = false) {
   const hasReference = reference?.available === true
   const hasAsphaltGuidance = latestAsphaltCoach.mode === 'cue' || latestAsphaltCoach.mode === 'brief'
+  const hasReferenceGuidance = window.ReferenceCoach.hasLiveCoachGuidance(reference, isSummary)
+  const hasCoachGuidance = hasAsphaltGuidance || hasReferenceGuidance
   const isCoachEditing = window.HudLayout?.isEditing?.('coach') === true
   const isCoachVisible = window.HudPreferences?.isOverlayVisible?.('coach') !== false
   const isDeltaVisible = window.HudPreferences?.isOverlayVisible?.('delta') !== false
-  coachCard.dataset.hasReference = hasAsphaltGuidance || isCoachEditing ? 'true' : 'false'
-  coachCard.dataset.coachMode = latestAsphaltCoach.mode
-  coachCard.hidden = !isCoachEditing && (!isCoachVisible || !hasAsphaltGuidance)
+  coachCard.dataset.hasReference = hasCoachGuidance || isCoachEditing ? 'true' : 'false'
+  coachCard.dataset.coachMode = hasAsphaltGuidance ? latestAsphaltCoach.mode : 'reference'
+  coachCard.hidden = !isCoachEditing && (!isCoachVisible || !hasCoachGuidance)
   deltaStrip.hidden = !isDeltaVisible || (!hasReference && !hasAsphaltGuidance)
 
   if (hasAsphaltGuidance) {
@@ -338,6 +340,15 @@ function renderCoach(reference, isSummary = false) {
     coachStatus.textContent = latestAsphaltCoach.mode === 'brief'
       ? `MAIN HABIT — ${brief.mainText}\nSTRONG — ${brief.strengthText}\nNEXT RUN — ${brief.nextText}`
       : cue.instruction
+  } else if (hasReferenceGuidance) {
+    coachKicker.textContent = 'REFERENCE COACH'
+    coachStatus.dataset.phase = reference.phase || 'between'
+    coachStatus.dataset.cueKind = reference.cue?.kind || ''
+    coachStatus.textContent = window.ReferenceCoach.formatCoachStatus(
+      reference,
+      isSummary,
+      displayPreferences.speedUnit
+    ) || '\u2014'
   } else {
     coachKicker.textContent = isCoachEditing ? 'ASPHALT ONLY' : ''
     coachStatus.dataset.phase = ''
@@ -445,7 +456,7 @@ function beginAsphaltAttempt() {
     asphaltBriefTimer = null
   }
   asphaltCoachState.beginAttempt()
-  asphaltCoachFindings.beginAttempt(asphaltCoachState.attemptId + 1)
+  asphaltCoachFindings.beginAttempt(asphaltCoachState.attemptId)
   asphaltCoachPresentation.beginAttempt()
   latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
   lastAsphaltBriefToken = null
@@ -508,23 +519,21 @@ function showAsphaltBriefIfConfirmed(token) {
 }
 
 function handleAsphaltLapLifecycle(previousTimingState, previousLapNumber, telemetry) {
-  const currentPhase = lapTimingState.phase
-  const wasComplete = previousTimingState.phase === 'circuit_complete'
-    || previousTimingState.phase === 'sprint_complete'
-  const isComplete = currentPhase === 'circuit_complete' || currentPhase === 'sprint_complete'
-  const currentLapNumber = finiteStateNumber(telemetry?.lap?.number)
-  const lapAdvanced = previousLapNumber !== null
-    && currentLapNumber !== null
-    && currentLapNumber > previousLapNumber
-  const nextAttemptStarted = wasComplete && currentPhase === 'live' && telemetry?.isRaceOn === true
+  const action = window.AsphaltCoachLifecycle.resolveLapAction({
+    previousTimingState,
+    timingState: lapTimingState,
+    previousLapNumber,
+    telemetry
+  })
 
-  if (lapAdvanced || nextAttemptStarted) {
-    beginAsphaltAttempt()
+  if (action === 'brief') {
+    showAsphaltBriefIfConfirmed(`${lapTimingState.phase}:${lapTimingState.lapNumber}:${lapTimingState.finalTimeMs}`)
     return
   }
 
-  if (isComplete && !wasComplete && telemetry?.isRaceOn !== true) {
-    showAsphaltBriefIfConfirmed(`${currentPhase}:${lapTimingState.lapNumber}:${lapTimingState.finalTimeMs}`)
+  if (action === 'begin_attempt') {
+    beginAsphaltAttempt()
+    return
   }
 }
 

@@ -22,8 +22,11 @@
     throttleOn: 0.2,
     speedBinKmh: 25,
     speedBinCount: 12,
+    envelopeWindowSize: 24,
     calibrationMinSamples: 36,
-    calibrationMinBins: 3
+    calibrationMinBins: 3,
+    surfaceVerticalRateFloor: 0.5,
+    surfaceVerticalRateRatio: 2.5
   })
 
   function finite(value) {
@@ -57,6 +60,84 @@
       : values.reduce((sum, value) => sum + value, 0) / values.length
   }
 
+  function anyRumble(quad) {
+    return quad?.fl === true || quad?.fr === true || quad?.rl === true || quad?.rr === true
+  }
+
+  function maxQuad(quad) {
+    const values = [finite(quad?.fl), finite(quad?.fr), finite(quad?.rl), finite(quad?.rr)]
+      .filter(value => value !== null)
+      .map(value => Math.abs(value))
+    return values.length === 0 ? null : Math.max(...values)
+  }
+
+  function createPercentile(windowSize) {
+    return {
+      count: 0,
+      next: 0,
+      ring: new Array(windowSize),
+      sorted: new Array(windowSize)
+    }
+  }
+
+  function insertSorted(metric, value) {
+    let index = metric.count
+    while (index > 0 && metric.sorted[index - 1] > value) {
+      metric.sorted[index] = metric.sorted[index - 1]
+      index -= 1
+    }
+    metric.sorted[index] = value
+    metric.count += 1
+  }
+
+  function removeSorted(metric, value) {
+    let index = 0
+    while (index < metric.count && metric.sorted[index] !== value) index += 1
+    if (index === metric.count) return
+    while (index < metric.count - 1) {
+      metric.sorted[index] = metric.sorted[index + 1]
+      index += 1
+    }
+    metric.count -= 1
+  }
+
+  function addPercentile(metric, value) {
+    const number = finite(value)
+    if (number === null) return
+
+    if (metric.count === metric.ring.length) removeSorted(metric, metric.ring[metric.next])
+    metric.ring[metric.next] = number
+    metric.next = (metric.next + 1) % metric.ring.length
+    insertSorted(metric, number)
+  }
+
+  function percentile(metric, fraction) {
+    if (!metric || metric.count === 0) return null
+    const index = Math.min(metric.count - 1, Math.max(0, Math.floor((metric.count - 1) * fraction)))
+    return metric.sorted[index]
+  }
+
+  function summarizeBin(bin) {
+    return {
+      index: bin.index,
+      speedMinKmh: bin.speedMinKmh,
+      speedMaxKmh: bin.speedMaxKmh,
+      samples: bin.samples,
+      maxLateralResponse: bin.maxLateralResponse,
+      maxYawRate: bin.maxYawRate,
+      maxEffectiveAcceleration: bin.maxEffectiveAcceleration,
+      minFrontSlip: bin.minFrontSlip,
+      lateralResponseP90: percentile(bin.lateralResponse, 0.9),
+      yawRateP90: percentile(bin.yawRate, 0.9),
+      effectiveAccelerationP90: percentile(bin.effectiveAcceleration, 0.9),
+      frontSlipP90: percentile(bin.frontSlip, 0.9),
+      drivenSlipP90: percentile(bin.drivenSlip, 0.9),
+      frontCombinedSlipP90: percentile(bin.frontCombinedSlip, 0.9),
+      verticalResponseP90: percentile(bin.verticalResponse, 0.9),
+      verticalChangeRateP90: percentile(bin.verticalChangeRate, 0.9)
+    }
+  }
+
   function drivenWheelAverage(frame) {
     const drivetrain = finite(frame?.car?.drivetrain)
     if (drivetrain === 0) return pairAverage(frame.slipRatio, 'fl', 'fr')
@@ -85,7 +166,15 @@
         maxLateralResponse: 0,
         maxYawRate: 0,
         maxEffectiveAcceleration: 0,
-        minFrontSlip: null
+        minFrontSlip: null,
+        lateralResponse: createPercentile(thresholds.envelopeWindowSize),
+        yawRate: createPercentile(thresholds.envelopeWindowSize),
+        effectiveAcceleration: createPercentile(thresholds.envelopeWindowSize),
+        frontSlip: createPercentile(thresholds.envelopeWindowSize),
+        drivenSlip: createPercentile(thresholds.envelopeWindowSize),
+        frontCombinedSlip: createPercentile(thresholds.envelopeWindowSize),
+        verticalResponse: createPercentile(thresholds.envelopeWindowSize),
+        verticalChangeRate: createPercentile(thresholds.envelopeWindowSize)
       })
     }
     return {
@@ -124,6 +213,8 @@
     const speedKmh = finite(frame?.speedKmh)
     if (timestampMs === null || speedKmh === null) return null
 
+    const accelerationX = finite(frame?.acceleration?.x)
+    const accelerationY = finite(frame?.acceleration?.y)
     const accelerationZ = finite(frame?.acceleration?.z)
     const yawRate = finite(frame?.angularVelocity?.y)
     return {
@@ -137,7 +228,11 @@
       rearSlip: pairAverage(frame?.slipAngle, 'rl', 'rr'),
       frontCombinedSlip: pairAverage(frame?.combinedSlip, 'fl', 'fr'),
       drivenSlip: drivenWheelAverage(frame),
-      lateralResponse: accelerationZ === null ? null : Math.abs(accelerationZ),
+      lateralResponse: accelerationX === null ? null : Math.abs(accelerationX),
+      verticalResponse: accelerationY === null ? null : Math.abs(accelerationY),
+      longitudinalResponse: accelerationZ === null ? null : Math.abs(accelerationZ),
+      rumbleContact: anyRumble(frame?.rumble),
+      puddleDepth: maxQuad(frame?.puddle),
       yawRate: yawRate === null ? null : Math.abs(yawRate),
       carIdentity: vehicleIdentity(frame),
       lapRaceTimeS: finite(frame?.lap?.raceTime),
@@ -163,6 +258,7 @@
       this.previousSample = null
       this.activeAttempt = false
       this.attemptId = 0
+      this.calibrationFrozen = false
       this.envelope = createEnvelope(this.thresholds)
       this.lastResetReason = reason
       return this.getSnapshot(null, reason)
@@ -190,6 +286,7 @@
       this.lastRaceTimeS = null
       this.lastLapNumber = null
       this.lastDistanceM = null
+      this.attemptId += 1
       return this.getSnapshot(null, 'attempt_start')
     }
 
@@ -239,7 +336,7 @@
       const newAttempt = !this.activeAttempt
       if (newAttempt) {
         this.activeAttempt = true
-        this.attemptId += 1
+        if (this.attemptId === 0) this.attemptId = 1
         this.phase = PHASES.STRAIGHT
         this.phaseSinceMs = sample.timestampMs
       }
@@ -262,6 +359,10 @@
       sample.brakeRate = previousSample === null || deltaSeconds === null
         ? null
         : (sample.brake - previousSample.brake) / deltaSeconds
+      sample.verticalChangeRate = previousSample === null || deltaSeconds === null
+        ? null
+        : Math.abs((sample.verticalResponse ?? 0) - (previousSample.verticalResponse ?? 0)) / deltaSeconds
+      sample.surfaceDisturbed = this.isSurfaceDisturbed(sample)
 
       const previousPhase = this.phase
       const nextPhase = this.classifyPhase(sample, previousSample, deltaSeconds)
@@ -320,14 +421,8 @@
     }
 
     updateEnvelope(sample) {
-      if (sample.speedKmh < this.thresholds.minSpeedKmh) return
-      const binIndex = Math.max(
-        0,
-        Math.min(
-          this.thresholds.speedBinCount - 1,
-          Math.floor(sample.speedKmh / this.thresholds.speedBinKmh)
-        )
-      )
+      if (this.calibrationFrozen || sample.speedKmh < this.thresholds.minSpeedKmh || sample.surfaceDisturbed) return
+      const binIndex = this.getBinIndex(sample.speedKmh)
       const bin = this.envelope.bins[binIndex]
       if (bin.samples === 0) this.envelope.binsWithSamples += 1
       bin.samples += 1
@@ -342,13 +437,49 @@
           ? sample.frontSlip
           : Math.min(bin.minFrontSlip, sample.frontSlip)
       }
+      addPercentile(bin.lateralResponse, sample.lateralResponse)
+      addPercentile(bin.yawRate, sample.yawRate)
+      if (sample.effectiveAcceleration !== null && sample.effectiveAcceleration > 0) {
+        addPercentile(bin.effectiveAcceleration, sample.effectiveAcceleration)
+      }
+      addPercentile(bin.frontSlip, sample.frontSlip)
+      addPercentile(bin.drivenSlip, sample.drivenSlip)
+      addPercentile(bin.frontCombinedSlip, sample.frontCombinedSlip)
+      addPercentile(bin.verticalResponse, sample.verticalResponse)
+      addPercentile(bin.verticalChangeRate, sample.verticalChangeRate)
+      if (
+        this.envelope.samples >= this.thresholds.calibrationMinSamples
+        && this.envelope.binsWithSamples >= this.thresholds.calibrationMinBins
+      ) this.calibrationFrozen = true
+    }
+
+    getBinIndex(speedKmh) {
+      return Math.max(
+        0,
+        Math.min(
+          this.thresholds.speedBinCount - 1,
+          Math.floor(speedKmh / this.thresholds.speedBinKmh)
+        )
+      )
+    }
+
+    isSurfaceDisturbed(sample) {
+      if (sample.rumbleContact || (sample.puddleDepth !== null && sample.puddleDepth > 0)) return true
+      if (sample.verticalChangeRate === null || sample.speedKmh < this.thresholds.minSpeedKmh) return false
+
+      const bin = this.envelope.bins[this.getBinIndex(sample.speedKmh)]
+      const learnedRate = percentile(bin.verticalChangeRate, 0.9)
+      return learnedRate !== null
+        && bin.samples >= 8
+        && sample.verticalChangeRate >= this.thresholds.surfaceVerticalRateFloor
+        && sample.verticalChangeRate > learnedRate * this.thresholds.surfaceVerticalRateRatio
     }
 
     getSnapshot(sample, resetReason = null, overrides = {}) {
       const binIndex = sample === null
         ? null
         : Math.max(0, Math.min(this.thresholds.speedBinCount - 1, Math.floor(sample.speedKmh / this.thresholds.speedBinKmh)))
-      const bin = binIndex === null ? null : this.envelope.bins[binIndex]
+      const bin = binIndex === null ? null : summarizeBin(this.envelope.bins[binIndex])
       return {
         valid: sample !== null,
         resetReason,

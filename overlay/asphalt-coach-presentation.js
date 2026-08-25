@@ -22,32 +22,32 @@
 
   const CUE_META = Object.freeze({
     front_scrub: Object.freeze({
-      code: 'C4',
+      code: 'ASPHALT',
       label: 'FRONT SCRUB',
       instruction: 'Reduce steering · let the front recover'
     }),
     exit_wheelspin: Object.freeze({
-      code: 'C3',
+      code: 'ASPHALT',
       label: 'EXIT WHEELSPIN',
       instruction: 'Build throttle after the car is settled'
     }),
     brake_steering_overload: Object.freeze({
-      code: 'C5',
+      code: 'ASPHALT',
       label: 'BRAKE + STEERING OVERLOAD',
       instruction: 'Release brake · let the front recover'
     }),
     abrupt_brake_release: Object.freeze({
-      code: 'C6',
+      code: 'ASPHALT',
       label: 'ABRUPT BRAKE RELEASE',
       instruction: 'Release brake smoothly · keep the car settled'
     }),
     clean_exit: Object.freeze({
-      code: 'P1',
+      code: 'ASPHALT',
       label: 'CLEAN EXIT',
       instruction: 'Keep the throttle build · clean exit'
     }),
     controlled_release: Object.freeze({
-      code: 'P2',
+      code: 'ASPHALT',
       label: 'CONTROLLED RELEASE',
       instruction: 'Keep the brake release smooth'
     })
@@ -107,27 +107,29 @@
       'abrupt_brake_release'
     ])
     const strength = strongestKind(counts, ['clean_exit', 'controlled_release'])
-    const mainKind = recurring?.kind || 'clean_exit'
-    const strengthKind = strength?.kind || 'clean_exit'
+    const mainKind = recurring?.kind || null
+    const strengthKind = strength?.kind || null
     const mainCount = recurring?.count || 0
     const strengthCount = strength?.count || 0
 
     return {
       title: 'DRIVER BRIEF · ASPHALT',
       mainKind,
-      mainLabel: metaFor(mainKind).label,
+      mainLabel: mainKind ? metaFor(mainKind).label : '',
       mainEvidenceCount: mainCount,
       mainText: recurring
         ? `${metaFor(mainKind).label} · ${mainCount} EVIDENCE`
         : 'NO RECURRING NEGATIVE PATTERN YET',
       strengthKind,
-      strengthLabel: metaFor(strengthKind).label,
+      strengthLabel: strengthKind ? metaFor(strengthKind).label : '',
       strengthEvidenceCount: strengthCount,
       strengthText: strength
         ? `${metaFor(strengthKind).label} · ${strengthCount} EVIDENCE`
-        : 'KEEP BUILDING CLEAN EXITS',
+        : 'NO POSITIVE EVIDENCE YET',
       nextFocus: mainKind,
-      nextText: NEXT_RUN_INSTRUCTIONS[mainKind]
+      nextText: mainKind
+        ? NEXT_RUN_INSTRUCTIONS[mainKind]
+        : 'Collect more evidence before changing technique'
     }
   }
 

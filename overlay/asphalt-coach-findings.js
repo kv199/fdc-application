@@ -43,6 +43,15 @@
     controlledReleaseRateMax: 1.5,
     cleanExitThrottleMin: 0.45,
     cleanExitAccelerationMin: 0.5,
+    responseFlatRatio: 0.04,
+    yawFlatRatio: 0.04,
+    frontSlipEnvelopeRatio: 0.9,
+    drivenSlipEnvelopeRatio: 1.25,
+    cleanSlipEnvelopeRatio: 1.1,
+    combinedSlipEnvelopeRatio: 1.15,
+    brakeReleaseResponseRatio: 0.18,
+    brakeReleaseYawRatio: 0.25,
+    cleanExitAccelerationRatio: 0.45,
     cueMinConfidence: 0.84
   })
 
@@ -100,6 +109,57 @@
     return currentValue === null || previousValue === null ? null : currentValue - previousValue
   }
 
+  function learnedThresholds(thresholds, snapshot) {
+    const bin = snapshot?.calibration?.bin
+    const scale = (field, fallback) => Math.max(fallback, finite(bin?.[field]) ?? 0)
+    const responseScale = finite(bin?.lateralResponseP90)
+    const yawScale = finite(bin?.yawRateP90)
+    const accelerationScale = finite(bin?.effectiveAccelerationP90)
+    return {
+      responseFlatDelta: Math.max(
+        thresholds.responseFlatDelta,
+        (responseScale ?? 0) * thresholds.responseFlatRatio
+      ),
+      yawFlatDelta: Math.max(
+        thresholds.yawFlatDelta,
+        (yawScale ?? 0) * thresholds.yawFlatRatio
+      ),
+      frontSlipMin: Math.max(
+        thresholds.frontSlipMin,
+        (finite(bin?.frontSlipP90) ?? 0) * thresholds.frontSlipEnvelopeRatio
+      ),
+      drivenSlipMin: Math.max(
+        thresholds.drivenSlipMin,
+        (finite(bin?.drivenSlipP90) ?? 0) * thresholds.drivenSlipEnvelopeRatio
+      ),
+      drivenSlipCleanMax: Math.max(
+        thresholds.drivenSlipCleanMax,
+        (finite(bin?.drivenSlipP90) ?? 0) * thresholds.cleanSlipEnvelopeRatio
+      ),
+      frontCombinedOverload: Math.max(
+        thresholds.frontCombinedOverload,
+        (finite(bin?.frontCombinedSlipP90) ?? 0) * thresholds.combinedSlipEnvelopeRatio
+      ),
+      wheelspinAccelerationLimit: Math.max(
+        thresholds.wheelspinMinAcceleration,
+        (accelerationScale ?? 0) * thresholds.wheelspinAccelerationRatio
+      ),
+      brakeReleaseResponseDrop: Math.max(
+        thresholds.brakeReleaseResponseDrop,
+        (responseScale ?? 0) * thresholds.brakeReleaseResponseRatio
+      ),
+      brakeReleaseYawDrop: Math.max(
+        thresholds.brakeReleaseYawDrop,
+        (yawScale ?? 0) * thresholds.brakeReleaseYawRatio
+      ),
+      cleanExitAccelerationMin: Math.max(
+        thresholds.cleanExitAccelerationMin,
+        (accelerationScale ?? 0) * thresholds.cleanExitAccelerationRatio
+      ),
+      learnedAcceleration: scale('effectiveAccelerationP90', 0)
+    }
+  }
+
   class AsphaltCoachFindings {
     constructor(options = {}) {
       this.thresholds = { ...DEFAULT_THRESHOLDS, ...(options.thresholds || {}) }
@@ -120,6 +180,8 @@
 
     beginAttempt(attemptId = null) {
       this.attemptId = finite(attemptId) ?? this.attemptId + 1
+      this.counts = createCounts()
+      this.sequence = 0
       this.resetTransient()
       return this.getSummary()
     }
@@ -142,7 +204,17 @@
         }
       }
 
-      if (snapshot.newAttempt || (this.attemptId !== 0 && snapshot.attemptId !== this.attemptId)) {
+      if (snapshot.calibration?.ready !== true || snapshot.sample.surfaceDisturbed === true) {
+        this.resetTransient()
+        return {
+          events: [],
+          counts: copyCounts(this.counts),
+          calibration: snapshot.calibration,
+          phase: snapshot.phase
+        }
+      }
+
+      if (this.attemptId !== 0 && snapshot.attemptId !== this.attemptId) {
         this.beginAttempt(snapshot.attemptId)
       } else if (this.attemptId === 0) {
         this.attemptId = snapshot.attemptId
@@ -201,33 +273,35 @@
         || previous.yawRate === null
         || sample.steerRate === null
       ) return false
+      const learned = learnedThresholds(this.thresholds, snapshot)
       const slipRate = (sample.frontSlip - previous.frontSlip) / ((sample.timestampMs - previous.timestampMs) / 1000)
       const responseDelta = sample.lateralResponse - previous.lateralResponse
       const yawDelta = sample.yawRate - previous.yawRate
       return sample.steerRate >= this.thresholds.steeringGrowthPerSecond
         && slipRate >= this.thresholds.frontSlipGrowthPerSecond
-        && sample.frontSlip >= this.thresholds.frontSlipMin
-        && responseDelta <= this.thresholds.responseFlatDelta
-        && yawDelta <= this.thresholds.yawFlatDelta
+        && sample.frontSlip >= learned.frontSlipMin
+        && responseDelta <= learned.responseFlatDelta
+        && yawDelta <= learned.yawFlatDelta
     }
 
     isExitWheelspin(snapshot) {
       const sample = snapshot.sample
       const previous = snapshot.previousSample
+      const learned = learnedThresholds(this.thresholds, snapshot)
       if (!phaseIsExit(snapshot.phase) || previous === null) return false
       if (
         sample.drivenSlip === null
         || sample.effectiveAcceleration === null
         || sample.throttleRate === null
-        || this.lastCleanExitAcceleration === null
+        || (this.lastCleanExitAcceleration === null && learned.learnedAcceleration <= 0)
       ) return false
       const accelerationLimit = Math.max(
-        this.thresholds.wheelspinMinAcceleration,
-        this.lastCleanExitAcceleration * this.thresholds.wheelspinAccelerationRatio
+        learned.wheelspinAccelerationLimit,
+        (this.lastCleanExitAcceleration ?? 0) * this.thresholds.wheelspinAccelerationRatio
       )
       return sample.throttle >= this.thresholds.throttleOn
         && sample.throttleRate >= this.thresholds.throttleRisePerSecond
-        && sample.drivenSlip >= this.thresholds.drivenSlipMin
+        && sample.drivenSlip >= learned.drivenSlipMin
         && sample.effectiveAcceleration <= accelerationLimit
     }
 
@@ -242,13 +316,14 @@
         || previous.lateralResponse === null
         || previous.yawRate === null
       ) return false
+      const learned = learnedThresholds(this.thresholds, snapshot)
       const responseDelta = sample.lateralResponse - previous.lateralResponse
       const yawDelta = sample.yawRate - previous.yawRate
       return sample.brake >= this.thresholds.overloadBrakeMin
         && sample.steerMagnitude >= this.thresholds.overloadSteerMin
-        && sample.frontCombinedSlip >= this.thresholds.frontCombinedOverload
-        && responseDelta <= this.thresholds.responseFlatDelta
-        && yawDelta <= this.thresholds.yawFlatDelta
+        && sample.frontCombinedSlip >= learned.frontCombinedOverload
+        && responseDelta <= learned.responseFlatDelta
+        && yawDelta <= learned.yawFlatDelta
     }
 
     isControlledRelease(snapshot) {
@@ -260,14 +335,15 @@
         || sample.lateralResponse === null
         || previous.lateralResponse === null
       ) return false
+      const learned = learnedThresholds(this.thresholds, snapshot)
       const responseDelta = sample.lateralResponse - previous.lateralResponse
       return sample.brake >= this.thresholds.controlledBrakeMin
         && sample.brake <= this.thresholds.controlledBrakeMax
         && sample.brakeRate <= -this.thresholds.controlledReleaseRateMin
         && sample.brakeRate >= -this.thresholds.controlledReleaseRateMax
         && sample.steerMagnitude >= 0.15
-        && sample.frontCombinedSlip < this.thresholds.frontCombinedOverload
-        && responseDelta >= -this.thresholds.responseFlatDelta
+        && sample.frontCombinedSlip < learned.frontCombinedOverload
+        && responseDelta >= -learned.responseFlatDelta
     }
 
     isCleanExit(snapshot) {
@@ -275,10 +351,11 @@
       const previous = snapshot.previousSample
       if (!phaseIsExit(snapshot.phase) || previous === null) return false
       if (sample.drivenSlip === null || sample.effectiveAcceleration === null || sample.throttleRate === null) return false
+      const learned = learnedThresholds(this.thresholds, snapshot)
       return sample.throttle >= this.thresholds.cleanExitThrottleMin
         && sample.throttleRate >= this.thresholds.throttleRisePerSecond
-        && sample.drivenSlip <= this.thresholds.drivenSlipCleanMax
-        && sample.effectiveAcceleration >= this.thresholds.cleanExitAccelerationMin
+        && sample.drivenSlip <= learned.drivenSlipCleanMax
+        && sample.effectiveAcceleration >= learned.cleanExitAccelerationMin
         && sample.steerRate !== null
         && sample.steerRate <= 0.2
     }
@@ -286,13 +363,14 @@
     updatePendingRelease(snapshot, events) {
       const sample = snapshot.sample
       const previous = snapshot.previousSample
+      const learned = learnedThresholds(this.thresholds, snapshot)
       if (this.pendingRelease !== null) {
         const elapsedMs = sample.timestampMs - this.pendingRelease.timestampMs
         if (elapsedMs < 0 || elapsedMs > this.thresholds.brakeReleaseWindowMs) {
           this.pendingRelease = null
         } else if (!this.pendingRelease.issued) {
-          const responseDrop = this.pendingRelease.lateralResponse - (sample.lateralResponse ?? this.pendingRelease.lateralResponse) >= this.thresholds.brakeReleaseResponseDrop
-          const yawDrop = this.pendingRelease.yawRate - (sample.yawRate ?? this.pendingRelease.yawRate) >= this.thresholds.brakeReleaseYawDrop
+          const responseDrop = this.pendingRelease.lateralResponse - (sample.lateralResponse ?? this.pendingRelease.lateralResponse) >= learned.brakeReleaseResponseDrop
+          const yawDrop = this.pendingRelease.yawRate - (sample.yawRate ?? this.pendingRelease.yawRate) >= learned.brakeReleaseYawDrop
           const rearSlipRise = sample.rearSlip !== null
             && this.pendingRelease.rearSlip !== null
             && sample.rearSlip - this.pendingRelease.rearSlip >= this.thresholds.brakeReleaseRearSlipRise
@@ -371,6 +449,7 @@
     FINDINGS,
     NEGATIVE_FINDINGS,
     POSITIVE_FINDINGS,
+    learnedThresholds,
     AsphaltCoachFindings
   }
 }))
