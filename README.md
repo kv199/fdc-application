@@ -32,9 +32,10 @@ are coalesced without advancing evidence time, and the latest normalized sample
 is retained for the next tick. Obvious failure signatures, rumble/puddle
 contact, four-wheel full suspension extension, and local transient outliers are excluded from calibration; the
 collision gate compares each axis with the learned per-speed-bin noise profile
-instead of using a fixed global jerk cutoff. The envelope is discarded on
-restart, rewind, source switch, or incompatible car identity. It is not written
-to `hud.sqlite`.
+instead of using a fixed global jerk cutoff. A confirmed retry starts a new
+finding attempt but keeps the bounded envelope for the same car; the envelope
+is discarded on an incompatible car identity or source switch. It is not
+written to `hud.sqlite`.
 
 After enough valid evidence, one high-confidence cue may appear briefly. The
 first version covers `FRONT SCRUB`, `EXIT WHEELSPIN`, `BRAKE + STEERING
@@ -50,8 +51,13 @@ confidence constant. It does not
 show exact metres, seconds, late-throttle claims, wrong-apex/line claims, or
 optimal gear advice.
 
-At a confirmed attempt finish, the same card can show a compact
-`DRIVER BRIEF · ASPHALT` for about 25 seconds:
+Direct keeps the game clock visible and shows `ASPHALT COACH · LEARNING` or
+`ASPHALT COACH · READY` while no cue is active, so silence is distinguishable
+from an unavailable Coach. Live cue instructions may wrap instead of being
+truncated by the compact card.
+
+At a confirmed attempt finish, the same card shows a compact `DRIVER BRIEF ·
+ASPHALT` for about 25 seconds:
 
 ```text
 DRIVER BRIEF · ASPHALT
@@ -60,9 +66,16 @@ STRONG — one demonstrated positive pattern
 NEXT RUN — one focused technique instruction
 ```
 
-The next live attempt hides the brief immediately and keeps its selected focus
-for cue arbitration. Ordinary multi-lap boundaries do not show a full brief;
-`HudLapTiming` remains the only finish authority. Historical/reference track
+The standard FH Dash packet has no dedicated sprint-finish flag and
+`isRaceOn=false` also covers pause and menus. When a valid Direct attempt leaves
+live telemetry without an authoritative result, the card therefore shows `RUN
+CHECK · NOT FINAL`: the same current-run technique evidence, labelled `CURRENT
+PATTERN`, `CURRENT STRENGTH`, and `FOCUS`, without claiming a finish or official
+time. Resuming the same run hides the check and preserves
+its evidence; a confirmed retry keeps the learned same-car envelope, resets the
+attempt counts, and carries the selected focus forward. Ordinary multi-lap
+boundaries do not show a full brief; `HudLapTiming` remains the only official
+time authority. Historical/reference track
 comparison and exact time-loss calculations remain provider-owned features and
 are not used by this zero-reference Coach. `EXCESSIVE COAST` is intentionally
 outside this first version because it cannot yet be separated reliably from
@@ -101,10 +114,12 @@ tab controls the displayed speed unit (`km/h` by default or `mph`), the selected
 telemetry route, endpoint, lifecycle state, and Suite
 coexistence diagnostics; no route status is drawn over the in-game HUD.
 Display and visibility choices are stored locally. In a browser preview, use
-`?demo=1&coach=front-scrub` to preview the zero-reference cue, or
+`?demo=1&coach=front-scrub` to preview the zero-reference cue,
+`?demo=1&coach=run-check` to preview the non-final report, or
 `?demo=1&coach=brief` to preview the finish brief. The available Coach demos
-are `calibrating`, `front-scrub`, `exit-wheelspin`, `brake-overload`,
-`abrupt-release`, `clean-exit`, `controlled-release`, `brief`, and `focus`.
+are `calibrating`, `ready`, `front-scrub`, `exit-wheelspin`, `brake-overload`,
+`abrupt-release`, `clean-exit`, `controlled-release`, `brief`, `run-check`, and
+`focus`.
 
 The historical Reference Coach can still be previewed without Forza in demo mode:
 

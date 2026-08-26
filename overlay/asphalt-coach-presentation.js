@@ -98,7 +98,7 @@
     return selected === null ? null : { kind: selected, count: selectedCount }
   }
 
-  function buildDriverBrief(summary) {
+  function buildDriverBrief(summary, options = {}) {
     const counts = summary?.counts || {}
     const recurring = strongestKind(counts, [
       'front_scrub',
@@ -113,7 +113,10 @@
     const strengthCount = strength?.count || 0
 
     return {
-      title: 'DRIVER BRIEF · ASPHALT',
+      title: options.title || 'DRIVER BRIEF · ASPHALT',
+      mainHeading: options.mainHeading || 'MAIN HABIT',
+      strengthHeading: options.strengthHeading || 'STRONG',
+      nextHeading: options.nextHeading || 'NEXT RUN',
       mainKind,
       mainLabel: mainKind ? metaFor(mainKind).label : '',
       mainEvidenceCount: mainCount,
@@ -166,12 +169,21 @@
       return this.lastView
     }
 
-    showBrief(summary, timestampMs) {
-      const brief = buildDriverBrief(summary)
+    dismissInterimBrief(readiness = 'ready') {
+      if (this.activeBrief?.dismissOnResume !== true) return this.lastView
+      this.activeBrief = null
+      this.lastView = createEmptyView(readiness)
+      this.lastView.focus = this.focus
+      return this.lastView
+    }
+
+    showBrief(summary, timestampMs, options = {}) {
+      const brief = buildDriverBrief(summary, options)
       this.focus = brief.nextFocus
       this.activeCue = null
       this.activeBrief = {
         ...brief,
+        dismissOnResume: options.dismissOnResume === true,
         expiresAtMs: timestampMs + this.thresholds.briefDurationMs
       }
       this.cooldownUntilMs = 0

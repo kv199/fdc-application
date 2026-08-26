@@ -671,6 +671,19 @@ test('beginning a new attempt clears evidence counts without requiring a process
   })
 })
 
+test('beginning a new attempt keeps the learned envelope for the same car', () => {
+  const state = new AsphaltCoachState()
+  for (const input of calibrationPrefix()) state.update(input)
+  const samples = state.envelope.samples
+  const identity = state.identity
+
+  state.beginAttempt()
+
+  assert.equal(samples > 0, true)
+  assert.equal(state.envelope.samples, samples)
+  assert.equal(state.identity, identity)
+})
+
 test('an ordinary lap boundary preserves accumulated finding evidence', () => {
   const result = runFrames(frontScrubScenario(true))
   const before = result.findings.getSummary()
@@ -899,6 +912,35 @@ test('driver brief is asphalt-only, evidence-based and has no score or exact los
   assert.match(brief.strengthText, /CLEAN EXIT · 3 EVIDENCE/)
   assert.match(brief.nextText, /Reduce steering/)
   assert.doesNotMatch(JSON.stringify(brief), /seconds|metres|meters|score|late throttle|wrong apex/i)
+})
+
+test('a run check reuses the evidence summary without claiming an official finish', () => {
+  const brief = buildDriverBrief({ counts: { front_scrub: 1 } }, {
+    title: 'RUN CHECK · NOT FINAL',
+    mainHeading: 'CURRENT PATTERN',
+    strengthHeading: 'CURRENT STRENGTH',
+    nextHeading: 'FOCUS'
+  })
+  assert.equal(brief.title, 'RUN CHECK · NOT FINAL')
+  assert.equal(brief.mainHeading, 'CURRENT PATTERN')
+  assert.equal(brief.strengthHeading, 'CURRENT STRENGTH')
+  assert.equal(brief.nextHeading, 'FOCUS')
+  assert.match(brief.mainText, /FRONT SCRUB · 1 EVIDENCE/)
+  assert.doesNotMatch(JSON.stringify(brief), /FINISH|LAP TIME/i)
+})
+
+test('an interim run check disappears as soon as the same attempt resumes', () => {
+  const presentation = new AsphaltCoachPresentation()
+  presentation.showBrief({ counts: { front_scrub: 1 } }, 1000, {
+    title: 'RUN CHECK · NOT FINAL',
+    dismissOnResume: true
+  })
+
+  const view = presentation.dismissInterimBrief('ready')
+
+  assert.equal(view.mode, 'none')
+  assert.equal(view.readiness, 'ready')
+  assert.equal(view.focus, 'front_scrub')
 })
 
 test('empty brief reports insufficient evidence without inventing a strength or focus', () => {

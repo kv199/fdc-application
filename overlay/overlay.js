@@ -51,7 +51,7 @@ const DEMO_COACH_FROM_URL = new URLSearchParams(window.location.search).get('coa
 const DEMO_SIGNALS = ['normal', 'redline', 'shift']
 const DEMO_CORNERS = ['between', 'approach', 'entry', 'apex', 'exit']
 const DEMO_REFERENCES = ['brake-late', 'release', 'apex-slow', 'throttle-late', 'good', 'summary']
-const DEMO_COACHES = ['calibrating', 'front-scrub', 'exit-wheelspin', 'brake-overload', 'abrupt-release', 'clean-exit', 'controlled-release', 'brief', 'focus']
+const DEMO_COACHES = ['calibrating', 'ready', 'front-scrub', 'exit-wheelspin', 'brake-overload', 'abrupt-release', 'clean-exit', 'controlled-release', 'brief', 'run-check', 'focus']
 const REDLINE_RPM_FRACTION = 0.85
 const SHIFT_RPM_FRACTION = 0.98
 const LAP_SUMMARY_DURATION_MS = 4000
@@ -301,7 +301,7 @@ function queueLapComplete(payload) {
     latestTelemetry?.isRaceOn !== true
     && (lapTimingState.phase === 'circuit_complete' || lapTimingState.phase === 'sprint_complete')
   ) {
-    showAsphaltBriefIfConfirmed(`provider:${lapComplete.lapNumber}:${lapComplete.lapTimeMs}`)
+    showAsphaltBrief(`provider:${lapComplete.lapNumber}:${lapComplete.lapTimeMs}`)
   }
   scheduleTelemetryRender()
 }
@@ -319,15 +319,22 @@ function getDisplayedReference() {
 function renderCoach(reference, isSummary = false) {
   const hasReference = reference?.available === true
   const hasAsphaltGuidance = latestAsphaltCoach.mode === 'cue' || latestAsphaltCoach.mode === 'brief'
+  const hasAsphaltStatus = latestAsphaltCoach.mode === 'status'
+    || (telemetrySource === 'direct'
+      && latestTelemetry?.isRaceOn === true
+      && !hasAsphaltGuidance)
   const hasReferenceGuidance = window.ReferenceCoach.hasLiveCoachGuidance(reference, isSummary)
-  const hasCoachGuidance = hasAsphaltGuidance || hasReferenceGuidance
+  const hasCoachGuidance = hasAsphaltGuidance || hasAsphaltStatus || hasReferenceGuidance
   const isCoachEditing = window.HudLayout?.isEditing?.('coach') === true
   const isCoachVisible = window.HudPreferences?.isOverlayVisible?.('coach') !== false
   const isDeltaVisible = window.HudPreferences?.isOverlayVisible?.('delta') !== false
   coachCard.dataset.hasReference = hasCoachGuidance || isCoachEditing ? 'true' : 'false'
-  coachCard.dataset.coachMode = hasAsphaltGuidance ? latestAsphaltCoach.mode : 'reference'
+  coachCard.dataset.coachMode = hasAsphaltGuidance
+    ? latestAsphaltCoach.mode
+    : hasAsphaltStatus ? 'status' : 'reference'
   coachCard.hidden = !isCoachEditing && (!isCoachVisible || !hasCoachGuidance)
-  deltaStrip.hidden = !isDeltaVisible || (!hasReference && !hasAsphaltGuidance)
+  const hasDirectClock = telemetrySource === 'direct' && latestTelemetry !== null
+  deltaStrip.hidden = !isDeltaVisible || (!hasReference && !hasAsphaltGuidance && !hasDirectClock)
 
   if (hasAsphaltGuidance) {
     const cue = latestAsphaltCoach.cue
@@ -338,8 +345,16 @@ function renderCoach(reference, isSummary = false) {
     coachStatus.dataset.phase = 'asphalt'
     coachStatus.dataset.cueKind = cue?.kind || brief?.mainKind || ''
     coachStatus.textContent = latestAsphaltCoach.mode === 'brief'
-      ? `MAIN HABIT — ${brief.mainText}\nSTRONG — ${brief.strengthText}\nNEXT RUN — ${brief.nextText}`
+      ? `${brief.mainHeading} — ${brief.mainText}\n${brief.strengthHeading} — ${brief.strengthText}\n${brief.nextHeading} — ${brief.nextText}`
       : cue.instruction
+  } else if (hasAsphaltStatus) {
+    const ready = latestAsphaltCoach.readiness === 'ready'
+    coachKicker.textContent = ready ? 'ASPHALT COACH · READY' : 'ASPHALT COACH · LEARNING'
+    coachStatus.dataset.phase = 'asphalt'
+    coachStatus.dataset.cueKind = ''
+    coachStatus.textContent = ready
+      ? 'Analyzing driving technique'
+      : 'Learning current speed range'
   } else if (hasReferenceGuidance) {
     coachKicker.textContent = 'REFERENCE COACH'
     coachStatus.dataset.phase = reference.phase || 'between'
@@ -473,7 +488,7 @@ function beginAsphaltLapBoundary() {
   lastAsphaltBriefToken = null
 }
 
-function updateAsphaltCoach(telemetry) {
+function updateAsphaltCoach(telemetry, options = {}) {
   const snapshot = asphaltCoachState.update(telemetry)
   if (snapshot.ignored) return snapshot
   if (
@@ -504,7 +519,18 @@ function updateAsphaltCoach(telemetry) {
     return snapshot
   }
 
-  if (snapshot.newAttempt) asphaltCoachPresentation.beginAttempt()
+  if (snapshot.newAttempt) {
+    if (asphaltBriefTimer !== null) {
+      window.clearTimeout(asphaltBriefTimer)
+      asphaltBriefTimer = null
+    }
+    if (options.presentationAttemptBegan !== true) asphaltCoachPresentation.beginAttempt()
+  }
+  if (telemetry?.isRaceOn === true) {
+    asphaltCoachPresentation.dismissInterimBrief(
+      snapshot.calibration?.ready === true ? 'ready' : 'calibrating'
+    )
+  }
   const result = asphaltCoachFindings.update(snapshot)
   latestAsphaltCoach = asphaltCoachPresentation.update({
     ...result,
@@ -513,12 +539,13 @@ function updateAsphaltCoach(telemetry) {
   return snapshot
 }
 
-function showAsphaltBriefIfConfirmed(token) {
+function showAsphaltBrief(token, options = {}) {
   if (!token || token === lastAsphaltBriefToken) return false
   lastAsphaltBriefToken = token
   latestAsphaltCoach = asphaltCoachPresentation.showBrief(
     asphaltCoachFindings.getSummary(),
-    performance.now()
+    performance.now(),
+    options
   )
   if (asphaltBriefTimer !== null) window.clearTimeout(asphaltBriefTimer)
   asphaltBriefTimer = window.setTimeout(() => {
@@ -530,6 +557,16 @@ function showAsphaltBriefIfConfirmed(token) {
   return true
 }
 
+function showAsphaltRunCheck(token) {
+  return showAsphaltBrief(token, {
+    title: 'RUN CHECK · NOT FINAL',
+    mainHeading: 'CURRENT PATTERN',
+    strengthHeading: 'CURRENT STRENGTH',
+    nextHeading: 'FOCUS',
+    dismissOnResume: true
+  })
+}
+
 function handleAsphaltLapLifecycle(previousTimingState, previousLapNumber, telemetry) {
   const action = window.AsphaltCoachLifecycle.resolveLapAction({
     previousTimingState,
@@ -539,7 +576,16 @@ function handleAsphaltLapLifecycle(previousTimingState, previousLapNumber, telem
   })
 
   if (action === 'brief') {
-    showAsphaltBriefIfConfirmed(`${lapTimingState.phase}:${lapTimingState.lapNumber}:${lapTimingState.finalTimeMs}`)
+    showAsphaltBrief(
+      `final:${lapTimingState.phase}:${lapTimingState.lapNumber}:${lapTimingState.finalTimeMs}`
+    )
+    return
+  }
+
+  if (action === 'run_check') {
+    showAsphaltRunCheck(
+      `check:${asphaltCoachState.attemptId}:${previousTimingState.lastLiveCurrentTimeMs}`
+    )
     return
   }
 
@@ -771,13 +817,17 @@ function queueTelemetry(telemetry) {
   const previousTimingState = lapTimingState
   const previousLapNumber = finiteStateNumber(latestTelemetry?.lap?.number)
   lapTimingState = window.HudLapTiming.update(lapTimingState, telemetry)
-  const raceRestart = window.ReferenceCoach.isRaceRestart(latestTelemetry, telemetry)
+  const raceRestart = window.AsphaltCoachLifecycle.resolveAttemptRestart({
+    previousTelemetry: latestTelemetry,
+    previousTimingState,
+    telemetry
+  })
   const displayedTimeMs = window.HudLapTiming.displayTimeMs(lapTimingState)
   if (displayedTimeMs !== null) latestLiveLapTimeSeconds = displayedTimeMs / 1000
 
-  if (raceRestart) resetAsphaltCoach('race_restart')
-  else updateAsphaltCoach(telemetry)
-  handleAsphaltLapLifecycle(previousTimingState, previousLapNumber, telemetry)
+  if (raceRestart) beginAsphaltAttempt()
+  updateAsphaltCoach(telemetry, { presentationAttemptBegan: raceRestart })
+  if (!raceRestart) handleAsphaltLapLifecycle(previousTimingState, previousLapNumber, telemetry)
 
   const telemetryLapNumber = finiteStateNumber(telemetry?.lap?.number)
   if (
@@ -951,6 +1001,14 @@ async function listenDirectEvents(generation) {
         scheduleTelemetryRender()
       } else if (state === 'is-stale') {
         forzaConnected = false
+        if (
+          latestTelemetry?.isRaceOn === true
+          && window.AsphaltCoachLifecycle.canSummarizeAttempt(lapTimingState)
+        ) {
+          showAsphaltRunCheck(
+            `stale:${asphaltCoachState.attemptId}:${lapTimingState.lastLiveCurrentTimeMs}`
+          )
+        }
         resetAsphaltCoachTransient('telemetry_gap')
         window.HudShiftLightRuntime?.resetTransient?.()
         setConnection('is-waiting')
@@ -1217,6 +1275,11 @@ function setDemoCoach(coach, schedule = true) {
   const now = performance.now()
   if (demoCoach === null || demoCoach === 'calibrating') {
     latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
+  } else if (demoCoach === 'ready') {
+    latestAsphaltCoach = {
+      ...window.AsphaltCoachPresentation.createEmptyView('ready'),
+      mode: 'status'
+    }
   } else if (demoCoach === 'brief') {
     latestAsphaltCoach = asphaltCoachPresentation.showBrief({
       counts: {
@@ -1228,6 +1291,21 @@ function setDemoCoach(coach, schedule = true) {
         controlled_release: 1
       }
     }, now)
+  } else if (demoCoach === 'run-check') {
+    latestAsphaltCoach = asphaltCoachPresentation.showBrief({
+      counts: {
+        front_scrub: 2,
+        exit_wheelspin: 1,
+        clean_exit: 1,
+        controlled_release: 1
+      }
+    }, now, {
+      title: 'RUN CHECK · NOT FINAL',
+      mainHeading: 'CURRENT PATTERN',
+      strengthHeading: 'CURRENT STRENGTH',
+      nextHeading: 'FOCUS',
+      dismissOnResume: true
+    })
   } else if (demoCoach === 'focus') {
     asphaltCoachPresentation.showBrief({
       counts: {

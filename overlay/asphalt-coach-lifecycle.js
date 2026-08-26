@@ -10,6 +10,47 @@
     return Number.isFinite(number) ? number : null
   }
 
+  function telemetryRestarted(previousTelemetry, telemetry) {
+    const previousRaceTimeS = finite(previousTelemetry?.lap?.raceTime)
+    const currentRaceTimeS = finite(telemetry?.lap?.raceTime)
+    const previousLapNumber = finite(previousTelemetry?.lap?.number)
+    const currentLapNumber = finite(telemetry?.lap?.number)
+    const previousDistanceM = finite(previousTelemetry?.lap?.distance)
+    const currentDistanceM = finite(telemetry?.lap?.distance)
+    if (
+      previousRaceTimeS === null
+      || currentRaceTimeS === null
+      || previousLapNumber === null
+      || currentLapNumber === null
+    ) return false
+
+    const clockWentBack = currentRaceTimeS + 5 < previousRaceTimeS
+    const lapWentBack = currentLapNumber < previousLapNumber
+    const distanceWentBack = previousDistanceM !== null
+      && currentDistanceM !== null
+      && currentDistanceM + 100 < previousDistanceM
+    return clockWentBack && (lapWentBack || distanceWentBack)
+  }
+
+  function resolveAttemptRestart({ previousTelemetry, previousTimingState, telemetry } = {}) {
+    if (telemetry?.isRaceOn !== true) return false
+    const timingBaseline = {
+      lap: {
+        raceTime: previousTimingState?.lastRaceTimeS,
+        number: previousTimingState?.lastLapNumber,
+        distance: previousTimingState?.lastDistanceM
+      }
+    }
+    return telemetryRestarted(previousTelemetry, telemetry)
+      || telemetryRestarted(timingBaseline, telemetry)
+  }
+
+  function canSummarizeAttempt(timingState) {
+    return timingState?.phase === 'live'
+      && timingState?.attemptStartValid === true
+      && finite(timingState?.lastLiveCurrentTimeMs) !== null
+  }
+
   function resolveLapAction({ previousTimingState, timingState, previousLapNumber, telemetry } = {}) {
     const previousPhase = previousTimingState?.phase
     const currentPhase = timingState?.phase
@@ -20,13 +61,20 @@
     const lapAdvanced = previousLap !== null
       && currentLapNumber !== null
       && currentLapNumber > previousLap
-    const nextAttemptStarted = wasComplete && currentPhase === 'live' && telemetry?.isRaceOn === true
+    const completedResultStopped = wasComplete
+      && isComplete
+      && telemetry?.isRaceOn !== true
+    const liveAttemptStopped = previousPhase === 'live'
+      && currentPhase === 'paused'
+      && canSummarizeAttempt(previousTimingState)
+      && telemetry?.isRaceOn !== true
 
-    if (isComplete && !wasComplete && telemetry?.isRaceOn !== true) return 'brief'
+    if (isComplete && !wasComplete && (telemetry?.isRaceOn !== true || !lapAdvanced)) return 'brief'
+    if (completedResultStopped) return 'brief'
+    if (liveAttemptStopped) return 'run_check'
     if (lapAdvanced) return 'lap_boundary'
-    if (nextAttemptStarted) return 'begin_attempt'
     return 'none'
   }
 
-  return { resolveLapAction }
+  return { canSummarizeAttempt, resolveAttemptRestart, resolveLapAction }
 }))

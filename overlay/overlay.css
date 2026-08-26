@@ -575,6 +575,15 @@ body.is-editing .coachbar {
   color: #f8fafc;
   font-size: 24px;
   line-height: 1.05;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.coach-card[data-coach-mode='status'] .coach__status {
+  color: #f8fafc;
+  font-size: 18px;
+  line-height: 1.1;
 }
 
 .coach-card[data-coach-mode='brief'] .coachbar {

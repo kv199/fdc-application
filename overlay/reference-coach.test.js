@@ -36,9 +36,28 @@ test('keeps the in-game Coach card to one instruction and compact corner context
   assert.match(runtime, /DEMO_MODE && demoReference !== null/)
   assert.match(runtime, /const hasReferenceGuidance = window\.ReferenceCoach\.hasLiveCoachGuidance/)
   assert.match(runtime, /coachCard\.hidden = !isCoachEditing && \(!isCoachVisible \|\| !hasCoachGuidance\)/)
+  assert.match(runtime, /ASPHALT COACH · READY/)
+  assert.match(runtime, /Learning current speed range/)
   assert.match(runtime, /coachKicker\.textContent = 'REFERENCE COACH'/)
   assert.equal([...runtime.matchAll(/beginLapSummary\(\)/g)].length, 2)
   assert.match(runtime, /Only an explicit lap_complete may turn a live value into a final result/)
+})
+
+test('Direct keeps the game clock visible and lets live cue instructions wrap', () => {
+  const css = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
+  const runtime = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
+
+  assert.match(runtime, /const hasDirectClock = telemetrySource === 'direct'/)
+  assert.match(runtime, /!hasReference && !hasAsphaltGuidance && !hasDirectClock/)
+  assert.match(runtime, /AsphaltCoachLifecycle\.resolveAttemptRestart/)
+  assert.match(runtime, /if \(!raceRestart\) handleAsphaltLapLifecycle/)
+  assert.doesNotMatch(runtime, /showAsphaltBriefIfConfirmed/)
+  assert.match(runtime, /showAsphaltBrief\(`provider:/)
+  assert.match(runtime, /RUN CHECK · NOT FINAL/)
+  assert.match(runtime, /AsphaltCoachLifecycle\.canSummarizeAttempt\(lapTimingState\)/)
+  assert.match(runtime, /presentationAttemptBegan: raceRestart/)
+  assert.match(runtime, /if \(options\.presentationAttemptBegan !== true\)/)
+  assert.match(css, /data-coach-mode='cue'[\s\S]*white-space: normal/)
 })
 
 test('does not expose a cue when reference is unavailable', () => {
