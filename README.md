@@ -319,7 +319,8 @@ for example:
 ## Development workflow
 
 - `main` is the only permanent branch in this standalone repository.
-- The repository has no configured remote; local commits are the source of truth.
+- The repository is mirrored to the private GitHub repository
+  `https://github.com/kv199/fdc-application`; `main` is the only permanent branch.
 - `release` is the single supported Cargo profile for runnable HUD builds.
 - Do not add custom `develop` or `preview` Cargo profiles. Use browser demo mode
   for visual previews and Cargo's standard `debug` profile only for temporary
