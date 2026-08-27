@@ -1,0 +1,13 @@
+/src-tauri/target/
+/src-tauri/gen/
+
+# Local telemetry and design-review artifacts
+/data/
+*.log
+/design-qa*.png
+/implementation-hud.png
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/

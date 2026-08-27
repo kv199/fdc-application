@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Forza Horizon 6 HUD",
+  "version": "0.1.0",
+  "identifier": "dev.kv199.forza-horizon-6-hud",
+  "build": {
+    "frontendDist": "../overlay"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Forza Horizon 6 HUD",
+        "width": 1280,
+        "height": 192,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "focus": false,
+        "focusable": false,
+        "skipTaskbar": false,
+        "visible": false
+      },
+      {
+        "label": "settings",
+        "title": "Forza Horizon 6 HUD Configuration",
+        "url": "settings.html",
+        "width": 620,
+        "height": 820,
+        "minWidth": 460,
+        "minHeight": 560,
+        "resizable": true,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": true,
+        "transparent": false,
+        "shadow": true,
+        "alwaysOnTop": true,
+        "focus": true,
+        "focusable": true,
+        "skipTaskbar": false,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ws://127.0.0.1:3001; style-src 'self'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}

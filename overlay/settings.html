@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Configuration</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <main class="settings-shell">
+    <header class="settings-header">
+      <div class="settings-header__topline">
+        <p class="settings-eyebrow">FORZA HORIZON 6</p>
+      </div>
+      <h1>CONFIGURATION</h1>
+      <p class="settings-copy">Configure the overlay, Shift Light and telemetry connection.</p>
+    </header>
+
+    <div class="settings-tabs" role="tablist" aria-label="Settings categories">
+      <button id="hud-tab" class="settings-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="hud-panel" data-settings-tab="hud">HUD</button>
+      <button id="shift-light-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="shift-light-panel" tabindex="-1" data-settings-tab="shift-light">SHIFT LIGHT</button>
+      <button id="settings-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel" tabindex="-1" data-settings-tab="settings">SETTINGS</button>
+    </div>
+
+    <section id="hud-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="hud-tab" data-settings-panel="hud">
+      <div class="settings-section__heading">
+        <h2 id="hud-title">HUD</h2>
+        <span>POSITION + VISIBILITY</span>
+      </div>
+
+      <div class="layout-list">
+        <article class="layout-row" data-layout-target="coach">
+          <div class="layout-row__content">
+            <h3>Driver Coach</h3>
+            <p>Asphalt only. Live zero-reference technique cues and a short Driver Brief.</p>
+          </div>
+          <div class="layout-row__actions">
+            <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
+            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="visibility-toggle" type="button" data-overlay-toggle="coach" aria-label="Toggle Driver Coach" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
+          </div>
+        </article>
+
+        <article class="layout-row" data-layout-target="delta">
+          <div class="layout-row__content">
+            <h3>Lap Delta</h3>
+            <p>Place the live lap time and delta strip independently.</p>
+          </div>
+          <div class="layout-row__actions">
+            <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
+            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="visibility-toggle" type="button" data-overlay-toggle="delta" aria-label="Toggle Lap Delta" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
+          </div>
+        </article>
+
+        <article class="layout-row layout-row--accordion" data-layout-target="hud">
+          <div class="layout-row__header">
+            <button class="layout-row__expand" type="button" data-accordion-toggle="hud" aria-expanded="false" aria-controls="hud-content-panel">
+              <span class="layout-row__content">
+                <strong>Telemetry HUD</strong>
+                <small>Move the compact telemetry panel as one block.</small>
+              </span>
+              <span class="layout-row__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="layout-row__actions">
+              <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
+              <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+              <button class="visibility-toggle" type="button" data-overlay-toggle="hud" aria-label="Toggle Telemetry HUD" aria-pressed="true">
+                <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+              </button>
+            </div>
+          </div>
+
+          <div id="hud-content-panel" class="accordion-panel" data-accordion-panel="hud" hidden>
+            <div class="settings-section__heading">
+              <h2>HUD CONTENT</h2>
+              <span>VISIBLE BLOCKS</span>
+            </div>
+
+            <div class="visibility-list">
+              <label class="visibility-row">
+                <span>
+                  <strong>Tires</strong>
+                  <small>Temperature and tire shapes</small>
+                </span>
+                <input type="checkbox" data-hud-component="tires">
+              </label>
+              <label class="visibility-row">
+                <span>
+                  <strong>Throttle &amp; Brake</strong>
+                  <small>Pedal input meters</small>
+                </span>
+                <input type="checkbox" data-hud-component="pedals">
+              </label>
+              <label class="visibility-row">
+                <span>
+                  <strong>Steering</strong>
+                  <small>Steering wheel indicator</small>
+                </span>
+                <input type="checkbox" data-hud-component="steering">
+              </label>
+              <label class="visibility-row">
+                <span>
+                  <strong>Gear / Speed / RPM</strong>
+                  <small>Drivetrain and speed data</small>
+                </span>
+                <input type="checkbox" data-hud-component="gear">
+              </label>
+              <label class="visibility-row">
+                <span>
+                  <strong>Engine / Boost</strong>
+                  <small>Boost, power and torque data</small>
+                </span>
+                <input type="checkbox" data-hud-component="engine">
+              </label>
+              <label class="visibility-row">
+                <span>
+                  <strong>Input Graph</strong>
+                  <small>Throttle and brake history</small>
+                </span>
+                <input type="checkbox" data-hud-component="history">
+              </label>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="shift-light-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="shift-light-tab" data-settings-panel="shift-light" hidden>
+      <div class="settings-section__heading">
+        <h2 id="shift-light-title">SHIFT LIGHT</h2>
+        <div class="calibration-heading__actions">
+          <span>AUTO CALIBRATION</span>
+          <button id="shift-light-help" class="calibration-help-button" type="button" aria-expanded="false" aria-controls="shift-light-help-panel" title="Explain shift-light diagnostics">?</button>
+        </div>
+      </div>
+
+      <section class="shift-light-brightness-card" data-display-preference aria-labelledby="shift-light-brightness-title">
+        <div class="shift-light-brightness-card__heading">
+          <div>
+            <span>VISUAL OUTPUT</span>
+            <h3 id="shift-light-brightness-title">LIGHT BAR BRIGHTNESS</h3>
+          </div>
+          <output id="shift-light-brightness-value" for="shift-light-brightness" aria-live="polite">80%</output>
+        </div>
+        <div class="brightness-control">
+          <input id="shift-light-brightness" type="range" min="0" max="100" step="5" value="80" aria-labelledby="shift-light-brightness-title" aria-describedby="shift-light-brightness-scale">
+        </div>
+        <div id="shift-light-brightness-scale" class="brightness-scale" aria-hidden="true">
+          <span>0 · DIM</span>
+          <span>80 · DEFAULT</span>
+          <span>100 · MAX</span>
+        </div>
+      </section>
+
+      <div id="shift-light-help-panel" class="calibration-help" hidden>
+        <div class="calibration-help__title">HOW TO READ DIAGNOSTICS</div>
+        <dl>
+          <div><dt>OBSERVED</dt><dd>Fallback target learned from your real upshifts.</dd></div>
+          <div><dt>OPTIMAL</dt><dd>Power crossover is stable and the gearbox ratio is validated.</dd></div>
+          <div><dt>LEARNING</dt><dd>The car or gear has not collected enough usable evidence.</dd></div>
+          <div><dt>WAITING FOR WOT</dt><dd>The power curve needs more full-throttle RPM coverage.</dd></div>
+          <div><dt>WAITING FOR RATIO</dt><dd>The current and next gear need more driven-wheel ratio samples.</dd></div>
+          <div><dt>CONFIRMING</dt><dd>A target was found and is being checked for stability.</dd></div>
+          <div><dt>GEARBOX MISMATCH</dt><dd>The live RPM drop does not match the stored gearbox evidence.</dd></div>
+        </dl>
+        <p>Power is measured at the target RPM before the shift and at the predicted RPM after the shift. The target is not simply the engine's peak-power RPM.</p>
+      </div>
+
+      <div id="shift-light-empty" class="calibration-empty">
+        WAITING FOR A LIVE CAR PROFILE
+      </div>
+
+      <div id="shift-light-profile" class="calibration-card" hidden>
+        <div class="calibration-card__meta">
+          <div>
+            <span class="calibration-label">CAR</span>
+            <output id="shift-light-car-key">—</output>
+          </div>
+          <div>
+            <span class="calibration-label">PI</span>
+            <output id="shift-light-car-pi">—</output>
+          </div>
+          <div>
+            <span class="calibration-label">RPM LIMIT</span>
+            <output id="shift-light-car-rpm-max">—</output>
+          </div>
+          <div>
+            <span class="calibration-label">CURRENT TARGET</span>
+            <output id="shift-light-current-target">—</output>
+          </div>
+          <div>
+            <span class="calibration-label">STATE</span>
+            <output id="shift-light-state">LEARNING</output>
+          </div>
+        </div>
+
+        <div class="calibration-table-wrap">
+            <table class="calibration-table">
+              <thead>
+              <tr>
+                <th scope="col">GEAR</th>
+                <th scope="col">TARGET / AFTER</th>
+                <th scope="col">POWER NOW / NEXT</th>
+                <th scope="col">DATA</th>
+                <th scope="col">STATE</th>
+              </tr>
+            </thead>
+            <tbody id="shift-light-gear-rows"></tbody>
+          </table>
+        </div>
+
+        <button id="shift-light-reset" class="settings-button settings-button--danger" type="button" disabled>
+          RESET CURRENT CALIBRATION
+        </button>
+      </div>
+    </section>
+
+    <section id="settings-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="settings-tab" data-settings-panel="settings" hidden>
+      <section class="display-settings" aria-labelledby="display-settings-title">
+        <div class="settings-section__heading">
+          <h2 id="display-settings-title">DISPLAY SETTINGS</h2>
+          <span>SPEED FORMAT</span>
+        </div>
+
+        <div class="display-settings__list">
+          <div class="display-setting-row" data-display-preference role="group" aria-labelledby="speed-unit-title">
+            <div class="display-setting-row__copy">
+              <strong id="speed-unit-title">SPEED UNIT</strong>
+              <small>Choose how vehicle speed is shown in the HUD.</small>
+            </div>
+            <div class="unit-options" aria-label="Speed unit">
+              <label class="unit-option">
+                <input type="radio" name="speed-unit" value="kmh">
+                <span>KM/H</span>
+              </label>
+              <label class="unit-option">
+                <input type="radio" name="speed-unit" value="mph">
+                <span>MPH</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="telemetry-settings" aria-labelledby="telemetry-settings-title">
+        <div class="settings-section__heading">
+          <h2 id="telemetry-settings-title">TELEMETRY SETTINGS</h2>
+          <div id="telemetry-status" class="telemetry-status" data-state="offline" role="status" aria-live="polite">
+            <span class="telemetry-status__dot" aria-hidden="true"></span>
+            <span id="telemetry-status-label">TELEMETRY OFFLINE</span>
+          </div>
+        </div>
+
+        <section class="source-section" aria-labelledby="source-title">
+          <div class="settings-section__heading">
+            <h2 id="source-title">TELEMETRY SOURCE</h2>
+            <span>CHOOSE THE ACTIVE INPUT</span>
+          </div>
+          <div class="source-options">
+            <label class="source-option">
+              <input type="radio" name="telemetry-source" value="direct">
+              <span>
+                <strong>Direct Forza</strong>
+                <small>Receive Data Out directly on UDP 5301. No co-driver required. Asphalt Coach included.</small>
+              </span>
+            </label>
+            <label class="source-option">
+              <input type="radio" name="telemetry-source" value="suite">
+              <span>
+                <strong>co-driver Suite</strong>
+                <small>Use normalized telemetry from the provider. Asphalt Coach is the same HUD analysis path.</small>
+              </span>
+            </label>
+          </div>
+          <div id="telemetry-route-card" class="telemetry-route-card" data-tone="offline">
+            <div class="telemetry-route-card__header">
+              <output id="telemetry-route-label" aria-live="polite">DIRECT · OFFLINE</output>
+              <output id="telemetry-route-endpoint">UDP 127.0.0.1:5301</output>
+            </div>
+            <p id="telemetry-route-detail">The Direct Forza UDP receiver is offline.</p>
+            <p id="telemetry-route-warning" class="telemetry-route-card__warning" hidden></p>
+            <button id="telemetry-route-retry" class="settings-button" type="button" hidden>RETRY SOURCE</button>
+          </div>
+        </section>
+      </section>
+    </section>
+
+    <p id="settings-status" class="settings-status" role="status" aria-live="polite">READY</p>
+  </main>
+
+  <script src="connection.js"></script>
+  <script src="telemetry-route.js"></script>
+  <script src="shift-light-settings.js"></script>
+  <script src="display-preferences.js"></script>
+  <script src="tauri-events.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

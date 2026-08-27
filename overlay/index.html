@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Forza Horizon 6 HUD</title>
+  <link rel="stylesheet" href="overlay.css">
+</head>
+<body>
+  <div class="hud-shell">
+    <div id="coach-card" class="coach-card">
+      <section id="coachbar" class="coachbar" aria-label="Driver Coach" aria-describedby="coach-edit-hint">
+        <div class="coach-card__main">
+          <div class="coach-card__header">
+            <output id="coach-kicker" class="coach__kicker" aria-label="Coach finding"></output>
+            <output id="corner-identity" class="corner__identity" aria-label="Current corner" hidden></output>
+            <output id="corner-distance" class="corner__distance" aria-label="Distance to corner point" hidden></output>
+          </div>
+          <div class="coach-card__body">
+            <output id="coach-status" class="coach__status" aria-label="Current Driver Coach guidance">&mdash;</output>
+          </div>
+        </div>
+      </section>
+
+      <div id="coach-edit-tools" class="coach-edit-tools" hidden>
+        <span id="coach-edit-hint" class="coach-edit__hint">DRAG COACH</span>
+        <button id="coach-reset" class="coach-edit__button" type="button">RESET</button>
+        <button id="coach-cancel" class="coach-edit__button" type="button">CANCEL</button>
+        <button id="coach-save" class="coach-edit__button coach-edit__button--primary" type="button">SAVE</button>
+      </div>
+    </div>
+
+    <section id="delta-strip" class="delta-strip" aria-label="Reference delta">
+      <div class="delta-strip__topline">
+        <output id="current-lap-time" class="delta-strip__lap-time" aria-label="Current lap time">LAP --:--.---</output>
+        <div class="delta-strip__labels" aria-hidden="true">
+          <span>SLOWER</span>
+          <span>FASTER</span>
+        </div>
+      </div>
+      <div class="delta-strip__track">
+        <span class="delta-strip__zone delta-strip__zone--slow" aria-hidden="true"></span>
+        <span class="delta-strip__zone delta-strip__zone--fast" aria-hidden="true"></span>
+        <span id="lap-delta-marker" class="delta-strip__marker" aria-hidden="true"></span>
+        <output id="lap-delta-value" class="delta-strip__value" aria-label="Current reference delta">&mdash;</output>
+      </div>
+      <div id="delta-edit-tools" class="layout-edit-tools" hidden>
+        <span class="layout-edit__hint">DRAG DELTA</span>
+        <button id="delta-reset" class="layout-edit__button" type="button">RESET</button>
+        <button id="delta-cancel" class="layout-edit__button" type="button">CANCEL</button>
+        <button id="delta-save" class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>
+      </div>
+    </section>
+
+    <div id="hud-frame" class="hud-frame">
+      <div class="hud-visual">
+        <main id="hud" class="hud is-waiting" aria-label="Forza telemetry overlay">
+          <section id="hud-tires" class="tires" aria-label="Tire temperatures">
+            <output id="tire-fl" class="tire__temp" aria-label="Front-left tire temperature">--&deg;</output>
+            <output id="tire-fr" class="tire__temp" aria-label="Front-right tire temperature">--&deg;</output>
+            <span id="tire-shape-fl" class="tire" aria-hidden="true"></span>
+            <span id="tire-shape-fr" class="tire" aria-hidden="true"></span>
+            <span id="tire-shape-rl" class="tire" aria-hidden="true"></span>
+            <span id="tire-shape-rr" class="tire" aria-hidden="true"></span>
+            <output id="tire-rl" class="tire__temp" aria-label="Rear-left tire temperature">--&deg;</output>
+            <output id="tire-rr" class="tire__temp" aria-label="Rear-right tire temperature">--&deg;</output>
+          </section>
+
+          <section id="hud-pedals" class="pedals" aria-label="Pedal inputs">
+            <div class="pedal pedal--brake">
+              <div id="brake-track" class="pedal__track" role="meter" aria-label="Brake input" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div id="brake-fill" class="pedal__fill"></div>
+              </div>
+            </div>
+
+            <div class="pedal pedal--throttle">
+              <div id="throttle-track" class="pedal__track" role="meter" aria-label="Throttle input" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div id="throttle-fill" class="pedal__fill"></div>
+              </div>
+            </div>
+          </section>
+
+          <section id="hud-steering" class="steering" aria-label="Steering input">
+            <canvas id="steering-canvas" class="steering__canvas" width="112" height="112" aria-hidden="true"></canvas>
+          </section>
+
+          <section id="hud-gear" class="gear" aria-label="Current gear">
+            <output id="speed-value" class="gear__speed">-- km/h</output>
+            <output id="gear-value" class="gear__value">&mdash;</output>
+            <output id="rpm-value" class="gear__rpm">-- RPM</output>
+          </section>
+
+          <section id="hud-engine" class="engine" aria-label="Engine telemetry">
+            <div class="engine__row">
+              <span class="engine__label">BOOST</span>
+              <output id="engine-boost" class="engine__value" aria-label="Boost pressure">&mdash;</output>
+            </div>
+            <div class="engine__row">
+              <span class="engine__label">POWER</span>
+              <output id="engine-power" class="engine__value" aria-label="Engine power">&mdash;</output>
+            </div>
+            <div class="engine__row">
+              <span class="engine__label">TORQUE</span>
+              <output id="engine-torque" class="engine__value" aria-label="Engine torque">&mdash;</output>
+            </div>
+          </section>
+
+          <section id="hud-history" class="history" aria-label="Throttle and brake history">
+            <canvas id="history-canvas"></canvas>
+          </section>
+        </main>
+      </div>
+      <div id="hud-edit-tools" class="layout-edit-tools" hidden>
+        <span class="layout-edit__hint">DRAG HUD</span>
+        <button id="hud-reset" class="layout-edit__button" type="button">RESET</button>
+        <button id="hud-cancel" class="layout-edit__button" type="button">CANCEL</button>
+        <button id="hud-save" class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="corner-state.js"></script>
+  <script src="connection.js"></script>
+  <script src="telemetry-route.js"></script>
+  <script src="suite-probe.js"></script>
+  <script src="display-preferences.js"></script>
+  <script src="engine-presentation.js"></script>
+  <script src="reference-coach.js"></script>
+  <script src="asphalt-coach-state.js"></script>
+  <script src="asphalt-coach-findings.js"></script>
+  <script src="asphalt-coach-presentation.js"></script>
+  <script src="asphalt-coach-lifecycle.js"></script>
+  <script src="lap-timing.js"></script>
+  <script src="coach-layout.js"></script>
+  <script src="hud-preferences.js"></script>
+  <script src="tauri-events.js"></script>
+  <script src="shift-light-engine.js"></script>
+  <script src="shift-light-runtime.js"></script>
+  <script src="shift-light-presentation.js"></script>
+  <script src="overlay.js"></script>
+</body>
+</html>
