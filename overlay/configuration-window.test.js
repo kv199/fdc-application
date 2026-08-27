@@ -46,6 +46,15 @@ test('telemetry diagnostics live only inside the Settings tab', () => {
   assert.doesNotMatch(overlayHtml, /telemetry-route-badge/)
 })
 
+test('Configuration exposes only the Direct Data Out receiver', () => {
+  assert.match(settingsHtml, /DIRECT DATA OUT/)
+  assert.match(settingsHtml, /UDP 127\.0\.0\.1:5301/)
+  assert.doesNotMatch(settingsHtml, /telemetry-source|co-driver|Suite|WebSocket/u)
+  assert.doesNotMatch(settingsJs, /HudConnection|set_telemetry_source|selectTelemetrySource/u)
+  assert.match(settingsJs, /call\('retry_direct_source'\)/u)
+  assert.match(tauriMain, /fn retry_direct_source/u)
+})
+
 test('Display settings expose speed units before telemetry', () => {
   const displaySettingsIndex = settingsHtml.indexOf('id="display-settings-title"')
   const telemetrySettingsIndex = settingsHtml.indexOf('id="telemetry-settings-title"')

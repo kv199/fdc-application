@@ -6,50 +6,34 @@ const {
   normalizeRouteStatus
 } = require('./telemetry-route.js')
 
-test('normalizes unknown route values to a safe Direct offline state', () => {
-  assert.deepEqual(normalizeRouteStatus({ source: 'other', phase: 'broken', suiteState: 'maybe' }), {
-    source: 'direct',
+test('normalizes unknown route values to a safe Direct Data Out offline state', () => {
+  assert.deepEqual(normalizeRouteStatus({ phase: 'broken', message: null }), {
     phase: 'offline',
-    suiteState: 'unavailable',
     message: '',
     revision: 0
   })
 })
 
-test('describes a live Direct route without implying Suite input', () => {
-  const presentation = getRoutePresentation({ source: 'direct', phase: 'live' })
+test('describes a live Direct Data Out route', () => {
+  const presentation = getRoutePresentation({ phase: 'live' })
 
-  assert.equal(presentation.statusLabel, 'DIRECT · LIVE')
+  assert.equal(presentation.statusLabel, 'DIRECT DATA OUT · LIVE')
   assert.equal(presentation.endpoint, 'UDP 127.0.0.1:5301')
-  assert.match(presentation.detail, /directly/)
+  assert.match(presentation.detail, /receiving Forza Horizon 6 Data Out directly/)
   assert.equal(presentation.warning, '')
   assert.equal(presentation.tone, 'live')
 })
 
-test('makes simultaneous Suite reception explicit while Direct remains authoritative', () => {
-  const presentation = getRoutePresentation({
-    source: 'direct',
-    phase: 'live',
-    suiteState: 'receiving'
-  })
+test('describes missing packets without introducing another transport state', () => {
+  const presentation = getRoutePresentation({ phase: 'stale' })
 
-  assert.equal(presentation.statusLabel, 'DIRECT · LIVE')
-  assert.match(presentation.warning, /HUD input is Direct UDP/)
-  assert.match(presentation.warning, /also receiving UDP packets/)
+  assert.equal(presentation.statusLabel, 'DIRECT DATA OUT · DATA STALE')
+  assert.match(presentation.detail, /packets have stopped arriving/)
+  assert.equal(presentation.warning, '')
 })
 
-test('distinguishes Suite transport availability from live Forza telemetry', () => {
-  const waiting = getRoutePresentation({ source: 'suite', phase: 'waiting' })
-  const live = getRoutePresentation({ source: 'suite', phase: 'live' })
-
-  assert.equal(waiting.statusLabel, 'SUITE · WAITING FOR FORZA')
-  assert.match(waiting.detail, /provider is connected/)
-  assert.equal(live.statusLabel, 'SUITE · LIVE')
-})
-
-test('preserves a Direct bind error and exposes retry', () => {
+test('preserves a Direct UDP bind error and exposes retry', () => {
   const presentation = getRoutePresentation({
-    source: 'direct',
     phase: 'error',
     message: 'Unable to bind UDP 127.0.0.1:5301: address in use'
   })

@@ -48,7 +48,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src ws://127.0.0.1:3001; style-src 'self'; script-src 'self'"
+      "csp": "default-src 'self'; connect-src 'self'; style-src 'self'; script-src 'self'"
     }
   },
   "bundle": {

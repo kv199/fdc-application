@@ -691,14 +691,14 @@ test('an ordinary lap boundary preserves accumulated finding evidence', () => {
   assert.deepEqual(result.findings.getSummary(), before)
 })
 
-test('Direct and Suite normalized replays produce identical zero-reference findings', () => {
+test('normalized telemetry replays produce identical zero-reference findings', () => {
   const replay = frontScrubScenario(true).concat(cleanExitScenario(true).slice(8).map(input => ({
     ...input,
     timestampMs: input.timestampMs + 340,
     lap: { ...input.lap, raceTime: (input.timestampMs + 340) / 1000, distance: input.timestampMs + 340 }
   })))
   const direct = runFrames(replay)
-  const suite = runFrames(replay.map(input => ({ ...input })))
+  const replayed = runFrames(replay.map(input => ({ ...input })))
   assert.deepEqual(
     direct.events.map(event => ({
       kind: event.kind,
@@ -706,14 +706,14 @@ test('Direct and Suite normalized replays produce identical zero-reference findi
       evidenceMs: event.evidenceMs,
       components: event.evidence.components
     })),
-    suite.events.map(event => ({
+    replayed.events.map(event => ({
       kind: event.kind,
       confidence: event.confidence,
       evidenceMs: event.evidenceMs,
       components: event.evidence.components
     }))
   )
-  assert.deepEqual(direct.findings.getSummary(), suite.findings.getSummary())
+  assert.deepEqual(direct.findings.getSummary(), replayed.findings.getSummary())
 })
 
 test('equal FH timestamps preserve evidence and use the latest tick sample', () => {
@@ -763,10 +763,10 @@ test('equal packet timestamps do not hide race-clock rewinds', () => {
   assert.equal(rewind.resetReason, 'race_clock_rewind')
 })
 
-test('Direct and Suite preserve delayed abrupt-release evidence identically', () => {
+test('normalized telemetry preserves delayed abrupt-release evidence identically', () => {
   const replay = delayedAbruptReleaseScenario()
   const direct = runFrames(replay)
-  const suite = runFrames(replay.map(input => ({ ...input })))
+  const replayed = runFrames(replay.map(input => ({ ...input })))
   const select = events => events
     .filter(event => event.kind === FINDINGS.ABRUPT_BRAKE_RELEASE)
     .map(event => ({
@@ -776,7 +776,7 @@ test('Direct and Suite preserve delayed abrupt-release evidence identically', ()
       evidenceMs: event.evidenceMs,
       components: event.evidence.components
     }))
-  assert.deepEqual(select(direct.events), select(suite.events))
+  assert.deepEqual(select(direct.events), select(replayed.events))
 })
 
 test('a grounded real FH6 braking turn stays analyzable without a false negative cue', () => {

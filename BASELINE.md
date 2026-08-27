@@ -59,3 +59,14 @@ Live Forza gameplay and a running Suite/WebSocket session were not available dur
 - **Local SQLite:** `hud.sqlite` is stored in the HUD application data directory, separate from the provider database. The schema stores cars, immutable gearbox variants, per-gear profiles, bounded samples, and schema version; Rust tests cover idempotent creation, migrations, variant resolution, monotonic merges, and reset behavior.
 
 This document records the source working baseline and the history-preserving extraction. The standalone commit SHA is necessarily different from the source Suite commit because the repository root and history are different.
+
+## Stage 4 runtime boundary
+
+Stage 4 makes the Direct Data Out path the only active FDC runtime flow:
+`Forza Horizon 6 → UDP 5301 → FDC → HUD / Recording / Analysis`. The Suite
+telemetry source, port-3001 WebSocket, probe, reconnect lifecycle, WebSocket CSP
+allowance, provider-owned reference/corner message consumers, and related
+user-facing contract documentation were removed. Direct UDP decoding still
+feeds the normalized `queueTelemetry` path; Asphalt Coach, Shift Light, lap
+timing, and FDC-local persistence remain active. The historical observations
+above describe the pre-Stage-4 baseline and are not current runtime behavior.

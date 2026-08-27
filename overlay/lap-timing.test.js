@@ -1,7 +1,5 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const path = require('node:path')
 
 const timing = require('./lap-timing.js')
 
@@ -29,7 +27,7 @@ function sequence() {
   return state
 }
 
-test('Direct and Suite telemetry sequences produce the same live and pause state', () => {
+test('Direct UDP telemetry sequences produce the expected live and pause state', () => {
   assert.deepEqual(sequence(), sequence())
   assert.equal(sequence().phase, 'live')
   assert.equal(sequence().currentTimeMs, 40200)
@@ -203,33 +201,6 @@ test('a zeroed non-live pause packet cannot masquerade as a restart', () => {
   assert.equal(state.currentTimeMs, 12600)
 })
 
-test('Direct keeps the game clock visible while provider reference controls stay hidden', () => {
-  const css = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
-  assert.match(css, /body\[data-telemetry-source='direct'\] #coach-card/)
-  assert.match(css, /body\[data-telemetry-source='direct'\] #delta-strip \.delta-strip__labels/)
-  assert.match(css, /body\[data-telemetry-source='direct'\] #delta-strip \.delta-strip__track/)
-  assert.doesNotMatch(css, /body\[data-telemetry-source='direct'\] #delta-strip\s*\{/)
-})
-
-test('provider sprint completion persists the Forza current clock until the next attempt', () => {
-  let state = timing.createState()
-  state = timing.update(state, telemetry({ lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 } }))
-  state = timing.update(state, telemetry({ lap: { number: 0, current: 108.713, last: 0, raceTime: 108.713, distance: 5951 } }))
-  state = timing.complete(state, { lapNumber: 1, lapTimeMs: 108713, timeSource: 'forza_lap_current' })
-  assert.equal(state.phase, 'sprint_complete')
-  assert.equal(timing.displayTimeMs(state), 108713)
-
-  state = timing.update(state, telemetry({ lap: { number: 0, current: 0.1, last: 0, raceTime: 0.1, distance: 0 } }))
-  assert.equal(state.phase, 'live')
-  assert.equal(state.finalTimeMs, null)
-})
-
-test('source switching resets volatile timing state', () => {
-  const state = timing.complete(timing.createState(), {
-    lapNumber: 1,
-    lapTimeMs: 50000,
-    timeSource: 'forza_lap_current'
-  })
-  assert.deepEqual(timing.resetForSourceSwitch(), timing.createState())
-  assert.equal(state.finalTimeMs, 50000)
+test('direct restart resets volatile timing state', () => {
+  assert.deepEqual(timing.resetForRestart(), timing.createState())
 })

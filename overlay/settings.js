@@ -35,7 +35,6 @@
   const shiftLightBrightness = document.getElementById('shift-light-brightness')
   const shiftLightBrightnessValue = document.getElementById('shift-light-brightness-value')
   const displayPreferenceRows = [...document.querySelectorAll('[data-display-preference]')]
-  const telemetrySourceInputs = [...document.querySelectorAll('input[name="telemetry-source"]')]
   const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
   const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
   const settingsPanels = [...document.querySelectorAll('[data-settings-panel]')]
@@ -47,12 +46,8 @@
     shiftLightBrightness: 80
   }
   let latestShiftLightState = null
-  let telemetrySource = globalScope.HudConnection?.readTelemetrySource?.() || 'direct'
   let latestRouteRevision = -1
-  let latestRouteStatus = globalScope.HudTelemetryRoute?.normalizeRouteStatus?.({
-    source: telemetrySource,
-    phase: 'offline'
-  })
+  let latestRouteStatus = globalScope.HudTelemetryRoute?.normalizeRouteStatus?.({ phase: 'offline' })
 
   function selectSettingsTab(tabName) {
     for (const tab of settingsTabs) {
@@ -199,8 +194,6 @@
     const presentation = globalScope.HudTelemetryRoute?.getRoutePresentation?.(latestRouteStatus)
     if (!presentation) return
 
-    telemetrySource = presentation.source
-    applyTelemetrySourceInput()
     telemetryStatus.dataset.state = presentation.tone === 'live'
       ? 'live'
       : ['waiting', 'stale'].includes(presentation.tone)
@@ -216,22 +209,12 @@
     telemetryRouteRetry.hidden = !presentation.canRetry
   }
 
-  function applyTelemetrySourceInput() {
-    for (const input of telemetrySourceInputs) input.checked = input.value === telemetrySource
-  }
-
-  async function selectTelemetrySource(source, force = false) {
-    const next = globalScope.HudConnection?.normalizeTelemetrySource?.(source) || 'direct'
-    if (next === telemetrySource && !force) return
+  async function retryDirectSource() {
     try {
-      setStatus(`SWITCHING TO ${next === 'direct' ? 'DIRECT FORZA' : 'CO-DRIVER SUITE'}`)
-      await call('set_telemetry_source', { source: next })
-      telemetrySource = next
-      globalScope.HudConnection?.writeTelemetrySource?.(next)
-      applyTelemetrySourceInput()
+      setStatus('RETRYING DIRECT DATA OUT')
+      await call('retry_direct_source')
     } catch (error) {
-      applyTelemetrySourceInput()
-      setStatus(error.message || 'Unable to change telemetry source', true)
+      setStatus(error.message || 'Unable to retry Direct Data Out', true)
     }
   }
 
@@ -520,11 +503,6 @@
     )
   })
 
-  applyTelemetrySourceInput()
-  for (const input of telemetrySourceInputs) {
-    input.addEventListener('change', () => selectTelemetrySource(input.value))
-  }
-
   shiftLightHelp?.addEventListener('click', () => {
     const expanded = shiftLightHelp.getAttribute('aria-expanded') === 'true'
     shiftLightHelp.setAttribute('aria-expanded', String(!expanded))
@@ -555,7 +533,7 @@
   })
 
   telemetryRouteRetry.addEventListener('click', () => {
-    void selectTelemetrySource(telemetrySource, true)
+    void retryDirectSource()
   })
 
   renderRouteStatus(latestRouteStatus)
@@ -566,10 +544,6 @@
     cancelEdit,
     setLayoutEditingState,
     setRouteStatus: renderRouteStatus,
-    resetShiftLight: requestShiftLightReset,
-    setTelemetrySource: source => {
-      telemetrySource = globalScope.HudConnection?.normalizeTelemetrySource?.(source) || 'direct'
-      applyTelemetrySourceInput()
-    }
+    resetShiftLight: requestShiftLightReset
   }
 })(typeof globalThis === 'undefined' ? this : globalThis)

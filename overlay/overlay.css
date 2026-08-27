@@ -333,27 +333,9 @@ body {
   white-space: nowrap;
 }
 
-.coach__status,
-.corner__identity,
-.corner__distance {
+.coach__status {
   padding: 0;
   font-style: normal;
-}
-
-.corner__identity {
-  color: #f8fafc;
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  line-height: 1.05;
-}
-
-.corner__distance {
-  flex: 0 0 auto;
-  color: #d4d4d8;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.1;
 }
 
 .coach__status {
@@ -398,10 +380,6 @@ body {
 .coach__status[data-cue-kind='throttle_early'],
 .coach__status[data-cue-kind='good'] {
   color: var(--gas);
-}
-
-.corner__identity[data-phase='loading'] {
-  color: #a1a1aa;
 }
 
 .coach-edit-tools {
@@ -511,21 +489,12 @@ body.is-editing .coachbar {
     padding: 12px 14px;
   }
 
-  .corner__identity {
-    font-size: 17px;
-  }
-
   .coach__status {
     font-size: 22px;
   }
-
-  .corner__distance {
-    font-size: 11px;
-  }
-
 }
 
-/* Driver Coach v2: the coach card is movable; the lap delta belongs to the HUD. */
+/* The Coach card is movable; the lap timer belongs to the HUD. */
 .coach-card {
   position: absolute;
   top: 12px;
@@ -557,14 +526,6 @@ body.is-editing .coachbar {
 .coach-card__body {
   justify-content: flex-start;
   margin-top: 6px;
-}
-
-.corner__identity {
-  font-size: 20px;
-}
-
-.corner__distance {
-  font-size: 13px;
 }
 
 .coach__status {
@@ -621,7 +582,6 @@ body.is-editing .coachbar {
 .delta-strip__topline {
   display: flex;
   align-items: center;
-  gap: 18px;
 }
 
 .delta-strip__lap-time {
@@ -631,56 +591,6 @@ body.is-editing .coachbar {
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
-}
-
-.delta-strip__labels {
-  flex: 1 1 auto;
-  display: flex;
-  justify-content: space-between;
-  color: #a1a1aa;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  line-height: 1;
-}
-
-.delta-strip__track {
-  position: relative;
-  height: 28px;
-  margin-top: 6px;
-  overflow: hidden;
-  border: 1px solid rgb(226 232 240 / 32%);
-  border-radius: 3px;
-  background: rgb(226 232 240 / 7%);
-}
-
-.delta-strip__zone,
-.delta-strip__marker {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-}
-
-.delta-strip__zone--slow {
-  right: 50%;
-  left: 0;
-  background: linear-gradient(90deg, rgb(255 49 43 / 40%), rgb(255 49 43 / 8%));
-}
-
-.delta-strip__zone--fast {
-  right: 0;
-  left: 50%;
-  background: linear-gradient(90deg, rgb(105 232 63 / 8%), rgb(105 232 63 / 40%));
-}
-
-.delta-strip__marker {
-  left: 50%;
-  z-index: 2;
-  width: 3px;
-  background: #fbbf24;
-  box-shadow: 0 0 8px rgb(251 191 36 / 70%);
-  transform: translateX(-50%);
-  transition: left 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
 /* Layout editor: Coach, Delta, and the telemetry HUD are independent targets. */
@@ -808,35 +718,6 @@ body.is-editing .coachbar {
   background: rgb(8 10 12 / 88%);
 }
 
-.delta-strip__value {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  display: grid;
-  place-items: center;
-  color: #f8fafc;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 90%);
-}
-
-.delta-strip[data-delta-state='green'] .delta-strip__marker {
-  background: var(--gas);
-  box-shadow: 0 0 8px rgb(105 232 63 / 70%);
-}
-
-.delta-strip[data-delta-state='red'] .delta-strip__marker {
-  background: var(--brake);
-  box-shadow: 0 0 8px rgb(255 49 43 / 70%);
-}
-
-.delta-strip[data-delta-state='amber'] .delta-strip__marker,
-.delta-strip[data-delta-state='neutral'] .delta-strip__marker {
-  background: #fbbf24;
-  box-shadow: 0 0 8px rgb(251 191 36 / 70%);
-}
-
 .coach-card.is-editing,
 body.is-editing .coach-card {
   pointer-events: auto;
@@ -857,24 +738,7 @@ body.is-editing .coachbar {
     padding: 12px 14px;
   }
 
-  .corner__identity {
-    font-size: 17px;
-  }
-
-  .corner__distance {
-    font-size: 11px;
-  }
-
   .coach__status {
     font-size: 22px;
   }
-
-  .delta-strip__value {
-    font-size: 15px;
-  }
-}
-body[data-telemetry-source='direct'] #coach-card[data-legacy-reference='true'],
-body[data-telemetry-source='direct'] #delta-strip .delta-strip__labels,
-body[data-telemetry-source='direct'] #delta-strip .delta-strip__track {
-  display: none;
 }

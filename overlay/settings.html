@@ -14,7 +14,7 @@
         <p class="settings-eyebrow">FORZA HORIZON 6</p>
       </div>
       <h1>CONFIGURATION</h1>
-      <p class="settings-copy">Configure the overlay, Shift Light and telemetry connection.</p>
+      <p class="settings-copy">Configure the overlay, Shift Light and direct Forza Data Out.</p>
     </header>
 
     <div class="settings-tabs" role="tablist" aria-label="Settings categories">
@@ -47,7 +47,7 @@
         <article class="layout-row" data-layout-target="delta">
           <div class="layout-row__content">
             <h3>Lap Delta</h3>
-            <p>Place the live lap time and delta strip independently.</p>
+          <p>Place the live lap timer independently.</p>
           </div>
           <div class="layout-row__actions">
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
@@ -250,42 +250,26 @@
 
       <section class="telemetry-settings" aria-labelledby="telemetry-settings-title">
         <div class="settings-section__heading">
-          <h2 id="telemetry-settings-title">TELEMETRY SETTINGS</h2>
+          <h2 id="telemetry-settings-title">DIRECT DATA OUT</h2>
           <div id="telemetry-status" class="telemetry-status" data-state="offline" role="status" aria-live="polite">
             <span class="telemetry-status__dot" aria-hidden="true"></span>
-            <span id="telemetry-status-label">TELEMETRY OFFLINE</span>
+            <span id="telemetry-status-label">DIRECT DATA OUT OFFLINE</span>
           </div>
         </div>
 
-        <section class="source-section" aria-labelledby="source-title">
+        <section class="data-out-section" aria-labelledby="source-title">
           <div class="settings-section__heading">
-            <h2 id="source-title">TELEMETRY SOURCE</h2>
-            <span>CHOOSE THE ACTIVE INPUT</span>
-          </div>
-          <div class="source-options">
-            <label class="source-option">
-              <input type="radio" name="telemetry-source" value="direct">
-              <span>
-                <strong>Direct Forza</strong>
-                <small>Receive Data Out directly on UDP 5301. No co-driver required. Asphalt Coach included.</small>
-              </span>
-            </label>
-            <label class="source-option">
-              <input type="radio" name="telemetry-source" value="suite">
-              <span>
-                <strong>co-driver Suite</strong>
-                <small>Use normalized telemetry from the provider. Asphalt Coach is the same HUD analysis path.</small>
-              </span>
-            </label>
+            <h2 id="source-title">FORZA DATA OUT</h2>
+            <span>DIRECT UDP INPUT</span>
           </div>
           <div id="telemetry-route-card" class="telemetry-route-card" data-tone="offline">
             <div class="telemetry-route-card__header">
-              <output id="telemetry-route-label" aria-live="polite">DIRECT · OFFLINE</output>
+              <output id="telemetry-route-label" aria-live="polite">DIRECT DATA OUT · OFFLINE</output>
               <output id="telemetry-route-endpoint">UDP 127.0.0.1:5301</output>
             </div>
-            <p id="telemetry-route-detail">The Direct Forza UDP receiver is offline.</p>
+            <p id="telemetry-route-detail">The FDC Direct Data Out receiver is offline.</p>
             <p id="telemetry-route-warning" class="telemetry-route-card__warning" hidden></p>
-            <button id="telemetry-route-retry" class="settings-button" type="button" hidden>RETRY SOURCE</button>
+            <button id="telemetry-route-retry" class="settings-button" type="button" hidden>RETRY DATA OUT</button>
           </div>
         </section>
       </section>
@@ -294,7 +278,6 @@
     <p id="settings-status" class="settings-status" role="status" aria-live="polite">READY</p>
   </main>
 
-  <script src="connection.js"></script>
   <script src="telemetry-route.js"></script>
   <script src="shift-light-settings.js"></script>
   <script src="display-preferences.js"></script>

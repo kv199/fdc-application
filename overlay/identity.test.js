@@ -6,7 +6,6 @@ const test = require('node:test')
 const root = path.join(__dirname, '..')
 const storageSources = [
   'coach-layout.js',
-  'connection.js',
   'display-preferences.js',
   'hud-preferences.js',
   'settings.js'
@@ -15,7 +14,6 @@ const storageSources = [
 test('FDC uses only fresh v1 browser storage keys', () => {
   for (const key of [
     'fdc.layout.v1',
-    'fdc.telemetry-source.v1',
     'fdc.display-preferences.v1',
     'fdc.hud-visibility.v1',
     'fdc.overlay-visibility.v1'
@@ -36,4 +34,23 @@ test('FDC has a new native identity and database filename', () => {
   assert.match(cargo, /^name = "fdc-application"$/mu)
   assert.match(rust, /directory\.join\("fdc\.sqlite"\)/u)
   assert.doesNotMatch(rust, /directory\.join\("hud\.sqlite"\)/u)
+})
+
+test('FDC exposes only the Direct Data Out runtime path', () => {
+  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
+  const settings = fs.readFileSync(path.join(__dirname, 'settings.html'), 'utf8')
+  const settingsRuntime = fs.readFileSync(path.join(__dirname, 'settings.js'), 'utf8')
+  const overlayRuntime = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
+  const route = fs.readFileSync(path.join(__dirname, 'telemetry-route.js'), 'utf8')
+  const config = fs.readFileSync(path.join(root, 'src-tauri', 'tauri.conf.json'), 'utf8')
+
+  for (const source of [html, settings, settingsRuntime, overlayRuntime, route, config]) {
+    assert.doesNotMatch(source, /WebSocket|websocket|co-driver|Suite|3001|ws:\/\//iu)
+  }
+  assert.match(html, /src="telemetry-route\.js"/u)
+  assert.doesNotMatch(html, /suite-probe|connection\.js|reference-coach|corner-state/u)
+  assert.match(settings, /DIRECT DATA OUT/u)
+  assert.doesNotMatch(settings, /telemetry-source|source-option|co-driver|Suite/u)
+  assert.match(route, /UDP 127\.0\.0\.1:5301/u)
+  assert.match(config, /connect-src 'self'/u)
 })

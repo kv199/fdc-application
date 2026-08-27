@@ -206,7 +206,7 @@
       if (
         editingTarget === 'coach'
         && targetWasHidden
-        && elements.coach.dataset.hasReference !== 'true'
+        && elements.coach.dataset.hasCoachGuidance !== 'true'
       ) {
         elements.coach.hidden = true
       }

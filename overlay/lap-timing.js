@@ -311,29 +311,7 @@
     })
   }
 
-  function complete(state, payload) {
-    const timeMs = finite(payload?.lapTimeMs)
-    if (timeMs === null || timeMs <= 0) return state
-    const timeSource = payload?.timeSource === COMPLETE_SOURCES.sprint
-      ? COMPLETE_SOURCES.sprint
-      : COMPLETE_SOURCES.circuit
-    return {
-      ...(state && typeof state === 'object' ? state : createState()),
-      phase: timeSource === COMPLETE_SOURCES.sprint ? 'sprint_complete' : 'circuit_complete',
-      lapNumber: finite(payload?.lapNumber),
-      currentTimeMs: timeMs,
-      finalTimeMs: timeMs,
-      finalTimeSource: timeSource,
-      lastCompletedLapTimeMs: timeSource === COMPLETE_SOURCES.circuit
-        ? timeMs
-        : state?.lastCompletedLapTimeMs ?? null,
-      pendingLapBoundary: false,
-      pendingLapNumber: null,
-      pendingSprintTimeMs: null
-    }
-  }
-
-  function resetForSourceSwitch() {
+  function resetForRestart() {
     return createState()
   }
 
@@ -344,11 +322,10 @@
   return {
     COMPLETE_SOURCES,
     START_MAX_MS,
-    complete,
     createState,
     currentGameTimeMs,
     displayTimeMs,
-    resetForSourceSwitch,
+    resetForRestart,
     update
   }
 }))

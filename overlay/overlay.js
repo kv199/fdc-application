@@ -17,12 +17,8 @@ const coachCard = document.getElementById('coach-card')
 const coachbar = document.getElementById('coachbar')
 const coachKicker = document.getElementById('coach-kicker')
 const coachStatus = document.getElementById('coach-status')
-const cornerIdentity = document.getElementById('corner-identity')
-const cornerDistance = document.getElementById('corner-distance')
 const deltaStrip = document.getElementById('delta-strip')
 const currentLapTime = document.getElementById('current-lap-time')
-const lapDeltaMarker = document.getElementById('lap-delta-marker')
-const lapDeltaValue = document.getElementById('lap-delta-value')
 const tireElements = {
   fl: document.getElementById('tire-fl'),
   fr: document.getElementById('tire-fr'),
@@ -36,56 +32,37 @@ const tireVisualElements = {
   rr: document.getElementById('tire-shape-rr')
 }
 
-const WS_URL = window.HudConnection.resolveCoDriverWebSocketUrl()
-let telemetrySource = window.HudConnection.readTelemetrySource()
 let displayPreferences = window.DisplayPreferences.read()
 const STEERING_WHEEL_ASSET = 'assets/steering-wheels/default.svg'
 const STEERING_WHEEL_RANGE_DEGREES = 90
-const RECONNECT_MS = 1000
 const HISTORY_MS = 8000
 const DEMO_MODE = new URLSearchParams(window.location.search).has('demo')
 const DEMO_SIGNAL_FROM_URL = new URLSearchParams(window.location.search).get('signal')
-const DEMO_CORNER_FROM_URL = new URLSearchParams(window.location.search).get('corner')
-const DEMO_REFERENCE_FROM_URL = new URLSearchParams(window.location.search).get('reference')
 const DEMO_COACH_FROM_URL = new URLSearchParams(window.location.search).get('coach')
 const DEMO_SIGNALS = ['normal', 'redline', 'shift']
-const DEMO_CORNERS = ['between', 'approach', 'entry', 'apex', 'exit']
-const DEMO_REFERENCES = ['brake-late', 'release', 'apex-slow', 'throttle-late', 'good', 'summary']
 const DEMO_COACHES = ['calibrating', 'ready', 'front-scrub', 'exit-wheelspin', 'brake-overload', 'abrupt-release', 'clean-exit', 'controlled-release', 'brief', 'run-check', 'focus']
 const REDLINE_RPM_FRACTION = 0.85
 const SHIFT_RPM_FRACTION = 0.98
-const LAP_SUMMARY_DURATION_MS = 4000
 const ASPHALT_BRIEF_DURATION_MS = 25000
-const DEMO_LAP_SUMMARY_FROM_URL = new URLSearchParams(window.location.search).get('lapSummary') === '1'
 
 let latestTelemetry = null
 let latestLiveLapTimeSeconds = null
 let lapTimingState = window.HudLapTiming.createState()
 let latestSteer = 0
 let renderScheduled = false
-let reconnectTimer = null
 let directStartPending = false
 let directGeneration = 0
 let directEventUnlisteners = []
-let socket = null
 let forzaConnected = false
-let suiteHadTelemetry = false
 let lastConnectionState = null
 let routeRevision = 0
 let routeStatus = window.HudTelemetryRoute.normalizeRouteStatus({
-  source: telemetrySource,
   phase: 'starting',
   revision: routeRevision
-})
-const suiteProbe = window.HudSuiteProbe.createSuiteProbe({
-  url: WS_URL,
-  onStatus: suiteState => publishRouteStatus({ suiteState })
 })
 let historySamples = []
 let steeringWheelImageReady = false
 let demoSignal = DEMO_SIGNALS.includes(DEMO_SIGNAL_FROM_URL) ? DEMO_SIGNAL_FROM_URL : 'normal'
-let demoCorner = DEMO_CORNERS.includes(DEMO_CORNER_FROM_URL) ? DEMO_CORNER_FROM_URL : null
-let demoReference = DEMO_REFERENCES.includes(DEMO_REFERENCE_FROM_URL) ? DEMO_REFERENCE_FROM_URL : null
 let demoCoach = DEMO_COACHES.includes(DEMO_COACH_FROM_URL) ? DEMO_COACH_FROM_URL : null
 let activeRpmSignal = null
 let latestShiftLight = {
@@ -102,23 +79,12 @@ let latestShiftLight = {
 }
 const shiftLightPresentation = window.ShiftLightPresentation.createShiftLightPresentation()
 let shiftLightLatchTimer = null
-let latestCornerTemplate = null
-let latestCornerState = null
-let latestReference = window.ReferenceCoach.createEmptyReference()
 let asphaltCoachState = new window.AsphaltCoachState.AsphaltCoachState()
 let asphaltCoachFindings = new window.AsphaltCoachFindings.AsphaltCoachFindings()
 let asphaltCoachPresentation = new window.AsphaltCoachPresentation.AsphaltCoachPresentation()
 let latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
 let lastAsphaltBriefToken = null
 let asphaltBriefTimer = null
-let lapDeltaState = 'neutral'
-let lapSummaryReference = null
-let lapSummaryExpiresAt = 0
-let lapSummaryTimer = null
-let pendingReference = null
-let lastAvailableReference = null
-let finalLapSummaryReference = null
-let finalLapSummaryLapNumber = null
 
 const steeringWheelImage = new Image()
 steeringWheelImage.addEventListener('load', () => {
@@ -171,9 +137,7 @@ function setConnection(state) {
 }
 
 function sameRouteStatus(left, right) {
-  return left.source === right.source
-    && left.phase === right.phase
-    && left.suiteState === right.suiteState
+  return left.phase === right.phase
     && left.message === right.message
     && left.revision === right.revision
 }
@@ -195,19 +159,13 @@ function publishRouteStatus(patch = {}, force = false) {
 function errorMessage(error) {
   if (typeof error === 'string') return error
   if (typeof error?.message === 'string') return error.message
-  return String(error || 'Unknown telemetry source error')
+  return String(error || 'Unknown Direct Data Out error')
 }
 
 function invokeTauri(command, args) {
   const invoke = window.__TAURI_INTERNALS__?.invoke
   if (typeof invoke !== 'function') return Promise.reject(new Error('Tauri commands are unavailable'))
   return Promise.resolve(invoke(command, args))
-}
-
-function applyTelemetrySourcePresentation() {
-  document.body.dataset.telemetrySource = DEMO_MODE && demoReference !== null
-    ? 'suite'
-    : telemetrySource
 }
 
 function applyDisplayPreferences() {
@@ -241,100 +199,29 @@ function setRpmSignal(signal) {
   hud.dataset.signal = signal
 }
 
-function clearLapSummary({ promotePending = true } = {}) {
-  if (lapSummaryTimer !== null) {
-    window.clearTimeout(lapSummaryTimer)
-    lapSummaryTimer = null
-  }
-  if (promotePending && pendingReference?.available === true) latestReference = pendingReference
-  pendingReference = null
-  lapSummaryReference = null
-  lapSummaryExpiresAt = 0
+function formatLapTime(secondsValue) {
+  const seconds = Number(secondsValue)
+  if (!Number.isFinite(seconds) || seconds < 0) return '--:--.---'
+
+  const minutes = Math.floor(seconds / 60)
+  const remainder = (seconds - minutes * 60).toFixed(3).padStart(6, '0')
+  return `${minutes}:${remainder}`
 }
 
-function getActiveLapSummary() {
-  if (!lapSummaryReference || performance.now() >= lapSummaryExpiresAt) {
-    clearLapSummary()
-    return null
-  }
-  return lapSummaryReference
-}
-
-function beginLapSummary() {
-  if (getActiveLapSummary()) return true
-  const sourceReference = latestReference?.available === true
-    ? latestReference
-    : lastAvailableReference
-  if (sourceReference?.available !== true) return false
-
-  lapSummaryReference = sourceReference
-  latestReference = window.ReferenceCoach.createEmptyReference()
-  lastAvailableReference = null
-  pendingReference = null
-  lapSummaryExpiresAt = performance.now() + LAP_SUMMARY_DURATION_MS
-  if (lapSummaryTimer !== null) window.clearTimeout(lapSummaryTimer)
-  lapSummaryTimer = window.setTimeout(() => {
-    lapSummaryTimer = null
-    clearLapSummary()
-    scheduleTelemetryRender()
-  }, LAP_SUMMARY_DURATION_MS)
-  return true
-}
-
-function queueLapComplete(payload) {
-  const lapComplete = window.ReferenceCoach.normalizeLapCompletePayload(payload)
-  if (!lapComplete) return
-
-  lapTimingState = window.HudLapTiming.complete(lapTimingState, lapComplete)
-  latestLiveLapTimeSeconds = window.HudLapTiming.displayTimeMs(lapTimingState) / 1000
-
-  finalLapSummaryReference = {
-    ...window.ReferenceCoach.createEmptyReference(),
-    available: true,
-    lapDeltaMs: lapComplete.deltaMs
-  }
-  finalLapSummaryLapNumber = lapComplete.lapNumber
-  latestReference = window.ReferenceCoach.createEmptyReference()
-  lastAvailableReference = null
-  clearLapSummary({ promotePending: false })
-  if (
-    latestTelemetry?.isRaceOn !== true
-    && (lapTimingState.phase === 'circuit_complete' || lapTimingState.phase === 'sprint_complete')
-  ) {
-    showAsphaltBrief(`provider:${lapComplete.lapNumber}:${lapComplete.lapTimeMs}`)
-  }
-  scheduleTelemetryRender()
-}
-
-function getDisplayedReference() {
-  if (finalLapSummaryReference) return { reference: finalLapSummaryReference, isSummary: true }
-  const summary = getActiveLapSummary()
-  if (summary) return { reference: summary, isSummary: true }
-  return {
-    reference: latestReference,
-    isSummary: false
-  }
-}
-
-function renderCoach(reference, isSummary = false) {
-  const hasReference = reference?.available === true
+function renderCoach() {
   const hasAsphaltGuidance = latestAsphaltCoach.mode === 'cue' || latestAsphaltCoach.mode === 'brief'
   const hasAsphaltStatus = latestAsphaltCoach.mode === 'status'
-    || (telemetrySource === 'direct'
-      && latestTelemetry?.isRaceOn === true
-      && !hasAsphaltGuidance)
-  const hasReferenceGuidance = window.ReferenceCoach.hasLiveCoachGuidance(reference, isSummary)
-  const hasCoachGuidance = hasAsphaltGuidance || hasAsphaltStatus || hasReferenceGuidance
+    || (latestTelemetry?.isRaceOn === true && !hasAsphaltGuidance)
+  const hasCoachGuidance = hasAsphaltGuidance || hasAsphaltStatus
   const isCoachEditing = window.HudLayout?.isEditing?.('coach') === true
   const isCoachVisible = window.HudPreferences?.isOverlayVisible?.('coach') !== false
   const isDeltaVisible = window.HudPreferences?.isOverlayVisible?.('delta') !== false
-  coachCard.dataset.hasReference = hasCoachGuidance || isCoachEditing ? 'true' : 'false'
+  coachCard.dataset.hasCoachGuidance = hasCoachGuidance || isCoachEditing ? 'true' : 'false'
   coachCard.dataset.coachMode = hasAsphaltGuidance
     ? latestAsphaltCoach.mode
-    : hasAsphaltStatus ? 'status' : 'reference'
+    : 'status'
   coachCard.hidden = !isCoachEditing && (!isCoachVisible || !hasCoachGuidance)
-  const hasDirectClock = telemetrySource === 'direct' && latestTelemetry !== null
-  deltaStrip.hidden = !isDeltaVisible || (!hasReference && !hasAsphaltGuidance && !hasDirectClock)
+  deltaStrip.hidden = !isDeltaVisible || latestTelemetry === null
 
   if (hasAsphaltGuidance) {
     const cue = latestAsphaltCoach.cue
@@ -355,87 +242,18 @@ function renderCoach(reference, isSummary = false) {
     coachStatus.textContent = ready
       ? 'Analyzing driving technique'
       : 'Learning current speed range'
-  } else if (hasReferenceGuidance) {
-    coachKicker.textContent = 'REFERENCE COACH'
-    coachStatus.dataset.phase = reference.phase || 'between'
-    coachStatus.dataset.cueKind = reference.cue?.kind || ''
-    coachStatus.textContent = window.ReferenceCoach.formatCoachStatus(
-      reference,
-      isSummary,
-      displayPreferences.speedUnit
-    ) || '\u2014'
   } else {
-    coachKicker.textContent = isCoachEditing ? 'ASPHALT ONLY' : ''
+    coachKicker.textContent = isCoachEditing ? 'ASPHALT COACH' : ''
     coachStatus.dataset.phase = ''
     coachStatus.dataset.cueKind = ''
     coachStatus.textContent = isCoachEditing ? 'No live cue' : '\u2014'
   }
 
-  if (!hasReference || hasAsphaltGuidance) {
-    coachbar.dataset.cueKind = hasAsphaltGuidance ? (latestAsphaltCoach.cue?.kind || latestAsphaltCoach.brief?.mainKind || '') : ''
-    coachbar.dataset.phase = hasAsphaltGuidance ? 'asphalt' : ''
-    lapDeltaState = 'neutral'
-    deltaStrip.dataset.deltaState = 'neutral'
-    lapDeltaMarker.style.left = '50%'
-    lapDeltaValue.textContent = '\u2014'
-    deltaStrip.dataset.mode = ''
-    deltaStrip.setAttribute('aria-label', 'Reference delta')
-    lapDeltaValue.setAttribute('aria-label', 'Current reference delta')
-    window.HudLayout.refreshPosition?.()
-    if (hasAsphaltGuidance || !hasReference) return
-  }
-
-  const phase = reference.phase || 'between'
-
-  const lapDeltaView = window.ReferenceCoach.createLapDeltaView(reference.lapDeltaMs, lapDeltaState)
-  lapDeltaState = lapDeltaView.state
-  deltaStrip.dataset.deltaState = lapDeltaView.state
-  lapDeltaMarker.style.left = `${lapDeltaView.positionPercent}%`
-  lapDeltaValue.textContent = lapDeltaView.text || '\u2014'
-  deltaStrip.dataset.mode = isSummary ? 'summary' : 'live'
-  deltaStrip.setAttribute('aria-label', isSummary ? 'Final reference delta' : 'Reference delta')
-  lapDeltaValue.setAttribute('aria-label', isSummary ? 'Final reference delta' : 'Current reference delta')
-
-  coachStatus.dataset.phase = isSummary ? 'summary' : phase
-  coachStatus.dataset.cueKind = reference.cue?.kind || ''
-  coachStatus.textContent = window.ReferenceCoach.formatCoachStatus(
-    reference,
-    isSummary,
-    displayPreferences.speedUnit
-  ) || '\u2014'
-
+  coachbar.dataset.cueKind = hasAsphaltGuidance
+    ? (latestAsphaltCoach.cue?.kind || latestAsphaltCoach.brief?.mainKind || '')
+    : ''
+  coachbar.dataset.phase = hasAsphaltGuidance ? 'asphalt' : ''
   window.HudLayout.refreshPosition?.()
-}
-
-function renderCorner(template, state, reference, isSummary = false) {
-  if (isSummary) {
-    const referenceReadout = window.ReferenceCoach.formatCornerReadout(reference)
-    cornerIdentity.textContent = referenceReadout.identity
-    cornerIdentity.hidden = !referenceReadout.visible || referenceReadout.identity === ''
-    cornerDistance.textContent = ''
-    cornerDistance.hidden = true
-    cornerIdentity.dataset.phase = ''
-    return
-  }
-
-  const readout = window.CornerState.formatCornerReadout(template, state)
-  const referenceReadout = window.ReferenceCoach.formatCornerReadout(reference)
-  const mergedReadout = {
-    visible: readout.visible || referenceReadout.visible,
-    identity: referenceReadout.identity || readout.identity,
-    distance: window.ReferenceCoach.cueHasMagnitude(reference.cue) ? '' : readout.distance,
-    phaseClass: referenceReadout.visible ? referenceReadout.phaseClass : readout.phaseClass
-  }
-  const fields = [
-    [cornerIdentity, mergedReadout.identity],
-    [cornerDistance, mergedReadout.distance]
-  ]
-
-  for (const [element, text] of fields) {
-    element.textContent = text
-    element.hidden = !mergedReadout.visible || text === ''
-    element.dataset.phase = mergedReadout.phaseClass
-  }
 }
 
 function resetAsphaltCoach(reason = 'reset') {
@@ -765,17 +583,15 @@ function drawHistory() {
 
 function renderTelemetry() {
   renderScheduled = false
-  const displayedReference = getDisplayedReference()
   const telemetry = latestTelemetry
   const timingPrefix = lapTimingState.phase === 'circuit_complete' || lapTimingState.phase === 'sprint_complete'
     ? 'FINAL'
     : lapTimingState.phase === 'paused'
       ? 'PAUSED LAP'
       : 'LIVE LAP'
-  currentLapTime.textContent = `${timingPrefix} ${window.ReferenceCoach.formatLapTime(latestLiveLapTimeSeconds)}`
+  currentLapTime.textContent = `${timingPrefix} ${formatLapTime(latestLiveLapTimeSeconds)}`
   if (!telemetry) {
-    renderCoach(displayedReference.reference, displayedReference.isSummary)
-    renderCorner(latestCornerTemplate, latestCornerState, displayedReference.reference, displayedReference.isSummary)
+    renderCoach()
     return
   }
 
@@ -801,11 +617,8 @@ function renderTelemetry() {
   setRpmSignal(signal)
   if (!DEMO_MODE) pushHistory(throttle, brake)
   drawHistory()
-  renderCoach(displayedReference.reference, displayedReference.isSummary)
-  renderCorner(latestCornerTemplate, latestCornerState, displayedReference.reference, displayedReference.isSummary)
+  renderCoach()
   if (DEMO_MODE) setConnection(telemetry.isRaceOn ? 'is-live' : 'is-waiting')
-  else if (telemetrySource === 'direct') setConnection(forzaConnected && telemetry.isRaceOn ? 'is-live' : 'is-waiting')
-  else if (!socket) setConnection('is-offline')
   else setConnection(forzaConnected && telemetry.isRaceOn ? 'is-live' : 'is-waiting')
 }
 
@@ -829,23 +642,6 @@ function queueTelemetry(telemetry) {
   updateAsphaltCoach(telemetry, { presentationAttemptBegan: raceRestart })
   if (!raceRestart) handleAsphaltLapLifecycle(previousTimingState, previousLapNumber, telemetry)
 
-  const telemetryLapNumber = finiteStateNumber(telemetry?.lap?.number)
-  if (
-    finalLapSummaryReference
-    && finalLapSummaryLapNumber !== null
-    && telemetryLapNumber !== null
-    && telemetryLapNumber !== finalLapSummaryLapNumber
-  ) {
-    finalLapSummaryReference = null
-    finalLapSummaryLapNumber = null
-  }
-
-  if (raceRestart) {
-    finalLapSummaryReference = null
-    finalLapSummaryLapNumber = null
-    resetCornerState({ preserveLapSummary: false, promotePending: false })
-  }
-
   latestTelemetry = telemetry
   forzaConnected = true
   if (renderScheduled) return true
@@ -860,23 +656,11 @@ function scheduleTelemetryRender() {
   requestAnimationFrame(renderTelemetry)
 }
 
-function resetCornerState({ preserveLapSummary = false, promotePending = true } = {}) {
-  latestCornerTemplate = null
-  latestCornerState = null
-  latestReference = window.ReferenceCoach.createEmptyReference()
-  lapDeltaState = 'neutral'
-  if (!preserveLapSummary) {
-    lastAvailableReference = null
-    clearLapSummary({ promotePending })
-  }
-  else pendingReference = null
-}
-
-function resetSourcePresentation() {
+function resetDirectPresentation() {
   latestTelemetry = null
   latestLiveLapTimeSeconds = null
-  resetAsphaltCoach('source_switch')
-  lapTimingState = window.HudLapTiming.resetForSourceSwitch()
+  resetAsphaltCoach('direct_restart')
+  lapTimingState = window.HudLapTiming.resetForRestart()
   latestSteer = 0
   historySamples = []
   latestShiftLight = {
@@ -901,73 +685,6 @@ function resetSourcePresentation() {
   scheduleTelemetryRender()
 }
 
-function queueCornerTemplate(template) {
-  if (!template || typeof template !== 'object') return
-
-  const isRecordingIdle = template.status === 'idle'
-  latestCornerTemplate = template
-  latestCornerState = null
-  latestReference = window.ReferenceCoach.createEmptyReference()
-  lapDeltaState = 'neutral'
-  if (!isRecordingIdle) {
-    finalLapSummaryReference = null
-    finalLapSummaryLapNumber = null
-    lastAvailableReference = null
-    clearLapSummary({ promotePending: false })
-  }
-  scheduleTelemetryRender()
-}
-
-function queueCornerState(state) {
-  if (!state || typeof state !== 'object') return
-
-  const previousCornerIndex = finiteStateNumber(latestCornerState?.cornerIndex)
-  const nextCornerIndex = finiteStateNumber(state.cornerIndex)
-  const changedCorner = previousCornerIndex !== null
-    && nextCornerIndex !== null
-    && previousCornerIndex !== nextCornerIndex
-  const referenceCorner = latestReference.corner
-  const nextDirection = String(state.direction || '').toUpperCase()
-  const nextIdentity = nextCornerIndex !== null
-    ? [`T${Math.trunc(nextCornerIndex)}`, nextDirection].filter(Boolean).join(' ')
-    : ''
-  if (changedCorner && referenceCorner && referenceCorner !== nextIdentity) {
-    latestReference = window.ReferenceCoach.createEmptyReference()
-    lapDeltaState = 'neutral'
-  }
-
-  latestCornerState = state
-  scheduleTelemetryRender()
-}
-
-function queueReference(payload) {
-  const reference = window.ReferenceCoach.normalizeReferencePayload(payload)
-  const summary = getActiveLapSummary()
-  if (reference.available) {
-    lastAvailableReference = reference
-    if (summary) {
-      pendingReference = reference
-    } else {
-      clearLapSummary({ promotePending: false })
-      latestReference = reference
-    }
-  } else {
-    // Only an explicit lap_complete may turn a live value into a final result.
-    // Provider loss or an unavailable reference must clear stale live guidance.
-    if (!summary) latestReference = reference
-    lastAvailableReference = null
-  }
-  scheduleTelemetryRender()
-}
-
-function scheduleReconnect() {
-  if (reconnectTimer !== null || DEMO_MODE || telemetrySource !== 'suite') return
-  reconnectTimer = window.setTimeout(() => {
-    reconnectTimer = null
-    connectSuite()
-  }, RECONNECT_MS)
-}
-
 async function listenDirectEvents(generation) {
   if (directEventUnlisteners.length > 0) return
   const eventApi = window.HudTauriEvents?.getEventApi?.()
@@ -976,7 +693,7 @@ async function listenDirectEvents(generation) {
   }
 
   const unlistenTelemetry = await eventApi.listen('direct_telemetry', event => {
-    if (generation !== directGeneration || telemetrySource !== 'direct') return
+    if (generation !== directGeneration) return
     if (queueTelemetry(event.payload)) publishRouteStatus({ phase: 'live', message: '' })
   })
   if (generation !== directGeneration) {
@@ -987,7 +704,7 @@ async function listenDirectEvents(generation) {
   let unlistenStatus
   try {
     unlistenStatus = await eventApi.listen('direct_status', event => {
-      if (generation !== directGeneration || telemetrySource !== 'direct') return
+      if (generation !== directGeneration) return
       const state = event.payload?.state
       if (state === 'is-live') {
         forzaConnected = true
@@ -1057,214 +774,41 @@ async function disconnectDirect() {
 }
 
 async function connectDirect() {
-  if (DEMO_MODE || directStartPending || telemetrySource !== 'direct') return
+  if (DEMO_MODE || directStartPending) return
   const generation = ++directGeneration
   directStartPending = true
   forzaConnected = false
   setConnection('is-waiting')
   publishRouteStatus({
-    source: 'direct',
     phase: 'starting',
-    suiteState: 'unavailable',
     message: ''
   })
-  if (!DEMO_MODE) suiteProbe.start()
   try {
     await listenDirectEvents(generation)
-    if (generation !== directGeneration || telemetrySource !== 'direct') return
+    if (generation !== directGeneration) return
     await invokeTauri('start_direct_source')
     if (
       generation === directGeneration
-      && telemetrySource === 'direct'
-      && routeStatus.source === 'direct'
       && routeStatus.phase === 'starting'
     ) {
       publishRouteStatus({ phase: 'waiting', message: '' })
     }
   } catch (error) {
-    if (generation !== directGeneration || telemetrySource !== 'direct') return
+    if (generation !== directGeneration) return
     await disconnectDirect()
     setConnection('is-offline')
     publishRouteStatus({ phase: 'error', message: errorMessage(error) })
-    console.warn('[hud] unable to start Direct Forza source', error)
+    console.warn('[hud] unable to start Direct Data Out receiver', error)
   } finally {
     if (generation === directGeneration) directStartPending = false
   }
 }
 
-function connectSuite() {
-  if (DEMO_MODE || telemetrySource !== 'suite' || (socket && socket.readyState < WebSocket.CLOSING)) return
-
-  forzaConnected = false
-  suiteHadTelemetry = false
-  setConnection('is-waiting')
-  publishRouteStatus({ source: 'suite', phase: 'starting', suiteState: 'unavailable', message: '' })
-  let currentSocket
-  try {
-    currentSocket = new WebSocket(WS_URL)
-  } catch (error) {
-    setConnection('is-offline')
-    publishRouteStatus({
-      phase: 'error',
-      suiteState: 'unavailable',
-      message: errorMessage(error)
-    })
-    scheduleReconnect()
-    return
-  }
-  socket = currentSocket
-
-  currentSocket.addEventListener('open', () => {
-    if (socket !== currentSocket || telemetrySource !== 'suite') return
-    publishRouteStatus({ phase: 'waiting', suiteState: 'waiting', message: '' })
-  })
-
-  currentSocket.addEventListener('message', (event) => {
-    if (socket !== currentSocket || telemetrySource !== 'suite') return
-    try {
-      const message = JSON.parse(event.data)
-      if (message.type === 'telemetry' && message.t) {
-        if (queueTelemetry(message.t)) {
-          suiteHadTelemetry = true
-          publishRouteStatus({ phase: 'live', suiteState: 'receiving', message: '' })
-        }
-      }
-      if (message.type === 'corner_template') queueCornerTemplate(message.template)
-      if (message.type === 'corner_state') queueCornerState(message.cornerState)
-      if (message.type === 'coach_reference') queueReference(message.reference)
-      if (message.type === 'lap_complete') queueLapComplete(message.lapComplete)
-      if (message.type === 'recording_state' && message.state === 'idle') {
-        resetCornerState({ promotePending: false })
-        scheduleTelemetryRender()
-      }
-      if (message.type === 'forza_status') {
-        forzaConnected = message.connected === true
-        if (forzaConnected) {
-          publishRouteStatus({
-            phase: suiteHadTelemetry ? 'live' : 'waiting',
-            suiteState: 'receiving',
-            message: ''
-          })
-          return
-        }
-        resetCornerState({ promotePending: false })
-        resetAsphaltCoachTransient('suite_waiting')
-        window.HudShiftLightRuntime?.resetTransient?.()
-        setConnection('is-waiting')
-        publishRouteStatus({
-          phase: suiteHadTelemetry ? 'stale' : 'waiting',
-          suiteState: 'waiting',
-          message: ''
-        })
-        scheduleTelemetryRender()
-      }
-    } catch {
-      // Keep rendering the last valid frame when a malformed message arrives.
-    }
-  })
-
-  currentSocket.addEventListener('close', () => {
-    if (socket !== currentSocket || telemetrySource !== 'suite') return
-    socket = null
-    forzaConnected = false
-    window.HudShiftLightRuntime?.resetTransient?.()
-    resetAsphaltCoachTransient('suite_offline')
-    resetCornerState({ promotePending: false })
-    setConnection('is-offline')
-    publishRouteStatus({ phase: 'offline', suiteState: 'unavailable', message: '' })
-    scheduleTelemetryRender()
-    if (telemetrySource === 'suite') scheduleReconnect()
-  })
-
-  currentSocket.addEventListener('error', () => {
-    if (socket === currentSocket) currentSocket.close()
-  })
-}
-
-async function setTelemetrySource(source, options = {}) {
-  const next = window.HudConnection.normalizeTelemetrySource(source)
-  if (next === telemetrySource && options.force !== true) return
-
+async function retryDirectSource() {
   routeRevision += 1
-  telemetrySource = window.HudConnection.writeTelemetrySource(next)
-  applyTelemetrySourcePresentation()
-  suiteProbe.stop()
-  if (reconnectTimer !== null) {
-    window.clearTimeout(reconnectTimer)
-    reconnectTimer = null
-  }
-
-  resetSourcePresentation()
-  if (telemetrySource === 'direct') {
-    socket?.close()
-    socket = null
-    suiteHadTelemetry = false
-    resetCornerState({ promotePending: false })
-    await disconnectDirect()
-    await connectDirect()
-  } else {
-    await disconnectDirect()
-    if (options.force === true) {
-      const previousSocket = socket
-      socket = null
-      previousSocket?.close()
-    }
-    resetCornerState({ promotePending: false })
-    connectSuite()
-  }
-}
-
-function setDemoCorner(corner, schedule = true) {
-  if (!DEMO_MODE) return
-
-  demoCorner = DEMO_CORNERS.includes(corner) ? corner : null
-  latestCornerTemplate = demoCorner === null
-    ? { status: 'idle', sessionId: null, eventId: null }
-    : { status: 'ready', sessionId: 27, eventId: 13 }
-  latestCornerState = null
-
-  if (demoCorner !== null) {
-    const distanceByPhase = {
-      between: 149,
-      approach: 62,
-      entry: 42,
-      apex: 0,
-      exit: 68
-    }
-    latestCornerState = {
-      sessionId: 27,
-      eventId: 13,
-      timestampMs: 2000,
-      lapNumber: 2,
-      lapDistanceM: 405.2,
-      phase: demoCorner,
-      cornerIndex: 1,
-      direction: 'left',
-      distanceToEntryM: distanceByPhase[demoCorner],
-      distanceToApexM: distanceByPhase[demoCorner],
-      distanceToExitM: distanceByPhase[demoCorner],
-      speedKmh: 128,
-      brake: 0.13,
-      throttle: 0.58,
-      steer: -0.28
-    }
-  }
-
-  if (schedule) scheduleTelemetryRender()
-}
-
-function setDemoReference(reference, schedule = true) {
-  if (!DEMO_MODE) return
-
-  demoReference = DEMO_REFERENCES.includes(reference) ? reference : null
-  latestReference = demoReference === null
-    ? window.ReferenceCoach.createEmptyReference()
-    : window.ReferenceCoach.createDemoReference(demoReference)
-  lastAvailableReference = latestReference.available ? latestReference : null
-  lapDeltaState = 'neutral'
-  applyTelemetrySourcePresentation()
-
-  if (schedule) scheduleTelemetryRender()
+  resetDirectPresentation()
+  await disconnectDirect()
+  await connectDirect()
 }
 
 function setDemoCoach(coach, schedule = true) {
@@ -1385,13 +929,7 @@ function startDemo() {
     tireTempC: { fl: 79, fr: 84, rl: 77, rr: 77 }
   }
   latestLiveLapTimeSeconds = latestTelemetry.lap.current
-  setDemoCorner(demoCorner, false)
-  setDemoReference(demoReference, false)
   setDemoCoach(demoCoach, false)
-  if (DEMO_LAP_SUMMARY_FROM_URL) {
-    beginLapSummary()
-    latestReference = window.ReferenceCoach.createEmptyReference()
-  }
   setDemoSignal(demoSignal)
   renderTelemetry()
 }
@@ -1410,11 +948,6 @@ window.addEventListener('keydown', event => {
     return
   }
 
-  const referenceByKey = {
-    9: 'brake-late',
-    0: 'summary'
-  }
-  if (referenceByKey[event.key]) setDemoReference(referenceByKey[event.key])
 })
 
 window.addEventListener('resize', () => {
@@ -1425,8 +958,7 @@ window.addEventListener('resize', () => {
 window.HudOverlay = {
   refresh: scheduleTelemetryRender,
   setDisplayPreferences,
-  setTelemetrySource,
-  retryTelemetrySource: () => setTelemetrySource(telemetrySource, { force: true }),
+  retryDirectSource,
   setDemoCoach,
   resetShiftLight: async () => {
     try {
@@ -1440,9 +972,7 @@ window.HudOverlay = {
   syncRouteStatus: () => publishRouteStatus({}, true)
 }
 
-applyTelemetrySourcePresentation()
 applyDisplayPreferences()
 publishRouteStatus({}, true)
 if (DEMO_MODE) startDemo()
-else if (telemetrySource === 'direct') connectDirect()
-else connectSuite()
+else connectDirect()

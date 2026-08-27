@@ -276,14 +276,24 @@ fn start_direct_source(app: AppHandle, state: State<'_, DirectSourceState>) -> R
             let mut buffer = [0_u8; 2048];
             let mut last_packet_at: Option<Instant> = None;
             let mut live = false;
+            let mut incompatible_packet_reported = false;
             emit_direct_status(&thread_app, "is-waiting", None);
 
             while !thread_stop.load(Ordering::Relaxed) {
                 match socket.recv(&mut buffer) {
                     Ok(length) => {
                         let Some(telemetry) = decode_direct_packet(&buffer[..length]) else {
+                            if !incompatible_packet_reported {
+                                incompatible_packet_reported = true;
+                                emit_direct_status(
+                                    &thread_app,
+                                    "is-error",
+                                    Some("Incompatible Forza Data Out packet format; expected a 324-byte FH6 packet.".to_string()),
+                                );
+                            }
                             continue;
                         };
+                        incompatible_packet_reported = false;
                         last_packet_at = Some(Instant::now());
                         if !live {
                             live = true;
@@ -324,19 +334,9 @@ fn stop_direct_source(state: State<'_, DirectSourceState>) -> Result<(), String>
 }
 
 #[tauri::command]
-fn set_telemetry_source(app: AppHandle, source: String) -> Result<(), String> {
-    if !["direct", "suite"].contains(&source.as_str()) {
-        return Err("unknown telemetry source".to_string());
-    }
-
-    let script = format!(
-        "window.HudOverlay?.setTelemetrySource?.('{}', {{ force: true }})",
-        source
-    );
-    if let Some(window) = app.get_webview_window("main") {
-        window.eval(&script).map_err(|error| error.to_string())?;
-    }
-    Ok(())
+fn retry_direct_source(app: AppHandle, state: State<'_, DirectSourceState>) -> Result<(), String> {
+    stop_direct_source_internal(&state);
+    eval_main(&app, "window.HudOverlay?.retryDirectSource?.()")
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -1505,7 +1505,7 @@ fn main() {
             sync_shift_light_status,
             start_direct_source,
             stop_direct_source,
-            set_telemetry_source,
+            retry_direct_source,
             load_shift_light_profiles,
             save_shift_light_profile,
             register_shift_light_variant,

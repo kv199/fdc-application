@@ -1,4 +1,4 @@
-// Generated from apps/co-driver/app/utils/shift-light.ts; keep this file synchronized with the source.
+// FDC-owned Shift Light utility; keep this browser module self-contained.
 var HudShiftLight = (() => {
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -18,7 +18,7 @@ var HudShiftLight = (() => {
   };
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // apps/co-driver/app/utils/shift-light.ts
+  // Shift Light learner
   var shift_light_exports = {};
   __export(shift_light_exports, {
     ShiftLightLearner: () => ShiftLightLearner,
@@ -26,7 +26,7 @@ var HudShiftLight = (() => {
     getShiftLightIdentity: () => getShiftLightIdentity
   });
 
-  // apps/co-driver/app/utils/optimal-shift.ts
+  // Optimal shift estimator
   var FORWARD_GEAR_MIN = 1;
   var FORWARD_GEAR_MAX = 10;
   var WOT_THRESHOLD = 0.95;
@@ -239,7 +239,7 @@ var HudShiftLight = (() => {
     }
   };
 
-  // apps/co-driver/app/utils/shift-light.ts
+  // Shift Light presentation helpers
   var MIN_THROTTLE = 0.95;
   var MIN_RPM_FRACTION = 0.82;
   var REARM_FRACTION = 0.85;
