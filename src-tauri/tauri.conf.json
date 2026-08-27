@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Forza Horizon 6 HUD",
+  "productName": "fdc-application",
   "version": "0.1.0",
-  "identifier": "dev.kv199.forza-horizon-6-hud",
+  "identifier": "dev.kv199.fdc-application",
   "build": {
     "frontendDist": "../overlay"
   },

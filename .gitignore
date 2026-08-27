@@ -1,9 +1,29 @@
-/src-tauri/target/
+target/
 /src-tauri/gen/
 
-# Local telemetry and design-review artifacts
+# Local runtime, telemetry, database, and design-review artifacts
 /data/
+/recordings/
+/telemetry/
+/captures/
+*.exe
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.wal
+*.shm
+*.replay
+*.recording
+*.telemetry
+*.telemetry.*
 *.log
+/export/
+/exports/
+/qa/
+*.export.*
+*.qa.*
+*.tmp
 /design-qa*.png
 /implementation-hud.png
 

@@ -2,6 +2,9 @@
 
 Captured on 2026-08-27 before separating the HUD from the Suite.
 
+The standalone product name is `fdc-application`. The local folder name remains
+`50-59_2026_FDC_PRN`.
+
 ## Provenance
 
 - Source repository: `C:\Install\forza-horizon-6-suite`
@@ -14,6 +17,12 @@ Captured on 2026-08-27 before separating the HUD from the Suite.
 The HUD path had no staged, unstaged, or untracked changes. The Suite had one unrelated untracked file, `.tmp/extract_hud_docx.py`; it was left untouched. The source also contained ignored generated `src-tauri/target` and `src-tauri/gen` output; only the 64 tracked HUD files were exported.
 
 The exported files were compared against the source by SHA-256: 64 files copied, 0 mismatches.
+
+## Repository history
+
+- The Stage 1 standalone snapshot commit `59b48c5d4d47b15d31e9e8a0d36895c42b8942f1` is preserved.
+- Suite HUD history was filtered to the repository root; its filtered tip is `024a194b2615c740c63779fb865853abebf56046`.
+- The Stage 2 merge commit `790db280842f945d3db313eea2b8130a1728bada` retains both histories on `main`.
 
 ## Verification
 
@@ -36,4 +45,4 @@ Live Forza gameplay and a running Suite/WebSocket session were not available dur
 - **Configuration:** first-launch settings window and tray entry; `HUD`, `SHIFT LIGHT`, and `SETTINGS` tabs; independent visibility/position preferences; selected telemetry source and diagnostics; speed units and shift-light brightness.
 - **Local SQLite:** `hud.sqlite` is stored in the HUD application data directory, separate from the provider database. The schema stores cars, immutable gearbox variants, per-gear profiles, bounded samples, and schema version; Rust tests cover idempotent creation, migrations, variant resolution, monotonic merges, and reset behavior.
 
-This document records the source working baseline; the initial commit of this standalone repository is expected to have a different Git SHA because its repository history starts here.
+This document records the source working baseline and the history-preserving extraction. The standalone commit SHA is necessarily different from the source Suite commit because the repository root and history are different.

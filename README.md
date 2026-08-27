@@ -1,4 +1,6 @@
-# Forza Horizon 6 HUD
+# fdc-application
+
+## Forza Horizon 6 HUD
 
 A lightweight, always-on-top telemetry overlay for Forza Horizon 6.
 
@@ -7,9 +9,11 @@ the current gear, and input history over the game. It can consume the local
 WebSocket telemetry stream exposed by [co-driver](https://github.com/Ojansen/co-driver)
 or receive FH6 Data Out directly over UDP.
 
-This directory is the HUD application inside Forza Horizon 6 Suite. It remains
-self-contained so it can be exported and published as a standalone repository,
-while the Suite root owns local runtime startup and end-to-end workflow.
+This is the standalone `fdc-application` repository. The local folder remains
+`50-59_2026_FDC_PRN`; `fdc-application` is the logical product and future Git
+repository name. The application owns its overlay, native Tauri runtime,
+Direct UDP route, Suite/WebSocket route, Asphalt Coach, Shift Light, and local
+SQLite profile storage.
 
 ## Asphalt Zero-reference Driving Coach
 
@@ -222,10 +226,9 @@ available in Configuration while clearing only the in-progress pull. Reset is
 acknowledged after the HUD-local SQLite operation completes, so it remains
 usable while Forza is paused.
 
-The checked-in `overlay/shift-light-engine.js` is generated from
-`apps/co-driver/app/utils/shift-light.ts` with the root command
-`.\scripts\build-shift-light-bundle.ps1`; it is the browser bundle used by
-the standalone HUD. Its learner behavior is covered by
+The checked-in `overlay/shift-light-engine.js` is the browser bundle used by
+the standalone HUD. It originated from the Suite's provider utility and is
+kept checked in here so this repository remains self-contained. Its learner behavior is covered by
 `overlay/shift-light-engine.test.js`.
 
 ## Historical Reference contract (Suite context)
@@ -311,7 +314,8 @@ for example:
 
 ## Development workflow
 
-- Suite development and end-to-end commits use the monorepo `main` branch.
+- `main` is the only permanent branch in this standalone repository.
+- The repository has no configured remote; local commits are the source of truth.
 - `release` is the single supported Cargo profile for runnable HUD builds.
 - Do not add custom `develop` or `preview` Cargo profiles. Use browser demo mode
   for visual previews and Cargo's standard `debug` profile only for temporary
@@ -332,10 +336,10 @@ it does not read the provider database or duplicate provider historical
 reference analysis. The Asphalt Coach itself is HUD-owned, bounded, current-run
 analysis in both source modes.
 
-From the Suite root:
+From the project root:
 
 ```powershell
-.\scripts\up.ps1
+cargo run --release --locked --manifest-path src-tauri/Cargo.toml
 ```
 
 The live browser preview uses the same endpoint without a channel parameter:
@@ -364,10 +368,10 @@ require changes to telemetry or the Tauri layer.
 
 ## Build
 
-Optimized HUD build from the Suite root:
+Optimized standalone build from the project root:
 
 ```powershell
-.\scripts\build-hud.ps1
+cargo build --release --locked --manifest-path src-tauri/Cargo.toml
 ```
 
 The executable selects `ws://127.0.0.1:3001/_ws`.
@@ -375,11 +379,11 @@ The executable selects `ws://127.0.0.1:3001/_ws`.
 The executable is written to:
 
 ```text
-src-tauri/target/release/forza-horizon-6-hud.exe
+src-tauri/target/release/fdc-application.exe
 ```
 
 Cargo's standard `target/debug` output is reserved for temporary technical
-diagnostics. Only `target/release/forza-horizon-6-hud.exe` is handed off for
-game testing; generated target output is never committed. Before handoff,
-launch that exact release executable and confirm it remains alive for at least
-five seconds—a successful Cargo build alone does not validate Tauri startup.
+diagnostics. Only `target/release/fdc-application.exe` is handed off for game
+testing; generated target output is never committed. Before handoff, launch
+that exact release executable and confirm it remains alive for at least five
+seconds—a successful Cargo build alone does not validate Tauri startup.

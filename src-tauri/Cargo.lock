@@ -825,7 +825,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "forza-horizon-6-hud"
+name = "fdc-application"
 version = "0.1.0"
 dependencies = [
  "rusqlite",
