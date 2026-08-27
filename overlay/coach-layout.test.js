@@ -25,3 +25,9 @@ test('stacks the default Coach position above the Delta strip', () => {
   assert.match(source, /hudTop - deltaSize\.height - elementSize\.height - 20/)
   assert.match(source, /Math\.min\(460, Math\.max\(0, viewport\.width - 24\)\), height: 88/)
 })
+
+test('starts layout storage in a fresh FDC v1 namespace', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
+  assert.match(source, /const STORAGE_KEY = 'fdc\.layout\.v1'/)
+  assert.doesNotMatch(source, /LEGACY_COACH_STORAGE_KEY|forza-horizon-6-hud\./)
+})

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "fdc-application",
+  "productName": "FDC",
   "version": "0.1.0",
-  "identifier": "dev.kv199.fdc-application",
+  "identifier": "dev.kv199.fdc",
   "build": {
     "frontendDist": "../overlay"
   },
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Forza Horizon 6 HUD",
+        "title": "FDC · Forza Horizon 6 HUD",
         "width": 1280,
         "height": 192,
         "resizable": false,
@@ -28,7 +28,7 @@
       },
       {
         "label": "settings",
-        "title": "Forza Horizon 6 HUD Configuration",
+        "title": "FDC Configuration · Forza Horizon 6 HUD",
         "url": "settings.html",
         "width": 620,
         "height": 820,

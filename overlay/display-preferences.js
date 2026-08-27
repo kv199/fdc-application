@@ -4,7 +4,7 @@
   if (typeof module !== 'undefined' && module.exports && typeof document === 'undefined') module.exports = api
   else globalScope.DisplayPreferences = api
 }(typeof globalThis !== 'undefined' ? globalThis : this, globalScope => {
-  const STORAGE_KEY = 'forza-horizon-6-hud.display-preferences.v1'
+  const STORAGE_KEY = 'fdc.display-preferences.v1'
   const DEFAULTS = Object.freeze({
     speedUnit: 'kmh',
     shiftLightBrightness: 80

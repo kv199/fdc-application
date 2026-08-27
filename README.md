@@ -15,6 +15,10 @@ repository name. The application owns its overlay, native Tauri runtime,
 Direct UDP route, Suite/WebSocket route, Asphalt Coach, Shift Light, and local
 SQLite profile storage.
 
+The product name is **FDC**, expanded as **Feedback-Driven Companion**. The
+initial platform is Windows PC and the initial game is Forza Horizon 6. FDC is
+a local-first telemetry, HUD, and driving-feedback application.
+
 ## Asphalt Zero-reference Driving Coach
 
 The Coach is **Asphalt only**. It is a current-run, zero-reference technique
@@ -39,7 +43,7 @@ collision gate compares each axis with the learned per-speed-bin noise profile
 instead of using a fixed global jerk cutoff. A confirmed retry starts a new
 finding attempt but keeps the bounded envelope for the same car; the envelope
 is discarded on an incompatible car identity or source switch. It is not
-written to `hud.sqlite`.
+written to `fdc.sqlite`.
 
 After enough valid evidence, one high-confidence cue may appear briefly. The
 first version covers `FRONT SCRUB`, `EXIT WHEELSPIN`, `BRAKE + STEERING
@@ -205,7 +209,7 @@ default 80% preserves the original alert intensity without dimming the gear,
 speed, or RPM text. The control lives with its diagnostics in the `SHIFT LIGHT`
 tab. Purple shift cues latch immediately for at least 250 ms and use the bounded
 RPM-rate lead for both observed and optimal profiles. Profiles are stored in a
-HUD-local `hud.sqlite` under the Windows AppData directory, never in the
+FDC-local `fdc.sqlite` under the Windows AppData directory, never in the
 provider's `runtime/data` database. The schema separates `Car` (`gameId` plus
 `carOrdinal`), base tune identity (`PI` plus `RPM max`), immutable numeric
 gearbox `Variant` IDs, and bounded per-gear learning evidence. A car and its

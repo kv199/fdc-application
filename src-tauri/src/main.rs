@@ -1124,7 +1124,7 @@ fn open_shift_light_db<R: Runtime>(app: &AppHandle<R>) -> Result<Connection, Str
         .map_err(|error| format!("unable to resolve HUD data directory: {error}"))?;
     fs::create_dir_all(&directory)
         .map_err(|error| format!("unable to create HUD data directory: {error}"))?;
-    let path = directory.join("hud.sqlite");
+    let path = directory.join("fdc.sqlite");
     let mut connection = Connection::open(path)
         .map_err(|error| format!("unable to open HUD SQLite database: {error}"))?;
     initialize_shift_light_schema(&mut connection)?;
@@ -1556,7 +1556,7 @@ fn main() {
 
             let mut tray = TrayIconBuilder::with_id("hud-tray")
                 .menu(&menu)
-                .tooltip("Forza Horizon 6 HUD")
+                .tooltip("FDC")
                 .on_menu_event(|app, event| {
                     if event.id().as_ref() == "quit" {
                         app.exit(0);
@@ -1589,7 +1589,7 @@ fn main() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("failed to run Forza Horizon 6 HUD");
+        .expect("failed to run FDC");
 }
 
 #[cfg(test)]

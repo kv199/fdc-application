@@ -1,5 +1,5 @@
 const CO_DRIVER_WEBSOCKET_URL = 'ws://127.0.0.1:3001/_ws'
-const TELEMETRY_SOURCE_STORAGE_KEY = 'forza-horizon-6-hud.telemetry-source.v1'
+const TELEMETRY_SOURCE_STORAGE_KEY = 'fdc.telemetry-source.v1'
 const TELEMETRY_SOURCES = ['direct', 'suite']
 
 function resolveCoDriverWebSocketUrl() {

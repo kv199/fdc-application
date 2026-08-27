@@ -1,8 +1,8 @@
 (function (globalScope) {
   'use strict'
 
-  const STORAGE_KEY = 'forza-horizon-6-hud.hud-visibility.v1'
-  const OVERLAY_STORAGE_KEY = 'forza-horizon-6-hud.overlay-visibility.v1'
+  const STORAGE_KEY = 'fdc.hud-visibility.v1'
+  const OVERLAY_STORAGE_KEY = 'fdc.overlay-visibility.v1'
   const COMPONENTS = ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']
   const OVERLAY_COMPONENTS = ['coach', 'delta', 'hud']
   const COLUMN_WIDTHS = {

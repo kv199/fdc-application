@@ -3,6 +3,8 @@
 ## Repository identity
 
 - Logical product and development name: `fdc-application`.
+- Product name: `FDC` (`Feedback-Driven Companion`).
+- Initial platform: Windows PC; initial game: Forza Horizon 6.
 - Local project directory: `50-59_2026_FDC_PRN`.
 - Permanent branch: `main` only.
 - This repository has no remote and must not be published or pushed to GitHub.
@@ -35,8 +37,9 @@ alive for at least five seconds.
 Keep generated build output, executables, SQLite databases, telemetry captures,
 recordings, logs, exports, and QA screenshots out of Git. The repository
 `.gitignore` contains the required protection. Runtime Shift Light data belongs
-to the HUD application-data directory as `hud.sqlite`, not in this repository
-and not in the Suite provider database.
+to the FDC application-data directory as `fdc.sqlite`, not in this repository
+and not in the Suite provider database. FDC must not read or import the old
+HUD application's `hud.sqlite` or its localStorage namespace.
 
 ## Change discipline
 

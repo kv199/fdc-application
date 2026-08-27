@@ -1,8 +1,7 @@
 (function (globalScope) {
   'use strict'
 
-  const STORAGE_KEY = 'forza-horizon-6-hud.layout.v3'
-  const LEGACY_COACH_STORAGE_KEY = 'forza-horizon-6-hud.coach-position.v2'
+  const STORAGE_KEY = 'fdc.layout.v1'
   const TARGET_NAMES = ['coach', 'delta', 'hud']
 
   function clamp(value, minimum, maximum) {
@@ -56,10 +55,6 @@
           return result
         }, {})
         : {}
-      if (positions.coach) return positions
-
-      const legacyCoach = sanitizePosition(JSON.parse(localStorage.getItem(LEGACY_COACH_STORAGE_KEY) || 'null'))
-      if (legacyCoach) positions.coach = legacyCoach
       return positions
     } catch {
       return {}

@@ -2,8 +2,9 @@
 
 ## Product identity
 
-`fdc-application` is the logical product and development name for the
-standalone Forza Horizon 6 HUD. The local folder intentionally remains
+`fdc-application` is the logical product and development name for **FDC**,
+expanded as **Feedback-Driven Companion**, the standalone Forza Horizon 6 HUD.
+The initial platform is Windows PC and the local folder intentionally remains
 `50-59_2026_FDC_PRN`.
 
 ## User problem
@@ -36,7 +37,7 @@ keeping HUD-owned learning data private to the local machine.
 - HUD-owned Shift Light learning and presentation in both source modes.
 - Configuration for visibility, placement, speed units, source selection,
   diagnostics, brightness, and profile reset.
-- HUD-local `hud.sqlite` storage for cars, gearbox variants, profiles, and
+- FDC-local `fdc.sqlite` storage for cars, gearbox variants, profiles, and
   bounded samples.
 
 ## Non-goals
@@ -53,6 +54,10 @@ application content directly under `overlay`, `src-tauri`, `docs`, and `ADR`.
 `main` is the only permanent branch. There is no remote. Generated targets,
 executables, SQLite files, telemetry recordings, logs, temporary exports, and
 QA artifacts are local-only and must not be committed.
+
+The Tauri identifier `dev.kv199.fdc` creates FDC's new application-data
+directory. FDC starts with fresh `fdc.sqlite` and `fdc.*.v1` localStorage keys;
+it never imports, modifies, or deletes data belonging to the old HUD identity.
 
 The source extraction baseline and verification results are recorded in
 `BASELINE.md`.

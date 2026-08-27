@@ -24,6 +24,19 @@ The exported files were compared against the source by SHA-256: 64 files copied,
 - Suite HUD history was filtered to the repository root; its filtered tip is `024a194b2615c740c63779fb865853abebf56046`.
 - The Stage 2 merge commit `790db280842f945d3db313eea2b8130a1728bada` retains both histories on `main`.
 
+## FDC identity reset
+
+Stage 3 establishes the new product identity without touching the old HUD's
+user data:
+
+- Product: `FDC` — `Feedback-Driven Companion`.
+- Repository and Rust package/executable: `fdc-application`.
+- Tauri identifier: `dev.kv199.fdc`.
+- New database: `fdc.sqlite` in the new FDC application-data directory.
+- New browser storage namespace: `fdc.*.v1`.
+- Old `forza-horizon-6-hud` localStorage keys and `hud.sqlite` are not read,
+  imported, changed, or deleted.
+
 ## Verification
 
 - HUD JavaScript syntax check: passed.

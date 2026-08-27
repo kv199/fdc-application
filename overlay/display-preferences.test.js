@@ -3,6 +3,10 @@ const test = require('node:test')
 
 const DisplayPreferences = require('./display-preferences.js')
 
+test('uses the fresh FDC display preference key', () => {
+  assert.equal(DisplayPreferences.STORAGE_KEY, 'fdc.display-preferences.v1')
+})
+
 function createStorage(initialValue = null) {
   let value = initialValue
   return {

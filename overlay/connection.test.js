@@ -30,7 +30,7 @@ test('writes a normalized telemetry source without requiring browser storage', (
   }
 
   assert.equal(writeTelemetrySource('suite'), 'suite')
-  assert.equal(values.get('forza-horizon-6-hud.telemetry-source.v1'), 'suite')
+  assert.equal(values.get('fdc.telemetry-source.v1'), 'suite')
 
   global.localStorage = previousStorage
 })
