@@ -38,6 +38,12 @@ machine.
 - FDC-local `fdc.sqlite` storage for cars, gearbox variants, profiles, and
   bounded samples.
 
+The canonical Shift Light learner and optimal estimator sources are stored in
+`tools/shift-light/` and are bundled locally into
+`overlay/shift-light-engine.js`. This build tooling is development-only; the
+release application consumes the checked-in browser bundle and keeps the
+existing profile key, serialized fields, and SQLite schema unchanged.
+
 ## Non-goals
 
 The first standalone product does not classify road surface from telemetry,

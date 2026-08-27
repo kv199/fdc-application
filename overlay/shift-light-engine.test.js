@@ -48,6 +48,39 @@ test('uses the car identity and limiter for the profile key', () => {
   assert.equal(getShiftLightCarKey(frame({ car: { ordinal: 0, pi: 800 } })), null)
 })
 
+test('keeps learning isolated for each car and PI/RPM configuration', () => {
+  const configurations = [
+    { ordinal: 123, pi: 800, rpmMax: 8000 },
+    { ordinal: 456, pi: 800, rpmMax: 8000 },
+    { ordinal: 123, pi: 850, rpmMax: 8000 },
+    { ordinal: 123, pi: 800, rpmMax: 8500 }
+  ]
+
+  const results = configurations.map((configuration, configurationIndex) => {
+    const car = { ordinal: configuration.ordinal, pi: configuration.pi, drivetrain: 1 }
+    const key = getShiftLightCarKey(frame({ car, rpmMax: configuration.rpmMax }))
+    const learner = new ShiftLightLearner(key)
+
+    for (let sample = 0; sample < 5; sample += 1) {
+      const timestampMs = configurationIndex * 1000 + sample * 100
+      learner.update(frame({ car, rpmMax: configuration.rpmMax, gear: 2, rpm: 8000, timestampMs }))
+      learner.update(frame({ car, rpmMax: configuration.rpmMax, gear: 11, rpm: 7800, timestampMs: timestampMs + 16 }))
+      learner.update(frame({ car, rpmMax: configuration.rpmMax, gear: 3, rpm: 6000, timestampMs: timestampMs + 48 }))
+    }
+
+    return {
+      key,
+      gear: learner.snapshot(frame({ car, rpmMax: configuration.rpmMax, gear: 2 })).gears.find(gear => gear.gear === 2)
+    }
+  })
+
+  assert.equal(new Set(results.map(result => result.key)).size, configurations.length)
+  for (const result of results) {
+    assert.equal(result.gear?.sampleCount, 5)
+    assert.equal(result.gear?.status, 'calibrated')
+  }
+})
+
 test('accepts a Porsche-length neutral transition by elapsed time', () => {
   const learner = new ShiftLightLearner('fh6:123:800:8000')
   learner.update(frame({ gear: 2, rpm: 8000, timestampMs: 0 }))

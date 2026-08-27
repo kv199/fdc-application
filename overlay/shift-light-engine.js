@@ -18,7 +18,7 @@ var HudShiftLight = (() => {
   };
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // Shift Light learner
+  // tools/shift-light/shift-light.ts
   var shift_light_exports = {};
   __export(shift_light_exports, {
     ShiftLightLearner: () => ShiftLightLearner,
@@ -26,7 +26,7 @@ var HudShiftLight = (() => {
     getShiftLightIdentity: () => getShiftLightIdentity
   });
 
-  // Optimal shift estimator
+  // tools/shift-light/optimal-shift.ts
   var FORWARD_GEAR_MIN = 1;
   var FORWARD_GEAR_MAX = 10;
   var WOT_THRESHOLD = 0.95;
@@ -239,7 +239,7 @@ var HudShiftLight = (() => {
     }
   };
 
-  // Shift Light presentation helpers
+  // tools/shift-light/shift-light.ts
   var MIN_THROTTLE = 0.95;
   var MIN_RPM_FRACTION = 0.82;
   var REARM_FRACTION = 0.85;

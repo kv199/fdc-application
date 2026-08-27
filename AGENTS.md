@@ -24,8 +24,12 @@ hierarchy here.
 Run from the repository root:
 
 ```powershell
+npm ci
+npm run build:shift-light
+npm run test:shift-light
 node --check overlay/overlay.js
-node --test overlay/*.test.js
+$testFiles = @(Get-ChildItem -LiteralPath overlay,tools -Recurse -File | Where-Object { $_.Name -match '\.test\.(js|mjs)$' } | ForEach-Object { $_.FullName })
+node --test $testFiles
 cargo fmt --check --manifest-path src-tauri/Cargo.toml
 cargo test --release --locked --manifest-path src-tauri/Cargo.toml
 cargo check --release --locked --manifest-path src-tauri/Cargo.toml

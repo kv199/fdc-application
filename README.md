@@ -169,9 +169,20 @@ available in Configuration while clearing only the in-progress pull. Reset is
 acknowledged after the HUD-local SQLite operation completes, so it remains
 usable while Forza is paused.
 
-The checked-in `overlay/shift-light-engine.js` is the self-contained browser
-bundle used by FDC. Its learner behavior is covered by
-`overlay/shift-light-engine.test.js`.
+The canonical Shift Light learner and estimator sources live in
+`tools/shift-light/`; `tools/shift-light/build.mjs` generates the checked-in
+self-contained browser bundle at `overlay/shift-light-engine.js`. Rebuild it
+locally with:
+
+```powershell
+npm ci
+npm run build:shift-light
+npm run test:shift-light
+```
+
+The executable consumes the generated bundle and does not require Node,
+TypeScript, or esbuild at runtime. Its learner behavior is covered by
+`overlay/shift-light-engine.test.js` and `tools/shift-light/build.test.mjs`.
 
 ## Development workflow
 
@@ -194,6 +205,9 @@ telemetry.
 From the project root:
 
 ```powershell
+npm ci
+npm run build:shift-light
+npm run test:shift-light
 cargo run --release --locked --manifest-path src-tauri/Cargo.toml
 ```
 
@@ -226,6 +240,9 @@ require changes to telemetry or the Tauri layer.
 Optimized standalone build from the project root:
 
 ```powershell
+npm ci
+npm run build:shift-light
+npm run test:shift-light
 cargo build --release --locked --manifest-path src-tauri/Cargo.toml
 ```
 
