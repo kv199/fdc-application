@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const settingsHtml = fs.readFileSync(path.join(__dirname, 'settings.html'), 'utf8')
+const settingsCss = fs.readFileSync(path.join(__dirname, 'settings.css'), 'utf8')
 const settingsJs = fs.readFileSync(path.join(__dirname, 'settings.js'), 'utf8')
 const overlayHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8')
@@ -35,7 +36,7 @@ test('Engine visibility is part of the safe HUD component contract', () => {
   assert.match(tauriMain, /"tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
 })
 
-test('telemetry status sits left of the Configuration setup card', () => {
+test('telemetry status stays separate and right-aligned above the setup card', () => {
   const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
   const telemetryStatusIndex = settingsHtml.indexOf('id="telemetry-status"')
   const routeCardIndex = settingsHtml.indexOf('id="telemetry-route-card"')
@@ -48,6 +49,8 @@ test('telemetry status sits left of the Configuration setup card', () => {
   assert.ok(telemetryStatusIndex < settingsPanelIndex)
   assert.ok(routeCardIndex < settingsPanelIndex)
   assert.match(settingsHtml, /class="settings-header__connection"[\s\S]*id="telemetry-status"[\s\S]*id="telemetry-route-card"/)
+  assert.match(settingsCss, /\.settings-header__connection > \.telemetry-status[\s\S]*justify-content: flex-end[\s\S]*width: 100%/)
+  assert.match(settingsCss, /#telemetry-route-detail\s*\{\s*margin-top: 0;/)
   assert.match(settingsHtml, /class="telemetry-setup-guide"[\s\S]*Settings → HUD and Gameplay → Telemetry/)
   assert.match(settingsHtml, /Data Out IP Address[\s\S]*127\.0\.0\.1/)
   assert.match(settingsHtml, /Data Out IP Port[\s\S]*5301/)
