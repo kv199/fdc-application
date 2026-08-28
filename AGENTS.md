@@ -1,61 +1,87 @@
-# fdc-application repository guidance
+# FDC repository guidance
 
 ## Repository identity
 
-- Logical product and development name: `fdc-application`.
-- Product name: `FDC` (`Feedback-Driven Companion`).
-- Initial platform: Windows PC; initial game: Forza Horizon 6.
-- Local project directory: `50-59_2026_FDC_PRN`.
-- Permanent branch: `main` only.
-- The repository is mirrored to the private GitHub repository
-  `https://github.com/kv199/fdc-application`; do not add additional remotes.
+- Product: FDC (`Feedback-Driven Companion`).
+- Application: standalone Windows Tauri application for Forza Horizon 6.
+- `main` is the only supported permanent branch.
+- The supported runnable build is the Cargo `release` build.
+- While working on `main`, commit each logically complete and locally verified
+  in-scope change and push it to the configured GitHub `origin/main`; do not
+  leave completed work only locally.
 
-## Project boundary
+## Current system boundary
 
-This is the standalone Forza Horizon 6 HUD application. Its root owns the
-browser overlay, native Tauri runtime, Direct UDP input on `127.0.0.1:5301`,
-Asphalt Coach, Shift Light, Configuration, recording/analysis flow, and HUD-local
-SQLite persistence. Suite, co-driver, and WebSocket telemetry are not runtime
-dependencies. Do not recreate the Suite's `apps/forza-horizon-6-hud` directory
-hierarchy here.
+- FDC receives Forza Horizon 6 Data Out on `127.0.0.1:5301`.
+- The native Tauri layer decodes packets into normalized telemetry.
+- The browser overlay consumes telemetry through `queueTelemetry`.
+- Current consumers are the Telemetry HUD, lap timing, Asphalt Coach, and Shift Light.
+- Shift Light persistence belongs to FDC-local `fdc.sqlite`.
+- Preserve the local runtime boundary and do not add another telemetry transport.
 
-## Verification
+## Documentation routing
 
-Run from the repository root:
+Read only the source relevant to the current task:
 
-```powershell
-npm ci
-npm run build:shift-light
-npm run test:shift-light
-node --check overlay/overlay.js
-$testFiles = @(Get-ChildItem -LiteralPath overlay,tools -Recurse -File | Where-Object { $_.Name -match '\.test\.(js|mjs)$' } | ForEach-Object { $_.FullName })
-node --test $testFiles
-cargo fmt --check --manifest-path src-tauri/Cargo.toml
-cargo test --release --locked --manifest-path src-tauri/Cargo.toml
-cargo check --release --locked --manifest-path src-tauri/Cargo.toml
-cargo build --release --locked --manifest-path src-tauri/Cargo.toml
-```
+- Current system data flow: `docs/architecture.md`
+- Asphalt Coach behavior: `docs/asphalt-coach.md`
+- Shift Light behavior and contracts: `docs/shift-light.md`
+- Specific decision record relevant to the current task: `ADR/`
 
-Before handing off a release build, run `cargo build --release --locked`, then
-launch `src-tauri/target/release/fdc-application.exe` and confirm that it stays
-alive for at least five seconds.
+Do not load all documentation or the entire `ADR/` directory by default.
+Current code is the behavioral authority. Current documentation describes
+implemented behavior. If they disagree, inspect and report the discrepancy
+before changing runtime behavior.
 
-## Data and artifacts
+## Verification by change type
 
-Keep generated build output, executables, SQLite databases, telemetry captures,
-recordings, logs, exports, and QA screenshots out of Git. The repository
-`.gitignore` contains the required protection. Runtime Shift Light data belongs
-to the FDC application-data directory as `fdc.sqlite`, not in this repository
-and not in any external provider database. FDC must not read or import the old
-HUD application's `hud.sqlite` or its localStorage namespace.
+- Documentation-only changes: check links and claims, then run
+  `git diff --check`.
+- Browser or Coach changes: run `node --check` for affected files and the
+  relevant Node.js tests.
+- Shift Light changes: run `npm run build:shift-light` and
+  `npm run test:shift-light`. Compare `overlay/shift-light-engine.js` when
+  runtime behavior should remain unchanged.
+- Native or release changes: run the locked release Cargo format, test, check,
+  and build commands from the repository root.
+- Release handoff: launch
+  `src-tauri/target/release/fdc-application.exe` and confirm that it remains
+  alive for at least five seconds.
+
+## Data and generated artifacts
+
+- Keep build output, executables, `target/`, SQLite databases, telemetry
+  captures, logs, exports, and QA screenshots out of Git.
+- Runtime Shift Light data belongs in the application-data directory as
+  `fdc.sqlite`.
+- Canonical Shift Light TypeScript source lives in `src/shift-light/`.
+- `tools/build-shift-light.mjs` generates the runtime bundle at
+  `overlay/shift-light-engine.js`.
+- Rebuild generated assets from canonical source; do not maintain separate
+  runtime implementations.
 
 ## Change discipline
 
-- Preserve the Direct UDP packet contract and the shared normalized
-  `queueTelemetry` path after decoding.
-- Keep the Asphalt Coach current-run and asphalt-only; do not introduce track,
-  line, score, or exact time-loss claims without an explicit product decision.
-- Keep Shift Light persistence HUD-local and preserve SQLite migration safety.
-- Update product documentation when behavior, configuration, or data ownership
-  changes.
-- Do not modify the source Suite as part of standalone repository work.
+- For explanation, review, diagnosis, or planning, inspect the relevant
+  materials and report the result. Do not edit files unless the request asks
+  for a change.
+- For requested changes, builds, or fixes, make the in-scope local changes and
+  run relevant non-destructive validation without asking first.
+- Reading files, inspecting logs, editing in-scope files, and running relevant
+  tests are normal local actions within the requested task.
+- Ask before destructive actions, external writes, or material scope expansion.
+- If an ambiguity can change behavior, data ownership, permissions, security,
+  or task scope, stop and ask for clarification.
+- Preserve the Direct Data Out packet contract and normalized `queueTelemetry`
+  path.
+- Keep Asphalt Coach asphalt-only, current-run, and zero-reference.
+- Do not add track identity, ideal-line guidance, driving scores, exact
+  time-loss claims, or unsupported findings without an explicit product
+  decision.
+- Preserve Shift Light learner APIs, vehicle identity, numeric variant IDs,
+  telemetry contracts, SQLite migration safety, and local persistence.
+- Documentation must describe implemented behavior only and must be written in
+  English.
+- Keep decision records unchanged unless updating them is explicitly requested.
+- Do not introduce new runtime channels, external telemetry dependencies, or
+  unsupported features.

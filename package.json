@@ -2,8 +2,8 @@
   "name": "fdc-application",
   "private": true,
   "scripts": {
-    "build:shift-light": "node tools/shift-light/build.mjs",
-    "test:shift-light": "node --test overlay/shift-light-engine.test.js overlay/shift-light-runtime.test.js tools/shift-light/build.test.mjs"
+    "build:shift-light": "node tools/build-shift-light.mjs",
+    "test:shift-light": "node --test overlay/shift-light-engine.test.js overlay/shift-light-runtime.test.js tools/build-shift-light.test.mjs"
   },
   "devDependencies": {
     "esbuild": "0.27.7"
