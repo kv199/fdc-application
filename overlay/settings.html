@@ -12,9 +12,25 @@
     <header class="settings-header">
       <div class="settings-header__topline">
         <p class="settings-eyebrow">FORZA HORIZON 6</p>
+        <div class="settings-header__connection" aria-label="Direct Data Out connection">
+          <div id="telemetry-status" class="telemetry-status" data-state="offline" role="status" aria-live="polite">
+            <span class="telemetry-status__dot" aria-hidden="true"></span>
+            <span id="telemetry-status-label">DIRECT DATA OUT OFFLINE</span>
+          </div>
+          <p class="settings-header__connection-help">In Forza Horizon 6, go to <strong>Settings → HUD and Gameplay → Telemetry</strong> and set <strong>Data Out</strong> to <strong>On</strong>, <strong>Data Out IP Address</strong> to <strong>127.0.0.1</strong>, and <strong>Data Out IP Port</strong> to <strong>5301</strong>.</p>
+          <div id="telemetry-route-card" class="telemetry-route-card" data-tone="offline">
+            <div class="telemetry-route-card__header">
+              <output id="telemetry-route-label" aria-live="polite">DIRECT DATA OUT · OFFLINE</output>
+              <output id="telemetry-route-endpoint">UDP 127.0.0.1:5301</output>
+            </div>
+            <p id="telemetry-route-detail">The FDC Direct Data Out receiver is offline.</p>
+            <p id="telemetry-route-warning" class="telemetry-route-card__warning" hidden></p>
+            <button id="telemetry-route-retry" class="settings-button" type="button" hidden>RETRY DATA OUT</button>
+          </div>
+        </div>
       </div>
       <h1>CONFIGURATION</h1>
-      <p class="settings-copy">Configure the overlay, Shift Light and direct Forza Data Out.</p>
+      <p class="settings-copy">Configure the overlay and Shift Light.</p>
     </header>
 
     <div class="settings-tabs" role="tablist" aria-label="Settings categories">
@@ -248,31 +264,6 @@
         </div>
       </section>
 
-      <section class="telemetry-settings" aria-labelledby="telemetry-settings-title">
-        <div class="settings-section__heading">
-          <h2 id="telemetry-settings-title">DIRECT DATA OUT</h2>
-          <div id="telemetry-status" class="telemetry-status" data-state="offline" role="status" aria-live="polite">
-            <span class="telemetry-status__dot" aria-hidden="true"></span>
-            <span id="telemetry-status-label">DIRECT DATA OUT OFFLINE</span>
-          </div>
-        </div>
-
-        <section class="data-out-section" aria-labelledby="source-title">
-          <div class="settings-section__heading">
-            <h2 id="source-title">FORZA DATA OUT</h2>
-            <span>DIRECT UDP INPUT</span>
-          </div>
-          <div id="telemetry-route-card" class="telemetry-route-card" data-tone="offline">
-            <div class="telemetry-route-card__header">
-              <output id="telemetry-route-label" aria-live="polite">DIRECT DATA OUT · OFFLINE</output>
-              <output id="telemetry-route-endpoint">UDP 127.0.0.1:5301</output>
-            </div>
-            <p id="telemetry-route-detail">The FDC Direct Data Out receiver is offline.</p>
-            <p id="telemetry-route-warning" class="telemetry-route-card__warning" hidden></p>
-            <button id="telemetry-route-retry" class="settings-button" type="button" hidden>RETRY DATA OUT</button>
-          </div>
-        </section>
-      </section>
     </section>
 
     <p id="settings-status" class="settings-status" role="status" aria-live="polite">READY</p>

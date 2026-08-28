@@ -43,9 +43,34 @@ input {
 
 .settings-header__topline {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
+}
+
+.settings-header__connection {
+  width: min(100%, 390px);
+  min-width: 0;
+  margin-left: auto;
+}
+
+.settings-header__connection .telemetry-status {
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.settings-header__connection-help {
+  margin-top: 8px;
+  color: #a1a1aa;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
+  user-select: text;
+}
+
+.settings-header__connection-help strong {
+  color: #d4d4d8;
+  font-weight: 650;
 }
 
 .settings-eyebrow,
@@ -925,16 +950,6 @@ h1 {
   opacity: 0.68;
 }
 
-.telemetry-settings {
-  margin-top: 28px;
-  padding-top: 22px;
-  border-top: 1px solid rgb(226 232 240 / 14%);
-}
-
-.data-out-section {
-  padding: 0;
-}
-
 .telemetry-route-card {
   margin-top: 10px;
   padding: 12px;
@@ -994,4 +1009,24 @@ h1 {
 #telemetry-route-retry {
   width: 100%;
   margin-top: 10px;
+}
+
+@media (max-width: 620px) {
+  .settings-header__topline {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-header__connection {
+    width: 100%;
+  }
+
+  .settings-header__connection .telemetry-status,
+  .settings-header__connection-help {
+    text-align: left;
+  }
+
+  .settings-header__connection .telemetry-status {
+    justify-content: flex-start;
+  }
 }

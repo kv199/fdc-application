@@ -35,14 +35,21 @@ test('Engine visibility is part of the safe HUD component contract', () => {
   assert.match(tauriMain, /"tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
 })
 
-test('telemetry diagnostics live only inside the Settings tab', () => {
+test('telemetry status and setup guidance live in the Configuration header', () => {
   const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
   const telemetryStatusIndex = settingsHtml.indexOf('id="telemetry-status"')
   const routeCardIndex = settingsHtml.indexOf('id="telemetry-route-card"')
+  const headerIndex = settingsHtml.indexOf('class="settings-header"')
 
   assert.ok(settingsPanelIndex >= 0)
-  assert.ok(telemetryStatusIndex > settingsPanelIndex)
-  assert.ok(routeCardIndex > settingsPanelIndex)
+  assert.ok(headerIndex >= 0)
+  assert.ok(telemetryStatusIndex > headerIndex)
+  assert.ok(telemetryStatusIndex < settingsPanelIndex)
+  assert.ok(routeCardIndex > headerIndex)
+  assert.ok(routeCardIndex < settingsPanelIndex)
+  assert.match(settingsHtml, /Settings → HUD and Gameplay → Telemetry/)
+  assert.match(settingsHtml, /Data Out IP Address.*127\.0\.0\.1/)
+  assert.match(settingsHtml, /Data Out IP Port.*5301/)
   assert.doesNotMatch(overlayHtml, /telemetry-route-badge/)
 })
 
@@ -55,16 +62,18 @@ test('Configuration exposes only the Direct Data Out receiver', () => {
   assert.match(tauriMain, /fn retry_direct_source/u)
 })
 
-test('Display settings expose speed units before telemetry', () => {
+test('Settings exposes only the speed unit preference', () => {
   const displaySettingsIndex = settingsHtml.indexOf('id="display-settings-title"')
-  const telemetrySettingsIndex = settingsHtml.indexOf('id="telemetry-settings-title"')
+  const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
   const displayPreferencesScriptIndex = settingsHtml.indexOf('src="display-preferences.js"')
   const settingsScriptIndex = settingsHtml.indexOf('src="settings.js"')
+  const settingsPanel = settingsHtml.slice(settingsPanelIndex)
 
   assert.ok(displaySettingsIndex >= 0)
-  assert.ok(telemetrySettingsIndex > displaySettingsIndex)
+  assert.ok(settingsPanelIndex >= 0)
   assert.match(settingsHtml, /name="speed-unit" value="kmh"/)
   assert.match(settingsHtml, /name="speed-unit" value="mph"/)
+  assert.doesNotMatch(settingsPanel, /telemetry-settings|telemetry-route-card|DIRECT DATA OUT.*OFFLINE/u)
   assert.ok(displayPreferencesScriptIndex >= 0)
   assert.ok(settingsScriptIndex > displayPreferencesScriptIndex)
 })
