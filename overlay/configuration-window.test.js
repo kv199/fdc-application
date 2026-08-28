@@ -35,7 +35,7 @@ test('Engine visibility is part of the safe HUD component contract', () => {
   assert.match(tauriMain, /"tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
 })
 
-test('telemetry status and setup guidance share one Configuration header card', () => {
+test('telemetry status sits left of the Configuration setup card', () => {
   const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
   const telemetryStatusIndex = settingsHtml.indexOf('id="telemetry-status"')
   const routeCardIndex = settingsHtml.indexOf('id="telemetry-route-card"')
@@ -43,13 +43,17 @@ test('telemetry status and setup guidance share one Configuration header card', 
 
   assert.ok(settingsPanelIndex >= 0)
   assert.ok(headerIndex >= 0)
-  assert.ok(routeCardIndex > headerIndex)
-  assert.ok(telemetryStatusIndex > routeCardIndex)
+  assert.ok(telemetryStatusIndex > headerIndex)
+  assert.ok(routeCardIndex > telemetryStatusIndex)
   assert.ok(telemetryStatusIndex < settingsPanelIndex)
   assert.ok(routeCardIndex < settingsPanelIndex)
+  assert.match(settingsHtml, /class="settings-header__connection"[\s\S]*id="telemetry-status"[\s\S]*id="telemetry-route-card"/)
   assert.match(settingsHtml, /class="telemetry-setup-guide"[\s\S]*Settings → HUD and Gameplay → Telemetry/)
   assert.match(settingsHtml, /Data Out IP Address[\s\S]*127\.0\.0\.1/)
   assert.match(settingsHtml, /Data Out IP Port[\s\S]*5301/)
+  const setupGuide = settingsHtml.slice(settingsHtml.indexOf('class="telemetry-setup-guide"'), settingsHtml.indexOf('id="telemetry-route-retry"'))
+  assert.equal((setupGuide.match(/<li>/g) || []).length, 4)
+  assert.doesNotMatch(setupGuide, /Return to the game and start driving/u)
   assert.doesNotMatch(settingsHtml, /id="telemetry-route-endpoint"|id="telemetry-route-label"/)
   assert.doesNotMatch(settingsJs, /telemetryRouteEndpoint|telemetryRouteLabel|telemetryRouteDetail|telemetryRouteWarning/u)
   assert.doesNotMatch(overlayHtml, /telemetry-route-badge/)

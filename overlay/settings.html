@@ -13,21 +13,18 @@
       <div class="settings-header__topline">
         <p class="settings-eyebrow">FORZA HORIZON 6</p>
         <div class="settings-header__connection" aria-label="Direct Data Out connection">
+          <div id="telemetry-status" class="telemetry-status" data-state="offline" role="status" aria-live="polite">
+            <span class="telemetry-status__dot" aria-hidden="true"></span>
+            <span id="telemetry-status-label">DIRECT DATA OUT OFFLINE</span>
+          </div>
           <div id="telemetry-route-card" class="telemetry-route-card" data-tone="offline">
-            <div class="telemetry-route-card__header">
-              <div id="telemetry-status" class="telemetry-status" data-state="offline" role="status" aria-live="polite">
-                <span class="telemetry-status__dot" aria-hidden="true"></span>
-                <span id="telemetry-status-label">DIRECT DATA OUT OFFLINE</span>
-              </div>
-            </div>
             <div id="telemetry-route-detail" class="telemetry-setup-guide">
               <p class="telemetry-setup-guide__title">HOW TO CONNECT</p>
               <ol>
-                <li>Open Forza Horizon 6 and go to <strong>Settings → HUD and Gameplay → Telemetry</strong>.</li>
+                <li>Open <strong>Settings → HUD and Gameplay → Telemetry</strong>.</li>
                 <li>Set <strong>Data Out</strong> to <strong>On</strong>.</li>
                 <li>Set <strong>Data Out IP Address</strong> to <strong>127.0.0.1</strong>.</li>
                 <li>Set <strong>Data Out IP Port</strong> to <strong>5301</strong>.</li>
-                <li>Return to the game and start driving.</li>
               </ol>
             </div>
             <button id="telemetry-route-retry" class="settings-button" type="button" hidden>RETRY DATA OUT</button>
