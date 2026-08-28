@@ -1,5 +1,4 @@
 import { build } from 'esbuild'
-import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -22,10 +21,5 @@ await build({
     js: 'if (typeof globalThis !== "undefined") globalThis.HudShiftLight = HudShiftLight; if (typeof module !== "undefined") module.exports = HudShiftLight;'
   }
 })
-
-const bundle = readFileSync(output, 'utf8')
-  .replaceAll('// src/shift-light/shift-light.ts', '// tools/shift-light/shift-light.ts')
-  .replaceAll('// src/shift-light/optimal-shift.ts', '// tools/shift-light/optimal-shift.ts')
-writeFileSync(output, bundle)
 
 console.log(`Shift Light bundle generated: ${output}`)

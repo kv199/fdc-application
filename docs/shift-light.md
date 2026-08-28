@@ -223,8 +223,9 @@ npm run build:shift-light
 ```
 
 Run the full Node.js test suite once after the final Shift Light changes and
-verify `overlay/shift-light-engine.js`. For source or build changes that should
-preserve behavior, the generated bundle must remain byte-for-byte identical.
+verify `overlay/shift-light-engine.js`. The generated bundle must use the
+canonical `src/shift-light/` source labels and contain no obsolete source path.
+Runtime behavior and compatibility contracts must remain unchanged.
 
 For a completed runtime code task, use the release verification cycle described
 in [README.md](../README.md#build-and-verify). Do not repeat checks that

@@ -51,11 +51,11 @@ Do not repeat checks that already passed for the same final state.
     least five seconds.
 - Shift Light changes additionally require rebuilding
   `overlay/shift-light-engine.js` before the final Node.js test run. Verify the
-  generated output. When the change should preserve runtime behavior, the
-  generated bundle must remain byte-for-byte identical. The targeted Shift
-  Light test command may be used during iteration, but must not be run in
-  addition to the full suite during final verification without a specific
-  debugging reason.
+  generated output uses the canonical `src/shift-light/` source labels and
+  contains no obsolete source path. Runtime behavior and compatibility
+  contracts must remain unchanged. The targeted Shift Light test command may
+  be used during iteration, but must not be run in addition to the full suite
+  during final verification without a specific debugging reason.
 - Run `npm ci` only when dependencies are not installed or dependency
   manifests have changed. It is not required for every task.
 

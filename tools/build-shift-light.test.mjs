@@ -35,8 +35,7 @@ test('local build workflow targets the checked-in overlay bundle', () => {
   assert.match(packageJson, /"esbuild": "0\.27\.7"/u)
   assert.match(buildScript, /src\/shift-light\/shift-light\.ts/u)
   assert.match(buildScript, /overlay\/shift-light-engine\.js/u)
-  assert.match(buildScript, /tools\/shift-light\/shift-light\.ts/u)
-  assert.match(buildScript, /tools\/shift-light\/optimal-shift\.ts/u)
+  assert.doesNotMatch(buildScript, /tools[\\/]shift-light[\\/]/u)
   assert.doesNotMatch(buildScript, /apps[\\/]co-driver|server[\\/]utils[\\/]decode|co-driver/iu)
 })
 
@@ -45,5 +44,8 @@ test('checked-in bundle has the FDC-owned export and no external source path', (
 
   assert.match(bundle, /^\/\/ FDC-owned Shift Light utility/u)
   assert.match(bundle, /globalThis\.HudShiftLight = HudShiftLight/u)
+  assert.match(bundle, /src\/shift-light\/shift-light\.ts/u)
+  assert.match(bundle, /src\/shift-light\/optimal-shift\.ts/u)
+  assert.doesNotMatch(bundle, /tools[\\/]shift-light[\\/]/u)
   assert.doesNotMatch(bundle, /apps[\\/]co-driver|server[\\/]utils[\\/]decode|co-driver/iu)
 })
