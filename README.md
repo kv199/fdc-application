@@ -143,15 +143,19 @@ running the application.
 
 ## Build and verify
 
-Build and test the Shift Light bundle:
+Verification is cumulative for the current change set and is performed once
+after all changes for a completed task. Documentation-only changes require
+changed-link and claim checks plus `git diff --check`.
+
+When Shift Light source or build tooling changes, rebuild the generated bundle
+before the final test run:
 
 ```powershell
-npm ci
 npm run build:shift-light
-npm run test:shift-light
 ```
 
-Run the browser and native release checks from the repository root:
+For a completed runtime code task, run the release verification cycle from the
+repository root:
 
 ```powershell
 node --check overlay/overlay.js
@@ -159,13 +163,14 @@ $testFiles = @(Get-ChildItem -LiteralPath overlay,tools -Recurse -File | Where-O
 node --test $testFiles
 cargo fmt --check --manifest-path src-tauri/Cargo.toml
 cargo test --release --locked --manifest-path src-tauri/Cargo.toml
-cargo check --release --locked --manifest-path src-tauri/Cargo.toml
 cargo build --release --locked --manifest-path src-tauri/Cargo.toml
 ```
 
 The runnable output is `src-tauri/target/release/fdc-application.exe`. Before
 handing off a release build, launch it and confirm that it stays alive for at
-least five seconds.
+least five seconds. Do not repeat checks that already passed for the same
+final state. Run `npm ci` only when dependencies are not installed or
+dependency manifests have changed.
 
 ## Current limitations
 

@@ -35,18 +35,29 @@ before changing runtime behavior.
 
 ## Verification by change type
 
-- Documentation-only changes: check links and claims, then run
+Verification is performed once after all changes belonging to a completed task.
+Do not repeat checks that already passed for the same final state.
+
+- Documentation-only changes: check changed links and claims, then run
   `git diff --check`.
-- Browser or Coach changes: run `node --check` for affected files and the
-  relevant Node.js tests.
-- Shift Light changes: run `npm run build:shift-light` and
-  `npm run test:shift-light`. Compare `overlay/shift-light-engine.js` when
-  runtime behavior should remain unchanged.
-- Native or release changes: run the locked release Cargo format, test, check,
-  and build commands from the repository root.
-- Release handoff: launch
-  `src-tauri/target/release/fdc-application.exe` and confirm that it remains
-  alive for at least five seconds.
+- Every completed task that changes runtime code, build tooling, package
+  scripts, or generated assets must pass the full release verification cycle:
+  - run `node --check` for affected JavaScript files;
+  - run the full Node.js test suite once;
+  - run Cargo formatting;
+  - run release Rust tests;
+  - build with Cargo `--release`;
+  - launch the release executable and confirm that it remains alive for at
+    least five seconds.
+- Shift Light changes additionally require rebuilding
+  `overlay/shift-light-engine.js` before the final Node.js test run. Verify the
+  generated output. When the change should preserve runtime behavior, the
+  generated bundle must remain byte-for-byte identical. The targeted Shift
+  Light test command may be used during iteration, but must not be run in
+  addition to the full suite during final verification without a specific
+  debugging reason.
+- Run `npm ci` only when dependencies are not installed or dependency
+  manifests have changed. It is not required for every task.
 
 ## Data and generated artifacts
 

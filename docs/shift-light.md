@@ -215,25 +215,21 @@ serialized profile fields, native/browser event names, or the database schema.
 
 ## Verification
 
-From the repository root, run the mandatory Shift Light and release checks:
+When Shift Light source or build tooling changes, rebuild the generated bundle
+from the repository root:
 
 ```powershell
-npm ci
 npm run build:shift-light
-npm run test:shift-light
-node --check overlay/overlay.js
-$testFiles = @(Get-ChildItem -LiteralPath overlay,tools -Recurse -File | Where-Object { $_.Name -match '\.test\.(js|mjs)$' } | ForEach-Object { $_.FullName })
-node --test $testFiles
-cargo fmt --check --manifest-path src-tauri/Cargo.toml
-cargo test --release --locked --manifest-path src-tauri/Cargo.toml
-cargo check --release --locked --manifest-path src-tauri/Cargo.toml
-cargo build --release --locked --manifest-path src-tauri/Cargo.toml
 ```
 
-After rebuilding, `overlay/shift-light-engine.js` must remain byte-for-byte
-identical when the change is only source relocation and build-path maintenance.
-Before a release handoff, launch the release executable and confirm that it
-stays alive for at least five seconds.
+Run the full Node.js test suite once after the final Shift Light changes and
+verify `overlay/shift-light-engine.js`. For source or build changes that should
+preserve behavior, the generated bundle must remain byte-for-byte identical.
+
+For a completed runtime code task, use the release verification cycle described
+in [README.md](../README.md#build-and-verify). Do not repeat checks that
+already passed for the same final state. Run `npm ci` only when dependencies
+are not installed or dependency manifests have changed.
 
 ## Current limitations
 

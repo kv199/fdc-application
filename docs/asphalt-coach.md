@@ -242,16 +242,11 @@ presentation, and lifecycle modules. They do not prove live Forza behavior,
 identify an asphalt surface from telemetry, or validate a track-specific
 reference line.
 
-From the repository root, run the relevant checks:
-
-```powershell
-node --check overlay/overlay.js
-$testFiles = @(Get-ChildItem -LiteralPath overlay,tools -Recurse -File | Where-Object { $_.Name -match '\.test\.(js|mjs)$' } | ForEach-Object { $_.FullName })
-node --test $testFiles
-```
-
-The full release verification also includes the locked Shift Light and native
-Cargo checks documented in the repository's release workflow.
+The checked-in fixtures are covered by the full Node.js test suite. Run that
+suite once after changes to the Coach runtime or fixtures. For a completed
+runtime code task, use the release verification cycle described in
+[README.md](../README.md#build-and-verify). Do not repeat checks that already
+passed for the same final state.
 
 ## Current limitations
 
