@@ -11,9 +11,7 @@ repository owns the native Direct Data Out receiver and decoder, the browser
 overlay, Configuration, lap timing, Asphalt Coach, Shift Light, and local HUD
 profile persistence.
 
-The runtime boundary ends at the local application. FDC does not depend on the
-Suite, the old HUD application, a co-driver service, WebSocket telemetry, a
-cloud provider, or an external telemetry database. The current source of
+The runtime boundary ends at the local application. The current source of
 telemetry is FH6 Data Out over the local UDP endpoint described below.
 
 ## Runtime data flow
@@ -144,8 +142,7 @@ identity and monotonic merge rules.
 The Coach calibration envelope, active findings, lap timing state, telemetry
 history, and visual presentation state remain in memory for the running HUD.
 Configuration and layout preferences use the versioned local browser storage
-keys listed above. FDC does not read or import the old HUD application's
-`hud.sqlite` or its localStorage namespace.
+keys listed above.
 
 ## Generated assets
 
@@ -178,8 +175,6 @@ remaining overlay JavaScript, CSS, HTML, and SVG files are loaded directly from
 - `queueTelemetry` is the shared browser ingress. Feature code must preserve
   the normalized telemetry contract and must not create a parallel telemetry
   transport.
-- The application is local-first. The current path has no Suite, co-driver,
-  WebSocket, cloud, or external analysis dependency.
 - Coach and Shift Light are intentionally separate feature boundaries; their
   detailed current behavior and limitations live in their dedicated documents.
 - The checked-in generated Shift Light bundle is a runtime input. A source move

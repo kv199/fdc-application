@@ -167,8 +167,7 @@ learning evidence.
 ## Local persistence
 
 Shift Light profiles are stored in the FDC-local `fdc.sqlite` under the native
-application data directory. FDC does not read or import the old HUD
-application's `hud.sqlite` or its localStorage namespace for calibration.
+application data directory.
 
 The versioned schema contains:
 

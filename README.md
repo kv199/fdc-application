@@ -90,9 +90,8 @@ Settings are applied locally and do not add another telemetry source.
 
 ## Local data and privacy
 
-FDC is local-first. Direct Data Out is received from the local game session;
-the application does not require a cloud service, Suite connection, co-driver,
-or external telemetry database.
+FDC is local-first. Direct Data Out is received from the local game session.
+The application keeps runtime data local to the machine.
 
 Shift Light profiles are stored in the FDC application-data directory as
 `fdc.sqlite`. Coach session state and live telemetry state remain local to the
