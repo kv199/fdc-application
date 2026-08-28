@@ -14,10 +14,6 @@
   const telemetryStatus = document.getElementById('telemetry-status')
   const telemetryStatusLabel = document.getElementById('telemetry-status-label')
   const telemetryRouteCard = document.getElementById('telemetry-route-card')
-  const telemetryRouteLabel = document.getElementById('telemetry-route-label')
-  const telemetryRouteEndpoint = document.getElementById('telemetry-route-endpoint')
-  const telemetryRouteDetail = document.getElementById('telemetry-route-detail')
-  const telemetryRouteWarning = document.getElementById('telemetry-route-warning')
   const telemetryRouteRetry = document.getElementById('telemetry-route-retry')
   const shiftLightEmpty = document.getElementById('shift-light-empty')
   const shiftLightProfile = document.getElementById('shift-light-profile')
@@ -201,11 +197,6 @@
         : 'offline'
     telemetryStatusLabel.textContent = presentation.statusLabel
     telemetryRouteCard.dataset.tone = presentation.tone
-    telemetryRouteLabel.textContent = presentation.statusLabel
-    telemetryRouteEndpoint.textContent = presentation.endpoint
-    telemetryRouteDetail.textContent = presentation.detail
-    telemetryRouteWarning.textContent = presentation.warning
-    telemetryRouteWarning.hidden = !presentation.warning
     telemetryRouteRetry.hidden = !presentation.canRetry
   }
 

@@ -35,7 +35,7 @@ test('Engine visibility is part of the safe HUD component contract', () => {
   assert.match(tauriMain, /"tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
 })
 
-test('telemetry status and setup guidance live in the Configuration header', () => {
+test('telemetry status and setup guidance share one Configuration header card', () => {
   const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
   const telemetryStatusIndex = settingsHtml.indexOf('id="telemetry-status"')
   const routeCardIndex = settingsHtml.indexOf('id="telemetry-route-card"')
@@ -43,19 +43,22 @@ test('telemetry status and setup guidance live in the Configuration header', () 
 
   assert.ok(settingsPanelIndex >= 0)
   assert.ok(headerIndex >= 0)
-  assert.ok(telemetryStatusIndex > headerIndex)
-  assert.ok(telemetryStatusIndex < settingsPanelIndex)
   assert.ok(routeCardIndex > headerIndex)
+  assert.ok(telemetryStatusIndex > routeCardIndex)
+  assert.ok(telemetryStatusIndex < settingsPanelIndex)
   assert.ok(routeCardIndex < settingsPanelIndex)
-  assert.match(settingsHtml, /Settings → HUD and Gameplay → Telemetry/)
-  assert.match(settingsHtml, /Data Out IP Address.*127\.0\.0\.1/)
-  assert.match(settingsHtml, /Data Out IP Port.*5301/)
+  assert.match(settingsHtml, /class="telemetry-setup-guide"[\s\S]*Settings → HUD and Gameplay → Telemetry/)
+  assert.match(settingsHtml, /Data Out IP Address[\s\S]*127\.0\.0\.1/)
+  assert.match(settingsHtml, /Data Out IP Port[\s\S]*5301/)
+  assert.doesNotMatch(settingsHtml, /id="telemetry-route-endpoint"|id="telemetry-route-label"/)
+  assert.doesNotMatch(settingsJs, /telemetryRouteEndpoint|telemetryRouteLabel|telemetryRouteDetail|telemetryRouteWarning/u)
   assert.doesNotMatch(overlayHtml, /telemetry-route-badge/)
 })
 
 test('Configuration exposes only the Direct Data Out receiver', () => {
   assert.match(settingsHtml, /DIRECT DATA OUT/)
-  assert.match(settingsHtml, /UDP 127\.0\.0\.1:5301/)
+  assert.match(settingsHtml, /127\.0\.0\.1/)
+  assert.match(settingsHtml, /5301/)
   assert.doesNotMatch(settingsHtml, /telemetry-source|co-driver|Suite|WebSocket/u)
   assert.doesNotMatch(settingsJs, /HudConnection|set_telemetry_source|selectTelemetrySource/u)
   assert.match(settingsJs, /call\('retry_direct_source'\)/u)
