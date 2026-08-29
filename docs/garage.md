@@ -12,8 +12,7 @@ Garage is the Configuration tab immediately to the right of HUD.
   saved vehicle name or its numeric car ordinal. A positive current `CarGroup`
   value is displayed below that name as `GROUP <value>`, followed by a paired
   Forza-style class and performance-index badge, drivetrain label, and cylinder
-  count. Its Shift Light label uses the current live learner state. It does not
-  carry a Last Used badge.
+  count. It does not carry a Last Used badge.
 - Clicking the current vehicle name or ordinal opens an inline name field. Enter
   or leaving the field saves the name; Escape cancels the edit. An empty saved
   name returns the display to the numeric ordinal.
@@ -95,10 +94,9 @@ distinct RPM limits and gearbox signatures. The snapshot reports:
 - `LEARNING` when a Shift Light tune exists without a calibrated target;
 - `NOT CALIBRATED` when no Shift Light tune exists.
 
-The active card takes precedence from the live Shift Light event, so it can
-show the state that is currently being learned. Reset and detailed diagnostics
-remain in the Shift Light tab and still target only the active numeric gearbox
-variant.
+Reset and detailed diagnostics remain in the Shift Light tab and still target
+only the active numeric gearbox variant. The Current Car block intentionally
+does not repeat Shift Light information.
 
 ## Local SQLite state
 
