@@ -771,23 +771,27 @@ h1 {
   gap: 8px;
 }
 
-.events-discard-dialog__no {
+.events-discard-dialog .events-discard-dialog__no {
   border-color: #69e83f;
   color: #090b0e;
   background: #69e83f;
 }
 
-.events-discard-dialog__no:hover {
+.events-discard-dialog .events-discard-dialog__no:hover,
+.events-discard-dialog .events-discard-dialog__no:focus-visible {
+  border-color: #88f166;
   background: #88f166;
 }
 
-.events-discard-dialog__yes {
+.events-discard-dialog .events-discard-dialog__yes {
   border-color: #ef4444;
   color: #fecaca;
   background: transparent;
 }
 
-.events-discard-dialog__yes:hover {
+.events-discard-dialog .events-discard-dialog__yes:hover,
+.events-discard-dialog .events-discard-dialog__yes:focus-visible {
+  border-color: #ef4444;
   color: #fff;
   background: #ef4444;
 }
