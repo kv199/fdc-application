@@ -2092,6 +2092,7 @@ fn set_display_preferences(
     app: AppHandle,
     speed_unit: String,
     shift_light_brightness: u8,
+    hud_opacity: u8,
 ) -> Result<(), String> {
     let safe_speed_unit = match speed_unit.as_str() {
         "kmh" | "mph" => speed_unit,
@@ -2100,10 +2101,13 @@ fn set_display_preferences(
     if shift_light_brightness > 100 {
         return Err("Shift Light brightness must be between 0 and 100".to_string());
     }
+    if !(1..=100).contains(&hud_opacity) {
+        return Err("HUD opacity must be between 1 and 100".to_string());
+    }
 
     let script = format!(
-        "window.HudOverlay?.setDisplayPreferences?.({{ speedUnit: '{}', shiftLightBrightness: {} }})",
-        safe_speed_unit, shift_light_brightness
+        "window.HudOverlay?.setDisplayPreferences?.({{ speedUnit: '{}', shiftLightBrightness: {}, hudOpacity: {} }})",
+        safe_speed_unit, shift_light_brightness, hud_opacity
     );
     eval_main(&app, &script)
 }

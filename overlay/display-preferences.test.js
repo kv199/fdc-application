@@ -18,33 +18,50 @@ function createStorage(initialValue = null) {
   }
 }
 
-test('uses km/h, 80 percent brightness and Configuration always-on-top by default', () => {
+test('uses km/h, 80 percent brightness and HUD opacity, and Configuration always-on-top by default', () => {
   assert.deepEqual(DisplayPreferences.read(createStorage()), {
     speedUnit: 'kmh',
     shiftLightBrightness: 80,
+    hudOpacity: 80,
     configurationAlwaysOnTop: true
   })
 })
 
-test('sanitizes stored units and clamps brightness', () => {
+test('sanitizes stored units and clamps brightness and HUD opacity', () => {
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'mph', shiftLightBrightness: 135 }), {
     speedUnit: 'mph',
     shiftLightBrightness: 100,
+    hudOpacity: 80,
     configurationAlwaysOnTop: true
   })
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'knots', shiftLightBrightness: -4 }), {
     speedUnit: 'kmh',
     shiftLightBrightness: 0,
+    hudOpacity: 80,
     configurationAlwaysOnTop: true
   })
   assert.deepEqual(DisplayPreferences.normalize({ shiftLightBrightness: '64.6' }), {
     speedUnit: 'kmh',
     shiftLightBrightness: 65,
+    hudOpacity: 80,
     configurationAlwaysOnTop: true
   })
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'mph', shiftLightBrightness: null }), {
     speedUnit: 'mph',
     shiftLightBrightness: 80,
+    hudOpacity: 80,
+    configurationAlwaysOnTop: true
+  })
+  assert.deepEqual(DisplayPreferences.normalize({ hudOpacity: 0 }), {
+    speedUnit: 'kmh',
+    shiftLightBrightness: 80,
+    hudOpacity: 1,
+    configurationAlwaysOnTop: true
+  })
+  assert.deepEqual(DisplayPreferences.normalize({ hudOpacity: 101.4 }), {
+    speedUnit: 'kmh',
+    shiftLightBrightness: 80,
+    hudOpacity: 100,
     configurationAlwaysOnTop: true
   })
 })
@@ -55,18 +72,19 @@ test('falls back safely when persisted data is malformed', () => {
 
 test('writes a versioned normalized preference record', () => {
   const storage = createStorage()
-  const written = DisplayPreferences.write({ speedUnit: 'mph', shiftLightBrightness: 55, configurationAlwaysOnTop: false }, storage)
+  const written = DisplayPreferences.write({ speedUnit: 'mph', shiftLightBrightness: 55, hudOpacity: 64, configurationAlwaysOnTop: false }, storage)
 
-  assert.deepEqual(written, { speedUnit: 'mph', shiftLightBrightness: 55, configurationAlwaysOnTop: false })
+  assert.deepEqual(written, { speedUnit: 'mph', shiftLightBrightness: 55, hudOpacity: 64, configurationAlwaysOnTop: false })
   assert.deepEqual(JSON.parse(storage.value()), written)
 })
 
 test('updates one preference without resetting the other', () => {
-  const storage = createStorage(JSON.stringify({ speedUnit: 'mph', shiftLightBrightness: 75, configurationAlwaysOnTop: false }))
+  const storage = createStorage(JSON.stringify({ speedUnit: 'mph', shiftLightBrightness: 75, hudOpacity: 42, configurationAlwaysOnTop: false }))
 
   assert.deepEqual(DisplayPreferences.update({ shiftLightBrightness: 90 }, storage), {
     speedUnit: 'mph',
     shiftLightBrightness: 90,
+    hudOpacity: 42,
     configurationAlwaysOnTop: false
   })
 })

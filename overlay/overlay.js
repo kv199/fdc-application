@@ -176,6 +176,7 @@ function applyDisplayPreferences() {
     displayPreferences.shiftLightBrightness
   )
   document.documentElement.style.setProperty('--shift-light-brightness-scale', String(brightnessScale))
+  document.documentElement.style.setProperty('--hud-opacity', String(displayPreferences.hudOpacity / 100))
   document.documentElement.dataset.speedUnit = displayPreferences.speedUnit
   speedValue.textContent = window.DisplayPreferences.formatSpeed(
     latestTelemetry?.speedKmh,

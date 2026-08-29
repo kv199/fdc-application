@@ -144,11 +144,22 @@ test('Shift Light brightness lives in the Shift Light tab and uses a rectilinear
   assert.match(settingsJs, /--brightness-fill/)
 })
 
+test('HUD opacity appears before HUD controls and resets to its 80 percent default', () => {
+  const hudOpacityIndex = settingsHtml.indexOf('id="hud-opacity"')
+  const layoutListIndex = settingsHtml.indexOf('<div class="layout-list">')
+
+  assert.ok(hudOpacityIndex >= 0)
+  assert.ok(hudOpacityIndex < layoutListIndex)
+  assert.match(settingsHtml, /id="hud-opacity" type="range" min="1" max="100" step="1" value="80"/)
+  assert.match(settingsHtml, /id="hud-opacity-reset" class="settings-button" type="button">RESET<\/button>/)
+  assert.match(settingsJs, /HUD OPACITY RESET TO \$\{next\.hudOpacity\}%/)
+})
+
 test('Configuration persists and applies display preferences through the shared contract', () => {
   assert.match(settingsJs, /displayPreferencesApi\?\.read/)
   assert.match(settingsJs, /displayPreferencesApi\.normalize/)
   assert.match(settingsJs, /displayPreferencesApi\.write\(next\)/)
-  assert.match(settingsJs, /call\('set_display_preferences', \{\s*speedUnit: next\.speedUnit,\s*shiftLightBrightness: next\.shiftLightBrightness\s*\}\)/)
+  assert.match(settingsJs, /call\('set_display_preferences', \{\s*speedUnit: next\.speedUnit,\s*shiftLightBrightness: next\.shiftLightBrightness,\s*hudOpacity: next\.hudOpacity\s*\}\)/)
   assert.match(settingsJs, /displayPreferences = previous\s*displayPreferencesApi\.write\(previous\)\s*renderDisplayPreferences\(previous\)/)
   assert.match(settingsJs, /configurationAlwaysOnTop: true/)
 })

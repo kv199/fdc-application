@@ -8,6 +8,7 @@
   --rule: rgb(226 232 240 / 42%);
   --panel: rgb(8 10 12 / 56%);
   --shift-light-brightness-scale: 1;
+  --hud-opacity: 0.8;
   --hud-scale: min(2, calc((100vw - 16px) / 736px));
 }
 
@@ -34,6 +35,7 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
+  opacity: var(--hud-opacity);
   pointer-events: none;
 }
 

@@ -31,6 +31,9 @@
   const configurationAlwaysOnTop = document.getElementById('configuration-always-on-top')
   const shiftLightBrightness = document.getElementById('shift-light-brightness')
   const shiftLightBrightnessValue = document.getElementById('shift-light-brightness-value')
+  const hudOpacity = document.getElementById('hud-opacity')
+  const hudOpacityValue = document.getElementById('hud-opacity-value')
+  const hudOpacityReset = document.getElementById('hud-opacity-reset')
   const displayPreferenceRows = [...document.querySelectorAll('[data-display-preference]')]
   const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
   const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
@@ -53,6 +56,7 @@
   let displayPreferences = displayPreferencesApi?.read?.() || {
     speedUnit: 'kmh',
     shiftLightBrightness: 80,
+    hudOpacity: 80,
     configurationAlwaysOnTop: true
   }
   let latestShiftLightState = null
@@ -411,6 +415,7 @@
       input.checked = input.value === preferences.speedUnit
     }
     renderShiftLightBrightness(preferences.shiftLightBrightness)
+    renderHudOpacity(preferences.hudOpacity)
     if (configurationAlwaysOnTop) updateOverlayToggle(configurationAlwaysOnTop, preferences.configurationAlwaysOnTop !== false)
   }
 
@@ -425,11 +430,24 @@
     shiftLightBrightnessValue.textContent = `${brightness}%`
   }
 
+  function renderHudOpacity(value) {
+    const opacity = Number(value)
+    const minimum = Number(hudOpacity.min)
+    const maximum = Number(hudOpacity.max)
+    const progress = ((opacity - minimum) / (maximum - minimum)) * 100
+    hudOpacity.value = String(opacity)
+    hudOpacity.style.setProperty('--brightness-fill', `${Math.max(0, Math.min(100, progress))}%`)
+    hudOpacity.setAttribute('aria-valuetext', `${opacity}% opacity`)
+    hudOpacityValue.textContent = `${opacity}%`
+  }
+
   function setDisplayPreferencesPending(pending) {
     displayPreferencesPending = pending
     for (const input of speedUnitInputs) input.disabled = pending
     if (configurationAlwaysOnTop) configurationAlwaysOnTop.disabled = pending
     shiftLightBrightness.disabled = pending
+    hudOpacity.disabled = pending
+    hudOpacityReset.disabled = pending
     for (const row of displayPreferenceRows) row.classList.toggle('is-pending', pending)
   }
 
@@ -453,7 +471,8 @@
     try {
       await call('set_display_preferences', {
         speedUnit: next.speedUnit,
-        shiftLightBrightness: next.shiftLightBrightness
+        shiftLightBrightness: next.shiftLightBrightness,
+        hudOpacity: next.hudOpacity
       })
       setStatus(successMessage(next))
     } catch (error) {
@@ -885,6 +904,21 @@
 
   shiftLightReset.addEventListener('click', () => {
     requestShiftLightReset()
+  })
+  hudOpacity.addEventListener('input', () => {
+    renderHudOpacity(hudOpacity.value)
+  })
+  hudOpacity.addEventListener('change', () => {
+    void updateDisplayPreferences(
+      { hudOpacity: Number(hudOpacity.value) },
+      next => `HUD OPACITY SET TO ${next.hudOpacity}%`
+    )
+  })
+  hudOpacityReset.addEventListener('click', () => {
+    void updateDisplayPreferences(
+      { hudOpacity: 80 },
+      next => `HUD OPACITY RESET TO ${next.hudOpacity}%`
+    )
   })
 
   garageCurrentVariantsToggle?.addEventListener('click', toggleGarageVariants)

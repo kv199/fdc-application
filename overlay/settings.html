@@ -49,6 +49,27 @@
         <span>POSITION + VISIBILITY</span>
       </div>
 
+      <section class="shift-light-brightness-card hud-opacity-card" data-display-preference aria-labelledby="hud-opacity-title">
+        <div class="shift-light-brightness-card__heading">
+          <div>
+            <span>VISUAL OUTPUT</span>
+            <h3 id="hud-opacity-title">HUD OPACITY</h3>
+          </div>
+          <div class="hud-opacity-card__actions">
+            <output id="hud-opacity-value" for="hud-opacity" aria-live="polite">80%</output>
+            <button id="hud-opacity-reset" class="settings-button" type="button">RESET</button>
+          </div>
+        </div>
+        <div class="brightness-control">
+          <input id="hud-opacity" type="range" min="1" max="100" step="1" value="80" aria-labelledby="hud-opacity-title" aria-describedby="hud-opacity-scale">
+        </div>
+        <div id="hud-opacity-scale" class="brightness-scale" aria-hidden="true">
+          <span>1 · DIM</span>
+          <span>80 · DEFAULT</span>
+          <span>100 · MAX</span>
+        </div>
+      </section>
+
       <div class="layout-list">
         <article class="layout-row" data-layout-target="coach">
           <div class="layout-row__content">

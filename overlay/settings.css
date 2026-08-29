@@ -1208,6 +1208,17 @@ h1 {
   text-align: right;
 }
 
+.hud-opacity-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-opacity-card__actions .settings-button {
+  min-height: 32px;
+  padding: 7px 10px 6px;
+}
+
 .brightness-control {
   width: 100%;
   padding: 4px 0;

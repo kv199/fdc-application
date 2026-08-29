@@ -8,6 +8,7 @@
   const DEFAULTS = Object.freeze({
     speedUnit: 'kmh',
     shiftLightBrightness: 80,
+    hudOpacity: 80,
     configurationAlwaysOnTop: true
   })
   const MPH_PER_KMH = 0.621371
@@ -21,10 +22,18 @@
     const shiftLightBrightness = Number.isFinite(rawBrightness)
       ? Math.round(Math.max(0, Math.min(100, rawBrightness)))
       : DEFAULTS.shiftLightBrightness
+    const opacityCandidate = candidate.hudOpacity
+    const rawOpacity = opacityCandidate === null || opacityCandidate === undefined || opacityCandidate === ''
+      ? Number.NaN
+      : Number(opacityCandidate)
+    const hudOpacity = Number.isFinite(rawOpacity)
+      ? Math.round(Math.max(1, Math.min(100, rawOpacity)))
+      : DEFAULTS.hudOpacity
 
     return {
       speedUnit: candidate.speedUnit === 'mph' ? 'mph' : DEFAULTS.speedUnit,
       shiftLightBrightness,
+      hudOpacity,
       configurationAlwaysOnTop: candidate.configurationAlwaysOnTop !== false
     }
   }
