@@ -9,10 +9,17 @@ const settingsJs = fs.readFileSync(path.join(__dirname, 'settings.js'), 'utf8')
 const overlayHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8')
 
-test('Configuration exposes HUD, Shift Light and Settings tabs', () => {
+test('Configuration exposes HUD, Garage, Shift Light and Settings tabs', () => {
   const tabs = [...settingsHtml.matchAll(/data-settings-tab="([^"]+)"/g)].map(match => match[1])
 
-  assert.deepEqual(tabs, ['hud', 'shift-light', 'settings'])
+  assert.deepEqual(tabs, ['hud', 'garage', 'shift-light', 'settings'])
+  assert.match(settingsHtml, /id="garage-panel"[^>]+data-settings-panel="garage"/)
+  assert.match(settingsHtml, /id="garage-grid"[^>]+aria-live="polite"/)
+  assert.match(settingsHtml, /id="garage-current-car"/)
+  assert.match(settingsJs, /load_garage_snapshot/)
+  assert.match(settingsJs, /rename_garage_car/)
+  assert.match(settingsJs, /garage-current-car__input/)
+  assert.doesNotMatch(settingsJs, /input\.className = 'garage-card__name'/)
 })
 
 test('Engine telemetry keeps the compact panel order and one visibility toggle', () => {

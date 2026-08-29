@@ -14,6 +14,7 @@ FDC provides a compact overlay with:
 - boost, power, and torque;
 - throttle and brake history;
 - live lap timing;
+- Garage vehicle library;
 - Asphalt Coach guidance;
 - Shift Light guidance.
 
@@ -39,6 +40,14 @@ diagnostics are available in Configuration, and learning data is kept locally
 for the matching vehicle and tune.
 
 Technical details: [docs/shift-light.md](docs/shift-light.md).
+
+### Garage
+
+Garage automatically records vehicles observed through FH6 Data Out, keeps one
+local card per car ordinal, remembers class and PI variants, and lets you name
+the current car in Configuration. The latest used car is shown first.
+
+Technical details: [docs/garage.md](docs/garage.md).
 
 ## Requirements
 
@@ -83,6 +92,7 @@ Configuration lets you:
 - show or hide overlay targets and individual HUD components;
 - choose `km/h` or `mph`;
 - adjust Shift Light brightness;
+- view the current car and locally name it in Garage;
 - view Direct Data Out status;
 - inspect Shift Light calibration and reset the current calibration.
 
@@ -93,7 +103,7 @@ Settings are applied locally and do not add another telemetry source.
 FDC is local-first. Direct Data Out is received from the local game session.
 The application keeps runtime data local to the machine.
 
-Shift Light profiles are stored in the FDC application-data directory as
+Garage and Shift Light data are stored in the FDC application-data directory as
 `fdc.sqlite`. Coach session state and live telemetry state remain local to the
 running application. Layout, visibility, speed-unit, and display preferences
 are stored in the local application webview.
@@ -180,6 +190,7 @@ dependency manifests have changed.
 - Coach calibration and findings are not persisted between application runs.
 - Shift Light learns from live telemetry and has no manual target-entry flow or
   car-name database.
+- Garage has image placeholders only; it does not download car images or names.
 - Browser demo mode previews the overlay but does not emulate a live Forza
   Data Out connection.
 
@@ -187,6 +198,8 @@ dependency manifests have changed.
 
 - [FDC Architecture](docs/architecture.md) — system boundary and runtime data
   flow.
+- [Garage](docs/garage.md) — vehicle identity, local persistence, and
+  Configuration behavior.
 - [Asphalt Coach](docs/asphalt-coach.md) — current Coach behavior and
   verification boundaries.
 - [Shift Light](docs/shift-light.md) — current learner, presentation,

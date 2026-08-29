@@ -85,6 +85,7 @@ let asphaltCoachPresentation = new window.AsphaltCoachPresentation.AsphaltCoachP
 let latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
 let lastAsphaltBriefToken = null
 let asphaltBriefTimer = null
+let garageRuntime = null
 
 const steeringWheelImage = new Image()
 steeringWheelImage.addEventListener('load', () => {
@@ -167,6 +168,8 @@ function invokeTauri(command, args) {
   if (typeof invoke !== 'function') return Promise.reject(new Error('Tauri commands are unavailable'))
   return Promise.resolve(invoke(command, args))
 }
+
+garageRuntime = window.HudGarageRuntime?.createGarageRuntime?.({ invoke: invokeTauri }) || null
 
 function applyDisplayPreferences() {
   const brightnessScale = window.DisplayPreferences.shiftLightBrightnessScale(
@@ -625,6 +628,7 @@ function renderTelemetry() {
 function queueTelemetry(telemetry) {
   if (!telemetry || typeof telemetry !== 'object' || !Number.isFinite(telemetry.speedKmh)) return false
 
+  garageRuntime?.update?.(telemetry)
   const shiftLightState = window.HudShiftLightRuntime?.update?.(telemetry)
   if (shiftLightState) queueShiftLight(shiftLightState)
   const previousTimingState = lapTimingState

@@ -60,12 +60,13 @@ struct DirectRumble {
     rr: bool,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DirectCar {
     ordinal: i32,
     class: i32,
     pi: i32,
+    car_group: u32,
     drivetrain: i32,
     cylinders: i32,
 }
@@ -222,6 +223,7 @@ fn decode_direct_packet(buf: &[u8]) -> Option<DirectTelemetry> {
             ordinal: i32_at(212),
             class: i32_at(216),
             pi: i32_at(220),
+            car_group: u32_at(232),
             drivetrain: i32_at(224),
             cylinders: i32_at(228),
         },
@@ -908,6 +910,56 @@ fn create_shift_light_tables(connection: &Connection) -> Result<(), String> {
         .map_err(|error| format!("unable to create HUD Shift Light schema: {error}"))
 }
 
+fn create_garage_tables(transaction: &Transaction<'_>) -> Result<(), String> {
+    transaction
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS garage_cars (
+               game_id TEXT NOT NULL,
+               car_ordinal INTEGER NOT NULL,
+               car_group INTEGER NOT NULL DEFAULT 0,
+               drivetrain_type INTEGER NOT NULL DEFAULT 0,
+               num_cylinders INTEGER NOT NULL DEFAULT 0,
+               display_name TEXT,
+               first_seen_sequence INTEGER NOT NULL,
+               last_seen_sequence INTEGER NOT NULL,
+               PRIMARY KEY (game_id, car_ordinal)
+             );
+             CREATE TABLE IF NOT EXISTS garage_variants (
+               id INTEGER PRIMARY KEY,
+               game_id TEXT NOT NULL,
+               car_ordinal INTEGER NOT NULL,
+               car_class INTEGER NOT NULL,
+               pi INTEGER NOT NULL,
+               first_seen_sequence INTEGER NOT NULL,
+               last_seen_sequence INTEGER NOT NULL,
+               UNIQUE (game_id, car_ordinal, car_class, pi),
+               FOREIGN KEY (game_id, car_ordinal)
+                 REFERENCES garage_cars(game_id, car_ordinal)
+                 ON DELETE CASCADE
+             );
+             CREATE TABLE IF NOT EXISTS garage_sequence (
+               id INTEGER PRIMARY KEY CHECK (id = 1),
+               next_sequence INTEGER NOT NULL
+             );
+             INSERT OR IGNORE INTO garage_sequence (id, next_sequence)
+             VALUES (1, 1);",
+        )
+        .map_err(|error| format!("unable to create Garage schema: {error}"))
+}
+
+fn migrate_garage_schema(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Garage schema migration: {error}"))?;
+    create_garage_tables(&transaction)?;
+    transaction
+        .execute("UPDATE hud_schema_version SET version = 4", [])
+        .map_err(|error| format!("unable to update Garage schema version: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Garage schema migration: {error}"))
+}
+
 fn migrate_shift_light_schema(connection: &Connection) -> Result<(), String> {
     let legacy_exists = table_exists(connection, "shift_light_profiles_legacy")?;
     let current_exists = table_exists(connection, "shift_light_profiles")?;
@@ -1114,6 +1166,17 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
             )
             .map_err(|error| format!("unable to index provisional HUD variants: {error}"))?;
     }
+    if version < 4 {
+        migrate_garage_schema(connection)?;
+    } else {
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("unable to start Garage schema check: {error}"))?;
+        create_garage_tables(&transaction)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("unable to commit Garage schema check: {error}"))?;
+    }
     Ok(())
 }
 
@@ -1129,6 +1192,279 @@ fn open_shift_light_db<R: Runtime>(app: &AppHandle<R>) -> Result<Connection, Str
         .map_err(|error| format!("unable to open HUD SQLite database: {error}"))?;
     initialize_shift_light_schema(&mut connection)?;
     Ok(connection)
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GarageVehicle {
+    ordinal: i32,
+    class: i32,
+    pi: i32,
+    car_group: u32,
+    drivetrain: i32,
+    cylinders: i32,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GarageVariant {
+    id: i64,
+    class: i32,
+    car_class: i32,
+    pi: i32,
+    first_seen_sequence: i64,
+    last_seen_sequence: i64,
+    is_current: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GarageCar {
+    ordinal: i32,
+    car_ordinal: i32,
+    car_group: u32,
+    drivetrain: i32,
+    cylinders: i32,
+    drivetrain_type: i32,
+    num_cylinders: i32,
+    name: Option<String>,
+    first_seen_sequence: i64,
+    last_seen_sequence: i64,
+    current_variant_id: Option<i64>,
+    latest_used: bool,
+    variants: Vec<GarageVariant>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GarageSnapshot {
+    cars: Vec<GarageCar>,
+    current_car_ordinal: Option<i32>,
+}
+
+fn validate_garage_vehicle(vehicle: &GarageVehicle) -> Result<(), String> {
+    if vehicle.ordinal <= 0 {
+        return Err("Garage car ordinal must be positive".to_string());
+    }
+    if vehicle.class < 0 || vehicle.pi < 0 {
+        return Err("Garage car class and PI must not be negative".to_string());
+    }
+    Ok(())
+}
+
+fn load_garage_snapshot_from_connection(connection: &Connection) -> Result<GarageSnapshot, String> {
+    let mut car_statement = connection
+        .prepare(
+            "SELECT car_ordinal, car_group, display_name,
+                    drivetrain_type, num_cylinders,
+                    first_seen_sequence, last_seen_sequence
+             FROM garage_cars
+             WHERE game_id = 'fh6'
+             ORDER BY last_seen_sequence DESC, car_ordinal DESC",
+        )
+        .map_err(|error| format!("unable to prepare Garage car query: {error}"))?;
+    let cars = car_statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i32>(0)?,
+                row.get::<_, u32>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, i32>(3)?,
+                row.get::<_, i32>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+            ))
+        })
+        .map_err(|error| format!("unable to read Garage cars: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("unable to decode Garage cars: {error}"))?;
+
+    let mut variant_statement = connection
+        .prepare(
+            "SELECT id, car_class, pi, first_seen_sequence, last_seen_sequence
+             FROM garage_variants
+             WHERE game_id = 'fh6' AND car_ordinal = ?1
+             ORDER BY last_seen_sequence DESC, id DESC",
+        )
+        .map_err(|error| format!("unable to prepare Garage variant query: {error}"))?;
+    let mut snapshot_cars = Vec::with_capacity(cars.len());
+    for (
+        ordinal,
+        car_group,
+        name,
+        drivetrain,
+        cylinders,
+        first_seen_sequence,
+        last_seen_sequence,
+    ) in cars
+    {
+        let variants = variant_statement
+            .query_map(params![ordinal], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i32>(1)?,
+                    row.get::<_, i32>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, i64>(4)?,
+                ))
+            })
+            .map_err(|error| format!("unable to read Garage variants: {error}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("unable to decode Garage variants: {error}"))?;
+        let current_variant_id = variants.first().map(|variant| variant.0);
+        snapshot_cars.push(GarageCar {
+            ordinal,
+            car_ordinal: ordinal,
+            car_group,
+            drivetrain,
+            cylinders,
+            drivetrain_type: drivetrain,
+            num_cylinders: cylinders,
+            name: name.filter(|name| !name.is_empty()),
+            first_seen_sequence,
+            last_seen_sequence,
+            current_variant_id,
+            latest_used: false,
+            variants: variants
+                .into_iter()
+                .map(
+                    |(id, class, pi, first_seen_sequence, last_seen_sequence)| GarageVariant {
+                        id,
+                        class,
+                        car_class: class,
+                        pi,
+                        first_seen_sequence,
+                        last_seen_sequence,
+                        is_current: Some(id) == current_variant_id,
+                    },
+                )
+                .collect(),
+        });
+    }
+    if let Some(current) = snapshot_cars.first_mut() {
+        current.latest_used = true;
+    }
+    Ok(GarageSnapshot {
+        current_car_ordinal: snapshot_cars.first().map(|car| car.ordinal),
+        cars: snapshot_cars,
+    })
+}
+
+fn record_garage_vehicle_in_connection(
+    connection: &mut Connection,
+    vehicle: &GarageVehicle,
+) -> Result<GarageSnapshot, String> {
+    validate_garage_vehicle(vehicle)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Garage record: {error}"))?;
+    let sequence: i64 = transaction
+        .query_row(
+            "SELECT next_sequence FROM garage_sequence WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("unable to read Garage sequence: {error}"))?;
+    transaction
+        .execute(
+            "UPDATE garage_sequence SET next_sequence = ?1 WHERE id = 1",
+            params![sequence.saturating_add(1)],
+        )
+        .map_err(|error| format!("unable to advance Garage sequence: {error}"))?;
+    transaction
+        .execute(
+            "INSERT INTO garage_cars
+               (game_id, car_ordinal, car_group, drivetrain_type, num_cylinders,
+                first_seen_sequence, last_seen_sequence)
+             VALUES ('fh6', ?1, ?2, ?3, ?4, ?5, ?5)
+             ON CONFLICT (game_id, car_ordinal) DO UPDATE SET
+               car_group = excluded.car_group,
+               drivetrain_type = excluded.drivetrain_type,
+               num_cylinders = excluded.num_cylinders,
+               last_seen_sequence = excluded.last_seen_sequence",
+            params![
+                vehicle.ordinal,
+                vehicle.car_group,
+                vehicle.drivetrain,
+                vehicle.cylinders,
+                sequence
+            ],
+        )
+        .map_err(|error| format!("unable to record Garage car: {error}"))?;
+    transaction
+        .execute(
+            "INSERT INTO garage_variants
+               (game_id, car_ordinal, car_class, pi, first_seen_sequence, last_seen_sequence)
+             VALUES ('fh6', ?1, ?2, ?3, ?4, ?4)
+             ON CONFLICT (game_id, car_ordinal, car_class, pi) DO UPDATE SET
+               last_seen_sequence = excluded.last_seen_sequence",
+            params![vehicle.ordinal, vehicle.class, vehicle.pi, sequence],
+        )
+        .map_err(|error| format!("unable to record Garage variant: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Garage record: {error}"))?;
+    load_garage_snapshot_from_connection(connection)
+}
+
+#[tauri::command]
+fn record_garage_vehicle(
+    app: AppHandle,
+    car_ordinal: i32,
+    class: i32,
+    pi: i32,
+    car_group: Option<u32>,
+    drivetrain: Option<i32>,
+    cylinders: Option<i32>,
+) -> Result<GarageSnapshot, String> {
+    let mut connection = open_shift_light_db(&app)?;
+    let vehicle = GarageVehicle {
+        ordinal: car_ordinal,
+        class,
+        pi,
+        car_group: car_group.unwrap_or_default(),
+        drivetrain: drivetrain.unwrap_or_default(),
+        cylinders: cylinders.unwrap_or_default(),
+    };
+    record_garage_vehicle_in_connection(&mut connection, &vehicle)
+}
+
+#[tauri::command]
+fn load_garage_snapshot(app: AppHandle) -> Result<GarageSnapshot, String> {
+    let connection = open_shift_light_db(&app)?;
+    load_garage_snapshot_from_connection(&connection)
+}
+
+#[tauri::command]
+fn load_garage(app: AppHandle) -> Result<GarageSnapshot, String> {
+    load_garage_snapshot(app)
+}
+
+#[tauri::command]
+fn rename_garage_car(
+    app: AppHandle,
+    car_ordinal: i32,
+    name: String,
+) -> Result<GarageSnapshot, String> {
+    if car_ordinal <= 0 {
+        return Err("Garage car ordinal must be positive".to_string());
+    }
+    let name = name.trim().to_string();
+    if name.chars().count() > 80 {
+        return Err("Garage car name must be 80 characters or fewer".to_string());
+    }
+    let connection = open_shift_light_db(&app)?;
+    let changed = connection
+        .execute(
+            "UPDATE garage_cars SET display_name = ?1
+             WHERE game_id = 'fh6' AND car_ordinal = ?2",
+            params![(!name.is_empty()).then_some(name), car_ordinal],
+        )
+        .map_err(|error| format!("unable to rename Garage car: {error}"))?;
+    if changed == 0 {
+        return Err(format!("Garage car {car_ordinal} does not exist"));
+    }
+    load_garage_snapshot_from_connection(&connection)
 }
 
 #[tauri::command]
@@ -1510,7 +1846,11 @@ fn main() {
             save_shift_light_profile,
             register_shift_light_variant,
             reset_shift_light_profiles,
-            reset_shift_light
+            reset_shift_light,
+            record_garage_vehicle,
+            load_garage_snapshot,
+            load_garage,
+            rename_garage_car
         ])
         .on_window_event(|window, event| {
             if window.label() != "settings" {
@@ -1631,6 +1971,7 @@ mod tests {
         packet[244 + 75] = 4;
         put_i32(&mut packet, 212, 1234);
         put_i32(&mut packet, 220, 850);
+        packet[232..236].copy_from_slice(&0x8000_0001_u32.to_le_bytes());
 
         let telemetry = decode_direct_packet(&packet).expect("packet should decode");
         assert!(telemetry.is_race_on);
@@ -1644,6 +1985,7 @@ mod tests {
         assert_eq!(telemetry.gear, 4);
         assert_eq!(telemetry.car.ordinal, 1234);
         assert_eq!(telemetry.car.pi, 850);
+        assert_eq!(telemetry.car.car_group, 0x8000_0001);
         assert!((telemetry.lap.distance - 100.5).abs() < f32::EPSILON);
         assert!((telemetry.lap.best - 85.123).abs() < 0.001);
         assert!((telemetry.lap.last - 86.5).abs() < f32::EPSILON);
@@ -1675,15 +2017,122 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
         for table in [
             "shift_light_cars",
             "shift_light_variants",
             "shift_light_profiles",
             "shift_light_profile_samples",
+            "garage_cars",
+            "garage_variants",
+            "garage_sequence",
         ] {
             assert!(table_exists(&connection, table).unwrap(), "missing {table}");
         }
+    }
+
+    #[test]
+    fn garage_records_one_car_and_distinct_class_pi_variants() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let first = GarageVehicle {
+            ordinal: 260,
+            class: 8,
+            pi: 600,
+            car_group: 42,
+            drivetrain: 1,
+            cylinders: 4,
+        };
+        record_garage_vehicle_in_connection(&mut connection, &first).unwrap();
+        let second = GarageVehicle {
+            ordinal: 260,
+            class: 9,
+            pi: 700,
+            car_group: 43,
+            drivetrain: 2,
+            cylinders: 6,
+        };
+        let snapshot = record_garage_vehicle_in_connection(&mut connection, &second).unwrap();
+
+        assert_eq!(snapshot.current_car_ordinal, Some(260));
+        assert_eq!(snapshot.cars.len(), 1);
+        let car = &snapshot.cars[0];
+        assert!(car.latest_used);
+        assert_eq!(car.car_group, 43);
+        assert_eq!(car.drivetrain, 2);
+        assert_eq!(car.cylinders, 6);
+        assert_eq!(car.first_seen_sequence, 1);
+        assert_eq!(car.last_seen_sequence, 2);
+        assert_eq!(car.variants.len(), 2);
+        assert_eq!((car.variants[0].class, car.variants[0].pi), (9, 700));
+        assert!(car.variants[0].is_current);
+        assert!(!car.variants[1].is_current);
+    }
+
+    #[test]
+    fn garage_renaming_is_persistent_and_empty_name_clears_it() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let vehicle = GarageVehicle {
+            ordinal: 260,
+            class: 8,
+            pi: 600,
+            car_group: 42,
+            drivetrain: 1,
+            cylinders: 4,
+        };
+        record_garage_vehicle_in_connection(&mut connection, &vehicle).unwrap();
+        connection
+            .execute(
+                "UPDATE garage_cars SET display_name = 'Road car'
+                 WHERE game_id = 'fh6' AND car_ordinal = 260",
+                [],
+            )
+            .unwrap();
+        let named = load_garage_snapshot_from_connection(&connection).unwrap();
+        assert_eq!(named.cars[0].name.as_deref(), Some("Road car"));
+
+        connection
+            .execute(
+                "UPDATE garage_cars SET display_name = NULL
+                 WHERE game_id = 'fh6' AND car_ordinal = 260",
+                [],
+            )
+            .unwrap();
+        let cleared = load_garage_snapshot_from_connection(&connection).unwrap();
+        assert_eq!(cleared.cars[0].name, None);
+    }
+
+    #[test]
+    fn garage_schema_migrates_atomically_from_shift_light_v3() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE hud_schema_version (version INTEGER NOT NULL);
+                 INSERT INTO hud_schema_version VALUES (3);
+                 CREATE TABLE shift_light_cars (
+                   game_id TEXT NOT NULL, car_ordinal INTEGER NOT NULL,
+                   first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL,
+                   PRIMARY KEY (game_id, car_ordinal)
+                 );",
+            )
+            .unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let version: i32 = connection
+            .query_row("SELECT version FROM hud_schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 4);
+        assert_eq!(
+            connection
+                .query_row("SELECT next_sequence FROM garage_sequence", [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .unwrap(),
+            1
+        );
     }
 
     #[test]

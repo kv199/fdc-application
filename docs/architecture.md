@@ -1,14 +1,14 @@
 # FDC Architecture
 
 This document is the map of the current FDC runtime. Detailed behavior belongs
-in the feature documents for [Asphalt Coach](asphalt-coach.md) and [Shift
-Light](shift-light.md).
+in the feature documents for [Garage](garage.md), [Asphalt Coach](asphalt-coach.md),
+and [Shift Light](shift-light.md).
 
 ## System boundary
 
 FDC is a standalone Windows Tauri application for Forza Horizon 6. The
 repository owns the native Direct Data Out receiver and decoder, the browser
-overlay, Configuration, lap timing, Asphalt Coach, Shift Light, and local HUD
+overlay, Configuration, lap timing, Garage, Asphalt Coach, Shift Light, and local HUD
 profile persistence.
 
 The runtime boundary ends at the local application. The current source of
@@ -30,20 +30,20 @@ Normalized telemetry
             |
             v
 queueTelemetry
-    |       |          |             |
-    v       v          v             v
-Telemetry  Lap timing  Asphalt Coach  Shift Light
-HUD                                      |
-                                         v
-                                     fdc.sqlite
+    |       |          |             |            |
+    v       v          v             v            v
+Telemetry  Lap timing  Garage         Asphalt      Shift Light
+HUD                     |              Coach          |
+                        v                             v
+                    fdc.sqlite                     fdc.sqlite
 ```
 
 The native layer emits one normalized telemetry payload for each valid FH6
 packet. The browser overlay receives it through the `direct_telemetry` Tauri
 event and passes it to `queueTelemetry`. That function fans the sample out to
-the HUD renderer, lap timing, Asphalt Coach, and Shift Light runtime. The
-feature branches keep their own state; Shift Light is the branch that reads and
-writes the local SQLite profile store.
+the HUD renderer, lap timing, Garage, Asphalt Coach, and Shift Light runtime.
+The feature branches keep their own state; Garage and Shift Light write to the
+local SQLite profile store.
 
 Connection lifecycle is a parallel status path. The native receiver emits
 `direct_status` for waiting, live, stale, offline, and incompatible-packet
@@ -62,9 +62,10 @@ the tray menu, Direct Data Out, and native persistence commands.
 - A valid packet emits `direct_telemetry`. Receiver lifecycle emits
   `direct_status`; a packet gap longer than one second becomes stale.
 - Tauri commands control source lifecycle, Configuration, layout and
-  visibility, display preferences, Shift Light profile operations, and reset.
-- Shift Light database commands open `fdc.sqlite` below the Tauri application
-  data directory and apply the versioned schema there.
+  visibility, display preferences, Garage and Shift Light profile operations,
+  and reset.
+- Garage and Shift Light database commands open `fdc.sqlite` below the Tauri
+  application data directory and apply the versioned schema there.
 
 The native layer does not implement Asphalt Coach or the browser HUD
 presentation. Those consumers operate on the normalized event after the IPC
@@ -74,19 +75,28 @@ boundary.
 
 `overlay/index.html` is the static main-window entry point. It loads the
 telemetry route, display preferences, presentation, Coach, lap timing, layout,
-HUD preference, Tauri event, Shift Light, and overlay modules in dependency
+HUD preference, Tauri event, Garage, Shift Light, and overlay modules in dependency
 order. The Tauri configuration uses `overlay/` as the frontend distribution.
 
 The main window is a transparent, always-on-top HUD positioned across the
 primary monitor. The browser layer renders the current telemetry HUD, lap time,
-Coach card, and Shift Light presentation. It schedules visual updates through
+Coach card, Garage persistence, and Shift Light presentation. It schedules visual updates through
 `requestAnimationFrame`; the normalized sample remains the shared input rather
 than each feature subscribing to the UDP source independently.
 
-The settings window is a separate browser page. It observes route status and
-Shift Light status events, and invokes native commands for configuration
+The settings window is a separate browser page. It observes route status,
+Garage, and Shift Light events, and invokes native commands for configuration
 actions. The tray menu opens Configuration and provides the application exit
 path.
+
+## Garage boundary
+
+Garage is a browser-local `queueTelemetry` consumer with native local
+persistence. It records each car ordinal once, records class and performance
+index variants separately, and refreshes Configuration through the local
+`hud_garage` event. It does not create another telemetry transport or use a car
+name service. Its full behavior and SQLite contract are documented in
+[Garage](garage.md).
 
 ## Asphalt Coach boundary
 
@@ -123,6 +133,7 @@ telemetry path. It provides:
 - overlay target editing for the Coach card, lap timer, and telemetry HUD;
 - visibility controls for the top-level overlay and HUD components;
 - speed-unit selection and Shift Light brightness;
+- Garage current-car and saved-car views, including local name editing;
 - Direct Data Out status and retry;
 - current Shift Light diagnostics and reset.
 
@@ -134,10 +145,11 @@ affect the native window or Shift Light database cross the Tauri IPC boundary.
 ## Local persistence
 
 `fdc.sqlite` is created in the FDC application-data directory, outside the
-repository. Its current Shift Light schema contains the car registry, gearbox
-variant registry, per-gear profiles, bounded profile samples, and schema
-version metadata. Transactional native commands enforce the Shift Light
-identity and monotonic merge rules.
+repository. Its current schema contains the Garage car registry and class/PI
+variant registry alongside the Shift Light car registry, gearbox variant
+registry, per-gear profiles, bounded profile samples, and schema version
+metadata. Transactional native commands enforce Garage identity and recency as
+well as Shift Light identity and monotonic merge rules.
 
 The Coach calibration envelope, active findings, lap timing state, telemetry
 history, and visual presentation state remain in memory for the running HUD.
@@ -175,8 +187,9 @@ remaining overlay JavaScript, CSS, HTML, and SVG files are loaded directly from
 - `queueTelemetry` is the shared browser ingress. Feature code must preserve
   the normalized telemetry contract and must not create a parallel telemetry
   transport.
-- Coach and Shift Light are intentionally separate feature boundaries; their
-  detailed current behavior and limitations live in their dedicated documents.
+- Garage, Coach, and Shift Light are intentionally separate feature boundaries;
+  their detailed current behavior and limitations live in their dedicated
+  documents.
 - The checked-in generated Shift Light bundle is a runtime input. A source move
   or build-tool change must preserve its runtime behavior and compatibility
   contracts.

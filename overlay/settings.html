@@ -37,6 +37,7 @@
 
     <div class="settings-tabs" role="tablist" aria-label="Settings categories">
       <button id="hud-tab" class="settings-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="hud-panel" data-settings-tab="hud">HUD</button>
+      <button id="garage-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="garage-panel" tabindex="-1" data-settings-tab="garage">GARAGE</button>
       <button id="shift-light-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="shift-light-panel" tabindex="-1" data-settings-tab="shift-light">SHIFT LIGHT</button>
       <button id="settings-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel" tabindex="-1" data-settings-tab="settings">SETTINGS</button>
     </div>
@@ -147,6 +148,29 @@
           </div>
         </article>
       </div>
+    </section>
+
+    <section id="garage-panel" class="settings-tab-panel garage-panel" role="tabpanel" aria-labelledby="garage-tab" data-settings-panel="garage" hidden>
+      <div class="settings-section__heading">
+        <h2 id="garage-title">GARAGE</h2>
+        <span>VEHICLE LIBRARY</span>
+      </div>
+      <section class="garage-current" aria-labelledby="garage-current-title">
+        <div class="garage-section-heading">
+          <h3 id="garage-current-title">CURRENT CAR</h3>
+          <span>LAST USED</span>
+        </div>
+        <div id="garage-current-car" class="garage-current-car" hidden></div>
+        <p id="garage-current-empty" class="garage-empty">No car telemetry yet.</p>
+      </section>
+      <section aria-labelledby="garage-cars-title">
+        <div class="garage-section-heading">
+          <h3 id="garage-cars-title">SAVED CARS</h3>
+          <span>ONE CARD PER CAR ORDINAL</span>
+        </div>
+        <div id="garage-grid" class="garage-grid" aria-live="polite"></div>
+        <p id="garage-grid-empty" class="garage-empty" hidden>No cars recorded yet.</p>
+      </section>
     </section>
 
     <section id="shift-light-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="shift-light-tab" data-settings-panel="shift-light" hidden>
@@ -275,6 +299,7 @@
   <script src="shift-light-settings.js"></script>
   <script src="display-preferences.js"></script>
   <script src="tauri-events.js"></script>
+  <script src="garage-runtime.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

@@ -34,6 +34,13 @@
   const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
   const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
   const settingsPanels = [...document.querySelectorAll('[data-settings-panel]')]
+  const garageApi = globalScope.HudGarageRuntime
+  const garageGrid = document.getElementById('garage-grid')
+  const garageGridEmpty = document.getElementById('garage-grid-empty')
+  const garageCurrentCar = document.getElementById('garage-current-car')
+  const garageCurrentEmpty = document.getElementById('garage-current-empty')
+  const garageVehicles = new Map()
+  let garageLatestOrdinal = null
   let editingTarget = null
   let shiftLightResetPending = false
   let displayPreferencesPending = false
@@ -44,6 +51,179 @@
   let latestShiftLightState = null
   let latestRouteRevision = -1
   let latestRouteStatus = globalScope.HudTelemetryRoute?.normalizeRouteStatus?.({ phase: 'offline' })
+
+  function garageDisplayName(vehicle) {
+    return garageApi?.displayName?.(vehicle) || vehicle?.name || String(vehicle?.carOrdinal || '')
+  }
+
+  function mergeGarageVehicle(value) {
+    const vehicle = garageApi?.normalizeVehicle?.(value)
+    if (!vehicle) return null
+    const previous = garageVehicles.get(vehicle.carOrdinal)
+    const merged = {
+      ...previous,
+      ...vehicle,
+      name: vehicle.name || previous?.name || null,
+      classLabel: vehicle.classLabel || previous?.classLabel || null,
+      class: vehicle.class ?? previous?.class ?? null,
+      pi: vehicle.pi ?? previous?.pi ?? null
+    }
+    garageVehicles.set(merged.carOrdinal, merged)
+    if (merged.latestUsed) {
+      for (const saved of garageVehicles.values()) saved.latestUsed = saved.carOrdinal === merged.carOrdinal
+      garageLatestOrdinal = merged.carOrdinal
+    }
+    return merged
+  }
+
+  function renderGarageCurrent() {
+    if (!garageCurrentCar || !garageCurrentEmpty) return
+    const vehicle = garageLatestOrdinal === null ? null : garageVehicles.get(garageLatestOrdinal)
+    garageCurrentCar.replaceChildren()
+    garageCurrentCar.hidden = !vehicle
+    garageCurrentEmpty.hidden = Boolean(vehicle)
+    if (!vehicle) return
+    const image = document.createElement('div')
+    image.className = 'garage-current-car__image'
+    image.textContent = 'IMAGE'
+    image.setAttribute('aria-label', `Image placeholder for ${garageDisplayName(vehicle)}`)
+    const content = document.createElement('div')
+    content.className = 'garage-current-car__content'
+    const name = document.createElement('button')
+    name.type = 'button'
+    name.className = 'garage-current-car__name'
+    name.textContent = garageDisplayName(vehicle)
+    const details = document.createElement('span')
+    details.className = 'garage-current-car__details'
+    details.textContent = [vehicle.classLabel, vehicle.pi].filter(value => value !== null && value !== undefined).join(' · ')
+      || String(vehicle.carOrdinal)
+    name.addEventListener('click', () => {
+      const input = document.createElement('input')
+      input.className = 'garage-current-car__input'
+      input.type = 'text'
+      input.maxLength = 80
+      input.value = vehicle.name || ''
+      input.placeholder = String(vehicle.carOrdinal)
+      input.setAttribute('aria-label', `Name for ${vehicle.carOrdinal}`)
+      name.replaceWith(input)
+      input.focus()
+      let cancelled = false
+      const finish = () => {
+        if (cancelled) return
+        const nextName = input.value.trim()
+        input.replaceWith(name)
+        if (nextName !== (vehicle.name || '')) void renameGarageCar(vehicle.carOrdinal, nextName)
+      }
+      input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') finish()
+        if (event.key === 'Escape') {
+          cancelled = true
+          input.replaceWith(name)
+        }
+      })
+      input.addEventListener('blur', finish, { once: true })
+    })
+    content.append(name, details)
+    garageCurrentCar.append(image, content)
+  }
+
+  function renderGarage() {
+    if (!garageGrid) return
+    garageGrid.replaceChildren()
+    const vehicles = [...garageVehicles.values()].sort((left, right) => {
+      if (left.latestUsed !== right.latestUsed) return left.latestUsed ? -1 : 1
+      return left.carOrdinal - right.carOrdinal
+    })
+    if (garageGridEmpty) garageGridEmpty.hidden = vehicles.length > 0
+    for (const vehicle of vehicles) {
+      const card = document.createElement('article')
+      card.className = 'garage-card'
+      card.dataset.carOrdinal = String(vehicle.carOrdinal)
+
+      const image = document.createElement('div')
+      image.className = 'garage-card__image'
+      image.textContent = 'IMAGE'
+      image.setAttribute('aria-label', `Image placeholder for ${garageDisplayName(vehicle)}`)
+
+      const content = document.createElement('div')
+      content.className = 'garage-card__content'
+      const name = document.createElement('h4')
+      name.className = 'garage-card__name'
+      name.textContent = garageDisplayName(vehicle)
+
+      const meta = document.createElement('div')
+      meta.className = 'garage-card__meta'
+      if (vehicle.classLabel) {
+        const value = document.createElement('span')
+        value.textContent = vehicle.classLabel
+        meta.append(value)
+      }
+      if (vehicle.pi !== null) {
+        const value = document.createElement('span')
+        value.textContent = String(vehicle.pi)
+        meta.append(value)
+      }
+      if (vehicle.carOrdinal === garageLatestOrdinal) {
+        const latest = document.createElement('span')
+        latest.className = 'garage-card__latest'
+        latest.textContent = 'LATEST USED'
+        meta.append(latest)
+      }
+
+      content.append(name, meta)
+      card.append(image, content)
+      garageGrid.append(card)
+    }
+    renderGarageCurrent()
+  }
+
+  async function renameGarageCar(carOrdinal, name) {
+    const ordinal = Number(carOrdinal)
+    if (!Number.isFinite(ordinal) || ordinal <= 0) return false
+    const normalizedName = typeof name === 'string' ? name.trim() : ''
+    const vehicle = mergeGarageVehicle({ carOrdinal: ordinal, name: normalizedName || null })
+    if (vehicle) {
+      vehicle.name = normalizedName || null
+      garageVehicles.set(vehicle.carOrdinal, vehicle)
+    }
+    renderGarage()
+    try {
+      const result = await call('rename_garage_car', { carOrdinal: Math.round(ordinal), name: normalizedName })
+      const returned = garageApi?.normalizeGaragePayload?.(result)?.[0]
+      if (returned) {
+        const saved = mergeGarageVehicle(returned)
+        if (saved) {
+          saved.name = normalizedName || null
+          garageVehicles.set(saved.carOrdinal, saved)
+        }
+      }
+      renderGarage()
+      const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+      if (eventApi?.emit) await eventApi.emit('hud_garage', returned || vehicle)
+      setStatus('GARAGE NAME SAVED')
+      return true
+    } catch (error) {
+      setStatus(error.message || 'Unable to rename garage car', true)
+      return false
+    }
+  }
+
+  function applyGaragePayload(payload) {
+    const vehicles = garageApi?.normalizeGaragePayload?.(payload) || []
+    for (const vehicle of vehicles) mergeGarageVehicle(vehicle)
+    renderGarage()
+  }
+
+  async function listenGarageEvents() {
+    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+    if (!eventApi || typeof eventApi.listen !== 'function') return
+    await eventApi.listen('hud_garage', event => applyGaragePayload(event?.payload))
+    try {
+      applyGaragePayload(await call('load_garage_snapshot'))
+    } catch {
+      renderGarage()
+    }
+  }
 
   function selectSettingsTab(tabName) {
     for (const tab of settingsTabs) {
@@ -529,8 +709,10 @@
 
   renderRouteStatus(latestRouteStatus)
   renderShiftLightState(null)
+  renderGarage()
   void listenShiftLightEvents()
   void listenRouteEvents()
+  void listenGarageEvents()
   globalScope.SettingsController = {
     cancelEdit,
     setLayoutEditingState,
