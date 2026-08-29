@@ -61,6 +61,10 @@
     return String(classLabel || 'unknown').trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, '-') || 'unknown'
   }
 
+  function garageDrivetrainLabel(vehicle) {
+    return garageApi?.drivetrainLabel?.(vehicle?.drivetrain) || null
+  }
+
   function appendGaragePerformance(container, vehicle) {
     if (!vehicle.classLabel && vehicle.pi === null) return
     const performance = document.createElement('div')
@@ -120,6 +124,29 @@
     const details = document.createElement('div')
     details.className = 'garage-current-car__details'
     appendGaragePerformance(details, vehicle)
+    const drivetrain = garageDrivetrainLabel(vehicle)
+    if (drivetrain) {
+      const drivetrainValue = document.createElement('span')
+      drivetrainValue.className = 'garage-current-car__drivetrain'
+      drivetrainValue.textContent = drivetrain
+      details.append(drivetrainValue)
+    }
+    if (vehicle.cylinders !== null && vehicle.cylinders !== undefined) {
+      const cylinders = document.createElement('span')
+      cylinders.className = 'garage-current-car__cylinders'
+      cylinders.textContent = `${vehicle.cylinders} CYL`
+      details.append(cylinders)
+    }
+    const carGroup = vehicle.carGroup === null || vehicle.carGroup === undefined
+      ? null
+      : Number(vehicle.carGroup)
+    const group = Number.isFinite(carGroup) && carGroup > 0
+      ? document.createElement('span')
+      : null
+    if (group) {
+      group.className = 'garage-current-car__group'
+      group.textContent = `GROUP ${Math.round(carGroup)}`
+    }
     name.addEventListener('click', () => {
       const input = document.createElement('input')
       input.className = 'garage-current-car__input'
@@ -146,7 +173,7 @@
       })
       input.addEventListener('blur', finish, { once: true })
     })
-    content.append(name, details)
+    content.append(name, ...(group ? [group] : []), details)
     garageCurrentCar.append(image, content)
   }
 

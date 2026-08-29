@@ -270,10 +270,31 @@ h1 {
 }
 
 .garage-current-car__details {
-  color: #69e83f;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.garage-current-car__group {
+  color: #a1a1aa;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.garage-current-car__drivetrain,
+.garage-current-car__cylinders {
+  display: inline-flex;
+  align-items: center;
+  min-height: 27px;
+  padding: 4px 8px;
+  border: 1px solid rgb(226 232 240 / 22%);
+  color: #f8fafc;
+  background: rgb(8 10 12 / 65%);
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
 }
 
 .garage-grid {

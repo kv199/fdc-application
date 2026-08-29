@@ -9,8 +9,10 @@ Garage is the Configuration tab immediately to the right of HUD.
 
 - **Current car** updates immediately when a new valid vehicle telemetry sample
   is observed. It shows an empty square reserved for a future image, then the
-  saved vehicle name or its numeric car ordinal and a paired Forza-style class
-  and performance-index badge. It does not carry a Last Used badge.
+  saved vehicle name or its numeric car ordinal. A positive current `CarGroup`
+  value is displayed below that name as `GROUP <value>`, followed by a paired
+  Forza-style class and performance-index badge, drivetrain label, and cylinder
+  count. It does not carry a Last Used badge.
 - Clicking the current vehicle name or ordinal opens an inline name field. Enter
   or leaving the field saves the name; Escape cancels the edit. An empty saved
   name returns the display to the numeric ordinal.
@@ -70,6 +72,10 @@ ordinal. Garage does not retain a history of those three metadata fields.
 The browser maps known numeric class values to `D`, `C`, `B`, `A`, `S1`, `S2`,
 `R`, and `X`. An unrecognized numeric value remains visible as its number
 rather than being guessed.
+
+The known drivetrain values map to `FWD` (0), `RWD` (1), and `AWD` (2). An
+unknown drivetrain value is left out of the current-car display rather than
+being guessed.
 
 ## Local SQLite state
 

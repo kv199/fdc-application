@@ -3,6 +3,7 @@
 
   const GARAGE_EVENT = 'hud_garage'
   const CLASS_LABELS = ['D', 'C', 'B', 'A', 'S1', 'S2', 'R', 'X']
+  const DRIVETRAIN_LABELS = ['FWD', 'RWD', 'AWD']
 
   function finitePositive(value) {
     const number = Number(value)
@@ -25,6 +26,12 @@
     const numeric = Number(value)
     if (!Number.isFinite(numeric)) return null
     return CLASS_LABELS[Math.round(numeric)] || String(Math.round(numeric))
+  }
+
+  function drivetrainLabel(value) {
+    if (value === null || value === undefined || value === '') return null
+    const numeric = finiteNonNegative(value)
+    return numeric === null ? null : (DRIVETRAIN_LABELS[Math.round(numeric)] || null)
   }
 
   function normalizeVehicle(value) {
@@ -51,6 +58,7 @@
       carGroup: carGroup === null ? null : Math.round(carGroup),
       drivetrain: drivetrain === null ? null : Math.round(drivetrain),
       cylinders: cylinders === null ? null : Math.round(cylinders),
+      drivetrainLabel: drivetrainLabel(drivetrain),
       latestUsed: vehicle.latestUsed === true || vehicle.isLatestUsed === true,
       lastUsedAt: vehicle.lastUsedAt ?? vehicle.last_seen_at ?? vehicle.lastSeenAt ?? null
     }
@@ -158,6 +166,7 @@
     normalizeGaragePayload,
     vehicleFromTelemetry,
     classLabel,
+    drivetrainLabel,
     displayName,
     createGarageRuntime
   }

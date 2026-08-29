@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 
 const {
   classLabel,
+  drivetrainLabel,
   displayName,
   normalizeGaragePayload,
   vehicleFromTelemetry,
@@ -28,6 +29,11 @@ test('normalizes native and telemetry vehicle identity without inventing values'
   assert.equal(classLabel(7), 'X')
   assert.equal(classLabel(99), '99')
   assert.equal(classLabel(null), null)
+  assert.equal(drivetrainLabel(0), 'FWD')
+  assert.equal(drivetrainLabel(1), 'RWD')
+  assert.equal(drivetrainLabel(2), 'AWD')
+  assert.equal(drivetrainLabel(3), null)
+  assert.equal(drivetrainLabel(null), null)
   assert.deepEqual(vehicleFromTelemetry(frame()), {
     carOrdinal: 123,
     name: null,
@@ -37,6 +43,7 @@ test('normalizes native and telemetry vehicle identity without inventing values'
     carGroup: null,
     drivetrain: null,
     cylinders: null,
+    drivetrainLabel: null,
     latestUsed: false,
     lastUsedAt: null
   })
@@ -50,6 +57,7 @@ test('normalizes native and telemetry vehicle identity without inventing values'
     carGroup: null,
     drivetrain: null,
     cylinders: null,
+    drivetrainLabel: null,
     latestUsed: false,
     lastUsedAt: null
   })
