@@ -93,6 +93,8 @@ Configuration lets you:
 - show or hide overlay targets and individual HUD components;
 - choose `km/h` or `mph`;
 - adjust Shift Light brightness;
+- resize Configuration; its `820 × 620` default size is replaced by the last
+  size chosen by the user;
 - view the current car, locally name it, and view its saved configurations in
   Garage;
 - view Direct Data Out status;

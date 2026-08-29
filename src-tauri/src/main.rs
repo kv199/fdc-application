@@ -15,11 +15,20 @@ use std::{
 use rusqlite::{Connection, Error as SqliteError, Transaction, params};
 use serde::{Deserialize, Serialize};
 use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, Runtime, State, WebviewWindow, WindowEvent,
-    menu::MenuBuilder, tray::TrayIconBuilder,
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Runtime, State, WebviewWindow,
+    WindowEvent, menu::MenuBuilder, tray::TrayIconBuilder,
 };
 
 const SETTINGS_MARKER: &str = "settings-first-launch-complete";
+const SETTINGS_WINDOW_SIZE_FILE: &str = "settings-window-size.json";
+#[cfg(test)]
+const SETTINGS_DEFAULT_WIDTH: u32 = 820;
+#[cfg(test)]
+const SETTINGS_DEFAULT_HEIGHT: u32 = 620;
+const SETTINGS_MIN_WIDTH: u32 = 460;
+const SETTINGS_MIN_HEIGHT: u32 = 560;
+const SETTINGS_MAX_WIDTH: u32 = 8192;
+const SETTINGS_MAX_HEIGHT: u32 = 8192;
 const DIRECT_UDP_BIND: &str = "127.0.0.1:5301";
 const DIRECT_TELEMETRY_EVENT: &str = "direct_telemetry";
 const DIRECT_STATUS_EVENT: &str = "direct_status";
@@ -1923,6 +1932,57 @@ fn settings_marker_path<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf
     Ok(app.path().app_data_dir()?.join(SETTINGS_MARKER))
 }
 
+#[derive(Clone, Copy, Deserialize, Serialize)]
+struct SettingsWindowSize {
+    width: u32,
+    height: u32,
+}
+
+fn settings_window_size_path<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
+    Ok(app.path().app_data_dir()?.join(SETTINGS_WINDOW_SIZE_FILE))
+}
+
+fn is_valid_settings_window_size(size: SettingsWindowSize) -> bool {
+    (SETTINGS_MIN_WIDTH..=SETTINGS_MAX_WIDTH).contains(&size.width)
+        && (SETTINGS_MIN_HEIGHT..=SETTINGS_MAX_HEIGHT).contains(&size.height)
+}
+
+fn restore_settings_window_size<R: Runtime>(
+    app: &AppHandle<R>,
+    window: &WebviewWindow<R>,
+) -> tauri::Result<()> {
+    let path = settings_window_size_path(app)?;
+    let Ok(contents) = fs::read_to_string(path) else {
+        return Ok(());
+    };
+    let Ok(size) = serde_json::from_str::<SettingsWindowSize>(&contents) else {
+        return Ok(());
+    };
+    if !is_valid_settings_window_size(size) {
+        return Ok(());
+    }
+
+    window.set_size(LogicalSize::new(size.width, size.height))?;
+    Ok(())
+}
+
+fn persist_settings_window_size<R: Runtime>(
+    app: &AppHandle<R>,
+    size: SettingsWindowSize,
+) -> tauri::Result<()> {
+    if !is_valid_settings_window_size(size) {
+        return Ok(());
+    }
+
+    let path = settings_window_size_path(app)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let contents = serde_json::to_vec(&size).map_err(std::io::Error::other)?;
+    fs::write(path, contents)?;
+    Ok(())
+}
+
 fn show_settings<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let Some(window) = app.get_webview_window("settings") else {
         return Ok(());
@@ -2099,6 +2159,23 @@ fn main() {
                 return;
             }
 
+            if let WindowEvent::Resized(size) = event {
+                let app = window.app_handle();
+                let scale_factor = window
+                    .scale_factor()
+                    .ok()
+                    .filter(|value| value.is_finite() && *value > 0.0)
+                    .unwrap_or(1.0);
+                let size = SettingsWindowSize {
+                    width: ((size.width as f64 / scale_factor).round()) as u32,
+                    height: ((size.height as f64 / scale_factor).round()) as u32,
+                };
+                if let Err(error) = persist_settings_window_size(&app, size) {
+                    eprintln!("unable to persist Configuration window size: {error}");
+                }
+                return;
+            }
+
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let app = window.app_handle();
@@ -2118,6 +2195,8 @@ fn main() {
             let settings = app
                 .get_webview_window("settings")
                 .expect("settings window must exist");
+
+            restore_settings_window_size(app.handle(), &settings)?;
 
             if let Some(monitor) = app.primary_monitor()? {
                 let monitor_position = monitor.position();
@@ -2184,6 +2263,38 @@ mod tests {
 
     fn put_i32(packet: &mut [u8], offset: usize, value: i32) {
         packet[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    }
+
+    #[test]
+    fn accepts_default_configuration_window_size_and_rejects_unsafe_values() {
+        let default = SettingsWindowSize {
+            width: SETTINGS_DEFAULT_WIDTH,
+            height: SETTINGS_DEFAULT_HEIGHT,
+        };
+        assert!(is_valid_settings_window_size(default));
+        assert!(!is_valid_settings_window_size(SettingsWindowSize {
+            width: SETTINGS_MIN_WIDTH - 1,
+            height: SETTINGS_DEFAULT_HEIGHT,
+        }));
+        assert!(!is_valid_settings_window_size(SettingsWindowSize {
+            width: SETTINGS_DEFAULT_WIDTH,
+            height: SETTINGS_MAX_HEIGHT + 1,
+        }));
+    }
+
+    #[test]
+    fn serializes_configuration_window_size_for_persistence() {
+        let size = SettingsWindowSize {
+            width: 1024,
+            height: 768,
+        };
+        let encoded = serde_json::to_string(&size).unwrap();
+        assert_eq!(
+            serde_json::from_str::<SettingsWindowSize>(&encoded)
+                .unwrap()
+                .width,
+            1024
+        );
     }
 
     #[test]

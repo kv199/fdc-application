@@ -48,6 +48,11 @@ input {
   gap: 18px;
 }
 
+.settings-header__brand {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .settings-header__connection {
   width: min(100%, 390px);
   min-width: 0;
@@ -135,12 +140,8 @@ h1 {
   line-height: 1;
 }
 
-.settings-copy {
-  max-width: 340px;
-  margin-top: 12px;
-  color: #a1a1aa;
-  font-size: 13px;
-  line-height: 1.45;
+.settings-header__brand h1 {
+  margin-top: 14px;
 }
 
 .settings-tabs {

@@ -97,6 +97,11 @@ test('telemetry status stays separate and right-aligned above the setup card', (
   assert.doesNotMatch(overlayHtml, /telemetry-route-badge/)
 })
 
+test('Configuration title sits directly below the product name', () => {
+  assert.match(settingsHtml, /class="settings-header__brand"[\s\S]*Feedback-Driven Companion[\s\S]*<h1>CONFIGURATION<\/h1>/u)
+  assert.doesNotMatch(settingsHtml, /Configure the overlay and Shift Light\./u)
+})
+
 test('Configuration exposes only the Direct Data Out receiver', () => {
   assert.match(settingsHtml, /DIRECT DATA OUT/)
   assert.match(settingsHtml, /127\.0\.0\.1/)
@@ -108,14 +113,14 @@ test('Configuration exposes only the Direct Data Out receiver', () => {
 })
 
 test('Settings exposes Configuration priority and speed unit preferences', () => {
-  const displaySettingsIndex = settingsHtml.indexOf('id="display-settings-title"')
   const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
   const displayPreferencesScriptIndex = settingsHtml.indexOf('src="display-preferences.js"')
   const settingsScriptIndex = settingsHtml.indexOf('src="settings.js"')
   const settingsPanel = settingsHtml.slice(settingsPanelIndex)
 
-  assert.ok(displaySettingsIndex >= 0)
   assert.ok(settingsPanelIndex >= 0)
+  assert.match(settingsHtml, /<section class="display-settings" aria-label="Display settings">/)
+  assert.doesNotMatch(settingsHtml, /DISPLAY SETTINGS|WINDOW \+ SPEED FORMAT/u)
   assert.match(settingsHtml, /name="speed-unit" value="kmh"/)
   assert.match(settingsHtml, /name="speed-unit" value="mph"/)
   assert.match(settingsHtml, /id="configuration-always-on-top" class="visibility-toggle" type="button"/)
@@ -148,10 +153,10 @@ test('Configuration persists and applies display preferences through the shared 
   assert.match(settingsJs, /configurationAlwaysOnTop: true/)
 })
 
-test('Configuration keeps its current default size and exposes standard Windows controls', () => {
+test('Configuration keeps its default size and exposes standard Windows controls', () => {
   const settingsWindow = JSON.parse(tauriConfig).app.windows.find(window => window.label === 'settings')
 
-  assert.deepEqual({ width: settingsWindow.width, height: settingsWindow.height }, { width: 620, height: 820 })
+  assert.deepEqual({ width: settingsWindow.width, height: settingsWindow.height }, { width: 820, height: 620 })
   assert.equal(settingsWindow.minimizable, true)
   assert.equal(settingsWindow.maximizable, true)
   assert.equal(settingsWindow.alwaysOnTop, true)

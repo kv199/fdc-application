@@ -11,7 +11,10 @@
   <main class="settings-shell">
     <header class="settings-header">
       <div class="settings-header__topline">
-        <p class="settings-eyebrow">FORZA HORIZON 6</p>
+        <div class="settings-header__brand">
+          <p class="settings-eyebrow">Feedback-Driven Companion</p>
+          <h1>CONFIGURATION</h1>
+        </div>
         <div class="settings-header__connection" aria-label="Direct Data Out connection">
           <div id="telemetry-status" class="telemetry-status" data-state="offline" role="status" aria-live="polite">
             <span class="telemetry-status__dot" aria-hidden="true"></span>
@@ -31,8 +34,6 @@
           </div>
         </div>
       </div>
-      <h1>CONFIGURATION</h1>
-      <p class="settings-copy">Configure the overlay and Shift Light.</p>
     </header>
 
     <div class="settings-tabs" role="tablist" aria-label="Settings categories">
@@ -266,12 +267,7 @@
     </section>
 
     <section id="settings-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="settings-tab" data-settings-panel="settings" hidden>
-      <section class="display-settings" aria-labelledby="display-settings-title">
-        <div class="settings-section__heading">
-          <h2 id="display-settings-title">DISPLAY SETTINGS</h2>
-          <span>WINDOW + SPEED FORMAT</span>
-        </div>
-
+      <section class="display-settings" aria-label="Display settings">
         <div class="display-settings__list">
           <div class="display-setting-row" data-display-preference>
             <div class="display-setting-row__copy">
