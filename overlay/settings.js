@@ -66,8 +66,7 @@
   const eventNotes = document.getElementById('event-notes')
   const eventsDetailBack = document.getElementById('events-detail-back')
   const eventsDetailTitle = document.getElementById('events-detail-title')
-  const eventsDetailHint = document.getElementById('events-detail-hint')
-  const eventsDetailCard = document.getElementById('events-detail-card')
+  const eventsDetailMetadata = document.getElementById('events-detail-metadata')
   const eventsDetailArchive = document.getElementById('events-detail-archive')
   const eventsDetailDelete = document.getElementById('events-detail-delete')
   const eventsById = new Map()
@@ -549,12 +548,28 @@
   function renderEventDetail(event) {
     if (!event) return
     if (eventsDetailTitle) eventsDetailTitle.textContent = event.name
-    if (eventsDetailHint) eventsDetailHint.textContent = 'EMPTY EVENT'
-    if (eventsDetailCard) {
-      const card = renderEventCard(event, true)
-      eventsDetailCard.replaceChildren(...card.childNodes)
-      eventsDetailCard.dataset.eventId = event.id
-      eventsDetailCard.dataset.eventMode = eventModeKey(event.mode)
+    if (eventsDetailMetadata) {
+      eventsDetailMetadata.replaceChildren()
+      eventsDetailMetadata.dataset.eventId = event.id
+      eventsDetailMetadata.dataset.eventMode = eventModeKey(event.mode)
+      const fields = [
+        ['MODE', eventModeLabel(event.mode), true],
+        ['ROUTE TYPE', eventRouteLabel(event.routeType), false],
+        ['CLASS', eventText(event.eventClass).toUpperCase() || 'ANY', false]
+      ]
+      if (event.notes) fields.push(['NOTES', event.notes, false])
+      for (const [label, value, isMode] of fields) {
+        const row = document.createElement('div')
+        row.className = 'events-detail-view__metadata-row'
+        const labelElement = document.createElement('span')
+        labelElement.className = 'events-detail-view__metadata-label'
+        labelElement.textContent = label
+        const valueElement = document.createElement('span')
+        valueElement.className = `events-detail-view__metadata-value${isMode ? ' events-detail-view__metadata-value--mode' : ''}`
+        valueElement.textContent = value
+        row.append(labelElement, valueElement)
+        eventsDetailMetadata.append(row)
+      }
     }
   }
 
@@ -599,6 +614,11 @@
 
   function closeEventDetail() {
     currentEventId = null
+    if (eventsDetailMetadata) {
+      eventsDetailMetadata.replaceChildren()
+      delete eventsDetailMetadata.dataset.eventId
+      delete eventsDetailMetadata.dataset.eventMode
+    }
     setEventsView('library')
     renderEventsLibrary()
   }

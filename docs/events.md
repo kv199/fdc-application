@@ -11,8 +11,9 @@ existing local runtime boundary.
   Selecting a tile opens that event.
 - The Events heading has a right-aligned **CREATE** action. It opens a creation
   area at the bottom of the page.
-- Creation requires an event name, Class, Route Type, and Mode. Notes are
-  optional. A blank name or an unselected required field cannot be submitted.
+- The creation area keeps the input order as Event Name, then Mode / Route
+  Type / Class, then optional Notes and the Create action. A blank name or an
+  unselected required field cannot be submitted.
 - Class values are `Any`, `D`, `C`, `B`, `A`, `S1`, `S2`, `R`, and `X`.
 - Route Type values are `Asphalt`, `Rally`, and `Offroad`. Asphalt includes the
   Road, Street, and Touge context selected by the player.
@@ -20,8 +21,10 @@ existing local runtime boundary.
   `Blueprint`. `Official` is an unchanged game-authored event; `Blueprint` is
   a game event with player-chosen parameters.
 - A successful Create saves the event and opens its page immediately.
-- An event page is intentionally empty beyond its identity tile, which shows
-  the name, Mode, and Route Type. Pressing Escape returns to the Events list.
+- An event page contains only its controls, clickable title, and one bordered
+  metadata panel to the title's right. The panel shows Mode, Route Type, Class,
+  and Notes when Notes were supplied. The top-left **BACK** action and Escape
+  both return to the Events list.
 - Selecting the event title starts inline renaming. Enter or leaving the input
   saves a non-empty name; Escape cancels that rename without leaving the page.
 - **ARCHIVE** retains the event locally, removes it from the active Events

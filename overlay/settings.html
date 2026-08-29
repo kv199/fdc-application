@@ -219,18 +219,15 @@
               <input id="event-name" name="name" type="text" autocomplete="off" required>
             </label>
             <label class="events-form__field">
-              <span>CLASS</span>
-              <select id="event-class" name="class" required>
-                <option value="">SELECT CLASS</option>
+              <span>MODE</span>
+              <select id="event-mode" name="mode" required>
+                <option value="">SELECT MODE</option>
                 <option value="Any">ANY</option>
-                <option value="D">D</option>
-                <option value="C">C</option>
-                <option value="B">B</option>
-                <option value="A">A</option>
-                <option value="S1">S1</option>
-                <option value="S2">S2</option>
-                <option value="R">R</option>
-                <option value="X">X</option>
+                <option value="Rivals">RIVALS</option>
+                <option value="Online">ONLINE</option>
+                <option value="EventLab">EVENTLAB</option>
+                <option value="Official">OFFICIAL</option>
+                <option value="Blueprint">BLUEPRINT</option>
               </select>
             </label>
             <label class="events-form__field">
@@ -243,15 +240,18 @@
               </select>
             </label>
             <label class="events-form__field">
-              <span>MODE</span>
-              <select id="event-mode" name="mode" required>
-                <option value="">SELECT MODE</option>
+              <span>CLASS</span>
+              <select id="event-class" name="class" required>
+                <option value="">SELECT CLASS</option>
                 <option value="Any">ANY</option>
-                <option value="Rivals">RIVALS</option>
-                <option value="Online">ONLINE</option>
-                <option value="EventLab">EVENTLAB</option>
-                <option value="Official">OFFICIAL</option>
-                <option value="Blueprint">BLUEPRINT</option>
+                <option value="D">D</option>
+                <option value="C">C</option>
+                <option value="B">B</option>
+                <option value="A">A</option>
+                <option value="S1">S1</option>
+                <option value="S2">S2</option>
+                <option value="R">R</option>
+                <option value="X">X</option>
               </select>
             </label>
             <label class="events-form__field events-form__field--notes">
@@ -267,7 +267,7 @@
 
       <section id="events-detail-view" class="events-detail-view" aria-labelledby="events-detail-title" hidden>
         <div class="events-detail-view__header">
-          <button id="events-detail-back" class="settings-button" type="button">EVENTS</button>
+          <button id="events-detail-back" class="settings-button" type="button">BACK</button>
           <div class="events-detail-view__actions">
             <button id="events-detail-archive" class="settings-button" type="button">ARCHIVE</button>
             <button id="events-detail-delete" class="settings-button settings-button--danger" type="button">DELETE</button>
@@ -275,9 +275,8 @@
         </div>
         <div class="events-detail-view__heading">
           <button id="events-detail-title" class="events-detail-view__title" type="button">EVENT</button>
-          <p id="events-detail-hint">EMPTY EVENT</p>
+          <div id="events-detail-metadata" class="events-detail-view__metadata" aria-label="Event metadata"></div>
         </div>
-        <article id="events-detail-card" class="events-card events-card--detail"></article>
       </section>
     </section>
 
