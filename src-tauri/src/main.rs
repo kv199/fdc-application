@@ -19,7 +19,6 @@ use tauri::{
     WindowEvent, menu::MenuBuilder, tray::TrayIconBuilder,
 };
 
-const SETTINGS_MARKER: &str = "settings-first-launch-complete";
 const SETTINGS_WINDOW_SIZE_FILE: &str = "settings-window-size.json";
 #[cfg(test)]
 const SETTINGS_DEFAULT_WIDTH: u32 = 820;
@@ -1928,10 +1927,6 @@ fn set_window_interaction<R: Runtime>(
     Ok(())
 }
 
-fn settings_marker_path<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
-    Ok(app.path().app_data_dir()?.join(SETTINGS_MARKER))
-}
-
 #[derive(Clone, Copy, Deserialize, Serialize)]
 struct SettingsWindowSize {
     width: u32,
@@ -2241,14 +2236,7 @@ fn main() {
             set_window_interaction(&window, false)?;
             window.show()?;
 
-            let marker = settings_marker_path(app.handle())?;
-            if !marker.exists() {
-                show_settings(app.handle())?;
-                if let Some(parent) = marker.parent() {
-                    fs::create_dir_all(parent)?;
-                }
-                fs::write(marker, b"1")?;
-            }
+            show_settings(app.handle())?;
 
             let _ = settings;
             Ok(())
