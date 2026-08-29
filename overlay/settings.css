@@ -297,83 +297,6 @@ h1 {
   letter-spacing: 0.06em;
 }
 
-.garage-shift-light {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  max-width: 100%;
-  min-height: 27px;
-  padding: 4px 8px;
-  border: 1px solid rgb(105 232 63 / 28%);
-  color: #d4d4d8;
-  background: rgb(105 232 63 / 7%);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  line-height: 1.2;
-}
-
-.garage-shift-light__status {
-  color: #69e83f;
-}
-
-.garage-shift-light__detail {
-  color: #a1a1aa;
-  font-size: 9px;
-}
-
-.garage-shift-light[data-state="none"] {
-  border-color: rgb(161 161 170 / 24%);
-  background: rgb(226 232 240 / 5%);
-}
-
-.garage-shift-light[data-state="none"] .garage-shift-light__status {
-  color: #a1a1aa;
-}
-
-.garage-shift-light[data-state="fallback"] {
-  border-color: rgb(250 204 21 / 30%);
-  background: rgb(250 204 21 / 7%);
-}
-
-.garage-shift-light[data-state="fallback"] .garage-shift-light__status {
-  color: #facc15;
-}
-
-.garage-card__meta {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.garage-card .garage-shift-light {
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: 20px;
-  padding: 2px;
-  border-color: transparent;
-  background: transparent;
-  gap: 4px;
-  font-size: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.garage-card .garage-shift-light__status {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.garage-card .garage-shift-light__detail {
-  display: none;
-}
-
 .garage-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
@@ -405,7 +328,7 @@ h1 {
   min-width: 0;
   gap: 9px;
   min-height: 0;
-  padding: 9px 92px 9px 10px;
+  padding: 9px 10px;
 }
 
 .garage-card__name-label {
@@ -426,6 +349,10 @@ h1 {
   font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.garage-card--latest .garage-card__name {
+  margin-right: 74px;
 }
 
 .garage-performance {
@@ -498,10 +425,6 @@ h1 {
 .garage-performance--x { --garage-rank-color: #22c55e; }
 
 @media (max-width: 420px) {
-  .garage-card__content {
-    padding-right: 76px;
-  }
-
   .garage-card__latest {
     right: 6px;
   }

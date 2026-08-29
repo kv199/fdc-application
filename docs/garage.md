@@ -23,9 +23,6 @@ Garage is the Configuration tab immediately to the right of HUD.
 - Class and performance index are displayed as the paired Forza-style badge:
   D is light blue, C yellow, B orange, A red, S1 purple, S2 dark blue, R pink,
   and X bright green. The class color also marks the left edge of a saved card.
-- Every saved card shows its persisted Shift Light summary: `READY`,
-  `LEARNING`, or `NOT CALIBRATED`. The compact status describes the matching
-  car ordinal and PI; it does not provide controls for a non-current profile.
 - UI text uses player-facing values only: for example, `2112`, `S1`, and `900`.
   The `S32` and `U32` field names are internal telemetry contract terms and are
   not rendered in cards.
@@ -94,9 +91,9 @@ distinct RPM limits and gearbox signatures. The snapshot reports:
 - `LEARNING` when a Shift Light tune exists without a calibrated target;
 - `NOT CALIBRATED` when no Shift Light tune exists.
 
-Reset and detailed diagnostics remain in the Shift Light tab and still target
-only the active numeric gearbox variant. The Current Car block intentionally
-does not repeat Shift Light information.
+Shift Light remains visible only in the Shift Light tab, which provides the
+live diagnostics and reset for the active numeric gearbox variant. Garage does
+not render a second Shift Light status or profile control.
 
 ## Local SQLite state
 

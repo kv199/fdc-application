@@ -65,40 +65,6 @@
     return garageApi?.drivetrainLabel?.(vehicle?.drivetrain) || null
   }
 
-  function garageShiftLightSummary(vehicle) {
-    return garageApi?.normalizeShiftLightSummary?.(vehicle?.shiftLight) || vehicle?.shiftLight || null
-  }
-
-  function garageShiftLightStatusLabel(status) {
-    if (status === 'ready') return 'READY'
-    if (status === 'learning') return 'LEARNING'
-    return 'NOT CALIBRATED'
-  }
-
-  function appendGarageShiftLight(container, vehicle) {
-    const saved = garageShiftLightSummary(vehicle)
-    if (!saved) return
-
-    const indicator = document.createElement('div')
-    indicator.className = 'garage-shift-light'
-    const state = document.createElement('span')
-    state.className = 'garage-shift-light__status'
-    indicator.dataset.state = saved.status
-    state.textContent = `SL · ${garageShiftLightStatusLabel(saved.status)}`
-    indicator.append(state)
-
-    const details = []
-    if (saved.tuneCount > 0) details.push(`${saved.tuneCount} ${saved.tuneCount === 1 ? 'TUNE' : 'TUNES'}`)
-    if (saved.calibratedGearCount > 0) details.push(`${saved.calibratedGearCount} ${saved.calibratedGearCount === 1 ? 'GEAR' : 'GEARS'}`)
-    if (details.length) {
-      const detail = document.createElement('span')
-      detail.className = 'garage-shift-light__detail'
-      detail.textContent = details.join(' · ')
-      indicator.append(detail)
-    }
-    container.append(indicator)
-  }
-
   function appendGaragePerformance(container, vehicle) {
     if (!vehicle.classLabel && vehicle.pi === null) return
     const performance = document.createElement('div')
@@ -240,10 +206,9 @@
       name.textContent = garageDisplayName(vehicle)
 
       const meta = document.createElement('div')
-      meta.className = 'garage-card__meta'
       appendGaragePerformance(meta, vehicle)
-      appendGarageShiftLight(meta, vehicle)
       if (vehicle.carOrdinal === garageLatestOrdinal) {
+        card.classList.add('garage-card--latest')
         const latest = document.createElement('span')
         latest.className = 'garage-card__latest'
         latest.textContent = 'LAST USED'

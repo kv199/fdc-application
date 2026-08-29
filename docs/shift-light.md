@@ -54,9 +54,8 @@ matches `game_id`, `car_ordinal`, and `PI`, then summarizes all RPM-limit and
 gearbox configurations for that Garage variant. This uses the same
 `fdc.sqlite` database and does not copy or re-key calibration data.
 
-Garage can show `READY`, `LEARNING`, or `NOT CALIBRATED`; it does not select a
-car, edit a profile, or reset a non-current profile. Detailed diagnostics and
-reset stay in the Shift Light tab for the live vehicle.
+Garage does not render a second Shift Light control or status. Detailed
+diagnostics and reset stay in the Shift Light tab for the live vehicle.
 
 ## Gearbox variants
 
