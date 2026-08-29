@@ -506,11 +506,6 @@ h1 {
   align-items: center;
 }
 
-.events-section-heading > div {
-  display: grid;
-  gap: 4px;
-}
-
 .events-section-heading .settings-button {
   flex: 0 0 auto;
 }
@@ -554,8 +549,7 @@ h1 {
   background: rgb(226 232 240 / 3%);
 }
 
-.events-card__open:focus-visible,
-.events-card__copy:focus-visible {
+.events-card__open:focus-visible {
   outline: 1px solid var(--events-mode-color);
   outline-offset: -1px;
 }
@@ -577,7 +571,7 @@ h1 {
   align-content: center;
   min-width: 0;
   gap: 9px;
-  padding: 9px 42px 9px 10px;
+  padding: 9px 10px;
 }
 
 .events-card__name {
@@ -588,29 +582,6 @@ h1 {
   font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.events-card__copy {
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  display: grid;
-  place-items: center;
-  width: 27px;
-  height: 27px;
-  padding: 0;
-  border: 1px solid rgb(226 232 240 / 22%);
-  color: #94a3b8;
-  background: rgb(8 10 12 / 72%);
-  cursor: pointer;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.events-card__copy:hover {
-  border-color: color-mix(in srgb, var(--events-mode-color) 56%, rgb(226 232 240 / 22%));
-  color: #f8fafc;
 }
 
 .events-card__meta {

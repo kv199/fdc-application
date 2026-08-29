@@ -479,18 +479,6 @@
     return eventText(routeType).toUpperCase() || 'ASPHALT'
   }
 
-  async function copyEventId(eventId) {
-    const value = String(eventId)
-    try {
-      const clipboard = globalScope.navigator?.clipboard
-      if (!clipboard?.writeText) throw new Error('Clipboard is unavailable')
-      await clipboard.writeText(value)
-      setStatus(`EVENT ID #${value} COPIED`)
-    } catch {
-      setStatus('EVENT ID COPY FAILED', true)
-    }
-  }
-
   function renderEventCard(event) {
     const card = document.createElement('article')
     card.className = 'events-card'
@@ -523,18 +511,8 @@
     meta.append(mode, route)
     content.append(name, meta)
 
-    const copy = document.createElement('button')
-    copy.type = 'button'
-    copy.className = 'events-card__copy'
-    copy.setAttribute('aria-label', `Copy event ID ${event.id}`)
-    copy.textContent = '⧉'
-    copy.addEventListener('click', copyEvent => {
-      copyEvent.stopPropagation()
-      void copyEventId(event.id)
-    })
-
     open.append(id, content)
-    card.append(open, copy)
+    card.append(open)
     return card
   }
 
