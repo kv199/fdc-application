@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const {
   classLabel,
   drivetrainLabel,
+  normalizeShiftLightSummary,
   displayName,
   normalizeGaragePayload,
   vehicleFromTelemetry,
@@ -34,6 +35,17 @@ test('normalizes native and telemetry vehicle identity without inventing values'
   assert.equal(drivetrainLabel(2), 'AWD')
   assert.equal(drivetrainLabel(3), null)
   assert.equal(drivetrainLabel(null), null)
+  assert.deepEqual(normalizeShiftLightSummary({
+    status: 'calibrated',
+    tuneCount: 2,
+    calibratedGearCount: 5,
+    learningGearCount: 1
+  }), {
+    status: 'ready',
+    tuneCount: 2,
+    calibratedGearCount: 5,
+    learningGearCount: 1
+  })
   assert.deepEqual(vehicleFromTelemetry(frame()), {
     carOrdinal: 123,
     name: null,
@@ -68,6 +80,22 @@ test('normalizes native and telemetry vehicle identity without inventing values'
   assert.equal(snapshot.classLabel, 'S2')
   assert.equal(snapshot.pi, 901)
   assert.equal(snapshot.latestUsed, true)
+  assert.deepEqual(normalizeGaragePayload({
+    cars: [{
+      ordinal: 456,
+      variants: [{
+        class: 5,
+        pi: 901,
+        isCurrent: true,
+        shiftLight: { status: 'ready', tuneCount: 1, calibratedGearCount: 3 }
+      }]
+    }]
+  })[0].shiftLight, {
+    status: 'ready',
+    tuneCount: 1,
+    calibratedGearCount: 3,
+    learningGearCount: 0
+  })
 })
 
 test('records each car identity once while telemetry keeps the latest car visible', async () => {

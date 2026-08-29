@@ -34,6 +34,83 @@
     return numeric === null ? null : (DRIVETRAIN_LABELS[Math.round(numeric)] || null)
   }
 
+  const SHIFT_LIGHT_STATUSES = ['none', 'learning', 'ready']
+
+  function nonNegativeInteger(value) {
+    const number = Number(value)
+    return Number.isFinite(number) && number >= 0 ? Math.round(number) : null
+  }
+
+  function shiftLightStatus(value) {
+    const status = String(value || '').trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-')
+    if (status === 'calibrated') return 'ready'
+    if (status === 'calibrating') return 'learning'
+    if (status === 'fallback' || status === 'unavailable' || status === 'no-profile') return 'none'
+    if (SHIFT_LIGHT_STATUSES.includes(status)) return status
+    return null
+  }
+
+  function normalizeShiftLightSummary(value) {
+    const source = value && typeof value === 'object' ? value : null
+    if (!source) return null
+    const rawStatus = source.status ?? source.state ?? source.phase
+    const rawTuneCount = source.tuneCount ?? source.tune_count ?? source.tunes
+    const rawCalibratedGearCount = source.calibratedGearCount
+      ?? source.calibrated_gear_count
+      ?? source.calibratedGears
+      ?? source.calibrated_gears
+    const rawLearningGearCount = source.learningGearCount
+      ?? source.learning_gear_count
+      ?? source.learningGears
+      ?? source.learning_gears
+    const hasSummaryField = rawStatus !== undefined
+      || rawTuneCount !== undefined
+      || rawCalibratedGearCount !== undefined
+      || rawLearningGearCount !== undefined
+    if (!hasSummaryField) return null
+    return {
+      status: shiftLightStatus(rawStatus) || 'none',
+      tuneCount: nonNegativeInteger(rawTuneCount) ?? 0,
+      calibratedGearCount: nonNegativeInteger(rawCalibratedGearCount) ?? 0,
+      learningGearCount: nonNegativeInteger(rawLearningGearCount) ?? 0
+    }
+  }
+
+  function shiftLightSummaryFromVariant(value) {
+    const variant = value && typeof value === 'object' ? value : {}
+    return normalizeShiftLightSummary(
+      variant.shiftLight
+      ?? variant.shift_light
+      ?? variant.shiftLightSummary
+      ?? variant.shift_light_summary
+      ?? (variant.shiftLightStatus !== undefined || variant.shift_light_status !== undefined
+        ? {
+            status: variant.shiftLightStatus ?? variant.shift_light_status,
+            tuneCount: variant.shiftLightTuneCount ?? variant.shift_light_tune_count,
+            calibratedGearCount: variant.shiftLightCalibratedGearCount ?? variant.shift_light_calibrated_gear_count
+          }
+        : null)
+    )
+  }
+
+  function normalizeVariant(value) {
+    const variant = value && typeof value === 'object' ? value : {}
+    const rawClass = variant.class ?? variant.carClass ?? variant.classLabel
+    const numericClass = Number(rawClass)
+    const pi = finiteNonNegative(variant.pi ?? variant.performanceIndex)
+    const rawId = finitePositive(variant.id)
+    return {
+      id: rawId === null ? null : Math.round(rawId),
+      class: Number.isFinite(numericClass) ? Math.round(numericClass) : null,
+      classLabel: classLabel(rawClass),
+      pi: pi === null ? null : Math.round(pi),
+      firstSeenSequence: nonNegativeInteger(variant.firstSeenSequence ?? variant.first_seen_sequence),
+      lastSeenSequence: nonNegativeInteger(variant.lastSeenSequence ?? variant.last_seen_sequence),
+      isCurrent: variant.isCurrent === true || variant.is_current === true,
+      shiftLight: shiftLightSummaryFromVariant(variant)
+    }
+  }
+
   function normalizeVehicle(value) {
     const vehicle = value && typeof value === 'object' ? value : {}
     const carOrdinal = ordinalOf(vehicle.carOrdinal ?? vehicle.car_ordinal ?? vehicle.ordinal)
@@ -49,7 +126,16 @@
     const carGroup = finiteNonNegative(vehicle.carGroup ?? vehicle.car_group)
     const drivetrain = finiteNonNegative(vehicle.drivetrain ?? vehicle.drivetrainType ?? vehicle.drivetrain_type)
     const cylinders = finiteNonNegative(vehicle.cylinders ?? vehicle.numCylinders ?? vehicle.num_cylinders)
-    return {
+    const variants = Array.isArray(vehicle.variants)
+      ? vehicle.variants.map(normalizeVariant).filter(variant => variant.class !== null || variant.pi !== null)
+      : null
+    const shiftLight = normalizeShiftLightSummary(
+      vehicle.shiftLight
+      ?? vehicle.shift_light
+      ?? vehicle.shiftLightSummary
+      ?? vehicle.shift_light_summary
+    ) || shiftLightSummaryFromVariant(currentVariant)
+    const normalized = {
       carOrdinal,
       name: typeof rawName === 'string' && rawName.trim() ? rawName.trim() : null,
       class: Number.isFinite(numericClass) ? Math.round(numericClass) : null,
@@ -62,6 +148,9 @@
       latestUsed: vehicle.latestUsed === true || vehicle.isLatestUsed === true,
       lastUsedAt: vehicle.lastUsedAt ?? vehicle.last_seen_at ?? vehicle.lastSeenAt ?? null
     }
+    if (variants) normalized.variants = variants
+    if (shiftLight) normalized.shiftLight = shiftLight
+    return normalized
   }
 
   function vehicleFromTelemetry(telemetry) {
@@ -167,6 +256,8 @@
     vehicleFromTelemetry,
     classLabel,
     drivetrainLabel,
+    shiftLightStatus,
+    normalizeShiftLightSummary,
     displayName,
     createGarageRuntime
   }

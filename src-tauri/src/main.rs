@@ -1207,6 +1207,15 @@ struct GarageVehicle {
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct GarageShiftLightSummary {
+    status: String,
+    tune_count: i64,
+    calibrated_gear_count: i64,
+    learning_gear_count: i64,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct GarageVariant {
     id: i64,
     class: i32,
@@ -1215,6 +1224,7 @@ struct GarageVariant {
     first_seen_sequence: i64,
     last_seen_sequence: i64,
     is_current: bool,
+    shift_light: GarageShiftLightSummary,
 }
 
 #[derive(Clone, Serialize)]
@@ -1250,6 +1260,47 @@ fn validate_garage_vehicle(vehicle: &GarageVehicle) -> Result<(), String> {
         return Err("Garage car class and PI must not be negative".to_string());
     }
     Ok(())
+}
+
+fn load_garage_shift_light_summary(
+    connection: &Connection,
+    car_ordinal: i32,
+    pi: i32,
+) -> Result<GarageShiftLightSummary, String> {
+    let (tune_count, calibrated_gear_count, learning_gear_count): (i64, i64, i64) = connection
+        .query_row(
+            "SELECT COUNT(DISTINCT variants.id),
+                    COALESCE(SUM(CASE
+                      WHEN profiles.status = 'calibrated' AND profiles.shift_rpm IS NOT NULL THEN 1
+                      ELSE 0
+                    END), 0),
+                    COALESCE(SUM(CASE
+                      WHEN profiles.gear IS NOT NULL
+                       AND (profiles.status <> 'calibrated' OR profiles.shift_rpm IS NULL) THEN 1
+                      ELSE 0
+                    END), 0)
+             FROM shift_light_variants AS variants
+             LEFT JOIN shift_light_profiles AS profiles ON profiles.variant_id = variants.id
+             WHERE variants.game_id = 'fh6'
+               AND variants.car_ordinal = ?1
+               AND variants.pi = ?2",
+            params![car_ordinal, pi],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|error| format!("unable to summarize Garage Shift Light profiles: {error}"))?;
+    let status = if calibrated_gear_count > 0 {
+        "ready"
+    } else if tune_count > 0 {
+        "learning"
+    } else {
+        "none"
+    };
+    Ok(GarageShiftLightSummary {
+        status: status.to_string(),
+        tune_count,
+        calibrated_gear_count,
+        learning_gear_count,
+    })
 }
 
 fn load_garage_snapshot_from_connection(connection: &Connection) -> Result<GarageSnapshot, String> {
@@ -1312,6 +1363,19 @@ fn load_garage_snapshot_from_connection(connection: &Connection) -> Result<Garag
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| format!("unable to decode Garage variants: {error}"))?;
         let current_variant_id = variants.first().map(|variant| variant.0);
+        let mut snapshot_variants = Vec::with_capacity(variants.len());
+        for (id, class, pi, first_seen_sequence, last_seen_sequence) in variants {
+            snapshot_variants.push(GarageVariant {
+                id,
+                class,
+                car_class: class,
+                pi,
+                first_seen_sequence,
+                last_seen_sequence,
+                is_current: Some(id) == current_variant_id,
+                shift_light: load_garage_shift_light_summary(connection, ordinal, pi)?,
+            });
+        }
         snapshot_cars.push(GarageCar {
             ordinal,
             car_ordinal: ordinal,
@@ -1325,20 +1389,7 @@ fn load_garage_snapshot_from_connection(connection: &Connection) -> Result<Garag
             last_seen_sequence,
             current_variant_id,
             latest_used: false,
-            variants: variants
-                .into_iter()
-                .map(
-                    |(id, class, pi, first_seen_sequence, last_seen_sequence)| GarageVariant {
-                        id,
-                        class,
-                        car_class: class,
-                        pi,
-                        first_seen_sequence,
-                        last_seen_sequence,
-                        is_current: Some(id) == current_variant_id,
-                    },
-                )
-                .collect(),
+            variants: snapshot_variants,
         });
     }
     if let Some(current) = snapshot_cars.first_mut() {
@@ -2067,6 +2118,51 @@ mod tests {
         assert_eq!((car.variants[0].class, car.variants[0].pi), (9, 700));
         assert!(car.variants[0].is_current);
         assert!(!car.variants[1].is_current);
+    }
+
+    #[test]
+    fn garage_variant_summarizes_its_shift_light_tunes() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let vehicle = GarageVehicle {
+            ordinal: 260,
+            class: 8,
+            pi: 600,
+            car_group: 42,
+            drivetrain: 1,
+            cylinders: 4,
+        };
+        record_garage_vehicle_in_connection(&mut connection, &vehicle).unwrap();
+        let no_profile = load_garage_snapshot_from_connection(&connection).unwrap();
+        assert_eq!(no_profile.cars[0].variants[0].shift_light.status, "none");
+        let resolution = resolve_shift_light_variant(&mut connection, 260, 600, 8500, "").unwrap();
+        let learning = load_garage_snapshot_from_connection(&connection).unwrap();
+        let learning_summary = &learning.cars[0].variants[0].shift_light;
+        assert_eq!(learning_summary.status, "learning");
+        assert_eq!(learning_summary.tune_count, 1);
+        assert_eq!(learning_summary.calibrated_gear_count, 0);
+        assert_eq!(learning_summary.learning_gear_count, 0);
+        write_stored_profile(
+            &connection,
+            resolution.variant_id,
+            &StoredShiftLightProfile {
+                gear: 2,
+                status: "calibrated".to_string(),
+                shift_rpm: Some(7800),
+                sample_count: 5,
+                method: "observed".to_string(),
+                ratio_drop: None,
+                samples: vec![7875, 7900, 7925, 7950, 7975],
+            },
+        )
+        .unwrap();
+
+        let snapshot = load_garage_snapshot_from_connection(&connection).unwrap();
+        let summary = &snapshot.cars[0].variants[0].shift_light;
+        assert_eq!(summary.status, "ready");
+        assert_eq!(summary.tune_count, 1);
+        assert_eq!(summary.calibrated_gear_count, 1);
+        assert_eq!(summary.learning_gear_count, 0);
     }
 
     #[test]

@@ -46,6 +46,18 @@ compatibility contract for persisted profiles.
 The UI exposes the current FH6 car ordinal, PI, and RPM limit. It does not
 depend on a localized or user-maintained vehicle name.
 
+## Garage association
+
+Shift Light profiles remain owned by their existing key and gearbox-variant
+identity. Garage presents them as part of the matching local car: its snapshot
+matches `game_id`, `car_ordinal`, and `PI`, then summarizes all RPM-limit and
+gearbox configurations for that Garage variant. This uses the same
+`fdc.sqlite` database and does not copy or re-key calibration data.
+
+Garage can show `READY`, `LEARNING`, or `NOT CALIBRATED`; it does not select a
+car, edit a profile, or reset a non-current profile. Detailed diagnostics and
+reset stay in the Shift Light tab for the live vehicle.
+
 ## Gearbox variants
 
 Each base identity can have more than one gearbox variant. A variant is

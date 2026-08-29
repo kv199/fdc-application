@@ -94,8 +94,10 @@ path.
 Garage is a browser-local `queueTelemetry` consumer with native local
 persistence. It records each car ordinal once, records class and performance
 index variants separately, and refreshes Configuration through the local
-`hud_garage` event. It does not create another telemetry transport or use a car
-name service. Its full behavior and SQLite contract are documented in
+`hud_garage` event. Its native snapshot also summarizes the existing Shift
+Light profiles with the same car ordinal and PI; both features stay in the
+single FDC-local `fdc.sqlite` file. It does not create another telemetry
+transport or use a car name service. Its full behavior and SQLite contract are documented in
 [Garage](garage.md).
 
 ## Asphalt Coach boundary

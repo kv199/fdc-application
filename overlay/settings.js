@@ -65,6 +65,59 @@
     return garageApi?.drivetrainLabel?.(vehicle?.drivetrain) || null
   }
 
+  function garageShiftLightSummary(vehicle) {
+    return garageApi?.normalizeShiftLightSummary?.(vehicle?.shiftLight) || vehicle?.shiftLight || null
+  }
+
+  function garageShiftLightStateFor(vehicle) {
+    const state = latestShiftLightState
+    return state?.carOrdinal === vehicle?.carOrdinal && state?.carKey ? state : null
+  }
+
+  function garageShiftLightStatusLabel(status) {
+    if (status === 'ready') return 'READY'
+    if (status === 'learning') return 'LEARNING'
+    return 'NOT CALIBRATED'
+  }
+
+  function appendGarageShiftLight(container, vehicle, current = false) {
+    const saved = garageShiftLightSummary(vehicle)
+    const live = current ? garageShiftLightStateFor(vehicle) : null
+    if (!saved && !live) return
+    const liveSummary = live
+      ? garageApi?.normalizeShiftLightSummary?.({
+          status: live.status,
+          calibratedGearCount: Array.isArray(live.gears)
+            ? live.gears.filter(gear => gear?.status === 'calibrated').length
+            : 0
+        })
+      : null
+    const summary = liveSummary || saved
+    if (!summary) return
+
+    const indicator = document.createElement('div')
+    indicator.className = 'garage-shift-light'
+    const state = document.createElement('span')
+    state.className = 'garage-shift-light__status'
+    indicator.dataset.state = summary.status
+    state.textContent = `${current ? 'SHIFT LIGHT' : 'SL'} · ${garageShiftLightStatusLabel(summary.status)}`
+    indicator.append(state)
+
+    const details = []
+    if (current && Number.isFinite(live?.shiftRpm)) details.push(`${Math.round(live.shiftRpm)} RPM`)
+    if (current && Number.isFinite(live?.currentGear)) details.push(`G${Math.round(live.currentGear)}`)
+    if (!live && summary.tuneCount > 0) details.push(`${summary.tuneCount} ${summary.tuneCount === 1 ? 'TUNE' : 'TUNES'}`)
+    if (summary.calibratedGearCount > 0) details.push(`${summary.calibratedGearCount} ${summary.calibratedGearCount === 1 ? 'GEAR' : 'GEARS'}`)
+    if (current && live?.method) details.push(String(live.method).toUpperCase())
+    if (details.length) {
+      const detail = document.createElement('span')
+      detail.className = 'garage-shift-light__detail'
+      detail.textContent = details.join(' · ')
+      indicator.append(detail)
+    }
+    container.append(indicator)
+  }
+
   function appendGaragePerformance(container, vehicle) {
     if (!vehicle.classLabel && vehicle.pi === null) return
     const performance = document.createElement('div')
@@ -174,6 +227,7 @@
       input.addEventListener('blur', finish, { once: true })
     })
     content.append(name, ...(group ? [group] : []), details)
+    appendGarageShiftLight(content, vehicle, true)
     garageCurrentCar.append(image, content)
   }
 
@@ -208,6 +262,7 @@
       const meta = document.createElement('div')
       meta.className = 'garage-card__meta'
       appendGaragePerformance(meta, vehicle)
+      appendGarageShiftLight(meta, vehicle)
       if (vehicle.carOrdinal === garageLatestOrdinal) {
         const latest = document.createElement('span')
         latest.className = 'garage-card__latest'
@@ -569,6 +624,7 @@
     await eventApi.listen('hud_shift_light', event => {
       renderShiftLightState(event.payload)
       shiftLightReset.disabled = !latestShiftLightState?.carKey || shiftLightResetPending
+      renderGarage()
     })
     await eventApi.listen('hud_shift_light_reset_result', event => {
       renderShiftLightResetResult(event.payload)

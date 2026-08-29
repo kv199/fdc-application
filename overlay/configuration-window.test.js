@@ -26,6 +26,8 @@ test('Configuration exposes HUD, Garage, Shift Light and Settings tabs', () => {
   assert.match(settingsJs, /garage-current-car__group/)
   assert.match(settingsJs, /garage-current-car__drivetrain/)
   assert.match(settingsJs, /garage-current-car__cylinders/)
+  assert.match(settingsJs, /garage-shift-light/)
+  assert.match(settingsJs, /SHIFT LIGHT/)
   assert.match(settingsJs, /latest\.textContent = 'LAST USED'/)
   assert.doesNotMatch(settingsJs, /input\.className = 'garage-card__name'/)
 })
