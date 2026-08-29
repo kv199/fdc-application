@@ -21,10 +21,12 @@ existing local runtime boundary.
   `Blueprint`. `Official` is an unchanged game-authored event; `Blueprint` is
   a game event with player-chosen parameters.
 - A successful Create saves the event and opens its page immediately.
-- An event page contains only its controls, clickable title, and one bordered
-  metadata panel to the title's right. The panel shows Mode, Route Type, Class,
-  and Notes when Notes were supplied. The top-left **BACK** action and Escape
-  both return to the Events list.
+- An event page contains only its controls and event identity. Mode, Route
+  Type, and Class appear in one compact row directly to the right of the
+  clickable title. Mode uses its configured color, and Class uses the existing
+  Garage class color. Notes, when supplied, appear in their own framed area
+  directly beneath that row. The top-left **BACK** action and Escape both
+  return to the Events list.
 - Selecting the event title starts inline renaming. Enter or leaving the input
   saves a non-empty name; Escape cancels that rename without leaving the page.
 - **ARCHIVE** retains the event locally, removes it from the active Events

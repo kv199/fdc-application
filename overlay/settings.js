@@ -66,7 +66,9 @@
   const eventNotes = document.getElementById('event-notes')
   const eventsDetailBack = document.getElementById('events-detail-back')
   const eventsDetailTitle = document.getElementById('events-detail-title')
-  const eventsDetailMetadata = document.getElementById('events-detail-metadata')
+  const eventsDetailSummary = document.getElementById('events-detail-summary')
+  const eventsDetailNotes = document.getElementById('events-detail-notes')
+  const eventsDetailNotesValue = document.getElementById('events-detail-notes-value')
   const eventsDetailArchive = document.getElementById('events-detail-archive')
   const eventsDetailDelete = document.getElementById('events-detail-delete')
   const eventsById = new Map()
@@ -548,29 +550,24 @@
   function renderEventDetail(event) {
     if (!event) return
     if (eventsDetailTitle) eventsDetailTitle.textContent = event.name
-    if (eventsDetailMetadata) {
-      eventsDetailMetadata.replaceChildren()
-      eventsDetailMetadata.dataset.eventId = event.id
-      eventsDetailMetadata.dataset.eventMode = eventModeKey(event.mode)
-      const fields = [
-        ['MODE', eventModeLabel(event.mode), true],
-        ['ROUTE TYPE', eventRouteLabel(event.routeType), false],
-        ['CLASS', eventText(event.eventClass).toUpperCase() || 'ANY', false]
-      ]
-      if (event.notes) fields.push(['NOTES', event.notes, false])
-      for (const [label, value, isMode] of fields) {
-        const row = document.createElement('div')
-        row.className = 'events-detail-view__metadata-row'
-        const labelElement = document.createElement('span')
-        labelElement.className = 'events-detail-view__metadata-label'
-        labelElement.textContent = label
-        const valueElement = document.createElement('span')
-        valueElement.className = `events-detail-view__metadata-value${isMode ? ' events-detail-view__metadata-value--mode' : ''}`
-        valueElement.textContent = value
-        row.append(labelElement, valueElement)
-        eventsDetailMetadata.append(row)
-      }
+    if (eventsDetailSummary) {
+      eventsDetailSummary.replaceChildren()
+      eventsDetailSummary.dataset.eventId = event.id
+      eventsDetailSummary.dataset.eventMode = eventModeKey(event.mode)
+      const mode = document.createElement('span')
+      mode.className = 'events-detail-view__badge events-detail-view__badge--mode'
+      mode.textContent = eventModeLabel(event.mode)
+      const route = document.createElement('span')
+      route.className = 'events-detail-view__badge'
+      route.textContent = eventRouteLabel(event.routeType)
+      const eventClass = document.createElement('span')
+      eventClass.className = 'events-detail-view__badge events-detail-view__badge--class'
+      eventClass.dataset.eventClass = eventText(event.eventClass).toUpperCase() || 'Any'
+      eventClass.textContent = eventText(event.eventClass).toUpperCase() || 'ANY'
+      eventsDetailSummary.append(mode, route, eventClass)
     }
+    if (eventsDetailNotes) eventsDetailNotes.hidden = !event.notes
+    if (eventsDetailNotesValue) eventsDetailNotesValue.textContent = event.notes || ''
   }
 
   async function loadEvents() {
@@ -614,11 +611,13 @@
 
   function closeEventDetail() {
     currentEventId = null
-    if (eventsDetailMetadata) {
-      eventsDetailMetadata.replaceChildren()
-      delete eventsDetailMetadata.dataset.eventId
-      delete eventsDetailMetadata.dataset.eventMode
+    if (eventsDetailSummary) {
+      eventsDetailSummary.replaceChildren()
+      delete eventsDetailSummary.dataset.eventId
+      delete eventsDetailSummary.dataset.eventMode
     }
+    if (eventsDetailNotes) eventsDetailNotes.hidden = true
+    if (eventsDetailNotesValue) eventsDetailNotesValue.textContent = ''
     setEventsView('library')
     renderEventsLibrary()
   }
