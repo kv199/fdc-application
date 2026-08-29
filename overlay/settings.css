@@ -279,6 +279,7 @@ h1 {
 
 .garage-current-variants-toggle {
   flex: 0 0 auto;
+  margin-left: auto;
   min-height: 28px;
   padding: 5px 9px;
   border: 1px solid rgb(105 232 63 / 42%);

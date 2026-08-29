@@ -13,9 +13,9 @@ Garage is the Configuration tab immediately to the right of HUD.
   value is displayed below that name as `GROUP <value>`, followed by a paired
   Forza-style class and performance-index badge, drivetrain label, and cylinder
   count. It does not carry a Last Used badge.
-- The current-car block has a `VIEW` button in the same detail row as its
-  class/PI badge, drivetrain, and cylinder count. It changes to `HIDE` and
-  reveals a separate framed configuration area directly below the block.
+- The current-car block has a right-aligned `VIEW` button in the same detail row
+  as its class/PI badge, drivetrain, and cylinder count. It changes to `HIDE`
+  and reveals a separate framed configuration area directly below the block.
   Escape closes that area, except while the inline name field owns Escape to
   cancel its edit. Each configuration row uses the Saved Cars border style and
   shows, from left to right, a Forza-style class/PI badge, its recorded

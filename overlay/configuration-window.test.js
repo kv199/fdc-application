@@ -46,6 +46,7 @@ test('Configuration exposes HUD, Garage, Shift Light and Settings tabs', () => {
   assert.match(settingsCss, /\.garage-variant-row\s*\{[\s\S]*justify-content:\s*flex-start/)
   assert.match(settingsCss, /\.garage-variant-row\s*\{[\s\S]*border-left:\s*3px solid var\(--garage-rank-color\)/)
   assert.doesNotMatch(settingsCss, /\.garage-current-variants-toggle\s*\{[^}]*position:\s*absolute/)
+  assert.match(settingsCss, /\.garage-current-variants-toggle\s*\{[\s\S]*margin-left:\s*auto/)
 })
 
 test('Engine telemetry keeps the compact panel order and one visibility toggle', () => {
