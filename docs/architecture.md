@@ -135,6 +135,8 @@ telemetry path. It provides:
 - overlay target editing for the Coach card, lap timer, and telemetry HUD;
 - visibility controls for the top-level overlay and HUD components;
 - speed-unit selection and Shift Light brightness;
+- standard minimize and maximize controls, plus a persisted Configuration
+  always-on-top preference that defaults to enabled;
 - Garage current-car and saved-car views, including local name editing and the
   current car's configuration list;
 - Direct Data Out status and retry;

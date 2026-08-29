@@ -8,6 +8,7 @@ const settingsCss = fs.readFileSync(path.join(__dirname, 'settings.css'), 'utf8'
 const settingsJs = fs.readFileSync(path.join(__dirname, 'settings.js'), 'utf8')
 const overlayHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8')
+const tauriConfig = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'tauri.conf.json'), 'utf8')
 
 test('Configuration exposes HUD, Garage, Shift Light and Settings tabs', () => {
   const tabs = [...settingsHtml.matchAll(/data-settings-tab="([^"]+)"/g)].map(match => match[1])
@@ -106,7 +107,7 @@ test('Configuration exposes only the Direct Data Out receiver', () => {
   assert.match(tauriMain, /fn retry_direct_source/u)
 })
 
-test('Settings exposes only the speed unit preference', () => {
+test('Settings exposes Configuration priority and speed unit preferences', () => {
   const displaySettingsIndex = settingsHtml.indexOf('id="display-settings-title"')
   const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
   const displayPreferencesScriptIndex = settingsHtml.indexOf('src="display-preferences.js"')
@@ -117,6 +118,9 @@ test('Settings exposes only the speed unit preference', () => {
   assert.ok(settingsPanelIndex >= 0)
   assert.match(settingsHtml, /name="speed-unit" value="kmh"/)
   assert.match(settingsHtml, /name="speed-unit" value="mph"/)
+  assert.match(settingsHtml, /id="configuration-always-on-top" class="visibility-toggle" type="button"/)
+  assert.match(settingsJs, /set_configuration_always_on_top/)
+  assert.match(tauriMain, /fn set_configuration_always_on_top/)
   assert.doesNotMatch(settingsPanel, /telemetry-settings|telemetry-route-card|DIRECT DATA OUT.*OFFLINE/u)
   assert.ok(displayPreferencesScriptIndex >= 0)
   assert.ok(settingsScriptIndex > displayPreferencesScriptIndex)
@@ -141,6 +145,16 @@ test('Configuration persists and applies display preferences through the shared 
   assert.match(settingsJs, /displayPreferencesApi\.write\(next\)/)
   assert.match(settingsJs, /call\('set_display_preferences', \{\s*speedUnit: next\.speedUnit,\s*shiftLightBrightness: next\.shiftLightBrightness\s*\}\)/)
   assert.match(settingsJs, /displayPreferences = previous\s*displayPreferencesApi\.write\(previous\)\s*renderDisplayPreferences\(previous\)/)
+  assert.match(settingsJs, /configurationAlwaysOnTop: true/)
+})
+
+test('Configuration keeps its current default size and exposes standard Windows controls', () => {
+  const settingsWindow = JSON.parse(tauriConfig).app.windows.find(window => window.label === 'settings')
+
+  assert.deepEqual({ width: settingsWindow.width, height: settingsWindow.height }, { width: 620, height: 820 })
+  assert.equal(settingsWindow.minimizable, true)
+  assert.equal(settingsWindow.maximizable, true)
+  assert.equal(settingsWindow.alwaysOnTop, true)
 })
 
 test('tray has one Configuration action and no calibration reset action', () => {

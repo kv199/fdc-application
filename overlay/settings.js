@@ -28,6 +28,7 @@
   const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
   const displayPreferencesApi = globalScope.DisplayPreferences
   const speedUnitInputs = [...document.querySelectorAll('input[name="speed-unit"]')]
+  const configurationAlwaysOnTop = document.getElementById('configuration-always-on-top')
   const shiftLightBrightness = document.getElementById('shift-light-brightness')
   const shiftLightBrightnessValue = document.getElementById('shift-light-brightness-value')
   const displayPreferenceRows = [...document.querySelectorAll('[data-display-preference]')]
@@ -51,7 +52,8 @@
   let displayPreferencesPending = false
   let displayPreferences = displayPreferencesApi?.read?.() || {
     speedUnit: 'kmh',
-    shiftLightBrightness: 80
+    shiftLightBrightness: 80,
+    configurationAlwaysOnTop: true
   }
   let latestShiftLightState = null
   let latestRouteRevision = -1
@@ -409,6 +411,7 @@
       input.checked = input.value === preferences.speedUnit
     }
     renderShiftLightBrightness(preferences.shiftLightBrightness)
+    if (configurationAlwaysOnTop) updateOverlayToggle(configurationAlwaysOnTop, preferences.configurationAlwaysOnTop !== false)
   }
 
   function renderShiftLightBrightness(value) {
@@ -425,6 +428,7 @@
   function setDisplayPreferencesPending(pending) {
     displayPreferencesPending = pending
     for (const input of speedUnitInputs) input.disabled = pending
+    if (configurationAlwaysOnTop) configurationAlwaysOnTop.disabled = pending
     shiftLightBrightness.disabled = pending
     for (const row of displayPreferenceRows) row.classList.toggle('is-pending', pending)
   }
@@ -533,6 +537,27 @@
     telemetryStatusLabel.textContent = presentation.statusLabel
     telemetryRouteCard.dataset.tone = presentation.tone
     telemetryRouteRetry.hidden = !presentation.canRetry
+  }
+
+  async function updateConfigurationAlwaysOnTop(alwaysOnTop, showStatus = true) {
+    if (displayPreferencesPending || !displayPreferencesApi?.normalize || !displayPreferencesApi?.write) return
+    const previous = displayPreferences
+    const next = displayPreferencesApi.normalize({ ...previous, configurationAlwaysOnTop: alwaysOnTop })
+    displayPreferences = next
+    displayPreferencesApi.write(next)
+    renderDisplayPreferences(next)
+    setDisplayPreferencesPending(true)
+    try {
+      await call('set_configuration_always_on_top', { alwaysOnTop: next.configurationAlwaysOnTop })
+      if (showStatus) setStatus(next.configurationAlwaysOnTop ? 'CONFIGURATION ALWAYS ON TOP' : 'CONFIGURATION CAN STAY BEHIND OTHER APPS')
+    } catch (error) {
+      displayPreferences = previous
+      displayPreferencesApi.write(previous)
+      renderDisplayPreferences(previous)
+      setStatus(error.message || 'Unable to update Configuration priority', true)
+    } finally {
+      setDisplayPreferencesPending(false)
+    }
   }
 
   async function retryDirectSource() {
@@ -810,6 +835,10 @@
 
   displayPreferences = displayPreferencesApi?.normalize?.(displayPreferences) || displayPreferences
   renderDisplayPreferences(displayPreferences)
+  void updateConfigurationAlwaysOnTop(displayPreferences.configurationAlwaysOnTop, false)
+  configurationAlwaysOnTop?.addEventListener('click', () => {
+    void updateConfigurationAlwaysOnTop(displayPreferences.configurationAlwaysOnTop === false)
+  })
   for (const input of speedUnitInputs) {
     input.addEventListener('change', () => {
       if (!input.checked) return

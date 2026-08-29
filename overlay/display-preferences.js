@@ -7,7 +7,8 @@
   const STORAGE_KEY = 'fdc.display-preferences.v1'
   const DEFAULTS = Object.freeze({
     speedUnit: 'kmh',
-    shiftLightBrightness: 80
+    shiftLightBrightness: 80,
+    configurationAlwaysOnTop: true
   })
   const MPH_PER_KMH = 0.621371
 
@@ -23,7 +24,8 @@
 
     return {
       speedUnit: candidate.speedUnit === 'mph' ? 'mph' : DEFAULTS.speedUnit,
-      shiftLightBrightness
+      shiftLightBrightness,
+      configurationAlwaysOnTop: candidate.configurationAlwaysOnTop !== false
     }
   }
 

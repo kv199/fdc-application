@@ -2049,6 +2049,16 @@ fn set_display_preferences(
 }
 
 #[tauri::command]
+fn set_configuration_always_on_top(app: AppHandle, always_on_top: bool) -> Result<(), String> {
+    let Some(window) = app.get_webview_window("settings") else {
+        return Err("Configuration window is not available".to_string());
+    };
+    window
+        .set_always_on_top(always_on_top)
+        .map_err(|error| format!("unable to update Configuration window priority: {error}"))
+}
+
+#[tauri::command]
 fn sync_route_status(app: AppHandle) -> Result<(), String> {
     eval_main(&app, "window.HudOverlay?.syncRouteStatus?.()")
 }
@@ -2068,6 +2078,7 @@ fn main() {
             set_hud_visibility,
             set_overlay_visibility,
             set_display_preferences,
+            set_configuration_always_on_top,
             sync_route_status,
             sync_shift_light_status,
             start_direct_source,

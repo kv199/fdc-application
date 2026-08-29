@@ -269,10 +269,19 @@
       <section class="display-settings" aria-labelledby="display-settings-title">
         <div class="settings-section__heading">
           <h2 id="display-settings-title">DISPLAY SETTINGS</h2>
-          <span>SPEED FORMAT</span>
+          <span>WINDOW + SPEED FORMAT</span>
         </div>
 
         <div class="display-settings__list">
+          <div class="display-setting-row" data-display-preference>
+            <div class="display-setting-row__copy">
+              <strong>CONFIGURATION ALWAYS ON TOP</strong>
+              <small>Keep Configuration above other apps and the game.</small>
+            </div>
+            <button id="configuration-always-on-top" class="visibility-toggle" type="button" aria-label="Keep Configuration always on top" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
+          </div>
           <div class="display-setting-row" data-display-preference role="group" aria-labelledby="speed-unit-title">
             <div class="display-setting-row__copy">
               <strong id="speed-unit-title">SPEED UNIT</strong>
