@@ -39,6 +39,7 @@
   const garageGridEmpty = document.getElementById('garage-grid-empty')
   const garageCurrentCar = document.getElementById('garage-current-car')
   const garageCurrentEmpty = document.getElementById('garage-current-empty')
+  const garageCarsCount = document.getElementById('garage-cars-count')
   const garageVehicles = new Map()
   let garageLatestOrdinal = null
   let editingTarget = null
@@ -54,6 +55,29 @@
 
   function garageDisplayName(vehicle) {
     return garageApi?.displayName?.(vehicle) || vehicle?.name || String(vehicle?.carOrdinal || '')
+  }
+
+  function garagePerformanceClass(classLabel) {
+    return String(classLabel || 'unknown').trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, '-') || 'unknown'
+  }
+
+  function appendGaragePerformance(container, vehicle) {
+    if (!vehicle.classLabel && vehicle.pi === null) return
+    const performance = document.createElement('div')
+    performance.className = `garage-performance garage-performance--${garagePerformanceClass(vehicle.classLabel)}`
+    if (vehicle.classLabel) {
+      const classBadge = document.createElement('span')
+      classBadge.className = 'garage-performance__class'
+      classBadge.textContent = vehicle.classLabel
+      performance.append(classBadge)
+    }
+    if (vehicle.pi !== null) {
+      const piBadge = document.createElement('span')
+      piBadge.className = 'garage-performance__pi'
+      piBadge.textContent = String(vehicle.pi)
+      performance.append(piBadge)
+    }
+    container.append(performance)
   }
 
   function mergeGarageVehicle(value) {
@@ -93,10 +117,9 @@
     name.type = 'button'
     name.className = 'garage-current-car__name'
     name.textContent = garageDisplayName(vehicle)
-    const details = document.createElement('span')
+    const details = document.createElement('div')
     details.className = 'garage-current-car__details'
-    details.textContent = [vehicle.classLabel, vehicle.pi].filter(value => value !== null && value !== undefined).join(' · ')
-      || String(vehicle.carOrdinal)
+    appendGaragePerformance(details, vehicle)
     name.addEventListener('click', () => {
       const input = document.createElement('input')
       input.className = 'garage-current-car__input'
@@ -135,10 +158,14 @@
       return left.carOrdinal - right.carOrdinal
     })
     if (garageGridEmpty) garageGridEmpty.hidden = vehicles.length > 0
+    if (garageCarsCount) {
+      garageCarsCount.textContent = `${vehicles.length} ${vehicles.length === 1 ? 'CAR' : 'CARS'}`
+    }
     for (const vehicle of vehicles) {
       const card = document.createElement('article')
       card.className = 'garage-card'
       card.dataset.carOrdinal = String(vehicle.carOrdinal)
+      card.dataset.carClass = vehicle.classLabel || 'unknown'
 
       const image = document.createElement('div')
       image.className = 'garage-card__image'
@@ -153,21 +180,12 @@
 
       const meta = document.createElement('div')
       meta.className = 'garage-card__meta'
-      if (vehicle.classLabel) {
-        const value = document.createElement('span')
-        value.textContent = vehicle.classLabel
-        meta.append(value)
-      }
-      if (vehicle.pi !== null) {
-        const value = document.createElement('span')
-        value.textContent = String(vehicle.pi)
-        meta.append(value)
-      }
+      appendGaragePerformance(meta, vehicle)
       if (vehicle.carOrdinal === garageLatestOrdinal) {
         const latest = document.createElement('span')
         latest.className = 'garage-card__latest'
-        latest.textContent = 'LATEST USED'
-        meta.append(latest)
+        latest.textContent = 'LAST USED'
+        card.append(latest)
       }
 
       content.append(name, meta)

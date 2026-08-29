@@ -9,14 +9,18 @@ Garage is the Configuration tab immediately to the right of HUD.
 
 - **Current car** updates immediately when a new valid vehicle telemetry sample
   is observed. It shows an empty square reserved for a future image, then the
-  saved vehicle name or its numeric car ordinal, class, and performance index.
+  saved vehicle name or its numeric car ordinal and a paired Forza-style class
+  and performance-index badge. It does not carry a Last Used badge.
 - Clicking the current vehicle name or ordinal opens an inline name field. Enter
   or leaving the field saves the name; Escape cancels the edit. An empty saved
   name returns the display to the numeric ordinal.
-- **Saved cars** is a responsive grid with one card per car ordinal. The most
-  recently observed car is first and carries `LATEST USED`. Cards have the same
-  image placeholder, display name or ordinal, current class, and performance
-  index, but they are not editable.
+- **Saved cars** is a responsive grid with one card per car ordinal. Its heading
+  shows the saved count. The most recently observed car is first and carries a
+  `LAST USED` badge in its upper-right corner. Every saved card is as tall as
+  its image placeholder and is not editable.
+- Class and performance index are displayed as the paired Forza-style badge:
+  D is light blue, C yellow, B orange, A red, S1 purple, S2 dark blue, R pink,
+  and X bright green. The class color also marks the left edge of a saved card.
 - UI text uses player-facing values only: for example, `2112`, `S1`, and `900`.
   The `S32` and `U32` field names are internal telemetry contract terms and are
   not rendered in cards.
@@ -92,7 +96,7 @@ garage_sequence
   single monotonic next_sequence value
 ```
 
-The monotonic sequence determines the `LATEST USED` order without relying on
+The monotonic sequence determines the `LAST USED` order without relying on
 second-resolution timestamps. The most recent car and its most recent variant
 are the current Garage state while FDC receives live telemetry; after a restart,
 the saved snapshot displays the last observed state until a new sample arrives.

@@ -283,24 +283,31 @@ h1 {
 }
 
 .garage-card {
+  --garage-rank-color: #a1a1aa;
+  position: relative;
   display: grid;
   grid-template-columns: 82px minmax(0, 1fr);
   min-width: 0;
-  min-height: 104px;
-  border: 1px solid rgb(226 232 240 / 16%);
+  height: 82px;
+  border: 1px solid color-mix(in srgb, var(--garage-rank-color) 34%, rgb(226 232 240 / 16%));
+  border-left: 3px solid var(--garage-rank-color);
   background: rgb(8 10 12 / 65%);
 }
 
 .garage-card__image {
   width: 82px;
   height: 82px;
+  align-self: stretch;
 }
 
 .garage-card__content {
+  position: relative;
   display: grid;
   flex: 1;
+  min-width: 0;
   gap: 9px;
-  padding: 10px;
+  min-height: 0;
+  padding: 9px 92px 9px 10px;
 }
 
 .garage-card__name-label {
@@ -323,24 +330,83 @@ h1 {
   white-space: nowrap;
 }
 
-.garage-card__meta {
+.garage-performance {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  color: #69e83f;
-  font-size: 11px;
+  align-items: stretch;
+  gap: 0;
+  color: #fff;
+  font-size: 13px;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
+  line-height: 1;
 }
 
-.garage-card__meta > span {
-  padding: 3px 5px;
-  background: rgb(105 232 63 / 12%);
+.garage-performance > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 27px;
+  padding: 4px 8px;
+  border: 1px solid rgb(255 255 255 / 12%);
+}
+
+/* Forza-style paired rank + PI badges. */
+.garage-performance__class {
+  border-color: transparent;
+  color: #fff;
+  background: var(--garage-rank-color);
+  font-size: 15px;
+}
+
+.garage-performance__pi {
+  min-width: 48px;
+  border-color: rgb(255 255 255 / 20%);
+  color: #fff;
+  background: #050607;
+  font-size: 14px;
 }
 
 .garage-card__latest {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 3px 5px !important;
+  border: 0 !important;
   color: #facc15 !important;
   background: rgb(250 204 21 / 12%) !important;
+  font-size: 8px !important;
+  letter-spacing: 0.08em;
+}
+
+.garage-card[data-car-class="D"] { --garage-rank-color: #7dd3fc; }
+.garage-card[data-car-class="C"] { --garage-rank-color: #facc15; }
+.garage-card[data-car-class="B"] { --garage-rank-color: #f97316; }
+.garage-card[data-car-class="A"] { --garage-rank-color: #ef4444; }
+.garage-card[data-car-class="S1"] { --garage-rank-color: #c084fc; }
+.garage-card[data-car-class="S2"] { --garage-rank-color: #2563eb; }
+.garage-card[data-car-class="R"] { --garage-rank-color: #ec4899; }
+.garage-card[data-car-class="X"] { --garage-rank-color: #22c55e; }
+
+.garage-performance--d { --garage-rank-color: #7dd3fc; }
+.garage-performance--c { --garage-rank-color: #facc15; }
+.garage-performance--b { --garage-rank-color: #f97316; }
+.garage-performance--a { --garage-rank-color: #ef4444; }
+.garage-performance--s1 { --garage-rank-color: #c084fc; }
+.garage-performance--s2 { --garage-rank-color: #2563eb; }
+.garage-performance--r { --garage-rank-color: #ec4899; }
+.garage-performance--x { --garage-rank-color: #22c55e; }
+
+@media (max-width: 420px) {
+  .garage-card__content {
+    padding-right: 76px;
+  }
+
+  .garage-card__latest {
+    right: 6px;
+  }
 }
 
 .garage-empty {
