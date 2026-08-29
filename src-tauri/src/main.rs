@@ -931,6 +931,7 @@ fn create_garage_tables(transaction: &Transaction<'_>) -> Result<(), String> {
                car_class INTEGER NOT NULL,
                pi INTEGER NOT NULL,
                drivetrain_type INTEGER NOT NULL DEFAULT 0,
+               num_cylinders INTEGER NOT NULL DEFAULT 0,
                first_seen_sequence INTEGER NOT NULL,
                last_seen_sequence INTEGER NOT NULL,
                UNIQUE (game_id, car_ordinal, car_class, pi, drivetrain_type),
@@ -1033,6 +1034,82 @@ fn migrate_garage_variant_schema(connection: &mut Connection) -> Result<(), Stri
     transaction
         .commit()
         .map_err(|error| format!("unable to commit Garage variant schema migration: {error}"))
+}
+
+fn migrate_garage_variant_cylinder_schema(connection: &mut Connection) -> Result<(), String> {
+    if table_has_column(connection, "garage_variants", "num_cylinders")? {
+        let transaction = connection.transaction().map_err(|error| {
+            format!("unable to start Garage variant cylinder schema check: {error}")
+        })?;
+        transaction
+            .execute("UPDATE hud_schema_version SET version = 6", [])
+            .map_err(|error| format!("unable to update Garage schema version: {error}"))?;
+        return transaction.commit().map_err(|error| {
+            format!("unable to commit Garage variant cylinder schema check: {error}")
+        });
+    }
+
+    let transaction = connection.transaction().map_err(|error| {
+        format!("unable to start Garage variant cylinder schema migration: {error}")
+    })?;
+    let orphaned_variant: bool = transaction
+        .query_row(
+            "SELECT EXISTS(
+               SELECT 1
+               FROM garage_variants AS variants
+               LEFT JOIN garage_cars AS cars
+                 ON cars.game_id = variants.game_id
+                AND cars.car_ordinal = variants.car_ordinal
+               WHERE cars.game_id IS NULL
+             )",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("unable to validate Garage variants: {error}"))?;
+    if orphaned_variant {
+        return Err(
+            "unable to migrate Garage variants: one or more rows have no parent car".to_string(),
+        );
+    }
+
+    transaction
+        .execute_batch(
+            "CREATE TABLE garage_variants_new (
+               id INTEGER PRIMARY KEY,
+               game_id TEXT NOT NULL,
+               car_ordinal INTEGER NOT NULL,
+               car_class INTEGER NOT NULL,
+               pi INTEGER NOT NULL,
+               drivetrain_type INTEGER NOT NULL DEFAULT 0,
+               num_cylinders INTEGER NOT NULL DEFAULT 0,
+               first_seen_sequence INTEGER NOT NULL,
+               last_seen_sequence INTEGER NOT NULL,
+               UNIQUE (game_id, car_ordinal, car_class, pi, drivetrain_type),
+               FOREIGN KEY (game_id, car_ordinal)
+                 REFERENCES garage_cars(game_id, car_ordinal)
+                 ON DELETE CASCADE
+             );
+             INSERT INTO garage_variants_new
+               (id, game_id, car_ordinal, car_class, pi, drivetrain_type,
+                num_cylinders, first_seen_sequence, last_seen_sequence)
+             SELECT variants.id, variants.game_id, variants.car_ordinal,
+                    variants.car_class, variants.pi, variants.drivetrain_type,
+                    cars.num_cylinders, variants.first_seen_sequence,
+                    variants.last_seen_sequence
+             FROM garage_variants AS variants
+             JOIN garage_cars AS cars
+               ON cars.game_id = variants.game_id
+              AND cars.car_ordinal = variants.car_ordinal;
+             DROP TABLE garage_variants;
+             ALTER TABLE garage_variants_new RENAME TO garage_variants;",
+        )
+        .map_err(|error| format!("unable to migrate Garage variants: {error}"))?;
+    transaction
+        .execute("UPDATE hud_schema_version SET version = 6", [])
+        .map_err(|error| format!("unable to update Garage schema version: {error}"))?;
+    transaction.commit().map_err(|error| {
+        format!("unable to commit Garage variant cylinder schema migration: {error}")
+    })
 }
 
 fn migrate_shift_light_schema(connection: &Connection) -> Result<(), String> {
@@ -1255,6 +1332,9 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
     if version < 5 {
         migrate_garage_variant_schema(connection)?;
     }
+    if version < 6 {
+        migrate_garage_variant_cylinder_schema(connection)?;
+    }
     Ok(())
 }
 
@@ -1301,6 +1381,8 @@ struct GarageVariant {
     pi: i32,
     drivetrain: i32,
     drivetrain_type: i32,
+    cylinders: i32,
+    num_cylinders: i32,
     first_seen_sequence: i64,
     last_seen_sequence: i64,
     is_current: bool,
@@ -1412,7 +1494,7 @@ fn load_garage_snapshot_from_connection(connection: &Connection) -> Result<Garag
 
     let mut variant_statement = connection
         .prepare(
-            "SELECT id, car_class, pi, drivetrain_type,
+            "SELECT id, car_class, pi, drivetrain_type, num_cylinders,
                     first_seen_sequence, last_seen_sequence
              FROM garage_variants
              WHERE game_id = 'fh6' AND car_ordinal = ?1
@@ -1437,8 +1519,9 @@ fn load_garage_snapshot_from_connection(connection: &Connection) -> Result<Garag
                     row.get::<_, i32>(1)?,
                     row.get::<_, i32>(2)?,
                     row.get::<_, i32>(3)?,
-                    row.get::<_, i64>(4)?,
+                    row.get::<_, i32>(4)?,
                     row.get::<_, i64>(5)?,
+                    row.get::<_, i64>(6)?,
                 ))
             })
             .map_err(|error| format!("unable to read Garage variants: {error}"))?
@@ -1446,7 +1529,9 @@ fn load_garage_snapshot_from_connection(connection: &Connection) -> Result<Garag
             .map_err(|error| format!("unable to decode Garage variants: {error}"))?;
         let current_variant_id = variants.first().map(|variant| variant.0);
         let mut snapshot_variants = Vec::with_capacity(variants.len());
-        for (id, class, pi, drivetrain, first_seen_sequence, last_seen_sequence) in variants {
+        for (id, class, pi, drivetrain, cylinders, first_seen_sequence, last_seen_sequence) in
+            variants
+        {
             snapshot_variants.push(GarageVariant {
                 id,
                 class,
@@ -1454,6 +1539,8 @@ fn load_garage_snapshot_from_connection(connection: &Connection) -> Result<Garag
                 pi,
                 drivetrain,
                 drivetrain_type: drivetrain,
+                cylinders,
+                num_cylinders: cylinders,
                 first_seen_sequence,
                 last_seen_sequence,
                 is_current: Some(id) == current_variant_id,
@@ -1530,15 +1617,17 @@ fn record_garage_vehicle_in_connection(
         .execute(
             "INSERT INTO garage_variants
                (game_id, car_ordinal, car_class, pi, drivetrain_type,
-                first_seen_sequence, last_seen_sequence)
-             VALUES ('fh6', ?1, ?2, ?3, ?4, ?5, ?5)
+                num_cylinders, first_seen_sequence, last_seen_sequence)
+             VALUES ('fh6', ?1, ?2, ?3, ?4, ?5, ?6, ?6)
              ON CONFLICT (game_id, car_ordinal, car_class, pi, drivetrain_type) DO UPDATE SET
+               num_cylinders = excluded.num_cylinders,
                last_seen_sequence = excluded.last_seen_sequence",
             params![
                 vehicle.ordinal,
                 vehicle.class,
                 vehicle.pi,
                 vehicle.drivetrain,
+                vehicle.cylinders,
                 sequence
             ],
         )
@@ -2159,7 +2248,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
         for table in [
             "shift_light_cars",
             "shift_light_variants",
@@ -2207,6 +2296,7 @@ mod tests {
         assert_eq!(car.last_seen_sequence, 2);
         assert_eq!(car.variants.len(), 2);
         assert_eq!((car.variants[0].class, car.variants[0].pi), (9, 700));
+        assert_eq!(car.variants[0].cylinders, 6);
         assert!(car.variants[0].is_current);
         assert!(!car.variants[1].is_current);
     }
@@ -2247,6 +2337,7 @@ mod tests {
             (8, 600, 2)
         );
         assert_eq!(car.variants[0].drivetrain_type, 2);
+        assert_eq!(car.variants[0].cylinders, 6);
         assert!(car.variants[0].is_current);
         assert_eq!(
             (
@@ -2257,7 +2348,51 @@ mod tests {
             (8, 600, 1)
         );
         assert_eq!(car.variants[1].drivetrain_type, 1);
+        assert_eq!(car.variants[1].cylinders, 4);
         assert!(!car.variants[1].is_current);
+    }
+
+    #[test]
+    fn garage_repeat_observation_updates_variant_cylinders_without_changing_identity() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let first = GarageVehicle {
+            ordinal: 260,
+            class: 8,
+            pi: 600,
+            car_group: 42,
+            drivetrain: 1,
+            cylinders: 4,
+        };
+        let first_snapshot = record_garage_vehicle_in_connection(&mut connection, &first).unwrap();
+        let first_variant_id = first_snapshot.cars[0].variants[0].id;
+
+        let second = GarageVehicle {
+            ordinal: 260,
+            class: 8,
+            pi: 600,
+            car_group: 43,
+            drivetrain: 1,
+            cylinders: 6,
+        };
+        let snapshot = record_garage_vehicle_in_connection(&mut connection, &second).unwrap();
+
+        assert_eq!(snapshot.cars[0].variants.len(), 1);
+        assert_eq!(snapshot.cars[0].variants[0].id, first_variant_id);
+        assert_eq!(snapshot.cars[0].variants[0].cylinders, 6);
+        assert_eq!(snapshot.cars[0].cylinders, 6);
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT num_cylinders FROM garage_variants
+                     WHERE game_id = 'fh6' AND car_ordinal = 260
+                       AND car_class = 8 AND pi = 600 AND drivetrain_type = 1",
+                    [],
+                    |row| row.get::<_, i32>(0),
+                )
+                .unwrap(),
+            6
+        );
     }
 
     #[test]
@@ -2360,7 +2495,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
         assert_eq!(
             connection
                 .query_row("SELECT next_sequence FROM garage_sequence", [], |row| {
@@ -2422,16 +2557,18 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 5);
-        let (drivetrain, first_seen_sequence, last_seen_sequence): (i32, i64, i64) = connection
-            .query_row(
-                "SELECT drivetrain_type, first_seen_sequence, last_seen_sequence
+        assert_eq!(version, 6);
+        let (drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (i32, i32, i64, i64) =
+            connection
+                .query_row(
+                    "SELECT drivetrain_type, num_cylinders, first_seen_sequence, last_seen_sequence
                  FROM garage_variants WHERE id = 77",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-            )
-            .unwrap();
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )
+                .unwrap();
         assert_eq!(drivetrain, 2);
+        assert_eq!(cylinders, 6);
         assert_eq!((first_seen_sequence, last_seen_sequence), (1, 2));
 
         let migrated = load_garage_snapshot_from_connection(&connection).unwrap();
@@ -2439,6 +2576,91 @@ mod tests {
         assert_eq!(migrated.cars[0].variants[0].drivetrain, 2);
         assert_eq!(migrated.cars[0].drivetrain, 2);
         assert_eq!(migrated.cars[0].cylinders, 6);
+    }
+
+    #[test]
+    fn garage_variant_cylinder_schema_migrates_v5_rows_to_parent_cylinders() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 CREATE TABLE hud_schema_version (version INTEGER NOT NULL);
+                 INSERT INTO hud_schema_version VALUES (5);
+                 CREATE TABLE garage_cars (
+                   game_id TEXT NOT NULL,
+                   car_ordinal INTEGER NOT NULL,
+                   car_group INTEGER NOT NULL DEFAULT 0,
+                   drivetrain_type INTEGER NOT NULL DEFAULT 0,
+                   num_cylinders INTEGER NOT NULL DEFAULT 0,
+                   display_name TEXT,
+                   first_seen_sequence INTEGER NOT NULL,
+                   last_seen_sequence INTEGER NOT NULL,
+                   PRIMARY KEY (game_id, car_ordinal)
+                 );
+                 INSERT INTO garage_cars
+                   (game_id, car_ordinal, car_group, drivetrain_type, num_cylinders,
+                    first_seen_sequence, last_seen_sequence)
+                 VALUES ('fh6', 260, 42, 2, 6, 1, 3);
+                 CREATE TABLE garage_variants (
+                   id INTEGER PRIMARY KEY,
+                   game_id TEXT NOT NULL,
+                   car_ordinal INTEGER NOT NULL,
+                   car_class INTEGER NOT NULL,
+                   pi INTEGER NOT NULL,
+                   drivetrain_type INTEGER NOT NULL DEFAULT 0,
+                   first_seen_sequence INTEGER NOT NULL,
+                   last_seen_sequence INTEGER NOT NULL,
+                   UNIQUE (game_id, car_ordinal, car_class, pi, drivetrain_type),
+                   FOREIGN KEY (game_id, car_ordinal)
+                     REFERENCES garage_cars(game_id, car_ordinal)
+                     ON DELETE CASCADE
+                 );
+                 INSERT INTO garage_variants
+                   (id, game_id, car_ordinal, car_class, pi, drivetrain_type,
+                    first_seen_sequence, last_seen_sequence)
+                 VALUES (77, 'fh6', 260, 8, 600, 2, 1, 2);",
+            )
+            .unwrap();
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        let version: i32 = connection
+            .query_row("SELECT version FROM hud_schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 6);
+        let (id, drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (
+            i64,
+            i32,
+            i32,
+            i64,
+            i64,
+        ) = connection
+            .query_row(
+                "SELECT id, drivetrain_type, num_cylinders,
+                        first_seen_sequence, last_seen_sequence
+                 FROM garage_variants WHERE id = 77",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(id, 77);
+        assert_eq!(drivetrain, 2);
+        assert_eq!(cylinders, 6);
+        assert_eq!((first_seen_sequence, last_seen_sequence), (1, 2));
+
+        let migrated = load_garage_snapshot_from_connection(&connection).unwrap();
+        assert_eq!(migrated.cars[0].variants[0].cylinders, 6);
     }
 
     #[test]

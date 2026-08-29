@@ -28,7 +28,10 @@ test('Configuration exposes HUD, Garage, Shift Light and Settings tabs', () => {
   assert.match(settingsJs, /garage-current-car__group/)
   assert.match(settingsJs, /garage-current-car__drivetrain/)
   assert.match(settingsJs, /garage-current-car__cylinders/)
+  assert.match(settingsJs, /details\.append\(garageCurrentVariantsToggle\)/)
   assert.match(settingsJs, /garageVariantsFor/)
+  assert.match(settingsJs, /garage-variant-row__cylinders/)
+  assert.match(settingsJs, /\?\? vehicle\?\.cylinders/)
   assert.match(settingsJs, /garage-current-variants-toggle/)
   assert.match(settingsJs, /garageCurrentVariantsToggle\?\.addEventListener\('click', toggleGarageVariants\)/)
   assert.match(settingsJs, /event\.key !== 'Escape'.*garage-current-car__input/)
@@ -39,7 +42,10 @@ test('Configuration exposes HUD, Garage, Shift Light and Settings tabs', () => {
   assert.match(settingsJs, /latest\.textContent = 'LAST USED'/)
   assert.doesNotMatch(settingsJs, /input\.className = 'garage-card__name'/)
   assert.match(settingsCss, /\.garage-variants\s*\{[\s\S]*grid-auto-rows:\s*36px[\s\S]*max-height:\s*432px[\s\S]*overflow-y:\s*auto/)
+  assert.match(settingsCss, /\.garage-variants\s*\{[\s\S]*width:\s*100%[\s\S]*border:\s*1px solid/)
+  assert.match(settingsCss, /\.garage-variant-row\s*\{[\s\S]*justify-content:\s*flex-start/)
   assert.match(settingsCss, /\.garage-variant-row\s*\{[\s\S]*border-left:\s*3px solid var\(--garage-rank-color\)/)
+  assert.doesNotMatch(settingsCss, /\.garage-current-variants-toggle\s*\{[^}]*position:\s*absolute/)
 })
 
 test('Engine telemetry keeps the compact panel order and one visibility toggle', () => {

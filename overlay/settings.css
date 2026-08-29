@@ -211,7 +211,6 @@ h1 {
   grid-template-columns: 124px minmax(0, 1fr);
   align-items: center;
   gap: 16px;
-  padding-bottom: 38px;
 }
 
 .garage-current-car__image,
@@ -279,9 +278,7 @@ h1 {
 }
 
 .garage-current-variants-toggle {
-  position: absolute;
-  right: 0;
-  bottom: 0;
+  flex: 0 0 auto;
   min-height: 28px;
   padding: 5px 9px;
   border: 1px solid rgb(105 232 63 / 42%);
@@ -303,11 +300,16 @@ h1 {
 .garage-variants {
   display: grid;
   grid-auto-rows: 36px;
+  width: 100%;
+  max-width: 100%;
   gap: 8px;
   max-height: 432px;
   margin-top: 12px;
   overflow-y: auto;
-  padding-right: 3px;
+  padding: 10px;
+  border: 1px solid rgb(226 232 240 / 18%);
+  background: rgb(226 232 240 / 5%);
+  box-shadow: inset 0 0 0 1px rgb(8 10 12 / 40%);
 }
 
 .garage-variants[hidden] {
@@ -318,7 +320,7 @@ h1 {
   --garage-rank-color: #a1a1aa;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   min-height: 0;
   padding: 3px 8px;
@@ -336,7 +338,8 @@ h1 {
 .garage-variant-row[data-car-class="R"] { --garage-rank-color: #ec4899; }
 .garage-variant-row[data-car-class="X"] { --garage-rank-color: #22c55e; }
 
-.garage-variant-row__drivetrain {
+.garage-variant-row__drivetrain,
+.garage-variant-row__cylinders {
   display: inline-flex;
   align-items: center;
   min-height: 27px;

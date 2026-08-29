@@ -122,6 +122,14 @@
       : []
   }
 
+  function garageVariantCylinders(variant, vehicle) {
+    const cylinders = variant?.cylinders
+      ?? variant?.numCylinders
+      ?? variant?.num_cylinders
+      ?? vehicle?.cylinders
+    return cylinders === null || cylinders === undefined ? null : cylinders
+  }
+
   function renderGarageVariants(vehicle) {
     if (!garageCurrentVariants || !garageCurrentVariantsToggle) return
     const isCurrentVehicle = garageVariantsOrdinal === vehicle?.carOrdinal
@@ -148,6 +156,13 @@
         drivetrainValue.className = 'garage-variant-row__drivetrain'
         drivetrainValue.textContent = drivetrain
         row.append(drivetrainValue)
+      }
+      const cylinders = garageVariantCylinders(variant, vehicle)
+      if (cylinders !== null) {
+        const cylindersValue = document.createElement('span')
+        cylindersValue.className = 'garage-variant-row__cylinders'
+        cylindersValue.textContent = `${cylinders} CYL`
+        row.append(cylindersValue)
       }
       garageCurrentVariants.append(row)
     }
@@ -215,6 +230,7 @@
       cylinders.textContent = `${vehicle.cylinders} CYL`
       details.append(cylinders)
     }
+    details.append(garageCurrentVariantsToggle)
     const carGroup = vehicle.carGroup === null || vehicle.carGroup === undefined
       ? null
       : Number(vehicle.carGroup)
@@ -252,7 +268,7 @@
       input.addEventListener('blur', finish, { once: true })
     })
     content.append(name, ...(group ? [group] : []), details)
-    garageCurrentCar.append(image, content, garageCurrentVariantsToggle)
+    garageCurrentCar.append(image, content)
     renderGarageVariants(vehicle)
   }
 

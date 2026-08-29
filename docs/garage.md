@@ -13,12 +13,14 @@ Garage is the Configuration tab immediately to the right of HUD.
   value is displayed below that name as `GROUP <value>`, followed by a paired
   Forza-style class and performance-index badge, drivetrain label, and cylinder
   count. It does not carry a Last Used badge.
-- The current-car block has a `VIEW` button in its lower-right corner. It
-  changes to `HIDE` and reveals the current ordinal's saved configurations
-  directly below the block. Escape closes that list, except while the inline
-  name field owns Escape to cancel its edit. Each configuration row uses the
-  Saved Cars border style and contains a Forza-style class/PI badge plus its
-  recorded drivetrain. The list shows ten rows before it scrolls vertically.
+- The current-car block has a `VIEW` button in the same detail row as its
+  class/PI badge, drivetrain, and cylinder count. It changes to `HIDE` and
+  reveals a separate framed configuration area directly below the block.
+  Escape closes that area, except while the inline name field owns Escape to
+  cancel its edit. Each configuration row uses the Saved Cars border style and
+  shows, from left to right, a Forza-style class/PI badge, its recorded
+  drivetrain, and its recorded cylinder count. The list shows ten rows before
+  it scrolls vertically.
 - Clicking the current vehicle name or ordinal opens an inline name field. Enter
   or leaving the field saves the name; Escape cancels the edit. An empty saved
   name returns the display to the numeric ordinal.
@@ -72,13 +74,15 @@ have multiple observed configurations. A configuration is the distinct
 combination of `S32 CarClass`, `S32 CarPerformanceIndex`, and
 `S32 DrivetrainType` for that ordinal.
 
-`S32 NumCylinders` and `U32 CarGroup` are stored with the parent vehicle. Their
-latest observed values replace earlier values for the same ordinal.
-`S32 DrivetrainType` is retained both as the latest parent-vehicle value and as
-part of each configuration identity. Garage does not retain a history of
-cylinder count or CarGroup. It also cannot detect changes that leave its full
-configuration identity unchanged, such as a weight reduction with unchanged
-class, PI, and drivetrain.
+`U32 CarGroup` is stored with the parent vehicle and its latest observed value
+replaces earlier values for the same ordinal. `S32 DrivetrainType` is retained
+both as the latest parent-vehicle value and as part of each configuration
+identity. `S32 NumCylinders` is retained as the latest parent-vehicle value and
+as the latest observed value for each configuration, but it does not create a
+new configuration. Garage does not retain a history of CarGroup or prior
+cylinder counts for the same configuration. It also cannot detect changes that
+leave its full configuration identity unchanged, such as a weight reduction
+with unchanged class, PI, and drivetrain.
 
 The browser maps known numeric class values to `D`, `C`, `B`, `A`, `S1`, `S2`,
 `R`, and `X`. An unrecognized numeric value remains visible as its number
@@ -110,7 +114,7 @@ not render a second Shift Light status or profile control.
 ## Local SQLite state
 
 Garage uses the existing FDC application-data database, `fdc.sqlite`, and
-schema version 5.
+schema version 6.
 
 ```text
 garage_cars
@@ -125,6 +129,7 @@ garage_cars
 garage_variants
   id
   game_id + car_ordinal + car_class + pi + drivetrain_type unique
+  num_cylinders                          latest observed for this configuration
   first_seen_sequence
   last_seen_sequence
 
@@ -161,5 +166,5 @@ Garage changes require the standard runtime release verification cycle. Focused
 coverage includes packet decoding for `CarGroup`, schema migration,
 one-car/multiple-configuration persistence including drivetrain, latest-used
 ordering, renaming, configuration-list keyboard behavior and scrolling, UI
-class formatting, Shift Light summary aggregation, telemetry deduplication, and
-Configuration tab structure.
+class formatting and detail order, Shift Light summary aggregation, telemetry
+deduplication, and Configuration tab structure.

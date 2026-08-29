@@ -99,6 +99,7 @@
     const numericClass = Number(rawClass)
     const pi = finiteNonNegative(variant.pi ?? variant.performanceIndex)
     const drivetrain = finiteNonNegative(variant.drivetrain ?? variant.drivetrainType ?? variant.drivetrain_type)
+    const cylinders = finiteNonNegative(variant.cylinders ?? variant.numCylinders ?? variant.num_cylinders)
     const rawId = finitePositive(variant.id)
     return {
       id: rawId === null ? null : Math.round(rawId),
@@ -107,6 +108,7 @@
       pi: pi === null ? null : Math.round(pi),
       drivetrain: drivetrain === null ? null : Math.round(drivetrain),
       drivetrainLabel: drivetrainLabel(drivetrain),
+      cylinders: cylinders === null ? null : Math.round(cylinders),
       firstSeenSequence: nonNegativeInteger(variant.firstSeenSequence ?? variant.first_seen_sequence),
       lastSeenSequence: nonNegativeInteger(variant.lastSeenSequence ?? variant.last_seen_sequence),
       isCurrent: variant.isCurrent === true || variant.is_current === true,
