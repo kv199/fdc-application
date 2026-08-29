@@ -24,6 +24,8 @@ async function flushPromises() {
 
 test('normalizes native and telemetry vehicle identity without inventing values', () => {
   assert.equal(classLabel(4), 'S1')
+  assert.equal(classLabel(6), 'R')
+  assert.equal(classLabel(7), 'X')
   assert.equal(classLabel(99), '99')
   assert.equal(classLabel(null), null)
   assert.deepEqual(vehicleFromTelemetry(frame()), {

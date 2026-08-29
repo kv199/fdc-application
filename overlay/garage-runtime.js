@@ -2,7 +2,7 @@
   'use strict'
 
   const GARAGE_EVENT = 'hud_garage'
-  const CLASS_LABELS = ['D', 'C', 'B', 'A', 'S1', 'S2', 'X']
+  const CLASS_LABELS = ['D', 'C', 'B', 'A', 'S1', 'S2', 'R', 'X']
 
   function finitePositive(value) {
     const number = Number(value)

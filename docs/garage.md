@@ -68,8 +68,8 @@ parent vehicle. Their latest observed values replace earlier values for the same
 ordinal. Garage does not retain a history of those three metadata fields.
 
 The browser maps known numeric class values to `D`, `C`, `B`, `A`, `S1`, `S2`,
-and `X`. An unrecognized numeric value remains visible as its number rather
-than being guessed.
+`R`, and `X`. An unrecognized numeric value remains visible as its number
+rather than being guessed.
 
 ## Local SQLite state
 
