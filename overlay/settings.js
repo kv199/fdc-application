@@ -64,6 +64,9 @@
   const eventRouteType = document.getElementById('event-route-type')
   const eventMode = document.getElementById('event-mode')
   const eventNotes = document.getElementById('event-notes')
+  const eventsDiscardDialog = document.getElementById('events-discard-dialog')
+  const eventsDiscardYes = document.getElementById('events-discard-yes')
+  const eventsDiscardNo = document.getElementById('events-discard-no')
   const eventsDetailBack = document.getElementById('events-detail-back')
   const eventsDetailTitle = document.getElementById('events-detail-title')
   const eventsDetailSummary = document.getElementById('events-detail-summary')
@@ -75,6 +78,7 @@
   let eventsView = 'library'
   let currentEventId = null
   let eventsCreateOpen = false
+  let eventsDiscardConfirmOpen = false
   let editingTarget = null
   let shiftLightResetPending = false
   let displayPreferencesPending = false
@@ -533,6 +537,33 @@
 
   function resetEventCreateForm() {
     eventsCreateForm?.reset()
+  }
+
+  function eventCreateFormHasContent() {
+    return [eventName, eventMode, eventRouteType, eventClass, eventNotes]
+      .some(field => field?.value.trim())
+  }
+
+  function setEventsDiscardConfirmOpen(open) {
+    eventsDiscardConfirmOpen = Boolean(open)
+    if (eventsDiscardDialog) eventsDiscardDialog.hidden = !eventsDiscardConfirmOpen
+    if (eventsDiscardConfirmOpen) eventsDiscardNo?.focus()
+  }
+
+  function closeEventsCreate() {
+    setEventsDiscardConfirmOpen(false)
+    resetEventCreateForm()
+    setEventsCreateOpen(false)
+    eventsCreateToggle?.focus()
+  }
+
+  function requestEventsCreateClose() {
+    if (!eventsCreateOpen || eventsDiscardConfirmOpen) return
+    if (eventCreateFormHasContent()) {
+      setEventsDiscardConfirmOpen(true)
+      return
+    }
+    closeEventsCreate()
   }
 
   function setEventsView(view) {
@@ -1286,10 +1317,15 @@
     )
   })
 
-  eventsCreateToggle?.addEventListener('click', () => setEventsCreateOpen(!eventsCreateOpen))
-  eventsCreateCancel?.addEventListener('click', () => {
-    resetEventCreateForm()
-    setEventsCreateOpen(false)
+  eventsCreateToggle?.addEventListener('click', () => {
+    if (eventsCreateOpen) requestEventsCreateClose()
+    else setEventsCreateOpen(true)
+  })
+  eventsCreateCancel?.addEventListener('click', requestEventsCreateClose)
+  eventsDiscardYes?.addEventListener('click', closeEventsCreate)
+  eventsDiscardNo?.addEventListener('click', () => {
+    setEventsDiscardConfirmOpen(false)
+    eventsCreateCancel?.focus()
   })
   eventsCreateForm?.addEventListener('submit', event => {
     event.preventDefault()
@@ -1304,6 +1340,17 @@
     if (event.key !== 'Escape') return
     if (event.target?.classList?.contains('garage-current-car__input')
       || event.target?.classList?.contains('events-detail-view__title-input')) return
+    if (eventsDiscardConfirmOpen) {
+      event.preventDefault()
+      setEventsDiscardConfirmOpen(false)
+      eventsCreateCancel?.focus()
+      return
+    }
+    if (eventsView === 'library' && eventsCreateOpen) {
+      event.preventDefault()
+      requestEventsCreateClose()
+      return
+    }
     if (eventsView === 'detail') {
       event.preventDefault()
       closeEventDetail()

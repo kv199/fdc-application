@@ -203,8 +203,6 @@
             <h2 id="events-title">EVENTS</h2>
             <button id="events-create-toggle" class="settings-button settings-button--primary" type="button" aria-expanded="false" aria-controls="events-create-area">CREATE</button>
           </div>
-        <div id="events-grid" class="events-grid" aria-live="polite"></div>
-        <p id="events-grid-empty" class="garage-empty">No events recorded yet.</p>
         <section id="events-create-area" class="events-create-area" aria-labelledby="events-create-title" hidden>
           <div class="events-create-area__heading">
             <h3 id="events-create-title">NEW EVENT</h3>
@@ -259,6 +257,18 @@
               <button id="events-create-submit" class="settings-button settings-button--primary" type="submit">CREATE EVENT</button>
             </div>
           </form>
+        </section>
+        <div id="events-grid" class="events-grid" aria-live="polite"></div>
+        <p id="events-grid-empty" class="garage-empty">No events recorded yet.</p>
+        <section id="events-discard-dialog" class="events-discard-dialog" role="alertdialog" aria-modal="true" aria-labelledby="events-discard-title" aria-describedby="events-discard-message" hidden>
+          <div class="events-discard-dialog__content">
+            <h3 id="events-discard-title">DISCARD EVENT?</h3>
+            <p id="events-discard-message">You have unsaved changes. Close this form?</p>
+            <div class="events-discard-dialog__actions">
+              <button id="events-discard-yes" class="settings-button events-discard-dialog__yes" type="button">YES</button>
+              <button id="events-discard-no" class="settings-button events-discard-dialog__no" type="button">NO</button>
+            </div>
+          </div>
         </section>
       </div>
 

@@ -639,7 +639,7 @@ h1 {
 }
 
 .events-create-area {
-  margin-top: 24px;
+  margin-bottom: 24px;
   padding: 16px;
   border: 1px solid rgb(105 232 63 / 35%);
   background: rgb(105 232 63 / 5%);
@@ -727,6 +727,69 @@ h1 {
 
 .events-form__actions .settings-button {
   min-width: 120px;
+}
+
+.events-discard-dialog[hidden] {
+  display: none;
+}
+
+.events-discard-dialog {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 62%);
+}
+
+.events-discard-dialog__content {
+  width: min(100%, 390px);
+  padding: 18px;
+  border: 1px solid rgb(226 232 240 / 24%);
+  background: #090b0e;
+  box-shadow: 0 20px 50px rgb(0 0 0 / 55%);
+}
+
+.events-discard-dialog__content h3 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+}
+
+.events-discard-dialog__content p {
+  margin: 10px 0 18px;
+  color: #a1a1aa;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.events-discard-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.events-discard-dialog__no {
+  border-color: #69e83f;
+  color: #090b0e;
+  background: #69e83f;
+}
+
+.events-discard-dialog__no:hover {
+  background: #88f166;
+}
+
+.events-discard-dialog__yes {
+  border-color: #ef4444;
+  color: #fecaca;
+  background: transparent;
+}
+
+.events-discard-dialog__yes:hover {
+  color: #fff;
+  background: #ef4444;
 }
 
 .events-detail-view {
