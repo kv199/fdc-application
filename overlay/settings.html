@@ -39,6 +39,7 @@
     <div class="settings-tabs" role="tablist" aria-label="Settings categories">
       <button id="hud-tab" class="settings-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="hud-panel" data-settings-tab="hud">HUD</button>
       <button id="garage-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="garage-panel" tabindex="-1" data-settings-tab="garage">GARAGE</button>
+      <button id="events-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="events-panel" tabindex="-1" data-settings-tab="events">EVENTS</button>
       <button id="shift-light-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="shift-light-panel" tabindex="-1" data-settings-tab="shift-light">SHIFT LIGHT</button>
       <button id="settings-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel" tabindex="-1" data-settings-tab="settings">SETTINGS</button>
     </div>
@@ -193,6 +194,90 @@
         </div>
         <div id="garage-grid" class="garage-grid" aria-live="polite"></div>
         <p id="garage-grid-empty" class="garage-empty" hidden>No cars recorded yet.</p>
+      </section>
+    </section>
+
+    <section id="events-panel" class="settings-tab-panel events-panel" role="tabpanel" aria-labelledby="events-tab" data-settings-panel="events" hidden>
+      <div id="events-library-view" class="events-view" aria-live="polite">
+        <div class="settings-section__heading events-section-heading">
+          <div>
+            <h2 id="events-title">EVENTS</h2>
+            <span>LOCAL EVENT LIBRARY</span>
+          </div>
+          <button id="events-create-toggle" class="settings-button settings-button--primary" type="button" aria-expanded="false" aria-controls="events-create-area">CREATE</button>
+        </div>
+        <div id="events-grid" class="events-grid" aria-live="polite"></div>
+        <p id="events-grid-empty" class="garage-empty">No events recorded yet.</p>
+        <section id="events-create-area" class="events-create-area" aria-labelledby="events-create-title" hidden>
+          <div class="events-create-area__heading">
+            <h3 id="events-create-title">NEW EVENT</h3>
+            <button id="events-create-cancel" class="settings-button" type="button">CANCEL</button>
+          </div>
+          <form id="events-create-form" class="events-form">
+            <label class="events-form__field events-form__field--name">
+              <span>EVENT NAME</span>
+              <input id="event-name" name="name" type="text" autocomplete="off" required>
+            </label>
+            <label class="events-form__field">
+              <span>CLASS</span>
+              <select id="event-class" name="class" required>
+                <option value="">SELECT CLASS</option>
+                <option value="Any">ANY</option>
+                <option value="D">D</option>
+                <option value="C">C</option>
+                <option value="B">B</option>
+                <option value="A">A</option>
+                <option value="S1">S1</option>
+                <option value="S2">S2</option>
+                <option value="R">R</option>
+                <option value="X">X</option>
+              </select>
+            </label>
+            <label class="events-form__field">
+              <span>ROUTE TYPE</span>
+              <select id="event-route-type" name="routeType" required>
+                <option value="">SELECT ROUTE</option>
+                <option value="Asphalt">ASPHALT</option>
+                <option value="Rally">RALLY</option>
+                <option value="Offroad">OFFROAD</option>
+              </select>
+            </label>
+            <label class="events-form__field">
+              <span>MODE</span>
+              <select id="event-mode" name="mode" required>
+                <option value="">SELECT MODE</option>
+                <option value="Any">ANY</option>
+                <option value="Rivals">RIVALS</option>
+                <option value="Online">ONLINE</option>
+                <option value="EventLab">EVENTLAB</option>
+                <option value="Official">OFFICIAL</option>
+                <option value="Blueprint">BLUEPRINT</option>
+              </select>
+            </label>
+            <label class="events-form__field events-form__field--notes">
+              <span>NOTES <small>OPTIONAL</small></span>
+              <textarea id="event-notes" name="notes" rows="3"></textarea>
+            </label>
+            <div class="events-form__actions">
+              <button id="events-create-submit" class="settings-button settings-button--primary" type="submit">CREATE EVENT</button>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      <section id="events-detail-view" class="events-detail-view" aria-labelledby="events-detail-title" hidden>
+        <div class="events-detail-view__header">
+          <button id="events-detail-back" class="settings-button" type="button">EVENTS</button>
+          <div class="events-detail-view__actions">
+            <button id="events-detail-archive" class="settings-button" type="button">ARCHIVE</button>
+            <button id="events-detail-delete" class="settings-button settings-button--danger" type="button">DELETE</button>
+          </div>
+        </div>
+        <div class="events-detail-view__heading">
+          <button id="events-detail-title" class="events-detail-view__title" type="button">EVENT</button>
+          <p id="events-detail-hint">EMPTY EVENT</p>
+        </div>
+        <article id="events-detail-card" class="events-card events-card--detail"></article>
       </section>
     </section>
 

@@ -202,6 +202,8 @@ dependency manifests have changed.
 
 - [FDC Architecture](docs/architecture.md) — system boundary and runtime data
   flow.
+- [Events](docs/events.md) — local event library, its lifecycle, and Mode
+  colors.
 - [Garage](docs/garage.md) — vehicle identity, local persistence, and
   Configuration behavior.
 - [Asphalt Coach](docs/asphalt-coach.md) — current Coach behavior and

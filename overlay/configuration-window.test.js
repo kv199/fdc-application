@@ -10,10 +10,10 @@ const overlayHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8')
 const tauriConfig = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'tauri.conf.json'), 'utf8')
 
-test('Configuration exposes HUD, Garage, Shift Light and Settings tabs', () => {
+test('Configuration exposes HUD, Garage, Events, Shift Light and Settings tabs', () => {
   const tabs = [...settingsHtml.matchAll(/data-settings-tab="([^"]+)"/g)].map(match => match[1])
 
-  assert.deepEqual(tabs, ['hud', 'garage', 'shift-light', 'settings'])
+  assert.deepEqual(tabs, ['hud', 'garage', 'events', 'shift-light', 'settings'])
   assert.match(settingsHtml, /id="garage-panel"[^>]+data-settings-panel="garage"/)
   assert.match(settingsHtml, /id="garage-grid"[^>]+aria-live="polite"/)
   assert.match(settingsHtml, /id="garage-current-car"/)
@@ -35,7 +35,8 @@ test('Configuration exposes HUD, Garage, Shift Light and Settings tabs', () => {
   assert.match(settingsJs, /\?\? vehicle\?\.cylinders/)
   assert.match(settingsJs, /garage-current-variants-toggle/)
   assert.match(settingsJs, /garageCurrentVariantsToggle\?\.addEventListener\('click', toggleGarageVariants\)/)
-  assert.match(settingsJs, /event\.key !== 'Escape'.*garage-current-car__input/)
+  assert.match(settingsJs, /event\.key !== 'Escape'/)
+  assert.match(settingsJs, /garage-current-car__input/)
   assert.doesNotMatch(settingsJs, /garage-shift-light/)
   assert.doesNotMatch(settingsJs, /Duplicate|COPY|copy/u)
   assert.doesNotMatch(settingsJs, /appendGarageShiftLight/)
@@ -48,6 +49,39 @@ test('Configuration exposes HUD, Garage, Shift Light and Settings tabs', () => {
   assert.match(settingsCss, /\.garage-variant-row\s*\{[\s\S]*border-left:\s*3px solid var\(--garage-rank-color\)/)
   assert.doesNotMatch(settingsCss, /\.garage-current-variants-toggle\s*\{[^}]*position:\s*absolute/)
   assert.match(settingsCss, /\.garage-current-variants-toggle\s*\{[\s\S]*margin-left:\s*auto/)
+})
+
+test('Events keeps the existing navigation and exposes the create/detail flow', () => {
+  assert.match(settingsHtml, /id="events-tab"[^>]+data-settings-tab="events"/)
+  assert.match(settingsHtml, /id="events-panel"[^>]+data-settings-panel="events"/)
+  assert.match(settingsHtml, /id="events-grid"[^>]+aria-live="polite"/)
+  assert.match(settingsHtml, /id="events-create-toggle"[^>]+aria-controls="events-create-area"/)
+  assert.match(settingsHtml, /id="events-create-area"[^>]+hidden/)
+  for (const id of ['event-name', 'event-class', 'event-route-type', 'event-mode', 'event-notes']) {
+    assert.match(settingsHtml, new RegExp(`id="${id}"`))
+  }
+  assert.match(settingsHtml, /id="events-detail-view"[^>]+hidden/)
+  assert.match(settingsHtml, /id="events-detail-title"/)
+  assert.match(settingsHtml, /id="events-detail-archive"/)
+  assert.match(settingsHtml, /id="events-detail-delete"/)
+  assert.match(settingsJs, /call\('create_event', payload\)/)
+  assert.match(settingsJs, /route: eventRouteType\.value/)
+  assert.match(settingsJs, /call\('load_events'\)/)
+  assert.match(settingsJs, /call\('load_event'/)
+  assert.match(settingsJs, /call\('rename_event'/)
+  assert.match(settingsJs, /call\('archive_event'/)
+  assert.match(settingsJs, /call\('delete_event'/)
+  assert.match(settingsJs, /globalScope\.confirm\(/)
+  assert.match(settingsJs, /events-detail-view__title-input/)
+  assert.match(settingsJs, /eventsView === 'detail'/)
+  assert.match(settingsCss, /\.settings-tabs\s*\{[\s\S]*grid-template-columns:\s*repeat\(5,/)
+  assert.match(settingsCss, /\.events-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit/)
+  assert.match(settingsCss, /\.events-card\[data-event-mode="any"\][\s\S]*#f97316/)
+  assert.match(settingsCss, /\.events-card\[data-event-mode="rivals"\][\s\S]*#7dd3fc/)
+  assert.match(settingsCss, /\.events-card\[data-event-mode="online"\][\s\S]*#facc15/)
+  assert.match(settingsCss, /\.events-card\[data-event-mode="eventlab"\][\s\S]*#ffffff/)
+  assert.match(settingsCss, /\.events-card\[data-event-mode="official"\][\s\S]*#ef4444/)
+  assert.match(settingsCss, /\.events-card\[data-event-mode="blueprint"\][\s\S]*#c084fc/)
 })
 
 test('Engine telemetry keeps the compact panel order and one visibility toggle', () => {

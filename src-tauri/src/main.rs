@@ -957,6 +957,37 @@ fn create_garage_tables(transaction: &Transaction<'_>) -> Result<(), String> {
         .map_err(|error| format!("unable to create Garage schema: {error}"))
 }
 
+fn create_event_tables(transaction: &Transaction<'_>) -> Result<(), String> {
+    transaction
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS events (
+               id INTEGER PRIMARY KEY,
+               name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+               class TEXT NOT NULL CHECK (class IN ('Any', 'D', 'C', 'B', 'A', 'S1', 'S2', 'R', 'X')),
+               route TEXT NOT NULL CHECK (route IN ('Asphalt', 'Rally', 'Offroad')),
+               mode TEXT NOT NULL CHECK (mode IN ('Any', 'Rivals', 'Online', 'EventLab', 'Official', 'Blueprint')),
+               notes TEXT,
+               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               archived_at TEXT
+             );",
+        )
+        .map_err(|error| format!("unable to create Events schema: {error}"))
+}
+
+fn migrate_events_schema(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Events schema migration: {error}"))?;
+    create_event_tables(&transaction)?;
+    transaction
+        .execute("UPDATE hud_schema_version SET version = 7", [])
+        .map_err(|error| format!("unable to update Events schema version: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Events schema migration: {error}"))
+}
+
 fn migrate_garage_schema(connection: &mut Connection) -> Result<(), String> {
     let transaction = connection
         .transaction()
@@ -1343,6 +1374,17 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
     if version < 6 {
         migrate_garage_variant_cylinder_schema(connection)?;
     }
+    if version < 7 {
+        migrate_events_schema(connection)?;
+    } else {
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("unable to start Events schema check: {error}"))?;
+        create_event_tables(&transaction)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("unable to commit Events schema check: {error}"))?;
+    }
     Ok(())
 }
 
@@ -1358,6 +1400,260 @@ fn open_shift_light_db<R: Runtime>(app: &AppHandle<R>) -> Result<Connection, Str
         .map_err(|error| format!("unable to open HUD SQLite database: {error}"))?;
     initialize_shift_light_schema(&mut connection)?;
     Ok(connection)
+}
+
+const EVENT_CLASSES: [&str; 9] = ["Any", "D", "C", "B", "A", "S1", "S2", "R", "X"];
+const EVENT_ROUTES: [&str; 3] = ["Asphalt", "Rally", "Offroad"];
+const EVENT_MODES: [&str; 6] = [
+    "Any",
+    "Rivals",
+    "Online",
+    "EventLab",
+    "Official",
+    "Blueprint",
+];
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NewEvent {
+    name: String,
+    class: String,
+    route: String,
+    mode: String,
+    notes: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EventRecord {
+    id: i64,
+    name: String,
+    class: String,
+    route: String,
+    mode: String,
+    notes: Option<String>,
+    created_at: String,
+    updated_at: String,
+    archived_at: Option<String>,
+}
+
+fn validate_event_choice(value: &str, field: &str, allowed: &[&str]) -> Result<(), String> {
+    if allowed.contains(&value) {
+        Ok(())
+    } else {
+        Err(format!("unknown Event {field}"))
+    }
+}
+
+fn normalize_event_input(mut event: NewEvent) -> Result<NewEvent, String> {
+    event.name = event.name.trim().to_string();
+    if event.name.is_empty() {
+        return Err("Event name must not be empty".to_string());
+    }
+    event.class = event.class.trim().to_string();
+    event.route = event.route.trim().to_string();
+    event.mode = event.mode.trim().to_string();
+    event.notes = event
+        .notes
+        .map(|notes| notes.trim().to_string())
+        .filter(|notes| !notes.is_empty());
+    validate_event_choice(&event.class, "class", &EVENT_CLASSES)?;
+    validate_event_choice(&event.route, "route", &EVENT_ROUTES)?;
+    validate_event_choice(&event.mode, "mode", &EVENT_MODES)?;
+    Ok(event)
+}
+
+fn event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EventRecord> {
+    Ok(EventRecord {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        class: row.get(2)?,
+        route: row.get(3)?,
+        mode: row.get(4)?,
+        notes: row.get(5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
+        archived_at: row.get(8)?,
+    })
+}
+
+fn load_event_from_connection(
+    connection: &Connection,
+    event_id: i64,
+) -> Result<EventRecord, String> {
+    if event_id <= 0 {
+        return Err("Event ID must be positive".to_string());
+    }
+    connection
+        .query_row(
+            "SELECT id, name, class, route, mode, notes,
+                    created_at, updated_at, archived_at
+             FROM events WHERE id = ?1",
+            params![event_id],
+            event_from_row,
+        )
+        .map_err(|error| match error {
+            SqliteError::QueryReturnedNoRows => format!("Event {event_id} does not exist"),
+            other => format!("unable to load Event {event_id}: {other}"),
+        })
+}
+
+fn load_events_from_connection(connection: &Connection) -> Result<Vec<EventRecord>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT id, name, class, route, mode, notes,
+                    created_at, updated_at, archived_at
+             FROM events
+             WHERE archived_at IS NULL
+             ORDER BY created_at DESC, id DESC",
+        )
+        .map_err(|error| format!("unable to prepare Event list query: {error}"))?;
+    statement
+        .query_map([], event_from_row)
+        .map_err(|error| format!("unable to load Events: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("unable to decode Events: {error}"))
+}
+
+fn create_event_in_connection(
+    connection: &mut Connection,
+    event: NewEvent,
+) -> Result<EventRecord, String> {
+    let event = normalize_event_input(event)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Event creation: {error}"))?;
+    transaction
+        .execute(
+            "INSERT INTO events (name, class, route, mode, notes)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                event.name,
+                event.class,
+                event.route,
+                event.mode,
+                event.notes
+            ],
+        )
+        .map_err(|error| format!("unable to create Event: {error}"))?;
+    let event_id = transaction.last_insert_rowid();
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Event creation: {error}"))?;
+    load_event_from_connection(connection, event_id)
+}
+
+fn rename_event_in_connection(
+    connection: &Connection,
+    event_id: i64,
+    name: String,
+) -> Result<EventRecord, String> {
+    if event_id <= 0 {
+        return Err("Event ID must be positive".to_string());
+    }
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("Event name must not be empty".to_string());
+    }
+    let changed = connection
+        .execute(
+            "UPDATE events
+             SET name = ?1, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?2",
+            params![name, event_id],
+        )
+        .map_err(|error| format!("unable to rename Event: {error}"))?;
+    if changed == 0 {
+        return Err(format!("Event {event_id} does not exist"));
+    }
+    load_event_from_connection(connection, event_id)
+}
+
+fn archive_event_in_connection(
+    connection: &Connection,
+    event_id: i64,
+) -> Result<EventRecord, String> {
+    if event_id <= 0 {
+        return Err("Event ID must be positive".to_string());
+    }
+    let changed = connection
+        .execute(
+            "UPDATE events
+             SET archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?1",
+            params![event_id],
+        )
+        .map_err(|error| format!("unable to archive Event: {error}"))?;
+    if changed == 0 {
+        return Err(format!("Event {event_id} does not exist"));
+    }
+    load_event_from_connection(connection, event_id)
+}
+
+fn delete_event_in_connection(connection: &Connection, event_id: i64) -> Result<(), String> {
+    if event_id <= 0 {
+        return Err("Event ID must be positive".to_string());
+    }
+    let changed = connection
+        .execute("DELETE FROM events WHERE id = ?1", params![event_id])
+        .map_err(|error| format!("unable to delete Event: {error}"))?;
+    if changed == 0 {
+        return Err(format!("Event {event_id} does not exist"));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn create_event(
+    app: AppHandle,
+    name: String,
+    class: String,
+    route: String,
+    mode: String,
+    notes: Option<String>,
+) -> Result<EventRecord, String> {
+    let mut connection = open_shift_light_db(&app)?;
+    create_event_in_connection(
+        &mut connection,
+        NewEvent {
+            name,
+            class,
+            route,
+            mode,
+            notes,
+        },
+    )
+}
+
+#[tauri::command]
+fn load_events(app: AppHandle) -> Result<Vec<EventRecord>, String> {
+    let connection = open_shift_light_db(&app)?;
+    load_events_from_connection(&connection)
+}
+
+#[tauri::command]
+fn load_event(app: AppHandle, event_id: i64) -> Result<EventRecord, String> {
+    let connection = open_shift_light_db(&app)?;
+    load_event_from_connection(&connection, event_id)
+}
+
+#[tauri::command]
+fn rename_event(app: AppHandle, event_id: i64, name: String) -> Result<EventRecord, String> {
+    let connection = open_shift_light_db(&app)?;
+    rename_event_in_connection(&connection, event_id, name)
+}
+
+#[tauri::command]
+fn archive_event(app: AppHandle, event_id: i64) -> Result<EventRecord, String> {
+    let connection = open_shift_light_db(&app)?;
+    archive_event_in_connection(&connection, event_id)
+}
+
+#[tauri::command]
+fn delete_event(app: AppHandle, event_id: i64) -> Result<(), String> {
+    let connection = open_shift_light_db(&app)?;
+    delete_event_in_connection(&connection, event_id)
 }
 
 #[derive(Clone, Deserialize)]
@@ -2148,6 +2444,12 @@ fn main() {
             register_shift_light_variant,
             reset_shift_light_profiles,
             reset_shift_light,
+            create_event,
+            load_events,
+            load_event,
+            rename_event,
+            archive_event,
+            delete_event,
             record_garage_vehicle,
             load_garage_snapshot,
             load_garage,
@@ -2362,7 +2664,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
         for table in [
             "shift_light_cars",
             "shift_light_variants",
@@ -2371,8 +2673,188 @@ mod tests {
             "garage_cars",
             "garage_variants",
             "garage_sequence",
+            "events",
         ] {
             assert!(table_exists(&connection, table).unwrap(), "missing {table}");
+        }
+    }
+
+    fn test_event(
+        name: &str,
+        class: &str,
+        route: &str,
+        mode: &str,
+        notes: Option<&str>,
+    ) -> NewEvent {
+        NewEvent {
+            name: name.to_string(),
+            class: class.to_string(),
+            route: route.to_string(),
+            mode: mode.to_string(),
+            notes: notes.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn events_migrate_from_v6_without_touching_existing_tables() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE hud_schema_version (version INTEGER NOT NULL);
+                 INSERT INTO hud_schema_version VALUES (6);",
+            )
+            .unwrap();
+        create_shift_light_tables(&connection).unwrap();
+        {
+            let transaction = connection.transaction().unwrap();
+            create_garage_tables(&transaction).unwrap();
+            transaction.commit().unwrap();
+        }
+        connection
+            .execute(
+                "INSERT INTO garage_cars
+                   (game_id, car_ordinal, first_seen_sequence, last_seen_sequence)
+                 VALUES ('fh6', 260, 1, 1)",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO shift_light_cars (game_id, car_ordinal)
+                 VALUES ('fh6', 260)",
+                [],
+            )
+            .unwrap();
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        let version: i32 = connection
+            .query_row("SELECT version FROM hud_schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 7);
+        assert!(table_exists(&connection, "events").unwrap());
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM garage_cars", [], |row| row
+                    .get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM shift_light_cars", [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn events_validate_and_round_trip_with_active_only_list() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        assert!(
+            create_event_in_connection(
+                &mut connection,
+                test_event("   ", "Any", "Asphalt", "Any", None),
+            )
+            .is_err()
+        );
+        for (field, value) in [
+            ("class", "Invalid"),
+            ("route", "Street"),
+            ("mode", "Practice"),
+        ] {
+            let mut event = test_event("Valid", "Any", "Asphalt", "Any", None);
+            match field {
+                "class" => event.class = value.to_string(),
+                "route" => event.route = value.to_string(),
+                "mode" => event.mode = value.to_string(),
+                _ => unreachable!(),
+            }
+            assert!(create_event_in_connection(&mut connection, event).is_err());
+        }
+
+        let created = create_event_in_connection(
+            &mut connection,
+            test_event(
+                "  Club Night  ",
+                "S1",
+                "Rally",
+                "EventLab",
+                Some("  wet route  "),
+            ),
+        )
+        .unwrap();
+        assert_eq!(created.name, "Club Night");
+        assert_eq!(created.class, "S1");
+        assert_eq!(created.route, "Rally");
+        assert_eq!(created.mode, "EventLab");
+        assert_eq!(created.notes.as_deref(), Some("wet route"));
+        assert!(created.archived_at.is_none());
+
+        let detail = load_event_from_connection(&connection, created.id).unwrap();
+        assert_eq!(detail.id, created.id);
+        assert_eq!(detail.name, "Club Night");
+        assert_eq!(load_events_from_connection(&connection).unwrap().len(), 1);
+
+        let renamed =
+            rename_event_in_connection(&connection, created.id, "  Night Sprint  ".to_string())
+                .unwrap();
+        assert_eq!(renamed.name, "Night Sprint");
+
+        let archived = archive_event_in_connection(&connection, created.id).unwrap();
+        assert!(archived.archived_at.is_some());
+        assert!(load_events_from_connection(&connection).unwrap().is_empty());
+        let archived_again = archive_event_in_connection(&connection, created.id).unwrap();
+        assert_eq!(archived_again.archived_at, archived.archived_at);
+        assert_eq!(
+            load_event_from_connection(&connection, created.id)
+                .unwrap()
+                .name,
+            "Night Sprint"
+        );
+
+        delete_event_in_connection(&connection, created.id).unwrap();
+        assert!(load_event_from_connection(&connection, created.id).is_err());
+        assert!(delete_event_in_connection(&connection, created.id).is_err());
+    }
+
+    #[test]
+    fn events_accept_all_supported_filter_values_and_normalize_empty_notes() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        for class in EVENT_CLASSES {
+            let event = create_event_in_connection(
+                &mut connection,
+                test_event(class, class, "Asphalt", "Any", Some("  ")),
+            )
+            .unwrap();
+            assert_eq!(event.class, class);
+            assert_eq!(event.notes, None);
+            delete_event_in_connection(&connection, event.id).unwrap();
+        }
+        for route in EVENT_ROUTES {
+            let event = create_event_in_connection(
+                &mut connection,
+                test_event(route, "Any", route, "Any", None),
+            )
+            .unwrap();
+            assert_eq!(event.route, route);
+            delete_event_in_connection(&connection, event.id).unwrap();
+        }
+        for mode in EVENT_MODES {
+            let event = create_event_in_connection(
+                &mut connection,
+                test_event(mode, "Any", "Asphalt", mode, None),
+            )
+            .unwrap();
+            assert_eq!(event.mode, mode);
+            delete_event_in_connection(&connection, event.id).unwrap();
         }
     }
 
@@ -2609,7 +3091,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
         assert_eq!(
             connection
                 .query_row("SELECT next_sequence FROM garage_sequence", [], |row| {
@@ -2671,7 +3153,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
         let (drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (i32, i32, i64, i64) =
             connection
                 .query_row(
@@ -2744,7 +3226,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
         let (id, drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (
             i64,
             i32,

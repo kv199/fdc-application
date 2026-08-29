@@ -51,6 +51,29 @@
   let garageLatestOrdinal = null
   let garageVariantsOpen = false
   let garageVariantsOrdinal = null
+  const eventsLibraryView = document.getElementById('events-library-view')
+  const eventsDetailView = document.getElementById('events-detail-view')
+  const eventsGrid = document.getElementById('events-grid')
+  const eventsGridEmpty = document.getElementById('events-grid-empty')
+  const eventsCreateToggle = document.getElementById('events-create-toggle')
+  const eventsCreateArea = document.getElementById('events-create-area')
+  const eventsCreateCancel = document.getElementById('events-create-cancel')
+  const eventsCreateForm = document.getElementById('events-create-form')
+  const eventName = document.getElementById('event-name')
+  const eventClass = document.getElementById('event-class')
+  const eventRouteType = document.getElementById('event-route-type')
+  const eventMode = document.getElementById('event-mode')
+  const eventNotes = document.getElementById('event-notes')
+  const eventsDetailBack = document.getElementById('events-detail-back')
+  const eventsDetailTitle = document.getElementById('events-detail-title')
+  const eventsDetailHint = document.getElementById('events-detail-hint')
+  const eventsDetailCard = document.getElementById('events-detail-card')
+  const eventsDetailArchive = document.getElementById('events-detail-archive')
+  const eventsDetailDelete = document.getElementById('events-detail-delete')
+  const eventsById = new Map()
+  let eventsView = 'library'
+  let currentEventId = null
+  let eventsCreateOpen = false
   let editingTarget = null
   let shiftLightResetPending = false
   let displayPreferencesPending = false
@@ -387,6 +410,329 @@
     }
   }
 
+  function eventKey(value) {
+    if (value === null || value === undefined || value === '') return null
+    return String(value)
+  }
+
+  function eventIdFrom(value) {
+    if (value && typeof value === 'object') {
+      return value.id ?? value.eventId ?? value.event_id ?? value.event?.id ?? value.event?.eventId ?? null
+    }
+    return value
+  }
+
+  function eventText(value) {
+    return typeof value === 'string' ? value.trim() : ''
+  }
+
+  function normalizeEvent(value) {
+    const source = value && typeof value === 'object' && value.event && typeof value.event === 'object'
+      ? value.event
+      : value
+    const id = eventKey(eventIdFrom(source))
+    if (!id) return null
+    const mode = eventText(source?.mode) || 'Any'
+    const routeType = eventText(source?.routeType ?? source?.route_type ?? source?.route) || 'Asphalt'
+    const eventClass = eventText(source?.class ?? source?.eventClass ?? source?.event_class) || 'Any'
+    return {
+      id,
+      name: eventText(source?.name ?? source?.title ?? source?.displayName) || `EVENT ${id}`,
+      eventClass,
+      routeType,
+      mode,
+      notes: eventText(source?.notes),
+      archived: source?.archived === true
+        || source?.isArchived === true
+        || source?.is_archived === true
+        || Boolean(source?.archivedAt ?? source?.archived_at)
+    }
+  }
+
+  function normalizeEventsPayload(value) {
+    if (Array.isArray(value)) return value.map(normalizeEvent).filter(Boolean)
+    if (!value || typeof value !== 'object') return []
+    const list = value.events ?? value.items ?? value.records
+    if (Array.isArray(list)) return list.map(normalizeEvent).filter(Boolean)
+    const single = normalizeEvent(value.event ?? value)
+    return single ? [single] : []
+  }
+
+  function eventModeKey(mode) {
+    return eventText(mode).toLowerCase().replaceAll(/[^a-z0-9]+/g, '') || 'any'
+  }
+
+  function eventModeLabel(mode) {
+    const labels = {
+      any: 'ANY',
+      rivals: 'RIVALS',
+      online: 'ONLINE',
+      eventlab: 'EVENTLAB',
+      official: 'OFFICIAL',
+      blueprint: 'BLUEPRINT'
+    }
+    return labels[eventModeKey(mode)] || eventText(mode).toUpperCase() || 'ANY'
+  }
+
+  function eventRouteLabel(routeType) {
+    return eventText(routeType).toUpperCase() || 'ASPHALT'
+  }
+
+  function renderEventCard(event, detail = false) {
+    const card = document.createElement('article')
+    card.className = `events-card${detail ? ' events-card--detail' : ''}`
+    card.dataset.eventId = event.id
+    card.dataset.eventMode = eventModeKey(event.mode)
+    if (!detail) {
+      card.tabIndex = 0
+      card.setAttribute('role', 'button')
+      card.setAttribute('aria-label', `Open event ${event.name}`)
+      card.addEventListener('click', () => void openEventDetail(event.id))
+      card.addEventListener('keydown', eventKeyDown => {
+        if (eventKeyDown.key === 'Enter' || eventKeyDown.key === ' ') {
+          eventKeyDown.preventDefault()
+          void openEventDetail(event.id)
+        }
+      })
+    }
+
+    const image = document.createElement('div')
+    image.className = 'events-card__image'
+    image.textContent = 'EVENT'
+    image.setAttribute('aria-hidden', 'true')
+
+    const content = document.createElement('div')
+    content.className = 'events-card__content'
+    const name = document.createElement('h3')
+    name.className = 'events-card__name'
+    name.textContent = event.name
+    const meta = document.createElement('div')
+    meta.className = 'events-card__meta'
+    const mode = document.createElement('span')
+    mode.className = 'events-card__badge events-card__badge--mode'
+    mode.textContent = eventModeLabel(event.mode)
+    const route = document.createElement('span')
+    route.className = 'events-card__badge events-card__badge--route'
+    route.textContent = eventRouteLabel(event.routeType)
+    meta.append(mode, route)
+    content.append(name, meta)
+    card.append(image, content)
+    return card
+  }
+
+  function renderEventsLibrary() {
+    if (!eventsGrid) return
+    eventsGrid.replaceChildren()
+    const activeEvents = [...eventsById.values()].filter(event => !event.archived)
+    if (eventsGridEmpty) eventsGridEmpty.hidden = activeEvents.length > 0
+    for (const event of activeEvents) eventsGrid.append(renderEventCard(event))
+  }
+
+  function setEventsCreateOpen(open) {
+    eventsCreateOpen = Boolean(open)
+    if (eventsCreateArea) eventsCreateArea.hidden = !eventsCreateOpen
+    eventsCreateToggle?.setAttribute('aria-expanded', String(eventsCreateOpen))
+    if (eventsCreateOpen) eventName?.focus()
+  }
+
+  function resetEventCreateForm() {
+    eventsCreateForm?.reset()
+  }
+
+  function setEventsView(view) {
+    eventsView = view
+    const detail = view === 'detail'
+    if (eventsLibraryView) eventsLibraryView.hidden = detail
+    if (eventsDetailView) eventsDetailView.hidden = !detail
+  }
+
+  function renderEventDetail(event) {
+    if (!event) return
+    if (eventsDetailTitle) eventsDetailTitle.textContent = event.name
+    if (eventsDetailHint) eventsDetailHint.textContent = 'EMPTY EVENT'
+    if (eventsDetailCard) {
+      const card = renderEventCard(event, true)
+      eventsDetailCard.replaceChildren(...card.childNodes)
+      eventsDetailCard.dataset.eventId = event.id
+      eventsDetailCard.dataset.eventMode = eventModeKey(event.mode)
+    }
+  }
+
+  async function loadEvents() {
+    try {
+      const result = await call('load_events')
+      eventsById.clear()
+      for (const event of normalizeEventsPayload(result)) eventsById.set(event.id, event)
+      renderEventsLibrary()
+      return true
+    } catch (error) {
+      renderEventsLibrary()
+      setStatus(error.message || 'Unable to load events', true)
+      return false
+    }
+  }
+
+  async function openEventDetail(id) {
+    const key = eventKey(id)
+    if (!key) return false
+    let event = eventsById.get(key) || null
+    try {
+      const loaded = normalizeEvent(await call('load_event', { eventId: event?.id ?? id }))
+      if (loaded) {
+        event = { ...event, ...loaded }
+        eventsById.set(loaded.id, event)
+      }
+    } catch (error) {
+      if (!event) {
+        setStatus(error.message || 'Unable to load event', true)
+        return false
+      }
+    }
+    if (!event || event.archived) return false
+    currentEventId = event.id
+    setEventsCreateOpen(false)
+    renderEventDetail(event)
+    setEventsView('detail')
+    eventsDetailBack?.focus()
+    return true
+  }
+
+  function closeEventDetail() {
+    currentEventId = null
+    setEventsView('library')
+    renderEventsLibrary()
+  }
+
+  async function createEvent() {
+    if (!eventsCreateForm?.checkValidity()) {
+      eventsCreateForm?.reportValidity()
+      return false
+    }
+    const payload = {
+      name: eventName.value.trim(),
+      class: eventClass.value,
+      route: eventRouteType.value,
+      mode: eventMode.value,
+      notes: eventNotes.value.trim()
+    }
+    if (!payload.name) {
+      eventName.setCustomValidity('Event name is required')
+      eventName.reportValidity()
+      eventName.setCustomValidity('')
+      return false
+    }
+    try {
+      const result = await call('create_event', payload)
+      const created = normalizeEvent(result)
+      const resultId = eventIdFrom(result)
+      const event = created
+        ? { ...created, ...payload, id: created.id }
+        : normalizeEvent({ ...payload, id: resultId })
+      if (!event) throw new Error('Create event did not return an event id')
+      eventsById.set(event.id, event)
+      resetEventCreateForm()
+      setEventsCreateOpen(false)
+      renderEventDetail(event)
+      currentEventId = event.id
+      setEventsView('detail')
+      eventsDetailBack?.focus()
+      setStatus('EVENT CREATED')
+      return true
+    } catch (error) {
+      setStatus(error.message || 'Unable to create event', true)
+      return false
+    }
+  }
+
+  function beginEventRename() {
+    const event = currentEventId === null ? null : eventsById.get(currentEventId)
+    if (!event || !eventsDetailTitle) return
+    const input = document.createElement('input')
+    input.className = 'events-detail-view__title-input'
+    input.type = 'text'
+    input.value = event.name
+    input.setAttribute('aria-label', `Name for ${event.name}`)
+    eventsDetailTitle.replaceWith(input)
+    input.focus()
+    let finished = false
+    const finish = save => {
+      if (finished) return
+      finished = true
+      const nextName = input.value.trim()
+      input.replaceWith(eventsDetailTitle)
+      if (save && nextName && nextName !== event.name) void renameEvent(event.id, nextName)
+      if (save && !nextName) setStatus('EVENT NAME REQUIRED', true)
+    }
+    input.addEventListener('keydown', eventKeyDown => {
+      if (eventKeyDown.key === 'Enter') {
+        eventKeyDown.preventDefault()
+        finish(true)
+      }
+      if (eventKeyDown.key === 'Escape') {
+        eventKeyDown.preventDefault()
+        finish(false)
+      }
+    })
+    input.addEventListener('blur', () => finish(true), { once: true })
+  }
+
+  async function renameEvent(id, name) {
+    const key = eventKey(id)
+    const event = key ? eventsById.get(key) : null
+    if (!event || !name) return false
+    const previousName = event.name
+    event.name = name
+    renderEventDetail(event)
+    renderEventsLibrary()
+    try {
+      const result = await call('rename_event', { eventId: event.id, name })
+      const returned = normalizeEvent(result)
+      if (returned) eventsById.set(returned.id, { ...event, ...returned, name })
+      renderEventDetail(eventsById.get(key))
+      renderEventsLibrary()
+      setStatus('EVENT NAME SAVED')
+      return true
+    } catch (error) {
+      event.name = previousName
+      renderEventDetail(event)
+      renderEventsLibrary()
+      setStatus(error.message || 'Unable to rename event', true)
+      return false
+    }
+  }
+
+  async function archiveCurrentEvent() {
+    const event = currentEventId === null ? null : eventsById.get(currentEventId)
+    if (!event) return false
+    try {
+      await call('archive_event', { eventId: event.id })
+      event.archived = true
+      eventsById.set(event.id, event)
+      closeEventDetail()
+      setStatus('EVENT ARCHIVED')
+      return true
+    } catch (error) {
+      setStatus(error.message || 'Unable to archive event', true)
+      return false
+    }
+  }
+
+  async function deleteCurrentEvent() {
+    const event = currentEventId === null ? null : eventsById.get(currentEventId)
+    if (!event) return false
+    if (typeof globalScope.confirm === 'function' && !globalScope.confirm(`Delete event “${event.name}”?`)) return false
+    try {
+      await call('delete_event', { eventId: event.id })
+      eventsById.delete(event.id)
+      closeEventDetail()
+      setStatus('EVENT DELETED')
+      return true
+    } catch (error) {
+      setStatus(error.message || 'Unable to delete event', true)
+      return false
+    }
+  }
+
   function selectSettingsTab(tabName) {
     for (const tab of settingsTabs) {
       const isActive = tab.dataset.settingsTab === tabName
@@ -397,6 +743,7 @@
     for (const panel of settingsPanels) {
       panel.hidden = panel.dataset.settingsPanel !== tabName
     }
+    if (tabName === 'events' && eventsView === 'library') void loadEvents()
   }
 
   function setStatus(message, error = false) {
@@ -925,9 +1272,29 @@
     )
   })
 
+  eventsCreateToggle?.addEventListener('click', () => setEventsCreateOpen(!eventsCreateOpen))
+  eventsCreateCancel?.addEventListener('click', () => {
+    resetEventCreateForm()
+    setEventsCreateOpen(false)
+  })
+  eventsCreateForm?.addEventListener('submit', event => {
+    event.preventDefault()
+    void createEvent()
+  })
+  eventsDetailBack?.addEventListener('click', closeEventDetail)
+  eventsDetailTitle?.addEventListener('click', beginEventRename)
+  eventsDetailArchive?.addEventListener('click', () => void archiveCurrentEvent())
+  eventsDetailDelete?.addEventListener('click', () => void deleteCurrentEvent())
   garageCurrentVariantsToggle?.addEventListener('click', toggleGarageVariants)
   document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || event.target?.classList?.contains('garage-current-car__input')) return
+    if (event.key !== 'Escape') return
+    if (event.target?.classList?.contains('garage-current-car__input')
+      || event.target?.classList?.contains('events-detail-view__title-input')) return
+    if (eventsView === 'detail') {
+      event.preventDefault()
+      closeEventDetail()
+      return
+    }
     closeGarageVariants()
   })
 
@@ -938,6 +1305,7 @@
   renderRouteStatus(latestRouteStatus)
   renderShiftLightState(null)
   renderGarage()
+  renderEventsLibrary()
   void listenShiftLightEvents()
   void listenRouteEvents()
   void listenGarageEvents()
@@ -945,6 +1313,9 @@
     cancelEdit,
     setLayoutEditingState,
     setRouteStatus: renderRouteStatus,
-    resetShiftLight: requestShiftLightReset
+    resetShiftLight: requestShiftLightReset,
+    loadEvents,
+    openEventDetail,
+    closeEventDetail
   }
 })(typeof globalThis === 'undefined' ? this : globalThis)

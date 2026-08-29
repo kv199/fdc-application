@@ -146,7 +146,7 @@ h1 {
 
 .settings-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   margin-top: 22px;
   padding: 4px;
@@ -501,6 +501,308 @@ h1 {
 .garage-performance--s2 { --garage-rank-color: #2563eb; }
 .garage-performance--r { --garage-rank-color: #ec4899; }
 .garage-performance--x { --garage-rank-color: #22c55e; }
+
+.events-section-heading {
+  align-items: center;
+}
+
+.events-section-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.events-section-heading .settings-button {
+  flex: 0 0 auto;
+}
+
+.events-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 12px;
+}
+
+.events-grid[hidden],
+.events-create-area[hidden],
+.events-detail-view[hidden] {
+  display: none;
+}
+
+.events-card {
+  --events-mode-color: #f97316;
+  position: relative;
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 82px;
+  border: 1px solid color-mix(in srgb, var(--events-mode-color) 34%, rgb(226 232 240 / 16%));
+  border-left: 3px solid var(--events-mode-color);
+  background: rgb(8 10 12 / 65%);
+}
+
+.events-card__image {
+  display: grid;
+  place-items: center;
+  width: 82px;
+  min-height: 82px;
+  color: #71717a;
+  background: linear-gradient(135deg, rgb(226 232 240 / 8%), rgb(226 232 240 / 2%));
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.events-card__content {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+  gap: 9px;
+  padding: 9px 10px;
+}
+
+.events-card__name {
+  min-width: 0;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 16px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.events-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.events-card__badge,
+.events-detail-view__hint {
+  display: inline-flex;
+  align-items: center;
+  min-height: 27px;
+  padding: 4px 8px;
+  border: 1px solid rgb(226 232 240 / 22%);
+  color: #f8fafc;
+  background: rgb(8 10 12 / 65%);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.events-card__badge--mode {
+  border-color: transparent;
+  background: var(--events-mode-color);
+  color: #090b0e;
+}
+
+.events-card[data-event-mode="any"] { --events-mode-color: #f97316; }
+.events-card[data-event-mode="eventlab"] { --events-mode-color: #ffffff; }
+.events-card[data-event-mode="rivals"] { --events-mode-color: #7dd3fc; }
+.events-card[data-event-mode="online"] { --events-mode-color: #facc15; }
+.events-card[data-event-mode="official"] { --events-mode-color: #ef4444; }
+.events-card[data-event-mode="blueprint"] { --events-mode-color: #c084fc; }
+.events-card[data-event-mode="any"] .events-card__badge--mode,
+.events-card[data-event-mode="eventlab"] .events-card__badge--mode {
+  color: #090b0e;
+}
+
+.events-grid .events-card {
+  cursor: pointer;
+}
+
+.events-grid .events-card:hover,
+.events-grid .events-card:focus-visible {
+  outline: none;
+  border-color: var(--events-mode-color);
+  background: rgb(226 232 240 / 9%);
+}
+
+.events-create-area {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid rgb(105 232 63 / 35%);
+  background: rgb(105 232 63 / 5%);
+}
+
+.events-create-area__heading,
+.events-detail-view__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.events-create-area__heading {
+  margin-bottom: 14px;
+}
+
+.events-create-area__heading h3 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+}
+
+.events-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.events-form__field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: #a1a1aa;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.events-form__field--name,
+.events-form__field--notes {
+  grid-column: span 2;
+}
+
+.events-form__field small {
+  color: #71717a;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.events-form input,
+.events-form select,
+.events-form textarea {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 1px solid rgb(226 232 240 / 24%);
+  border-radius: 3px;
+  color: #f8fafc;
+  background: rgb(8 10 12 / 80%);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.events-form textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.events-form input:focus,
+.events-form select:focus,
+.events-form textarea:focus {
+  border-color: #69e83f;
+  outline: none;
+}
+
+.events-form__actions {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  grid-column: span 2;
+}
+
+.events-form__actions .settings-button {
+  min-width: 120px;
+}
+
+.events-detail-view {
+  margin-top: 24px;
+}
+
+.events-detail-view__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.events-detail-view__actions .settings-button--danger {
+  width: auto;
+  margin-top: 0;
+}
+
+.events-detail-view__header {
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgb(226 232 240 / 14%);
+}
+
+.events-detail-view__heading {
+  display: grid;
+  gap: 6px;
+  margin: 24px 0 16px;
+}
+
+.events-detail-view__title {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  color: #f8fafc;
+  background: transparent;
+  cursor: pointer;
+  font-size: clamp(20px, 3vw, 30px);
+  font-weight: 800;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.events-detail-view__title:hover,
+.events-detail-view__title:focus-visible {
+  color: #69e83f;
+  outline: none;
+}
+
+.events-detail-view__title-input {
+  width: min(100%, 420px);
+  min-height: 38px;
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 1px solid #69e83f;
+  color: #f8fafc;
+  background: transparent;
+  font: inherit;
+  font-size: clamp(20px, 3vw, 30px);
+  font-weight: 800;
+}
+
+.events-detail-view__title-input:focus {
+  outline: none;
+}
+
+.events-detail-view__heading p {
+  margin: 0;
+  color: #71717a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.events-card--detail {
+  max-width: 520px;
+}
+
+@media (max-width: 620px) {
+  .events-form {
+    grid-template-columns: 1fr;
+  }
+
+  .events-form__field--name,
+  .events-form__field--notes,
+  .events-form__actions {
+    grid-column: auto;
+  }
+
+  .events-form__actions {
+    justify-content: stretch;
+  }
+
+  .events-form__actions .settings-button {
+    width: 100%;
+  }
+}
 
 @media (max-width: 420px) {
   .garage-card__latest {
