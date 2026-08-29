@@ -206,10 +206,12 @@ h1 {
 }
 
 .garage-current-car {
+  position: relative;
   display: grid;
   grid-template-columns: 124px minmax(0, 1fr);
   align-items: center;
   gap: 16px;
+  padding-bottom: 38px;
 }
 
 .garage-current-car__image,
@@ -274,6 +276,77 @@ h1 {
   flex-wrap: wrap;
   align-items: stretch;
   gap: 8px;
+}
+
+.garage-current-variants-toggle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid rgb(105 232 63 / 42%);
+  color: #69e83f;
+  background: rgb(105 232 63 / 8%);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.garage-current-variants-toggle:hover,
+.garage-current-variants-toggle:focus-visible {
+  color: #f8fafc;
+  background: rgb(105 232 63 / 16%);
+  outline: none;
+}
+
+.garage-variants {
+  display: grid;
+  grid-auto-rows: 36px;
+  gap: 8px;
+  max-height: 432px;
+  margin-top: 12px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.garage-variants[hidden] {
+  display: none;
+}
+
+.garage-variant-row {
+  --garage-rank-color: #a1a1aa;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 0;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--garage-rank-color) 34%, rgb(226 232 240 / 16%));
+  border-left: 3px solid var(--garage-rank-color);
+  background: rgb(8 10 12 / 65%);
+}
+
+.garage-variant-row[data-car-class="D"] { --garage-rank-color: #7dd3fc; }
+.garage-variant-row[data-car-class="C"] { --garage-rank-color: #facc15; }
+.garage-variant-row[data-car-class="B"] { --garage-rank-color: #f97316; }
+.garage-variant-row[data-car-class="A"] { --garage-rank-color: #ef4444; }
+.garage-variant-row[data-car-class="S1"] { --garage-rank-color: #c084fc; }
+.garage-variant-row[data-car-class="S2"] { --garage-rank-color: #2563eb; }
+.garage-variant-row[data-car-class="R"] { --garage-rank-color: #ec4899; }
+.garage-variant-row[data-car-class="X"] { --garage-rank-color: #22c55e; }
+
+.garage-variant-row__drivetrain {
+  display: inline-flex;
+  align-items: center;
+  min-height: 27px;
+  padding: 4px 8px;
+  border: 1px solid rgb(226 232 240 / 22%);
+  color: #f8fafc;
+  background: rgb(8 10 12 / 65%);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
 }
 
 .garage-current-car__group {

@@ -98,12 +98,15 @@
     const rawClass = variant.class ?? variant.carClass ?? variant.classLabel
     const numericClass = Number(rawClass)
     const pi = finiteNonNegative(variant.pi ?? variant.performanceIndex)
+    const drivetrain = finiteNonNegative(variant.drivetrain ?? variant.drivetrainType ?? variant.drivetrain_type)
     const rawId = finitePositive(variant.id)
     return {
       id: rawId === null ? null : Math.round(rawId),
       class: Number.isFinite(numericClass) ? Math.round(numericClass) : null,
       classLabel: classLabel(rawClass),
       pi: pi === null ? null : Math.round(pi),
+      drivetrain: drivetrain === null ? null : Math.round(drivetrain),
+      drivetrainLabel: drivetrainLabel(drivetrain),
       firstSeenSequence: nonNegativeInteger(variant.firstSeenSequence ?? variant.first_seen_sequence),
       lastSeenSequence: nonNegativeInteger(variant.lastSeenSequence ?? variant.last_seen_sequence),
       isCurrent: variant.isCurrent === true || variant.is_current === true,

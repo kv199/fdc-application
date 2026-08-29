@@ -38,10 +38,14 @@
   const garageGrid = document.getElementById('garage-grid')
   const garageGridEmpty = document.getElementById('garage-grid-empty')
   const garageCurrentCar = document.getElementById('garage-current-car')
+  const garageCurrentVariants = document.getElementById('garage-current-variants')
+  const garageCurrentVariantsToggle = document.getElementById('garage-current-variants-toggle')
   const garageCurrentEmpty = document.getElementById('garage-current-empty')
   const garageCarsCount = document.getElementById('garage-cars-count')
   const garageVehicles = new Map()
   let garageLatestOrdinal = null
+  let garageVariantsOpen = false
+  let garageVariantsOrdinal = null
   let editingTarget = null
   let shiftLightResetPending = false
   let displayPreferencesPending = false
@@ -62,26 +66,91 @@
   }
 
   function garageDrivetrainLabel(vehicle) {
-    return garageApi?.drivetrainLabel?.(vehicle?.drivetrain) || null
+    const directLabel = typeof vehicle?.drivetrainLabel === 'string' ? vehicle.drivetrainLabel.trim().toUpperCase() : ''
+    if (['FWD', 'RWD', 'AWD'].includes(directLabel)) return directLabel
+    const rawDrivetrain = vehicle?.drivetrain
+      ?? vehicle?.drivetrainType
+      ?? vehicle?.drivetrain_type
+    const normalized = garageApi?.drivetrainLabel?.(rawDrivetrain)
+    if (normalized) return normalized
+    const fallback = typeof rawDrivetrain === 'string' ? rawDrivetrain.trim().toUpperCase() : ''
+    return ['FWD', 'RWD', 'AWD'].includes(fallback) ? fallback : null
   }
 
   function appendGaragePerformance(container, vehicle) {
-    if (!vehicle.classLabel && vehicle.pi === null) return
+    const classLabel = vehicle?.classLabel
+      || (vehicle?.class !== null && vehicle?.class !== undefined
+        ? garageApi?.classLabel?.(vehicle.class)
+        : null)
+    const pi = vehicle?.pi === null || vehicle?.pi === undefined ? null : vehicle.pi
+    if (!classLabel && pi === null) return
     const performance = document.createElement('div')
-    performance.className = `garage-performance garage-performance--${garagePerformanceClass(vehicle.classLabel)}`
-    if (vehicle.classLabel) {
+    performance.className = `garage-performance garage-performance--${garagePerformanceClass(classLabel)}`
+    if (classLabel) {
       const classBadge = document.createElement('span')
       classBadge.className = 'garage-performance__class'
-      classBadge.textContent = vehicle.classLabel
+      classBadge.textContent = classLabel
       performance.append(classBadge)
     }
-    if (vehicle.pi !== null) {
+    if (pi !== null) {
       const piBadge = document.createElement('span')
       piBadge.className = 'garage-performance__pi'
-      piBadge.textContent = String(vehicle.pi)
+      piBadge.textContent = String(pi)
       performance.append(piBadge)
     }
     container.append(performance)
+  }
+
+  function garageVariantFallback(vehicle) {
+    return {
+      class: vehicle?.class,
+      classLabel: vehicle?.classLabel,
+      pi: vehicle?.pi,
+      drivetrain: vehicle?.drivetrain,
+      drivetrainLabel: vehicle?.drivetrainLabel
+    }
+  }
+
+  function garageVariantsFor(vehicle) {
+    if (!vehicle) return []
+    if (Array.isArray(vehicle.variants) && vehicle.variants.length > 0) return vehicle.variants
+    const fallback = garageVariantFallback(vehicle)
+    const hasClass = Boolean(fallback.classLabel) || fallback.class !== null && fallback.class !== undefined
+    const hasPi = fallback.pi !== null && fallback.pi !== undefined
+    return hasClass || hasPi
+      ? [fallback]
+      : []
+  }
+
+  function renderGarageVariants(vehicle) {
+    if (!garageCurrentVariants || !garageCurrentVariantsToggle) return
+    const isCurrentVehicle = garageVariantsOrdinal === vehicle?.carOrdinal
+    const open = Boolean(vehicle && isCurrentVehicle && garageVariantsOpen)
+    garageCurrentVariants.replaceChildren()
+    garageCurrentVariants.hidden = !open
+    garageCurrentVariantsToggle.hidden = !vehicle
+    garageCurrentVariantsToggle.textContent = open ? 'HIDE' : 'VIEW'
+    garageCurrentVariantsToggle.setAttribute('aria-expanded', String(open))
+    if (!open || !vehicle) return
+
+    for (const variant of garageVariantsFor(vehicle)) {
+      const classLabel = variant?.classLabel
+        || (variant?.class !== null && variant?.class !== undefined
+          ? garageApi?.classLabel?.(variant.class)
+          : null)
+      const row = document.createElement('div')
+      row.className = `garage-variant-row garage-variant-row--${garagePerformanceClass(classLabel)}`
+      row.dataset.carClass = classLabel || 'unknown'
+      appendGaragePerformance(row, { ...variant, classLabel })
+      const drivetrain = garageDrivetrainLabel(variant) || garageDrivetrainLabel(vehicle)
+      if (drivetrain) {
+        const drivetrainValue = document.createElement('span')
+        drivetrainValue.className = 'garage-variant-row__drivetrain'
+        drivetrainValue.textContent = drivetrain
+        row.append(drivetrainValue)
+      }
+      garageCurrentVariants.append(row)
+    }
   }
 
   function mergeGarageVehicle(value) {
@@ -107,10 +176,19 @@
   function renderGarageCurrent() {
     if (!garageCurrentCar || !garageCurrentEmpty) return
     const vehicle = garageLatestOrdinal === null ? null : garageVehicles.get(garageLatestOrdinal)
+    if (vehicle && garageVariantsOrdinal !== vehicle.carOrdinal) {
+      garageVariantsOrdinal = vehicle.carOrdinal
+      garageVariantsOpen = false
+    }
     garageCurrentCar.replaceChildren()
     garageCurrentCar.hidden = !vehicle
     garageCurrentEmpty.hidden = Boolean(vehicle)
-    if (!vehicle) return
+    if (!vehicle) {
+      garageVariantsOrdinal = null
+      garageVariantsOpen = false
+      renderGarageVariants(null)
+      return
+    }
     const image = document.createElement('div')
     image.className = 'garage-current-car__image'
     image.textContent = 'IMAGE'
@@ -174,7 +252,8 @@
       input.addEventListener('blur', finish, { once: true })
     })
     content.append(name, ...(group ? [group] : []), details)
-    garageCurrentCar.append(image, content)
+    garageCurrentCar.append(image, content, garageCurrentVariantsToggle)
+    renderGarageVariants(vehicle)
   }
 
   function renderGarage() {
@@ -220,6 +299,21 @@
       garageGrid.append(card)
     }
     renderGarageCurrent()
+  }
+
+  function closeGarageVariants() {
+    if (!garageVariantsOpen) return
+    garageVariantsOpen = false
+    const vehicle = garageVariantsOrdinal === null ? null : garageVehicles.get(garageVariantsOrdinal)
+    renderGarageVariants(vehicle)
+  }
+
+  function toggleGarageVariants() {
+    const vehicle = garageLatestOrdinal === null ? null : garageVehicles.get(garageLatestOrdinal)
+    if (!vehicle) return
+    garageVariantsOrdinal = vehicle.carOrdinal
+    garageVariantsOpen = !garageVariantsOpen
+    renderGarageVariants(vehicle)
   }
 
   async function renameGarageCar(carOrdinal, name) {
@@ -746,6 +840,12 @@
 
   shiftLightReset.addEventListener('click', () => {
     requestShiftLightReset()
+  })
+
+  garageCurrentVariantsToggle?.addEventListener('click', toggleGarageVariants)
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || event.target?.classList?.contains('garage-current-car__input')) return
+    closeGarageVariants()
   })
 
   telemetryRouteRetry.addEventListener('click', () => {

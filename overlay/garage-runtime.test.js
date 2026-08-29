@@ -75,11 +75,23 @@ test('normalizes native and telemetry vehicle identity without inventing values'
   })
   const snapshot = normalizeGaragePayload({
     currentCarOrdinal: 456,
-    cars: [{ ordinal: 456, name: null, variants: [{ class: 5, pi: 901, isCurrent: true }] }]
+    cars: [{ ordinal: 456, name: null, variants: [{ class: 5, pi: 901, drivetrain: 2, isCurrent: true }] }]
   })[0]
   assert.equal(snapshot.classLabel, 'S2')
   assert.equal(snapshot.pi, 901)
   assert.equal(snapshot.latestUsed, true)
+  assert.deepEqual(snapshot.variants, [{
+    id: null,
+    class: 5,
+    classLabel: 'S2',
+    pi: 901,
+    drivetrain: 2,
+    drivetrainLabel: 'AWD',
+    firstSeenSequence: null,
+    lastSeenSequence: null,
+    isCurrent: true,
+    shiftLight: null
+  }])
   assert.deepEqual(normalizeGaragePayload({
     cars: [{
       ordinal: 456,

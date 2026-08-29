@@ -92,8 +92,8 @@ path.
 ## Garage boundary
 
 Garage is a browser-local `queueTelemetry` consumer with native local
-persistence. It records each car ordinal once, records class and performance
-index variants separately, and refreshes Configuration through the local
+persistence. It records each car ordinal once, records class, performance
+index, and drivetrain configurations separately, and refreshes Configuration through the local
 `hud_garage` event. Its native snapshot also summarizes the existing Shift
 Light profiles with the same car ordinal and PI; both features stay in the
 single FDC-local `fdc.sqlite` file. It does not create another telemetry
@@ -135,7 +135,8 @@ telemetry path. It provides:
 - overlay target editing for the Coach card, lap timer, and telemetry HUD;
 - visibility controls for the top-level overlay and HUD components;
 - speed-unit selection and Shift Light brightness;
-- Garage current-car and saved-car views, including local name editing;
+- Garage current-car and saved-car views, including local name editing and the
+  current car's configuration list;
 - Direct Data Out status and retry;
 - current Shift Light diagnostics and reset.
 
@@ -147,8 +148,8 @@ affect the native window or Shift Light database cross the Tauri IPC boundary.
 ## Local persistence
 
 `fdc.sqlite` is created in the FDC application-data directory, outside the
-repository. Its current schema contains the Garage car registry and class/PI
-variant registry alongside the Shift Light car registry, gearbox variant
+repository. Its current schema contains the Garage car registry and
+class/PI/drivetrain configuration registry alongside the Shift Light car registry, gearbox variant
 registry, per-gear profiles, bounded profile samples, and schema version
 metadata. Transactional native commands enforce Garage identity and recency as
 well as Shift Light identity and monotonic merge rules.

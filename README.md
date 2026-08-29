@@ -44,8 +44,9 @@ Technical details: [docs/shift-light.md](docs/shift-light.md).
 ### Garage
 
 Garage automatically records vehicles observed through FH6 Data Out, keeps one
-local card per car ordinal, remembers class and PI variants, and lets you name
-the current car in Configuration. The latest used car is shown first.
+local card per car ordinal, remembers class, PI, and drivetrain configurations,
+and lets you name the current car or view its configurations in Configuration.
+The latest used car is shown first.
 
 Technical details: [docs/garage.md](docs/garage.md).
 
@@ -92,7 +93,8 @@ Configuration lets you:
 - show or hide overlay targets and individual HUD components;
 - choose `km/h` or `mph`;
 - adjust Shift Light brightness;
-- view the current car and locally name it in Garage;
+- view the current car, locally name it, and view its saved configurations in
+  Garage;
 - view Direct Data Out status;
 - inspect Shift Light calibration and reset the current calibration.
 

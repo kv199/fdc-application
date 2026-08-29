@@ -13,6 +13,12 @@ Garage is the Configuration tab immediately to the right of HUD.
   value is displayed below that name as `GROUP <value>`, followed by a paired
   Forza-style class and performance-index badge, drivetrain label, and cylinder
   count. It does not carry a Last Used badge.
+- The current-car block has a `VIEW` button in its lower-right corner. It
+  changes to `HIDE` and reveals the current ordinal's saved configurations
+  directly below the block. Escape closes that list, except while the inline
+  name field owns Escape to cancel its edit. Each configuration row uses the
+  Saved Cars border style and contains a Forza-style class/PI badge plus its
+  recorded drivetrain. The list shows ten rows before it scrolls vertically.
 - Clicking the current vehicle name or ordinal opens an inline name field. Enter
   or leaving the field saves the name; Escape cancels the edit. An empty saved
   name returns the display to the numeric ordinal.
@@ -62,12 +68,17 @@ It is not a telemetry source and does not leave the local application.
 ## Vehicle identity and variants
 
 `S32 CarOrdinal` is the unique Garage vehicle identity. A single ordinal can
-have multiple observed combinations of `S32 CarClass` and
-`S32 CarPerformanceIndex`; each distinct combination is a Garage variant.
+have multiple observed configurations. A configuration is the distinct
+combination of `S32 CarClass`, `S32 CarPerformanceIndex`, and
+`S32 DrivetrainType` for that ordinal.
 
-`S32 DrivetrainType`, `S32 NumCylinders`, and `U32 CarGroup` are stored with the
-parent vehicle. Their latest observed values replace earlier values for the same
-ordinal. Garage does not retain a history of those three metadata fields.
+`S32 NumCylinders` and `U32 CarGroup` are stored with the parent vehicle. Their
+latest observed values replace earlier values for the same ordinal.
+`S32 DrivetrainType` is retained both as the latest parent-vehicle value and as
+part of each configuration identity. Garage does not retain a history of
+cylinder count or CarGroup. It also cannot detect changes that leave its full
+configuration identity unchanged, such as a weight reduction with unchanged
+class, PI, and drivetrain.
 
 The browser maps known numeric class values to `D`, `C`, `B`, `A`, `S1`, `S2`,
 `R`, and `X`. An unrecognized numeric value remains visible as its number
@@ -80,11 +91,12 @@ being guessed.
 ## Shift Light association
 
 Garage and Shift Light use the same local `fdc.sqlite` file. They retain their
-separate tables and responsibilities, but a Garage variant and Shift Light
-profiles are associated by `game_id`, `car_ordinal`, and `PI`.
+separate tables and responsibilities, but a Garage configuration and Shift
+Light profiles are associated by `game_id`, `car_ordinal`, and `PI`.
 
-A Garage car may have multiple class/PI variants. Each matching variant
-summarizes every persisted Shift Light tune for that car and PI, including its
+A Garage car may have multiple class/PI/drivetrain configurations. Each
+matching configuration summarizes every persisted Shift Light tune for that car
+and PI, including its
 distinct RPM limits and gearbox signatures. The snapshot reports:
 
 - `READY` when at least one calibrated per-gear target exists;
@@ -98,7 +110,7 @@ not render a second Shift Light status or profile control.
 ## Local SQLite state
 
 Garage uses the existing FDC application-data database, `fdc.sqlite`, and
-schema version 4.
+schema version 5.
 
 ```text
 garage_cars
@@ -112,7 +124,7 @@ garage_cars
 
 garage_variants
   id
-  game_id + car_ordinal + car_class + pi unique
+  game_id + car_ordinal + car_class + pi + drivetrain_type unique
   first_seen_sequence
   last_seen_sequence
 
@@ -121,16 +133,17 @@ garage_sequence
 ```
 
 The monotonic sequence determines the `LAST USED` order without relying on
-second-resolution timestamps. The most recent car and its most recent variant
-are the current Garage state while FDC receives live telemetry; after a restart,
-the saved snapshot displays the last observed state until a new sample arrives.
+second-resolution timestamps. The most recent car and its most recent
+configuration are the current Garage state while FDC receives live telemetry;
+after a restart, the saved snapshot displays the last observed state until a new
+sample arrives.
 
 The migration creates these tables transactionally and leaves existing Shift
 Light tables and profiles intact.
 
 Garage snapshots query `shift_light_variants` and `shift_light_profiles` to
-attach the Shift Light summary. No Shift Light profile key, table, or stored
-calibration is copied or re-keyed.
+attach the Shift Light summary by car ordinal and PI. A drivetrain change does
+not alter any Shift Light key, table, or stored calibration.
 
 ## Native commands
 
@@ -146,6 +159,7 @@ trimmed and limited to 80 characters.
 
 Garage changes require the standard runtime release verification cycle. Focused
 coverage includes packet decoding for `CarGroup`, schema migration,
-one-car/multiple-variant persistence, latest-used ordering, renaming, UI class
-formatting, Shift Light summary aggregation, telemetry deduplication, and
+one-car/multiple-configuration persistence including drivetrain, latest-used
+ordering, renaming, configuration-list keyboard behavior and scrolling, UI
+class formatting, Shift Light summary aggregation, telemetry deduplication, and
 Configuration tab structure.
