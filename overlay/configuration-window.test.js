@@ -151,8 +151,15 @@ test('HUD opacity appears before HUD controls and resets to its 80 percent defau
   assert.ok(hudOpacityIndex >= 0)
   assert.ok(hudOpacityIndex < layoutListIndex)
   assert.match(settingsHtml, /id="hud-opacity" type="range" min="1" max="100" step="1" value="80"/)
-  assert.match(settingsHtml, /id="hud-opacity-reset" class="settings-button" type="button">RESET<\/button>/)
+  assert.match(settingsHtml, /id="hud-opacity-reset" class="settings-button hud-opacity-reset" type="button" disabled>RESET<\/button>/)
   assert.match(settingsJs, /HUD OPACITY RESET TO \$\{next\.hudOpacity\}%/)
+  assert.match(settingsJs, /hudOpacityReset\.disabled = pending \|\| displayPreferences\.hudOpacity === DEFAULT_HUD_OPACITY/)
+  assert.match(settingsCss, /\.hud-opacity-reset\.is-dirty:not\(:disabled\)[\s\S]*?#facc15/)
+})
+
+test('HUD heading has no redundant position and visibility label, and action status is anchored', () => {
+  assert.doesNotMatch(settingsHtml, /POSITION \+ VISIBILITY/)
+  assert.match(settingsCss, /\.settings-status\s*{[\s\S]*?position:\s*fixed;[\s\S]*?bottom:\s*26px;[\s\S]*?left:\s*30px;/)
 })
 
 test('Configuration persists and applies display preferences through the shared contract', () => {

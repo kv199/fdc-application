@@ -27,6 +27,7 @@
   const shiftLightHelp = document.getElementById('shift-light-help')
   const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
   const displayPreferencesApi = globalScope.DisplayPreferences
+  const DEFAULT_HUD_OPACITY = displayPreferencesApi?.DEFAULTS?.hudOpacity ?? 80
   const speedUnitInputs = [...document.querySelectorAll('input[name="speed-unit"]')]
   const configurationAlwaysOnTop = document.getElementById('configuration-always-on-top')
   const shiftLightBrightness = document.getElementById('shift-light-brightness')
@@ -56,7 +57,7 @@
   let displayPreferences = displayPreferencesApi?.read?.() || {
     speedUnit: 'kmh',
     shiftLightBrightness: 80,
-    hudOpacity: 80,
+    hudOpacity: DEFAULT_HUD_OPACITY,
     configurationAlwaysOnTop: true
   }
   let latestShiftLightState = null
@@ -432,6 +433,7 @@
 
   function renderHudOpacity(value) {
     const opacity = Number(value)
+    const isDefault = opacity === DEFAULT_HUD_OPACITY
     const minimum = Number(hudOpacity.min)
     const maximum = Number(hudOpacity.max)
     const progress = ((opacity - minimum) / (maximum - minimum)) * 100
@@ -439,6 +441,8 @@
     hudOpacity.style.setProperty('--brightness-fill', `${Math.max(0, Math.min(100, progress))}%`)
     hudOpacity.setAttribute('aria-valuetext', `${opacity}% opacity`)
     hudOpacityValue.textContent = `${opacity}%`
+    hudOpacityReset.disabled = displayPreferencesPending || isDefault
+    hudOpacityReset.classList.toggle('is-dirty', !isDefault)
   }
 
   function setDisplayPreferencesPending(pending) {
@@ -447,7 +451,7 @@
     if (configurationAlwaysOnTop) configurationAlwaysOnTop.disabled = pending
     shiftLightBrightness.disabled = pending
     hudOpacity.disabled = pending
-    hudOpacityReset.disabled = pending
+    hudOpacityReset.disabled = pending || displayPreferences.hudOpacity === DEFAULT_HUD_OPACITY
     for (const row of displayPreferenceRows) row.classList.toggle('is-pending', pending)
   }
 
@@ -916,7 +920,7 @@
   })
   hudOpacityReset.addEventListener('click', () => {
     void updateDisplayPreferences(
-      { hudOpacity: 80 },
+      { hudOpacity: DEFAULT_HUD_OPACITY },
       next => `HUD OPACITY RESET TO ${next.hudOpacity}%`
     )
   })
