@@ -479,28 +479,33 @@
     return eventText(routeType).toUpperCase() || 'ASPHALT'
   }
 
-  function renderEventCard(event, detail = false) {
+  async function copyEventId(eventId) {
+    const value = String(eventId)
+    try {
+      const clipboard = globalScope.navigator?.clipboard
+      if (!clipboard?.writeText) throw new Error('Clipboard is unavailable')
+      await clipboard.writeText(value)
+      setStatus(`EVENT ID #${value} COPIED`)
+    } catch {
+      setStatus('EVENT ID COPY FAILED', true)
+    }
+  }
+
+  function renderEventCard(event) {
     const card = document.createElement('article')
-    card.className = `events-card${detail ? ' events-card--detail' : ''}`
+    card.className = 'events-card'
     card.dataset.eventId = event.id
     card.dataset.eventMode = eventModeKey(event.mode)
-    if (!detail) {
-      card.tabIndex = 0
-      card.setAttribute('role', 'button')
-      card.setAttribute('aria-label', `Open event ${event.name}`)
-      card.addEventListener('click', () => void openEventDetail(event.id))
-      card.addEventListener('keydown', eventKeyDown => {
-        if (eventKeyDown.key === 'Enter' || eventKeyDown.key === ' ') {
-          eventKeyDown.preventDefault()
-          void openEventDetail(event.id)
-        }
-      })
-    }
 
-    const image = document.createElement('div')
-    image.className = 'events-card__image'
-    image.textContent = 'EVENT'
-    image.setAttribute('aria-hidden', 'true')
+    const open = document.createElement('button')
+    open.type = 'button'
+    open.className = 'events-card__open'
+    open.setAttribute('aria-label', `Open event ${event.name}`)
+    open.addEventListener('click', () => void openEventDetail(event.id))
+
+    const id = document.createElement('span')
+    id.className = 'events-card__id'
+    id.textContent = `#${event.id}`
 
     const content = document.createElement('div')
     content.className = 'events-card__content'
@@ -517,7 +522,19 @@
     route.textContent = eventRouteLabel(event.routeType)
     meta.append(mode, route)
     content.append(name, meta)
-    card.append(image, content)
+
+    const copy = document.createElement('button')
+    copy.type = 'button'
+    copy.className = 'events-card__copy'
+    copy.setAttribute('aria-label', `Copy event ID ${event.id}`)
+    copy.textContent = '⧉'
+    copy.addEventListener('click', copyEvent => {
+      copyEvent.stopPropagation()
+      void copyEventId(event.id)
+    })
+
+    open.append(id, content)
+    card.append(open, copy)
     return card
   }
 
