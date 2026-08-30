@@ -39,7 +39,10 @@ available as the Events tab in Configuration, directly after Garage.
   circuit lap in that attempt. Completing another lap never creates another
   run ID. A circuit result stores each completed lap and shows the best lap and
   its lap number in the event page; a sprint shows its confirmed finish time.
-  Each row displays the local run start as `YYYY.MM.DD HH:MM:SS`.
+  A confirmed sprint is saved immediately and leaves capture armed for the
+  next attempt. Circuit laps remain in their current run until **STOP** or a
+  confirmed restart. Each row displays the local run start as
+  `YYYY.MM.DD HH:MM:SS`.
 - Paused or non-live telemetry suspends capture without discarding a run. A
   subsequent live sample is the same attempt unless the race clock has moved
   backwards by more than five seconds and either lap number or distance has
@@ -47,7 +50,8 @@ available as the Events tab in Configuration, directly after Garage.
   and immediately begins a new run ID while **STOP** remains active.
 - A circuit attempt with no completed lap, or a sprint without a confirmed
   result, is discarded rather than added to the saved-run list. Selecting
-  **STOP** saves only a valid current attempt.
+  **STOP** saves only a valid current attempt and explicitly reports whether
+  it was saved, discarded, or could not be stored.
 - **ARCHIVE** retains the event locally, removes it from the active Events
   list, and returns to that list. **DELETE** asks for confirmation, then
   permanently removes the event and returns to the list.

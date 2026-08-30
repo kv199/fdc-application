@@ -86,14 +86,23 @@ let latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibr
 let lastAsphaltBriefToken = null
 let asphaltBriefTimer = null
 let garageRuntime = null
+
+function emitRecorderEvent(eventName, payload) {
+  try {
+    const eventApi = window.HudTauriEvents?.getEventApi?.()
+    if (!eventApi || typeof eventApi.emit !== 'function') return Promise.resolve()
+    return Promise.resolve(eventApi.emit(eventName, payload)).catch(() => {})
+  } catch {
+    return Promise.resolve()
+  }
+}
+
 const eventRecorder = window.HudEventRecorder?.createEventRecorder?.({
   timingApi: window.HudLapTiming,
   invoke: invokeTauri,
-  emit: payload => window.HudTauriEvents?.getEventApi?.()?.emit?.('event_recorder_status', payload),
-  onSaved: payload => {
-    const eventApi = window.HudTauriEvents?.getEventApi?.()
-    if (eventApi?.emit) Promise.resolve(eventApi.emit('event_recorder_run_saved', payload)).catch(() => {})
-  }
+  emit: payload => emitRecorderEvent('event_recorder_status', payload),
+  onSaved: payload => emitRecorderEvent('event_recorder_run_saved', payload),
+  onResult: payload => emitRecorderEvent('event_recorder_result', payload)
 }) || null
 
 const steeringWheelImage = new Image()

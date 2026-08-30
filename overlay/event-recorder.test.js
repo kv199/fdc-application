@@ -56,12 +56,14 @@ test('strong restart persists the completed prior run and remains armed for a cl
   assert.ok(instance.snapshot().run)
 })
 
-test('a sprint is saved only after the timing engine confirms the finish', async () => {
+test('a confirmed sprint is saved immediately and the recorder remains armed', async () => {
   const saved = []
+  const results = []
   const instance = recorder.createEventRecorder({
     timingApi: timing,
     now: () => 1700000000000,
-    invoke: async (_command, payload) => { saved.push(payload); return payload }
+    invoke: async (_command, payload) => { saved.push(payload); return payload },
+    onResult: payload => results.push(payload)
   })
   instance.arm(8)
   instance.update(telemetry())
@@ -69,10 +71,59 @@ test('a sprint is saved only after the timing engine confirms the finish', async
   instance.update(telemetry({ isRaceOn: false, lap: { number: 0, current: 108.71, last: 0, raceTime: 108.71, distance: 5951 } }))
   assert.equal(saved.length, 0)
   instance.update(telemetry({ isRaceOn: false, lap: { number: 0, current: 108.71, last: 0, raceTime: 108.71, distance: 5951 } }))
-  assert.equal(saved.length, 0)
-  await instance.stop()
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(saved.length, 1)
-  assert.equal(saved[0].run.finalTimeMs, undefined)
   assert.equal(saved[0].run.resultTimeMs, 108710)
+  assert.equal(results.length, 1)
+  assert.equal(results[0].eventId, 8)
+  assert.equal(results[0].outcome, 'saved')
+  assert.equal(results[0].run.resultTimeMs, 108710)
+  assert.match(results[0].reason, /saved/i)
+  assert.equal(instance.snapshot().armed, true)
+  assert.equal(instance.snapshot().run, null)
+  assert.equal((await instance.stop()).outcome, 'saved')
+})
+
+test('circuit stop saves every completed lap in one run', async () => {
+  const saved = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  instance.arm(9)
+  instance.update(telemetry())
+  instance.update(telemetry({ lap: { number: 0, current: 32, last: 0, raceTime: 32, distance: 2500 } }))
+  instance.update(telemetry({ lap: { number: 1, current: 0, last: 55.418, raceTime: 55.418, distance: 0 } }))
+  instance.update(telemetry({ lap: { number: 1, current: 20, last: 55.418, raceTime: 75.418, distance: 1000 } }))
+  instance.update(telemetry({ lap: { number: 2, current: 0, last: 56.125, raceTime: 131.543, distance: 0 } }))
+  const outcome = await instance.stop()
+  assert.equal(outcome.outcome, 'saved')
+  assert.deepEqual(saved[0].run.laps, [
+    { lapNumber: 1, lapTimeMs: 55418 },
+    { lapNumber: 2, lapTimeMs: 56125 }
+  ])
+})
+
+test('stop reports discarded and failed results explicitly', async () => {
+  const results = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    onResult: payload => results.push(payload),
+    invoke: async () => { throw new Error('database offline') }
+  })
+  assert.equal((await instance.stop()).outcome, 'discarded')
+  instance.arm(10)
+  instance.update(telemetry())
+  assert.equal((await instance.stop()).outcome, 'discarded')
+  assert.equal(results[0].outcome, 'discarded')
+  assert.equal(results[1].outcome, 'discarded')
+  assert.match(results[1].reason, /no completed laps/i)
+  instance.arm(10)
+  instance.update(telemetry())
+  instance.update(telemetry({ lap: { number: 1, current: 0, last: 55.418, raceTime: 55.418, distance: 0 } }))
+  const failed = await instance.stop()
+  assert.equal(failed.outcome, 'failed')
+  assert.equal(results[2].outcome, 'failed')
+  assert.match(results[2].reason, /database offline/i)
 })

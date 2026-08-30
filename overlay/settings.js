@@ -77,6 +77,7 @@
   const eventsDetailDelete = document.getElementById('events-detail-delete')
   const eventRecorderStatus = document.getElementById('event-recorder-status')
   const eventRecorderHint = document.getElementById('event-recorder-hint')
+  const eventRecorderFeedback = document.getElementById('event-recorder-feedback')
   const eventRecorderToggle = document.getElementById('event-recorder-toggle')
   const eventRunsList = document.getElementById('event-runs-list')
   const eventRunsEmpty = document.getElementById('event-runs-empty')
@@ -455,7 +456,46 @@
       currentEventRuns = [run, ...currentEventRuns.filter(existing => existing.id !== run.id)]
       renderEventRuns()
     })
+    await eventApi.listen('event_recorder_result', event => {
+      const payload = event?.payload
+      if (!payload || typeof payload !== 'object') return
+      const resultEventId = eventKey(payload.eventId ?? payload.event_id ?? payload.run?.eventId ?? payload.run?.event_id)
+      if (resultEventId !== null && currentEventId !== null && resultEventId !== currentEventId) return
+
+      const outcome = eventText(payload.outcome).toLowerCase()
+      if (outcome === 'saved') {
+        const run = normalizeEventRun(payload.run ?? payload)
+        const id = run?.id || runId(payload.runId ?? payload.run_id ?? payload.run?.runId ?? payload.run?.run_id)
+        const details = []
+        if (id) details.push(`ID ${id}`)
+        if (run?.laps?.length) details.push(`${run.laps.length} ${run.laps.length === 1 ? 'LAP' : 'LAPS'}`)
+        if (Number.isFinite(run?.finalTimeMs)) details.push(formatRunTime(run.finalTimeMs))
+        const message = `RUN SAVED${details.length ? ` · ${details.join(' · ')}` : ''}`
+        setEventRecorderFeedback(message, 'saved')
+        setStatus(message)
+      } else if (outcome === 'discarded') {
+        const message = 'RUN DISCARDED — NO CONFIRMED RESULT'
+        setEventRecorderFeedback(message, 'discarded')
+        setStatus(message)
+      } else if (outcome === 'failed') {
+        const reason = eventText(payload.reason)
+        const message = `RUN SAVE FAILED${reason ? ` — ${reason}` : ''}`
+        setEventRecorderFeedback(message, 'failed')
+        setStatus(message, true)
+      }
+    })
     await eventApi.emit('event_recorder_status_request')
+  }
+
+  function setEventRecorderFeedback(message, outcome = '') {
+    if (!eventRecorderFeedback) return
+    eventRecorderFeedback.textContent = message
+    eventRecorderFeedback.dataset.outcome = outcome
+    eventRecorderFeedback.hidden = !message
+  }
+
+  function clearEventRecorderFeedback() {
+    setEventRecorderFeedback('', '')
   }
 
   function eventKey(value) {
@@ -816,6 +856,7 @@
       return false
     }
     try {
+      if (action === 'record') clearEventRecorderFeedback()
       await eventApi.emit('event_recorder_config', {
         action,
         eventId: event.id,
@@ -864,6 +905,7 @@
     }
     if (!event || event.archived) return false
     currentEventId = event.id
+    clearEventRecorderFeedback()
     setEventsCreateOpen(false)
     renderEventDetail(event)
     setEventsView('detail')

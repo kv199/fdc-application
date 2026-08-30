@@ -1001,6 +1001,19 @@ h1 {
   line-height: 1.45;
 }
 
+.event-recorder__feedback {
+  margin: -8px 0 18px;
+  color: #69e83f;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+}
+
+.event-recorder__feedback[data-outcome="discarded"] { color: #fbbf24; }
+.event-recorder__feedback[data-outcome="failed"] { color: #ff827d; }
+.event-recorder__feedback[hidden] { display: none; }
+
 .event-runs {
   border-top: 1px solid rgb(226 232 240 / 12%);
   padding-top: 13px;

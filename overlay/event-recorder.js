@@ -119,8 +119,10 @@
     const now = typeof options.now === 'function' ? options.now : Date.now
     const onStatus = typeof options.onStatus === 'function' ? options.onStatus : () => {}
     const onSaved = typeof options.onSaved === 'function' ? options.onSaved : () => {}
+    const onResult = typeof options.onResult === 'function' ? options.onResult : () => {}
     let state = createState()
     let persistQueue = Promise.resolve()
+    let lastPersistence = null
     let lastStatusSignature = null
 
     function status(extra = {}, force = false) {
@@ -166,6 +168,7 @@
       state.eventId = key
       state.eventName = text(eventName)
       state.armedAtMs = Number.isFinite(Number(armedAt)) ? Number(armedAt) : (Number(now()) || Date.now())
+      lastPersistence = null
       resetTiming()
       return status()
     }
@@ -199,8 +202,43 @@
         && afterTiming?.phase === 'circuit_complete'
     }
 
+    function resultEventId(run) {
+      if (run?.eventId !== null && run?.eventId !== undefined) {
+        return Number.isFinite(Number(run.eventId)) ? Math.round(Number(run.eventId)) : run.eventId
+      }
+      return state.eventId
+    }
+
+    function notifyResult(payload) {
+      try {
+        Promise.resolve(onResult(payload)).catch(() => {})
+      } catch (_) {
+        // Result observers must not change persistence outcomes.
+      }
+      return payload
+    }
+
+    function result(run, outcome, reason, extra = {}) {
+      return notifyResult({
+        eventId: resultEventId(run),
+        outcome,
+        run: run || null,
+        reason,
+        ...extra
+      })
+    }
+
+    function hasPersistableResult(run) {
+      if (!run) return false
+      if (run.runType === 'sprint') return run.result === 'confirmed' && run.finalTimeMs !== null
+      return run.laps.length > 0 || run.finalTimeMs !== null
+    }
+
     function persist(run, reason) {
-      if (!run || (!run.laps.length && run.finalTimeMs === null)) return Promise.resolve(false)
+      if (!run) return Promise.resolve(result(null, 'discarded', 'There is no active run to save.'))
+      if (!hasPersistableResult(run)) {
+        return Promise.resolve(result(run, 'discarded', 'The run has no completed laps or confirmed result.'))
+      }
       const classLabels = ['D', 'C', 'B', 'A', 'S1', 'S2', 'R', 'X']
       const carClass = run.car.class === null ? null : Number.isFinite(Number(run.car.class))
         ? Math.round(Number(run.car.class))
@@ -220,16 +258,26 @@
           laps: run.laps.map(lap => ({ lapNumber: lap.lapNumber, lapTimeMs: lap.timeMs }))
         }
       }
-      if (!invoke) {
-        onSaved(payload)
-        return Promise.resolve(true)
-      }
-      persistQueue = persistQueue.then(() => Promise.resolve(invoke('record_event_run', payload))
-        .then(result => {
-          onSaved(result?.run || result || payload)
-          return true
-        }))
-      return persistQueue.catch(() => false)
+      const queued = persistQueue.catch(() => undefined).then(() => {
+        if (!invoke) {
+          try { onSaved(payload) } catch (_) {}
+          return result(run, 'saved', `Run saved (${reason}).`, { run: payload.run })
+        }
+        return Promise.resolve()
+          .then(() => invoke('record_event_run', payload))
+          .then(saved => {
+            const savedRun = saved?.run || saved || payload.run
+            try { onSaved(savedRun) } catch (_) {}
+            return result(run, 'saved', `Run saved (${reason}).`, { run: savedRun })
+          })
+          .catch(error => {
+            const detail = text(error?.message ?? error)
+            const message = detail ? `Unable to save run: ${detail}` : 'Unable to save run.'
+            return result(run, 'failed', message, { error: message })
+          })
+      })
+      persistQueue = queued.catch(() => undefined)
+      return queued
     }
 
     function finishRun(reason, finalTimeMs = null, finalTimeSource = null) {
@@ -239,11 +287,14 @@
       if (finalTimeSource !== null) run.finalTimeSource = finalTimeSource
       state.lastRunResult = run
       state.run = null
-      return persist(run, reason)
+      lastPersistence = persist(run, reason)
+      return lastPersistence
     }
 
     function stop() {
-      const pending = state.run ? finishRun('stop') : Promise.resolve(false)
+      const pending = state.run
+        ? finishRun('stop')
+        : (lastPersistence || Promise.resolve(result(null, 'discarded', 'There is no active run to save.')))
       state.armed = false
       state.eventId = null
       state.eventName = null
@@ -278,6 +329,7 @@
           state.run.finalTimeSource = nextTiming.finalTimeSource || 'forza_lap_current'
           state.run.runType = 'sprint'
           state.run.result = 'confirmed'
+          void finishRun('sprint_complete')
         }
         state.timingState = nextTiming
       }
