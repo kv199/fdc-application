@@ -1896,10 +1896,16 @@ fn load_event_run_from_connection(
     }
     let mut statement = connection
         .prepare(
-            "SELECT id, event_id, car_ordinal, car_name, car_class, car_pi,
-                    drivetrain, started_at, run_type, result, result_time_ms, created_at
+            "SELECT event_runs.id, event_runs.event_id, event_runs.car_ordinal,
+                    COALESCE(garage_cars.display_name, event_runs.car_name),
+                    event_runs.car_class, event_runs.car_pi, event_runs.drivetrain,
+                    event_runs.started_at, event_runs.run_type, event_runs.result,
+                    event_runs.result_time_ms, event_runs.created_at
              FROM event_runs
-             WHERE id = ?1",
+             LEFT JOIN garage_cars
+               ON garage_cars.game_id = 'fh6'
+              AND garage_cars.car_ordinal = event_runs.car_ordinal
+             WHERE event_runs.id = ?1",
         )
         .map_err(|error| format!("unable to prepare Event run query: {error}"))?;
     let values = statement
@@ -1921,11 +1927,17 @@ fn load_event_runs_from_connection(
     }
     let mut statement = connection
         .prepare(
-            "SELECT id, event_id, car_ordinal, car_name, car_class, car_pi,
-                    drivetrain, started_at, run_type, result, result_time_ms, created_at
+            "SELECT event_runs.id, event_runs.event_id, event_runs.car_ordinal,
+                    COALESCE(garage_cars.display_name, event_runs.car_name),
+                    event_runs.car_class, event_runs.car_pi, event_runs.drivetrain,
+                    event_runs.started_at, event_runs.run_type, event_runs.result,
+                    event_runs.result_time_ms, event_runs.created_at
              FROM event_runs
-             WHERE (?1 IS NULL OR event_id = ?1)
-             ORDER BY started_at DESC, id DESC",
+             LEFT JOIN garage_cars
+               ON garage_cars.game_id = 'fh6'
+              AND garage_cars.car_ordinal = event_runs.car_ordinal
+             WHERE (?1 IS NULL OR event_runs.event_id = ?1)
+             ORDER BY event_runs.started_at DESC, event_runs.id DESC",
         )
         .map_err(|error| format!("unable to prepare Event run list query: {error}"))?;
     let rows = statement
@@ -3373,6 +3385,73 @@ mod tests {
             load_event_runs_from_connection(&connection, None)
                 .unwrap()
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn event_runs_resolve_current_garage_name_after_run_save() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Garage rename", "Any", "Asphalt", "Any", None),
+        )
+        .unwrap();
+
+        let mut run = test_event_run(event.id, "sprint", "confirmed", Some(75_000), Vec::new());
+        run.car_name = None;
+        let saved = record_event_run_in_connection(&mut connection, run).unwrap();
+        assert_eq!(saved.car_name, None);
+
+        // The Garage record can be created after the run has already been saved.
+        connection
+            .execute(
+                "INSERT INTO garage_cars
+                   (game_id, car_ordinal, first_seen_sequence, last_seen_sequence)
+                 VALUES ('fh6', 260, 1, 1)",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            load_event_run_from_connection(&connection, saved.id)
+                .unwrap()
+                .car_name,
+            None
+        );
+
+        connection
+            .execute(
+                "UPDATE garage_cars SET display_name = 'Named after run'
+                 WHERE game_id = 'fh6' AND car_ordinal = 260",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            load_event_run_from_connection(&connection, saved.id)
+                .unwrap()
+                .car_name
+                .as_deref(),
+            Some("Named after run")
+        );
+        assert_eq!(
+            load_event_runs_from_connection(&connection, Some(event.id)).unwrap()[0]
+                .car_name
+                .as_deref(),
+            Some("Named after run")
+        );
+
+        connection
+            .execute(
+                "UPDATE garage_cars SET display_name = 'Renamed again'
+                 WHERE game_id = 'fh6' AND car_ordinal = 260",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            load_event_runs_from_connection(&connection, Some(event.id)).unwrap()[0]
+                .car_name
+                .as_deref(),
+            Some("Renamed again")
         );
     }
 

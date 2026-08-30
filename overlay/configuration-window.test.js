@@ -117,6 +117,16 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsCss, /\.events-detail-view__badge--class\[data-event-class="S1"\][\s\S]*#c084fc/)
 })
 
+test('Event recorder uses the compact idle control and local run timestamps', () => {
+  assert.doesNotMatch(settingsHtml, /event-recorder__eyebrow|RUN CAPTURE/)
+  assert.match(settingsHtml, /id="event-recorder-status"[^>]+hidden/)
+  assert.match(settingsHtml, /id="event-recorder-toggle"[^>]*>RECORD RUN<\/button>/)
+  assert.match(settingsJs, /eventRecorderStatus\.hidden = !recording/)
+  assert.match(settingsJs, /eventRecorderToggle\.textContent = recording \? 'STOP' : 'RECORD RUN'/)
+  assert.match(settingsJs, /getHours\(\).*getMinutes\(\).*getSeconds\(\)/s)
+  assert.match(settingsCss, /\.event-recorder\s*\{[\s\S]*border: 1px solid rgb\(226 232 240 \/ 18%\);[\s\S]*background: rgb\(226 232 240 \/ 5%\)/)
+})
+
 test('Engine telemetry keeps the compact panel order and one visibility toggle', () => {
   const sections = [...overlayHtml.matchAll(/<section id="(hud-[^"]+)"/g)].map(match => match[1])
   const components = [...settingsHtml.matchAll(/data-hud-component="([^"]+)"/g)].map(match => match[1])

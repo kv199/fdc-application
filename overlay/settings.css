@@ -939,8 +939,8 @@ h1 {
 .event-recorder {
   margin-top: 24px;
   padding: 16px;
-  border: 1px solid rgb(105 232 63 / 30%);
-  background: rgb(105 232 63 / 4%);
+  border: 1px solid rgb(226 232 240 / 18%);
+  background: rgb(226 232 240 / 5%);
 }
 
 .event-recorder__heading,
@@ -952,7 +952,6 @@ h1 {
   gap: 12px;
 }
 
-.event-recorder__eyebrow,
 .event-runs__heading {
   color: #71717a;
   font-size: 9px;
@@ -982,6 +981,7 @@ h1 {
 .event-recorder__status[data-state="armed"],
 .event-recorder__status[data-state="recording"] { color: #69e83f; }
 .event-recorder__status[data-state="stopped"] { color: #ef4444; }
+.event-recorder__status[hidden] { display: none; }
 
 .event-recorder__record {
   border-color: #69e83f;

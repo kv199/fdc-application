@@ -411,6 +411,16 @@
     const vehicles = garageApi?.normalizeGaragePayload?.(payload) || []
     for (const vehicle of vehicles) mergeGarageVehicle(vehicle)
     renderGarage()
+    let runsChanged = false
+    currentEventRuns = currentEventRuns.map(run => {
+      const ordinal = Number(run?.car?.ordinal)
+      if (!Number.isFinite(ordinal) || ordinal <= 0) return run
+      const garageName = garageVehicles.get(Math.round(ordinal))?.name
+      if (!garageName || run.car.name === garageName) return run
+      runsChanged = true
+      return { ...run, car: { ...run.car, name: garageName } }
+    })
+    if (runsChanged) renderEventRuns()
   }
 
   async function listenGarageEvents() {
@@ -711,7 +721,7 @@
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return String(value)
     const pad = number => String(number).padStart(2, '0')
-    return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
+    return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
   }
 
   function runCarName(run) {
@@ -761,9 +771,10 @@
     if (eventRecorderStatus) {
       eventRecorderStatus.dataset.state = state
       eventRecorderStatus.textContent = state.toUpperCase()
+      eventRecorderStatus.hidden = !recording
     }
     if (eventRecorderToggle) {
-      eventRecorderToggle.textContent = recording ? 'STOP' : 'RECORD'
+      eventRecorderToggle.textContent = recording ? 'STOP' : 'RECORD RUN'
       eventRecorderToggle.classList.toggle('settings-button--danger', recording)
       eventRecorderToggle.classList.toggle('event-recorder__record', !recording)
       eventRecorderToggle.setAttribute('aria-pressed', String(recording))
