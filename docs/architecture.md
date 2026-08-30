@@ -137,7 +137,7 @@ telemetry path. It provides:
 - speed-unit selection and Shift Light brightness;
 - standard minimize and maximize controls, a persisted Configuration
   always-on-top preference that defaults to enabled, and a persisted window
-  size (default `820 × 620` logical pixels);
+  size (default `820 × 620` logical pixels) and last valid on-screen position;
 - Garage current-car and saved-car views, including local name editing and the
   current car's configuration list;
 - the Events library with local event creation, management, and run records;
@@ -161,9 +161,10 @@ and recency as well as Shift Light identity and monotonic merge rules.
 The Coach calibration envelope, active findings, lap timing state, telemetry
 history, and visual presentation state remain in memory for the running HUD.
 Configuration and layout preferences use the versioned local browser storage
-keys listed above. The Configuration window size is stored separately in the
-FDC application-data directory so a user-resized window is restored on the
-next launch.
+keys listed above. The Configuration window size and last valid on-screen
+position are stored separately in the FDC application-data directory so a
+user-resized and moved window is restored on the next launch. A saved position
+outside the available monitors is ignored.
 
 ## Generated assets
 

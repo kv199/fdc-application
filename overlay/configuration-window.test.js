@@ -269,6 +269,15 @@ test('Configuration keeps its default size and exposes standard Windows controls
   assert.equal(settingsWindow.alwaysOnTop, true)
 })
 
+test('Configuration restores its last on-screen position with its size', () => {
+  assert.match(tauriMain, /SettingsWindowState/)
+  assert.match(tauriMain, /WindowEvent::Resized\(_\) \| WindowEvent::Moved\(_\)/)
+  assert.match(tauriMain, /window\.outer_position\(\)/)
+  assert.match(tauriMain, /app\s*\.available_monitors\(\)/)
+  assert.match(tauriMain, /window\.set_position\(position\)/)
+  assert.match(tauriMain, /serde\(default\)/)
+})
+
 test('Configuration opens every time the HUD starts', () => {
   assert.match(tauriMain, /window\.show\(\)\?;\s*show_settings\(app\.handle\(\)\)\?;/)
   assert.doesNotMatch(tauriMain, /settings-first-launch-complete/)
