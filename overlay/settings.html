@@ -201,7 +201,18 @@
         <div id="events-library-view" class="events-view" aria-live="polite">
           <div class="settings-section__heading events-section-heading">
             <h2 id="events-title">EVENTS</h2>
-            <button id="events-create-toggle" class="settings-button settings-button--primary" type="button" aria-expanded="false" aria-controls="events-create-area">CREATE</button>
+            <div class="events-section-heading__actions">
+              <label class="events-sort-control" for="events-sort">
+                <span>SORT</span>
+                <select id="events-sort" aria-label="Sort events">
+                  <option value="id-desc">ID ↓</option>
+                  <option value="id-asc">ID ↑</option>
+                  <option value="last-recorded-desc">LAST RUN ↓</option>
+                  <option value="last-recorded-asc">LAST RUN ↑</option>
+                </select>
+              </label>
+              <button id="events-create-toggle" class="settings-button settings-button--primary" type="button" aria-expanded="false" aria-controls="events-create-area">CREATE</button>
+            </div>
           </div>
         <section id="events-create-area" class="events-create-area" aria-labelledby="events-create-title" hidden>
           <div class="events-create-area__heading">
@@ -276,7 +287,6 @@
         <div class="events-detail-view__header">
           <button id="events-detail-back" class="settings-button" type="button">BACK</button>
           <div class="events-detail-view__actions">
-            <button id="events-detail-archive" class="settings-button" type="button">ARCHIVE</button>
             <button id="events-detail-delete" class="settings-button settings-button--danger" type="button">DELETE</button>
           </div>
         </div>
@@ -302,6 +312,13 @@
           <p id="event-recorder-feedback" class="event-recorder__feedback" aria-live="polite" hidden></p>
           <div class="event-runs" aria-live="polite">
             <div class="event-runs__heading"><span>SAVED RUNS</span><span id="event-runs-count">0 RUNS</span></div>
+            <div class="event-run-row event-run-row--header" role="row" aria-label="Sort saved runs">
+              <div class="event-run-row__cell"><button class="event-run-row__sort" type="button" data-run-sort="id" aria-sort="none">ID</button></div>
+              <div class="event-run-row__cell"><span class="event-run-row__header-label">CAR</span></div>
+              <div class="event-run-row__cell"><span class="event-run-row__header-label">CLASS / PI / DRIVE</span></div>
+              <div class="event-run-row__cell"><button class="event-run-row__sort" type="button" data-run-sort="best" aria-sort="none">BEST</button></div>
+              <div class="event-run-row__cell"><button class="event-run-row__sort" type="button" data-run-sort="date" aria-sort="descending">DATE</button></div>
+            </div>
             <div id="event-runs-list" class="event-runs__list"></div>
             <p id="event-runs-empty" class="event-runs__empty">No completed runs yet.</p>
           </div>

@@ -8,6 +8,9 @@ available as the Events tab in Configuration, directly after Garage.
 - **Events** shows active events as responsive tiles in the Garage card style.
   A tile shows its database event ID as `#ID`, its name, Mode, and Route Type.
   Selecting a tile opens that event.
+- The Events list has a persistent **SORT** selection. Its default is ID from
+  highest to lowest; it can also order ID ascending or the most recently
+  recorded run date ascending or descending.
 - The Events heading has a right-aligned **CREATE** action. It opens a creation
   area above the active event tiles.
 - The creation area keeps the input order as Event Name, then Mode / Route
@@ -43,6 +46,8 @@ available as the Events tab in Configuration, directly after Garage.
   next attempt. Circuit laps remain in their current run until **STOP** or a
   confirmed restart. Each row displays the local run start as
   `YYYY.MM.DD HH:MM:SS`.
+- The saved-run header sorts by ID, Best, or Date. Its default is Date from
+  newest to oldest, and that temporary choice is not persisted.
 - Paused, non-live, free-roam, and in-race rewind telemetry suspend or resume
   capture without discarding or splitting a run. A new run ID is created only
   when live telemetry returns to a clean lap-zero race start after at least one
@@ -52,9 +57,8 @@ available as the Events tab in Configuration, directly after Garage.
   result, is discarded rather than added to the saved-run list. Selecting
   **STOP** saves only a valid current attempt and explicitly reports whether
   it was saved, discarded, or could not be stored.
-- **ARCHIVE** retains the event locally, removes it from the active Events
-  list, and returns to that list. **DELETE** asks for confirmation, then
-  permanently removes the event and returns to the list.
+- **DELETE** asks for confirmation, then permanently removes the event and
+  returns to the list.
 
 ## Mode colors
 

@@ -3,6 +3,8 @@
 
   const VISIBILITY_STORAGE_KEY = 'fdc.hud-visibility.v1'
   const OVERLAY_VISIBILITY_STORAGE_KEY = 'fdc.overlay-visibility.v1'
+  const EVENTS_SORT_STORAGE_KEY = 'fdc.events-sort.v1'
+  const EVENT_SORT_OPTIONS = ['id-desc', 'id-asc', 'last-recorded-desc', 'last-recorded-asc']
   const COMPONENTS = ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']
   const OVERLAY_COMPONENTS = ['coach', 'delta', 'hud']
   const DEFAULT_VISIBILITY = COMPONENTS.reduce((state, name) => {
@@ -59,6 +61,7 @@
   const eventsCreateToggle = document.getElementById('events-create-toggle')
   const eventsCreateArea = document.getElementById('events-create-area')
   const eventsCreateCancel = document.getElementById('events-create-cancel')
+  const eventsSort = document.getElementById('events-sort')
   const eventsCreateForm = document.getElementById('events-create-form')
   const eventName = document.getElementById('event-name')
   const eventClass = document.getElementById('event-class')
@@ -73,13 +76,13 @@
   const eventsDetailSummary = document.getElementById('events-detail-summary')
   const eventsDetailNotes = document.getElementById('events-detail-notes')
   const eventsDetailNotesValue = document.getElementById('events-detail-notes-value')
-  const eventsDetailArchive = document.getElementById('events-detail-archive')
   const eventsDetailDelete = document.getElementById('events-detail-delete')
   const eventRecorderStatus = document.getElementById('event-recorder-status')
   const eventRecorderHint = document.getElementById('event-recorder-hint')
   const eventRecorderFeedback = document.getElementById('event-recorder-feedback')
   const eventRecorderToggle = document.getElementById('event-recorder-toggle')
   const eventRunsList = document.getElementById('event-runs-list')
+  const eventRunSortButtons = [...document.querySelectorAll('[data-run-sort]')]
   const eventRunsEmpty = document.getElementById('event-runs-empty')
   const eventRunsCount = document.getElementById('event-runs-count')
   const eventsById = new Map()
@@ -89,6 +92,8 @@
   let currentEventId = null
   let eventsCreateOpen = false
   let eventsDiscardConfirmOpen = false
+  let eventRunsSort = { key: 'date', direction: 'desc' }
+  let eventsSortValue = 'id-desc'
   let editingTarget = null
   let shiftLightResetPending = false
   let displayPreferencesPending = false
@@ -454,6 +459,7 @@
       const run = normalizeEventRun(event?.payload)
       if (!run || currentEventId === null || (run.eventId && run.eventId !== currentEventId)) return
       currentEventRuns = [run, ...currentEventRuns.filter(existing => existing.id !== run.id)]
+      if (updateEventLastRecordedAt(run)) renderEventsLibrary()
       renderEventRuns()
     })
     await eventApi.listen('event_recorder_result', event => {
@@ -465,6 +471,7 @@
       const outcome = eventText(payload.outcome).toLowerCase()
       if (outcome === 'saved') {
         const run = normalizeEventRun(payload.run ?? payload)
+        if (run && updateEventLastRecordedAt(run)) renderEventsLibrary()
         const id = run?.id || runId(payload.runId ?? payload.run_id ?? payload.run?.runId ?? payload.run?.run_id)
         const details = []
         if (id) details.push(`ID ${id}`)
@@ -530,6 +537,12 @@
       routeType,
       mode,
       notes: eventText(source?.notes),
+      createdAt: source?.createdAt ?? source?.created_at ?? null,
+      lastRecordedAt: source?.lastRecordedAt
+        ?? source?.last_recorded_at
+        ?? source?.lastRecordedRunAt
+        ?? source?.last_recorded_run_at
+        ?? null,
       archived: source?.archived === true
         || source?.isArchived === true
         || source?.is_archived === true
@@ -564,6 +577,70 @@
 
   function eventRouteLabel(routeType) {
     return eventText(routeType).toUpperCase() || 'ASPHALT'
+  }
+
+  function readEventsSort() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(EVENTS_SORT_STORAGE_KEY) || 'null')
+      return EVENT_SORT_OPTIONS.includes(stored) ? stored : 'id-desc'
+    } catch {
+      return 'id-desc'
+    }
+  }
+
+  function saveEventsSort(value) {
+    try {
+      localStorage.setItem(EVENTS_SORT_STORAGE_KEY, JSON.stringify(value))
+    } catch {
+      // A restricted webview may not expose persistent storage.
+    }
+  }
+
+  function eventIdCompare(left, right) {
+    const leftNumber = Number(left?.id)
+    const rightNumber = Number(right?.id)
+    if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber !== rightNumber) {
+      return leftNumber - rightNumber
+    }
+    return String(left?.id || '').localeCompare(String(right?.id || ''), undefined, { numeric: true })
+  }
+
+  function eventDateMs(event) {
+    const value = event?.lastRecordedAt
+    if (!value) return null
+    const timestamp = new Date(value).getTime()
+    return Number.isFinite(timestamp) ? timestamp : null
+  }
+
+  function compareEvents(left, right) {
+    if (eventsSortValue === 'id-asc' || eventsSortValue === 'id-desc') {
+      const result = eventIdCompare(left, right)
+      return eventsSortValue === 'id-asc' ? result : -result
+    }
+    const leftDate = eventDateMs(left)
+    const rightDate = eventDateMs(right)
+    // Events without runs remain grouped at the end in either date direction.
+    if (leftDate === null || rightDate === null) {
+      if (leftDate === rightDate) return -eventIdCompare(left, right)
+      return leftDate === null ? 1 : -1
+    }
+    if (leftDate !== rightDate) {
+      const result = leftDate - rightDate
+      return eventsSortValue === 'last-recorded-asc' ? result : -result
+    }
+    return -eventIdCompare(left, right)
+  }
+
+  function renderEventsSort() {
+    if (eventsSort) eventsSort.value = eventsSortValue
+  }
+
+  function setEventsSort(value) {
+    if (!EVENT_SORT_OPTIONS.includes(value)) return
+    eventsSortValue = value
+    saveEventsSort(value)
+    renderEventsSort()
+    renderEventsLibrary()
   }
 
   function renderEventCard(event) {
@@ -606,9 +683,28 @@
   function renderEventsLibrary() {
     if (!eventsGrid) return
     eventsGrid.replaceChildren()
-    const activeEvents = [...eventsById.values()].filter(event => !event.archived)
+    const activeEvents = [...eventsById.values()]
+      .filter(event => !event.archived)
+      .sort(compareEvents)
     if (eventsGridEmpty) eventsGridEmpty.hidden = activeEvents.length > 0
     for (const event of activeEvents) eventsGrid.append(renderEventCard(event))
+  }
+
+  function updateEventLastRecordedAt(run) {
+    const eventId = eventKey(run?.eventId)
+    const event = eventId === null ? null : eventsById.get(eventId)
+    const recordedAt = run?.recordedAt || run?.startedAt
+    if (!event || !recordedAt) return false
+    const current = eventDateMs(event)
+    const next = new Date(recordedAt).getTime()
+    if (!Number.isFinite(next) || (current !== null && next <= current)) return false
+    event.lastRecordedAt = recordedAt
+    eventsById.set(event.id, event)
+    return true
+  }
+
+  function applyEventRunDates(runs) {
+    for (const run of runs) updateEventLastRecordedAt(run)
   }
 
   function setEventsCreateOpen(open) {
@@ -717,6 +813,7 @@
       id,
       eventId: eventKey(source.eventId ?? source.event_id),
       startedAt: source.startedAt ?? source.started_at ?? source.createdAt ?? source.created_at ?? null,
+      recordedAt: source.createdAt ?? source.created_at ?? source.recordedAt ?? source.recorded_at ?? source.startedAt ?? source.started_at ?? null,
       finalTimeMs: source.resultTimeMs !== undefined
         ? runTimeMs(source.resultTimeMs, 'ms')
         : source.result_time_ms !== undefined
@@ -768,22 +865,84 @@
     return run.car.name || (run.car.ordinal ? `CAR #${run.car.ordinal}` : 'UNKNOWN CAR')
   }
 
+  function runBestTimeMs(run) {
+    if (run?.runType === 'sprint') return run.finalTimeMs
+    return run?.laps?.reduce((best, lap) => !best || lap.timeMs < best ? lap.timeMs : best, null)
+  }
+
+  function runDateMs(run) {
+    if (!run?.startedAt) return null
+    const timestamp = new Date(run.startedAt).getTime()
+    return Number.isFinite(timestamp) ? timestamp : null
+  }
+
+  function runIdCompare(left, right) {
+    const leftNumber = Number(left?.id)
+    const rightNumber = Number(right?.id)
+    if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber !== rightNumber) {
+      return leftNumber - rightNumber
+    }
+    return String(left?.id || '').localeCompare(String(right?.id || ''), undefined, { numeric: true })
+  }
+
+  function compareEventRuns(left, right) {
+    const key = eventRunsSort.key
+    if (key === 'id') {
+      const result = runIdCompare(left, right)
+      return eventRunsSort.direction === 'asc' ? result : -result
+    }
+    const leftValue = key === 'best' ? runBestTimeMs(left) : runDateMs(left)
+    const rightValue = key === 'best' ? runBestTimeMs(right) : runDateMs(right)
+    // Runs missing the selected value remain grouped at the end in either direction.
+    if (leftValue === null || rightValue === null || leftValue === undefined || rightValue === undefined) {
+      if (leftValue === rightValue) return -runIdCompare(left, right)
+      return leftValue === null || leftValue === undefined ? 1 : -1
+    }
+    if (leftValue !== rightValue) {
+      const result = leftValue - rightValue
+      return eventRunsSort.direction === 'asc' ? result : -result
+    }
+    return -runIdCompare(left, right)
+  }
+
+  function setEventRunsSort(key) {
+    if (!['id', 'best', 'date'].includes(key)) return
+    const direction = eventRunsSort.key === key
+      ? eventRunsSort.direction === 'asc' ? 'desc' : 'asc'
+      : key === 'date' ? 'desc' : 'asc'
+    eventRunsSort = { key, direction }
+    renderEventRuns()
+  }
+
+  function updateEventRunSortButtons() {
+    for (const button of eventRunSortButtons) {
+      const active = button.dataset.runSort === eventRunsSort.key
+      button.setAttribute('aria-sort', active
+        ? eventRunsSort.direction === 'asc' ? 'ascending' : 'descending'
+        : 'none')
+      button.setAttribute('aria-label', `Sort saved runs by ${button.textContent}`)
+    }
+  }
+
   function renderEventRuns() {
     if (!eventRunsList) return
     eventRunsList.replaceChildren()
-    const runs = [...currentEventRuns].sort((left, right) => String(right.startedAt || '').localeCompare(String(left.startedAt || '')))
+    updateEventRunSortButtons()
+    const runs = [...currentEventRuns].sort(compareEventRuns)
     if (eventRunsEmpty) eventRunsEmpty.hidden = runs.length > 0
     if (eventRunsCount) eventRunsCount.textContent = `${runs.length} ${runs.length === 1 ? 'RUN' : 'RUNS'}`
     for (const run of runs) {
       const row = document.createElement('div')
       row.className = 'event-run-row'
       const carDetails = [run.car.class, run.car.pi ? `PI ${run.car.pi}` : '', run.car.drivetrain].filter(Boolean).join(' · ') || '—'
-      const bestLap = run.laps.reduce((best, lap) => !best || lap.timeMs < best.timeMs ? lap : best, null)
+      const bestLap = run.runType !== 'sprint'
+        ? run.laps.reduce((best, lap) => !best || lap.timeMs < best.timeMs ? lap : best, null)
+        : null
       const cells = [
         ['ID', run.id],
         ['CAR', runCarName(run)],
         ['CLASS / PI / DRIVE', carDetails],
-        [bestLap ? `BEST L${Math.max(1, Math.round(bestLap.lapNumber))}` : 'SPRINT', formatRunTime(bestLap?.timeMs ?? run.finalTimeMs)],
+        [bestLap ? `BEST L${Math.max(1, Math.round(bestLap.lapNumber))}` : 'SPRINT', formatRunTime(runBestTimeMs(run))],
         ['DATE', formatRunDate(run.startedAt)]
       ]
       for (const [label, value] of cells) {
@@ -838,6 +997,7 @@
     try {
       const nativeEventId = Number.isFinite(Number(key)) ? Math.round(Number(key)) : key
       currentEventRuns = normalizeEventRunsPayload(await call('load_event_runs', { eventId: nativeEventId }))
+      if (currentEventRuns.some(updateEventLastRecordedAt)) renderEventsLibrary()
       renderEventRuns()
       return true
     } catch (error) {
@@ -878,6 +1038,13 @@
       const result = await call('load_events')
       eventsById.clear()
       for (const event of normalizeEventsPayload(result)) eventsById.set(event.id, event)
+      // The Events command intentionally returns event metadata only. Reuse the
+      // existing run list command to derive the latest recorded date for sorting.
+      try {
+        applyEventRunDates(normalizeEventRunsPayload(await call('load_event_runs', { eventId: null })))
+      } catch {
+        // Sorting by ID remains available if run metadata cannot be loaded.
+      }
       renderEventsLibrary()
       return true
     } catch (error) {
@@ -1625,9 +1792,14 @@
     event.preventDefault()
     void createEvent()
   })
+  eventsSortValue = readEventsSort()
+  renderEventsSort()
+  eventsSort?.addEventListener('change', () => setEventsSort(eventsSort.value))
+  for (const button of eventRunSortButtons) {
+    button.addEventListener('click', () => setEventRunsSort(button.dataset.runSort))
+  }
   eventsDetailBack?.addEventListener('click', closeEventDetail)
   eventsDetailTitle?.addEventListener('click', beginEventRename)
-  eventsDetailArchive?.addEventListener('click', () => void archiveCurrentEvent())
   eventsDetailDelete?.addEventListener('click', () => void deleteCurrentEvent())
   eventRecorderToggle?.addEventListener('click', () => {
     void sendRecorderConfig(recorderState.recording === true ? 'stop' : 'record')

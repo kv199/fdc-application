@@ -78,7 +78,7 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsHtml, /id="events-detail-summary"[^>]+aria-label="Event details"/)
   assert.match(settingsHtml, /id="events-detail-notes"[^>]+hidden/)
   assert.doesNotMatch(settingsHtml, /id="events-detail-hint"|id="events-detail-card"|id="events-detail-metadata"/)
-  assert.match(settingsHtml, /id="events-detail-archive"/)
+  assert.doesNotMatch(settingsHtml, /id="events-detail-archive"/)
   assert.match(settingsHtml, /id="events-detail-delete"/)
   assert.match(settingsJs, /call\('create_event', payload\)/)
   assert.match(settingsJs, /route: eventRouteType\.value/)
@@ -125,6 +125,24 @@ test('Event recorder uses the compact idle control and local run timestamps', ()
   assert.match(settingsJs, /eventRecorderToggle\.textContent = recording \? 'STOP' : 'RECORD RUN'/)
   assert.match(settingsJs, /getHours\(\).*getMinutes\(\).*getSeconds\(\)/s)
   assert.match(settingsCss, /\.event-recorder\s*\{[\s\S]*border: 1px solid rgb\(226 232 240 \/ 18%\);[\s\S]*background: rgb\(226 232 240 \/ 5%\)/)
+  assert.match(settingsCss, /\.event-recorder__record\s*\{[\s\S]*background: #69e83f/)
+  assert.match(settingsCss, /\.settings-button--danger[\s\S]*color: #ff827d/)
+})
+
+test('Events expose deterministic persisted list sorting and in-memory run sorting', () => {
+  assert.match(settingsHtml, /id="events-sort"[^>]+aria-label="Sort events"/)
+  assert.deepEqual(
+    [...settingsHtml.matchAll(/<option value="([^"]+)">/g)].map(match => match[1]).filter(value => value.includes('recorded') || value.startsWith('id-')),
+    ['id-desc', 'id-asc', 'last-recorded-desc', 'last-recorded-asc']
+  )
+  assert.match(settingsJs, /const EVENTS_SORT_STORAGE_KEY = 'fdc\.events-sort\.v1'/)
+  assert.match(settingsJs, /localStorage\.setItem\(EVENTS_SORT_STORAGE_KEY, JSON\.stringify\(value\)\)/)
+  assert.match(settingsJs, /let eventRunsSort = \{ key: 'date', direction: 'desc' \}/)
+  assert.match(settingsHtml, /data-run-sort="id"/)
+  assert.match(settingsHtml, /data-run-sort="best"/)
+  assert.match(settingsHtml, /data-run-sort="date"/)
+  assert.match(settingsJs, /run\?\.runType === 'sprint'/)
+  assert.match(settingsJs, /applyEventRunDates\(normalizeEventRunsPayload\(await call\('load_event_runs'/)
 })
 
 test('Engine telemetry keeps the compact panel order and one visibility toggle', () => {
