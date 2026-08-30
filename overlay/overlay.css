@@ -104,7 +104,7 @@ body {
 
 .tire__temp {
   color: #71717a;
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
@@ -187,7 +187,7 @@ body {
   position: relative;
   z-index: 1;
   color: #fafafa;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1;
 }
@@ -249,7 +249,7 @@ body {
 .engine__label {
   overflow: hidden;
   color: #a1a1aa;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 750;
   letter-spacing: 0.04em;
   line-height: 1;
@@ -259,7 +259,7 @@ body {
   min-width: 0;
   overflow: hidden;
   color: #f8fafc;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 650;
   line-height: 1;
   text-align: right;
@@ -401,7 +401,7 @@ body {
 .coach-edit__hint {
   flex: 1 1 auto;
   color: #a1a1aa;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -414,7 +414,7 @@ body {
   color: #f8fafc;
   background: rgb(226 232 240 / 10%);
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 750;
   letter-spacing: 0.04em;
   cursor: pointer;
@@ -660,7 +660,7 @@ body.is-editing .coachbar {
 
 .layout-edit__hint {
   color: #a1a1aa;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 750;
   letter-spacing: 0.08em;
 }
@@ -673,7 +673,7 @@ body.is-editing .coachbar {
   color: #f8fafc;
   background: rgb(226 232 240 / 10%);
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 750;
   letter-spacing: 0.04em;
   cursor: pointer;
