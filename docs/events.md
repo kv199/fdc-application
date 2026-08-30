@@ -31,6 +31,22 @@ available as the Events tab in Configuration, directly after Garage.
   top-left **BACK** action and Escape both return to the Events list.
 - Selecting the event title starts inline renaming. Enter or leaving the input
   saves a non-empty name; Escape cancels that rename without leaving the page.
+- An event page has one **RECORD** control. Selecting it changes the same
+  control to red **STOP** and arms capture for that event. FDC does not accept
+  a run already in progress: it waits for a new live race whose race clock and
+  distance are both within the bounded start window.
+- One saved run ID represents one driving attempt, including every completed
+  circuit lap in that attempt. Completing another lap never creates another
+  run ID. A circuit result stores each completed lap and shows the best lap and
+  its lap number in the event page; a sprint shows its confirmed finish time.
+- Paused or non-live telemetry suspends capture without discarding a run. A
+  subsequent live sample is the same attempt unless the race clock has moved
+  backwards by more than five seconds and either lap number or distance has
+  also moved backwards. That confirmed restart saves a valid preceding attempt
+  and immediately begins a new run ID while **STOP** remains active.
+- A circuit attempt with no completed lap, or a sprint without a confirmed
+  result, is discarded rather than added to the saved-run list. Selecting
+  **STOP** saves only a valid current attempt.
 - **ARCHIVE** retains the event locally, removes it from the active Events
   list, and returns to that list. **DELETE** asks for confirmation, then
   permanently removes the event and returns to the list.
@@ -54,7 +70,10 @@ uses the corresponding existing Forza-style class colors where specified:
 Events use the existing FDC application-data database, `fdc.sqlite`. Schema
 version 7 adds the `events` table with a numeric event ID, name, Class, Route
 Type, Mode, optional notes, creation/update timestamps, and an optional archive
-timestamp. Existing Garage and Shift Light data is retained during migration.
+timestamp. Schema version 8 adds event runs and their completed circuit laps.
+A run snapshots the vehicle ordinal, optional Garage display name, class, PI,
+drivetrain, start time, run type, and confirmed result. Existing Garage and
+Shift Light data is retained during migration.
 
 The active Events list excludes archived records. Event detail remains loadable
 for an archived record by the native layer, while deletion removes the record
@@ -69,3 +88,5 @@ stored as absent.
 - `rename_event`
 - `archive_event`
 - `delete_event`
+- `record_event_run`
+- `load_event_runs`

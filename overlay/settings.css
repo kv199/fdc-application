@@ -936,6 +936,100 @@ h1 {
   line-height: 1.4;
 }
 
+.event-recorder {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid rgb(105 232 63 / 30%);
+  background: rgb(105 232 63 / 4%);
+}
+
+.event-recorder__heading,
+.event-recorder__controls,
+.event-runs__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.event-recorder__eyebrow,
+.event-runs__heading {
+  color: #71717a;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.event-recorder h3 {
+  margin: 4px 0 0;
+  color: #f8fafc;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+}
+
+.event-recorder__controls {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.event-recorder__status {
+  color: #a1a1aa;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.event-recorder__status[data-state="armed"],
+.event-recorder__status[data-state="recording"] { color: #69e83f; }
+.event-recorder__status[data-state="stopped"] { color: #ef4444; }
+
+.event-recorder__record {
+  border-color: #69e83f;
+  color: #090b0e;
+  background: #69e83f;
+}
+
+.event-recorder__record:hover,
+.event-recorder__record:focus-visible { background: #88f166; }
+
+.event-recorder__controls .settings-button--danger { width: auto; margin-top: 0; }
+
+.event-recorder__hint {
+  margin: 10px 0 18px;
+  color: #a1a1aa;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.event-runs {
+  border-top: 1px solid rgb(226 232 240 / 12%);
+  padding-top: 13px;
+}
+
+.event-runs__heading { margin-bottom: 8px; }
+.event-runs__list { display: grid; gap: 6px; }
+
+.event-run-row {
+  display: grid;
+  grid-template-columns: minmax(82px, 0.7fr) minmax(120px, 1.4fr) minmax(120px, 1fr) minmax(90px, 0.75fr) minmax(85px, 0.75fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 7px 9px;
+  border: 1px solid rgb(226 232 240 / 14%);
+  background: rgb(8 10 12 / 55%);
+}
+
+.event-run-row__cell { min-width: 0; color: #f8fafc; font-size: 11px; }
+.event-run-row__label { display: block; margin-bottom: 3px; color: #71717a; font-size: 8px; font-weight: 800; letter-spacing: 0.1em; }
+.event-run-row__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-run-row__time { color: #69e83f; font-variant-numeric: tabular-nums; font-weight: 800; }
+.event-runs__empty { margin: 11px 0 0; color: #71717a; font-size: 11px; }
+
+@media (max-width: 760px) {
+  .event-run-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 620px) {
   .events-form {
     grid-template-columns: 1fr;

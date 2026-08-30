@@ -30,20 +30,20 @@ Normalized telemetry
             |
             v
 queueTelemetry
-    |       |          |             |            |
-    v       v          v             v            v
-Telemetry  Lap timing  Garage         Asphalt      Shift Light
-HUD                     |              Coach          |
-                        v                             v
-                    fdc.sqlite                     fdc.sqlite
+    |       |          |             |            |            |
+    v       v          v             v            v            v
+Telemetry  Lap timing  Garage         Asphalt      Shift Light  Events
+HUD                     |              Coach          |          |
+                        v                             v          v
+                    fdc.sqlite                     fdc.sqlite  fdc.sqlite
 ```
 
 The native layer emits one normalized telemetry payload for each valid FH6
 packet. The browser overlay receives it through the `direct_telemetry` Tauri
 event and passes it to `queueTelemetry`. That function fans the sample out to
-the HUD renderer, lap timing, Garage, Asphalt Coach, and Shift Light runtime.
-The feature branches keep their own state; Garage and Shift Light write to the
-local SQLite profile store.
+the HUD renderer, lap timing, Garage, Asphalt Coach, Shift Light, and Events
+runtime. The feature branches keep their own state; Garage, Shift Light, and
+Events write to the local SQLite profile store.
 
 Connection lifecycle is a parallel status path. The native receiver emits
 `direct_status` for waiting, live, stale, offline, and incompatible-packet
@@ -140,7 +140,7 @@ telemetry path. It provides:
   size (default `820 × 620` logical pixels);
 - Garage current-car and saved-car views, including local name editing and the
   current car's configuration list;
-- the Events library with local event creation and management;
+- the Events library with local event creation, management, and run records;
 - Direct Data Out status and retry;
 - current Shift Light diagnostics and reset.
 

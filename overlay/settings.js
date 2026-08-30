@@ -75,7 +75,15 @@
   const eventsDetailNotesValue = document.getElementById('events-detail-notes-value')
   const eventsDetailArchive = document.getElementById('events-detail-archive')
   const eventsDetailDelete = document.getElementById('events-detail-delete')
+  const eventRecorderStatus = document.getElementById('event-recorder-status')
+  const eventRecorderHint = document.getElementById('event-recorder-hint')
+  const eventRecorderToggle = document.getElementById('event-recorder-toggle')
+  const eventRunsList = document.getElementById('event-runs-list')
+  const eventRunsEmpty = document.getElementById('event-runs-empty')
+  const eventRunsCount = document.getElementById('event-runs-count')
   const eventsById = new Map()
+  let currentEventRuns = []
+  let recorderState = { eventId: null, recording: false, state: 'stopped', lapCount: 0 }
   let eventsView = 'library'
   let currentEventId = null
   let eventsCreateOpen = false
@@ -416,6 +424,30 @@
     }
   }
 
+  async function listenEventRecorderEvents() {
+    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+    if (!eventApi || typeof eventApi.listen !== 'function') return
+    await eventApi.listen('event_recorder_status', event => {
+      const payload = event?.payload
+      if (!payload || (currentEventId !== null && eventKey(payload.eventId) !== currentEventId)) return
+      recorderState = {
+        ...recorderState,
+        eventId: eventKey(payload.eventId),
+        recording: payload.recording === true,
+        state: payload.state || (payload.recording ? 'recording' : 'stopped'),
+        lapCount: Number(payload.lapCount) || 0
+      }
+      renderEventRecorder()
+    })
+    await eventApi.listen('event_recorder_run_saved', event => {
+      const run = normalizeEventRun(event?.payload)
+      if (!run || currentEventId === null || (run.eventId && run.eventId !== currentEventId)) return
+      currentEventRuns = [run, ...currentEventRuns.filter(existing => existing.id !== run.id)]
+      renderEventRuns()
+    })
+    await eventApi.emit('event_recorder_status_request')
+  }
+
   function eventKey(value) {
     if (value === null || value === undefined || value === '') return null
     return String(value)
@@ -595,6 +627,198 @@
     }
     if (eventsDetailNotes) eventsDetailNotes.hidden = !event.notes
     if (eventsDetailNotesValue) eventsDetailNotesValue.textContent = event.notes || ''
+    renderEventRecorder()
+  }
+
+  function runId(value) {
+    if (value === null || value === undefined || value === '') return null
+    return String(value)
+  }
+
+  function runTimeMs(value, unit = 'auto') {
+    const number = Number(value)
+    if (!Number.isFinite(number) || number < 0) return null
+    if (unit === 'ms') return Math.round(number)
+    if (unit === 'seconds') return Math.round(number * 1000)
+    return number < 1000 ? Math.round(number * 1000) : Math.round(number)
+  }
+
+  function normalizeEventRun(value) {
+    const source = value && typeof value === 'object' && value.run && typeof value.run === 'object' ? value.run : value
+    if (!source || typeof source !== 'object') return null
+    const id = runId(source.runId ?? source.run_id ?? source.id)
+    if (!id) return null
+    const laps = Array.isArray(source.laps)
+      ? source.laps.map(lap => ({
+        lapNumber: Number(lap?.lapNumber ?? lap?.lap_number ?? lap?.number),
+        timeMs: lap?.lapTimeMs !== undefined
+          ? runTimeMs(lap.lapTimeMs, 'ms')
+          : lap?.lap_time_ms !== undefined
+            ? runTimeMs(lap.lap_time_ms, 'ms')
+            : lap?.timeMs !== undefined
+              ? runTimeMs(lap.timeMs, 'ms')
+              : lap?.time_ms !== undefined
+                ? runTimeMs(lap.time_ms, 'ms')
+                : runTimeMs(lap?.time ?? lap?.seconds)
+      })).filter(lap => Number.isFinite(lap.lapNumber) && lap.timeMs !== null)
+      : []
+    const car = source.car && typeof source.car === 'object' ? source.car : source
+    return {
+      id,
+      eventId: eventKey(source.eventId ?? source.event_id),
+      startedAt: source.startedAt ?? source.started_at ?? source.createdAt ?? source.created_at ?? null,
+      finalTimeMs: source.resultTimeMs !== undefined
+        ? runTimeMs(source.resultTimeMs, 'ms')
+        : source.result_time_ms !== undefined
+          ? runTimeMs(source.result_time_ms, 'ms')
+          : source.finalTimeMs !== undefined
+            ? runTimeMs(source.finalTimeMs, 'ms')
+            : source.final_time_ms !== undefined
+              ? runTimeMs(source.final_time_ms, 'ms')
+              : runTimeMs(source.finalTime ?? source.final_time),
+      runType: eventText(source.runType ?? source.run_type).toLowerCase() || (laps.length ? 'circuit' : 'sprint'),
+      result: eventText(source.result).toLowerCase() || 'completed',
+      laps,
+      car: {
+        name: eventText(car.name ?? car.displayName ?? car.carName ?? source.carName),
+        ordinal: car.ordinal ?? car.carOrdinal ?? car.car_ordinal ?? source.carOrdinal ?? source.car_ordinal ?? null,
+        class: eventText(car.class ?? car.classLabel ?? car.carClass ?? source.carClass)
+          || garageApi?.classLabel?.(car.class ?? car.classLabel ?? car.carClass ?? source.carClass)
+          || null,
+        pi: car.pi ?? car.performanceIndex ?? source.carPi ?? source.car_pi ?? null,
+        drivetrain: eventText(car.drivetrainLabel ?? car.drivetrain ?? car.drivetrainType)
+          || garageApi?.drivetrainLabel?.(car.drivetrain ?? car.drivetrainType ?? source.drivetrain)
+          || null
+      }
+    }
+  }
+
+  function normalizeEventRunsPayload(value) {
+    const list = Array.isArray(value) ? value : value?.runs ?? value?.items ?? value?.records
+    return Array.isArray(list) ? list.map(normalizeEventRun).filter(Boolean) : []
+  }
+
+  function formatRunTime(timeMs) {
+    if (!Number.isFinite(timeMs)) return '—'
+    const totalSeconds = timeMs / 1000
+    const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0')
+    const seconds = (totalSeconds - minutes * 60).toFixed(3).padStart(6, '0')
+    return `${minutes}:${seconds}`
+  }
+
+  function formatRunDate(value) {
+    if (!value) return '—'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return String(value)
+    const pad = number => String(number).padStart(2, '0')
+    return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
+  }
+
+  function runCarName(run) {
+    return run.car.name || (run.car.ordinal ? `CAR #${run.car.ordinal}` : 'UNKNOWN CAR')
+  }
+
+  function renderEventRuns() {
+    if (!eventRunsList) return
+    eventRunsList.replaceChildren()
+    const runs = [...currentEventRuns].sort((left, right) => String(right.startedAt || '').localeCompare(String(left.startedAt || '')))
+    if (eventRunsEmpty) eventRunsEmpty.hidden = runs.length > 0
+    if (eventRunsCount) eventRunsCount.textContent = `${runs.length} ${runs.length === 1 ? 'RUN' : 'RUNS'}`
+    for (const run of runs) {
+      const row = document.createElement('div')
+      row.className = 'event-run-row'
+      const carDetails = [run.car.class, run.car.pi ? `PI ${run.car.pi}` : '', run.car.drivetrain].filter(Boolean).join(' · ') || '—'
+      const bestLap = run.laps.reduce((best, lap) => !best || lap.timeMs < best.timeMs ? lap : best, null)
+      const cells = [
+        ['ID', run.id],
+        ['CAR', runCarName(run)],
+        ['CLASS / PI / DRIVE', carDetails],
+        [bestLap ? `BEST L${Math.max(1, Math.round(bestLap.lapNumber))}` : 'SPRINT', formatRunTime(bestLap?.timeMs ?? run.finalTimeMs)],
+        ['DATE', formatRunDate(run.startedAt)]
+      ]
+      for (const [label, value] of cells) {
+        const cell = document.createElement('div')
+        cell.className = 'event-run-row__cell'
+        const labelElement = document.createElement('span')
+        labelElement.className = 'event-run-row__label'
+        labelElement.textContent = label
+        const valueElement = document.createElement('span')
+        valueElement.className = `event-run-row__value${label.startsWith('BEST') || label === 'SPRINT' ? ' event-run-row__time' : ''}`
+        valueElement.textContent = value
+        cell.append(labelElement, valueElement)
+        row.append(cell)
+      }
+      eventRunsList.append(row)
+    }
+  }
+
+  function renderEventRecorder() {
+    const event = currentEventId === null ? null : eventsById.get(currentEventId)
+    const isSelected = Boolean(event && recorderState.eventId === event.id)
+    const recording = isSelected && recorderState.recording === true
+    const recordingAnotherEvent = Boolean(recorderState.recording && !isSelected)
+    const state = isSelected ? recorderState.state || (recording ? 'recording' : 'stopped') : 'stopped'
+    if (eventRecorderStatus) {
+      eventRecorderStatus.dataset.state = state
+      eventRecorderStatus.textContent = state.toUpperCase()
+    }
+    if (eventRecorderToggle) {
+      eventRecorderToggle.textContent = recording ? 'STOP' : 'RECORD'
+      eventRecorderToggle.classList.toggle('settings-button--danger', recording)
+      eventRecorderToggle.classList.toggle('event-recorder__record', !recording)
+      eventRecorderToggle.setAttribute('aria-pressed', String(recording))
+      eventRecorderToggle.disabled = recordingAnotherEvent
+    }
+    if (eventRecorderHint) {
+      eventRecorderHint.textContent = recordingAnotherEvent
+        ? `Recording Event #${recorderState.eventId}. Open that event to stop capture.`
+        : state === 'armed'
+        ? 'Waiting for a clean race start. Pauses are retained.'
+        : state === 'recording'
+          ? `${recorderState.lapCount || 0} completed ${(recorderState.lapCount || 0) === 1 ? 'lap' : 'laps'} in this run.`
+          : 'Arm capture, then start from the event grid. Pauses are retained.'
+    }
+    renderEventRuns()
+  }
+
+  async function loadEventRuns(eventId = currentEventId) {
+    const key = eventKey(eventId)
+    if (!key) return false
+    try {
+      const nativeEventId = Number.isFinite(Number(key)) ? Math.round(Number(key)) : key
+      currentEventRuns = normalizeEventRunsPayload(await call('load_event_runs', { eventId: nativeEventId }))
+      renderEventRuns()
+      return true
+    } catch (error) {
+      currentEventRuns = []
+      renderEventRuns()
+      setStatus(error.message || 'Unable to load event runs', true)
+      return false
+    }
+  }
+
+  async function sendRecorderConfig(action) {
+    const event = currentEventId === null ? null : eventsById.get(currentEventId)
+    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+    if (!event || !eventApi || typeof eventApi.emit !== 'function') {
+      setStatus('EVENT RECORDER IS UNAVAILABLE', true)
+      return false
+    }
+    try {
+      await eventApi.emit('event_recorder_config', {
+        action,
+        eventId: event.id,
+        eventName: event.name,
+        armedAt: action === 'record' ? Date.now() : undefined
+      })
+      recorderState = { ...recorderState, eventId: event.id, recording: action === 'record', state: action === 'record' ? 'armed' : 'stopped' }
+      renderEventRecorder()
+      setStatus(action === 'record' ? 'EVENT RECORDING ARMED' : 'EVENT RECORDING STOPPED')
+      return true
+    } catch (error) {
+      setStatus(error.message || 'Unable to update event recorder', true)
+      return false
+    }
   }
 
   async function loadEvents() {
@@ -633,6 +857,7 @@
     renderEventDetail(event)
     setEventsView('detail')
     eventsDetailBack?.focus()
+    void loadEventRuns(event.id)
     return true
   }
 
@@ -645,6 +870,7 @@
     }
     if (eventsDetailNotes) eventsDetailNotes.hidden = true
     if (eventsDetailNotesValue) eventsDetailNotesValue.textContent = ''
+    currentEventRuns = []
     setEventsView('library')
     renderEventsLibrary()
   }
@@ -678,10 +904,11 @@
       eventsById.set(event.id, event)
       resetEventCreateForm()
       setEventsCreateOpen(false)
-      renderEventDetail(event)
       currentEventId = event.id
+      renderEventDetail(event)
       setEventsView('detail')
       eventsDetailBack?.focus()
+      void loadEventRuns(event.id)
       setStatus('EVENT CREATED')
       return true
     } catch (error) {
@@ -1349,6 +1576,9 @@
   eventsDetailTitle?.addEventListener('click', beginEventRename)
   eventsDetailArchive?.addEventListener('click', () => void archiveCurrentEvent())
   eventsDetailDelete?.addEventListener('click', () => void deleteCurrentEvent())
+  eventRecorderToggle?.addEventListener('click', () => {
+    void sendRecorderConfig(recorderState.recording === true ? 'stop' : 'record')
+  })
   garageCurrentVariantsToggle?.addEventListener('click', toggleGarageVariants)
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return
@@ -1384,6 +1614,7 @@
   void listenShiftLightEvents()
   void listenRouteEvents()
   void listenGarageEvents()
+  void listenEventRecorderEvents()
   globalScope.SettingsController = {
     cancelEdit,
     setLayoutEditingState,

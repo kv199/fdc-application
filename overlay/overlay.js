@@ -86,6 +86,15 @@ let latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibr
 let lastAsphaltBriefToken = null
 let asphaltBriefTimer = null
 let garageRuntime = null
+const eventRecorder = window.HudEventRecorder?.createEventRecorder?.({
+  timingApi: window.HudLapTiming,
+  invoke: invokeTauri,
+  emit: payload => window.HudTauriEvents?.getEventApi?.()?.emit?.('event_recorder_status', payload),
+  onSaved: payload => {
+    const eventApi = window.HudTauriEvents?.getEventApi?.()
+    if (eventApi?.emit) Promise.resolve(eventApi.emit('event_recorder_run_saved', payload)).catch(() => {})
+  }
+}) || null
 
 const steeringWheelImage = new Image()
 steeringWheelImage.addEventListener('load', () => {
@@ -630,6 +639,7 @@ function queueTelemetry(telemetry) {
   if (!telemetry || typeof telemetry !== 'object' || !Number.isFinite(telemetry.speedKmh)) return false
 
   garageRuntime?.update?.(telemetry)
+  eventRecorder?.update?.(telemetry)
   const shiftLightState = window.HudShiftLightRuntime?.update?.(telemetry)
   if (shiftLightState) queueShiftLight(shiftLightState)
   const previousTimingState = lapTimingState
@@ -809,6 +819,20 @@ async function connectDirect() {
   }
 }
 
+async function listenEventRecorderEvents() {
+  const eventApi = window.HudTauriEvents?.getEventApi?.()
+  if (!eventApi || typeof eventApi.listen !== 'function' || !eventRecorder) return
+  await eventApi.listen('event_recorder_config', event => {
+    const payload = event?.payload || {}
+    if (payload.action === 'record') {
+      eventRecorder.arm(payload.eventId, payload.eventName, payload.armedAt)
+    } else if (payload.action === 'stop') {
+      void eventRecorder.stop()
+    }
+  })
+  await eventApi.listen('event_recorder_status_request', () => eventRecorder.status({}, true))
+}
+
 async function retryDirectSource() {
   routeRevision += 1
   resetDirectPresentation()
@@ -979,5 +1003,6 @@ window.HudOverlay = {
 
 applyDisplayPreferences()
 publishRouteStatus({}, true)
+void listenEventRecorderEvents()
 if (DEMO_MODE) startDemo()
 else connectDirect()

@@ -288,6 +288,24 @@
           <span id="events-detail-notes-label" class="events-detail-view__notes-label">NOTES</span>
           <p id="events-detail-notes-value" class="events-detail-view__notes-value"></p>
         </section>
+        <section class="event-recorder" aria-labelledby="event-recorder-title">
+          <div class="event-recorder__heading">
+            <div>
+              <span class="event-recorder__eyebrow">RUN CAPTURE</span>
+              <h3 id="event-recorder-title">RECORD RUNS</h3>
+            </div>
+            <div class="event-recorder__controls">
+              <span id="event-recorder-status" class="event-recorder__status" data-state="stopped">STOPPED</span>
+              <button id="event-recorder-toggle" class="settings-button event-recorder__record" type="button" aria-pressed="false">RECORD</button>
+            </div>
+          </div>
+          <p id="event-recorder-hint" class="event-recorder__hint">Arm capture, then start from the event grid. Pauses are retained.</p>
+          <div class="event-runs" aria-live="polite">
+            <div class="event-runs__heading"><span>SAVED RUNS</span><span id="event-runs-count">0 RUNS</span></div>
+            <div id="event-runs-list" class="event-runs__list"></div>
+            <p id="event-runs-empty" class="event-runs__empty">No completed runs yet.</p>
+          </div>
+        </section>
       </section>
     </section>
 
@@ -425,6 +443,7 @@
   <script src="display-preferences.js"></script>
   <script src="tauri-events.js"></script>
   <script src="garage-runtime.js"></script>
+  <script src="event-recorder.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>
