@@ -2,14 +2,14 @@
 
 This document is the map of the current FDC runtime. Detailed behavior belongs
 in the feature documents for [Garage](garage.md), [Asphalt Coach](asphalt-coach.md),
-and [Shift Light](shift-light.md).
+[Shift Light](shift-light.md), and [Events](events.md).
 
 ## System boundary
 
 FDC is a standalone Windows Tauri application for Forza Horizon 6. The
 repository owns the native Direct Data Out receiver and decoder, the browser
-overlay, Configuration, lap timing, Garage, Asphalt Coach, Shift Light, and local HUD
-profile persistence.
+overlay, Configuration, lap timing, Garage, Asphalt Coach, Shift Light, Events,
+and local HUD profile persistence.
 
 The runtime boundary ends at the local application. The current source of
 telemetry is FH6 Data Out over the local UDP endpoint described below.
@@ -62,9 +62,9 @@ the tray menu, Direct Data Out, and native persistence commands.
 - A valid packet emits `direct_telemetry`. Receiver lifecycle emits
   `direct_status`; a packet gap longer than one second becomes stale.
 - Tauri commands control source lifecycle, Configuration, layout and
-  visibility, display preferences, Garage and Shift Light profile operations,
-  and reset.
-- Garage and Shift Light database commands open `fdc.sqlite` below the Tauri
+  visibility, display preferences, Garage and Events operations, Shift Light
+  profile operations, and reset.
+- Garage, Events, and Shift Light database commands open `fdc.sqlite` below the Tauri
   application data directory and apply the versioned schema there.
 
 The native layer does not implement Asphalt Coach or the browser HUD
@@ -85,9 +85,9 @@ Coach card, Garage persistence, and Shift Light presentation. It schedules visua
 than each feature subscribing to the UDP source independently.
 
 The settings window is a separate browser page. It observes route status,
-Garage, and Shift Light events, and invokes native commands for configuration
-actions. The tray menu opens Configuration and provides the application exit
-path.
+Garage, and Shift Light events, presents the Events library, and invokes native
+commands for configuration actions. The tray menu opens Configuration and
+provides the application exit path.
 
 ## Garage boundary
 
@@ -140,6 +140,7 @@ telemetry path. It provides:
   size (default `820 × 620` logical pixels);
 - Garage current-car and saved-car views, including local name editing and the
   current car's configuration list;
+- the Events library with local event creation and management;
 - Direct Data Out status and retry;
 - current Shift Light diagnostics and reset.
 
@@ -153,9 +154,9 @@ affect the native window or Shift Light database cross the Tauri IPC boundary.
 `fdc.sqlite` is created in the FDC application-data directory, outside the
 repository. Its current schema contains the Garage car registry and
 class/PI/drivetrain configuration registry alongside the Shift Light car registry, gearbox variant
-registry, per-gear profiles, bounded profile samples, and schema version
-metadata. Transactional native commands enforce Garage identity and recency as
-well as Shift Light identity and monotonic merge rules.
+registry, per-gear profiles, bounded profile samples, the Events table, and
+schema version metadata. Transactional native commands enforce Garage identity
+and recency as well as Shift Light identity and monotonic merge rules.
 
 The Coach calibration envelope, active findings, lap timing state, telemetry
 history, and visual presentation state remain in memory for the running HUD.
