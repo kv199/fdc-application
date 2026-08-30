@@ -226,11 +226,14 @@ test('HUD opacity appears before HUD controls and resets to its 80 percent defau
 
 test('HUD heading has no redundant position and visibility label, and status uses a fixed footer', () => {
   assert.doesNotMatch(settingsHtml, /POSITION \+ VISIBILITY/)
-  assert.match(settingsHtml, /<footer class="settings-footer"[^>]*>[\s\S]*id="settings-status"[^>]*>[\s\S]*id="app-version"[^>]*>v1\.0\.0<\/span>[\s\S]*<\/footer>/)
+  assert.match(settingsHtml, /<footer class="settings-footer"[^>]*>[\s\S]*id="settings-status"[^>]*>[\s\S]*id="app-version"[^>]*>VERSION UNAVAILABLE<\/span>[\s\S]*<\/footer>/)
+  assert.doesNotMatch(settingsHtml, /v\d+\.\d+\.\d+/)
+  assert.doesNotMatch(settingsJs, /v\d+\.\d+\.\d+/)
   assert.match(settingsJs, /getElementById\('settings-status'\)/)
   assert.match(settingsJs, /call\('get_app_version'\)/)
+  assert.match(settingsJs, /appVersion\.textContent = `v\$\{normalizedVersion\}`/)
   assert.match(tauriMain, /fn get_app_version\(\) -> &'static str/)
-  assert.match(cargoManifest, /^version = "1\.0\.0"$/m)
+  assert.match(cargoManifest, /^version = "\d+\.\d+\.\d+"$/m)
   assert.equal(Object.hasOwn(JSON.parse(tauriConfig), 'version'), false)
   assert.match(settingsCss, /--settings-footer-height:\s*52px;/)
   assert.match(settingsCss, /\.settings-shell\s*{[\s\S]*?padding:\s*28px 30px calc\(26px \+ var\(--settings-footer-height\)\);/)

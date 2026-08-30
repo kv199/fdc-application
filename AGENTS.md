@@ -10,6 +10,20 @@
   in-scope change and push it to the configured GitHub `origin/main`; do not
   leave completed work only locally.
 
+## Release versioning policy
+
+- `src-tauri/Cargo.toml` is the sole canonical application version source;
+  omit `version` from the Tauri configuration.
+- Bump the release version according to user impact: user-facing runtime
+  features require a minor bump; fixes and safe UI or behavior improvements
+  require a patch bump; breaking compatibility, persistence, or contract
+  changes require a major bump.
+- Documentation-only changes, tests-only changes, and nonbehavioral refactors
+  do not bump the release version.
+- Every version bump must update `src-tauri/Cargo.toml`, be reflected in
+  `Cargo.lock`, pass the final release verification cycle, be committed and
+  pushed to `main`, and have an annotated tag `vX.Y.Z` created and pushed.
+
 ## Current system boundary
 
 - FDC receives Forza Horizon 6 Data Out on `127.0.0.1:5301`.

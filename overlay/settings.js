@@ -11,7 +11,6 @@
   }, {})
   const invoke = globalScope.__TAURI_INTERNALS__?.invoke
   const appVersion = document.getElementById('app-version')
-  const staticAppVersionLabel = appVersion?.textContent || ''
   const status = document.getElementById('settings-status')
   const telemetryStatus = document.getElementById('telemetry-status')
   const telemetryStatusLabel = document.getElementById('telemetry-status-label')
@@ -811,10 +810,9 @@
       const version = await call('get_app_version')
       if (typeof version !== 'string' || !version.trim()) return
       const normalizedVersion = version.trim().replace(/^v/u, '')
-      const staticPrefix = staticAppVersionLabel.match(/^[^0-9]*/u)?.[0] || 'v'
-      appVersion.textContent = `${staticPrefix}${normalizedVersion}`
+      appVersion.textContent = `v${normalizedVersion}`
     } catch {
-      // Preserve the static footer version when the native command is unavailable.
+      // Preserve the unavailable-version fallback when the native command is unavailable.
     }
   }
 
