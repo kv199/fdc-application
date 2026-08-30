@@ -2423,6 +2423,11 @@ fn sync_shift_light_status(app: AppHandle) -> Result<(), String> {
     eval_main(&app, "window.HudOverlay?.syncShiftLightStatus?.()")
 }
 
+#[tauri::command]
+fn get_app_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(DirectSourceState::default())
@@ -2436,6 +2441,7 @@ fn main() {
             set_configuration_always_on_top,
             sync_route_status,
             sync_shift_light_status,
+            get_app_version,
             start_direct_source,
             stop_direct_source,
             retry_direct_source,
@@ -2574,6 +2580,11 @@ mod tests {
             width: SETTINGS_DEFAULT_WIDTH,
             height: SETTINGS_MAX_HEIGHT + 1,
         }));
+    }
+
+    #[test]
+    fn exposes_the_compiled_cargo_package_version() {
+        assert_eq!(get_app_version(), env!("CARGO_PKG_VERSION"));
     }
 
     #[test]

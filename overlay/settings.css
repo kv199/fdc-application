@@ -1,4 +1,5 @@
 :root {
+  --settings-footer-height: 52px;
   color: #f8fafc;
   background: #090b0e;
   font-family: "Bahnschrift", "Segoe UI Variable", "Segoe UI", sans-serif;
@@ -30,7 +31,7 @@ input {
 .settings-shell {
   width: 100%;
   min-height: 100vh;
-  padding: 28px 30px 26px;
+  padding: 28px 30px calc(26px + var(--settings-footer-height));
   background:
     radial-gradient(circle at 100% 0, rgb(105 232 63 / 8%), transparent 34%),
     #090b0e;
@@ -1529,18 +1530,44 @@ h1 {
 }
 
 .settings-status {
-  position: fixed;
-  bottom: 26px;
-  left: 30px;
+  flex: 1 1 auto;
+  min-width: 0;
   z-index: 10;
   margin: 0;
   color: #69e83f;
   letter-spacing: 0.18em;
   pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-status.is-error {
   color: #ff827d;
+}
+
+.settings-footer {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: var(--settings-footer-height);
+  padding: 0 30px;
+  border-top: 1px solid rgb(226 232 240 / 18%);
+  background: #090b0e;
+}
+
+.settings-footer__version {
+  flex: 0 0 auto;
+  color: #71717a;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
 }
 
 .display-settings__list {

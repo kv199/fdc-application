@@ -9,6 +9,7 @@ const settingsJs = fs.readFileSync(path.join(__dirname, 'settings.js'), 'utf8')
 const overlayHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8')
 const tauriConfig = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'tauri.conf.json'), 'utf8')
+const cargoManifest = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'Cargo.toml'), 'utf8')
 
 test('Configuration exposes HUD, Garage, Events, Shift Light and Settings tabs', () => {
   const tabs = [...settingsHtml.matchAll(/data-settings-tab="([^"]+)"/g)].map(match => match[1])
@@ -223,9 +224,18 @@ test('HUD opacity appears before HUD controls and resets to its 80 percent defau
   assert.match(settingsCss, /\.hud-opacity-reset\.is-dirty:not\(:disabled\)[\s\S]*?#facc15/)
 })
 
-test('HUD heading has no redundant position and visibility label, and action status is anchored', () => {
+test('HUD heading has no redundant position and visibility label, and status uses a fixed footer', () => {
   assert.doesNotMatch(settingsHtml, /POSITION \+ VISIBILITY/)
-  assert.match(settingsCss, /\.settings-status\s*{[\s\S]*?position:\s*fixed;[\s\S]*?bottom:\s*26px;[\s\S]*?left:\s*30px;/)
+  assert.match(settingsHtml, /<footer class="settings-footer"[^>]*>[\s\S]*id="settings-status"[^>]*>[\s\S]*id="app-version"[^>]*>v1\.0\.0<\/span>[\s\S]*<\/footer>/)
+  assert.match(settingsJs, /getElementById\('settings-status'\)/)
+  assert.match(settingsJs, /call\('get_app_version'\)/)
+  assert.match(tauriMain, /fn get_app_version\(\) -> &'static str/)
+  assert.match(cargoManifest, /^version = "1\.0\.0"$/m)
+  assert.equal(Object.hasOwn(JSON.parse(tauriConfig), 'version'), false)
+  assert.match(settingsCss, /--settings-footer-height:\s*52px;/)
+  assert.match(settingsCss, /\.settings-shell\s*{[\s\S]*?padding:\s*28px 30px calc\(26px \+ var\(--settings-footer-height\)\);/)
+  assert.match(settingsCss, /\.settings-footer\s*{[\s\S]*?position:\s*fixed;[\s\S]*?height:\s*var\(--settings-footer-height\);[\s\S]*?border-top:[\s\S]*?background:\s*#090b0e;/)
+  assert.doesNotMatch(settingsCss, /\.settings-status\s*{[^}]*position:\s*fixed;/)
 })
 
 test('Configuration persists and applies display preferences through the shared contract', () => {
