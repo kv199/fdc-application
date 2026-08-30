@@ -26,6 +26,20 @@
     return value !== null && value >= 0 ? Math.round(value * 1000) : null
   }
 
+  function raceTimeMs(telemetry) {
+    const value = finite(telemetry?.lap?.raceTime)
+    return value !== null && value >= 0 ? Math.round(value * 1000) : null
+  }
+
+  function isZeroedNonLiveRacePacket(telemetry) {
+    if (telemetry?.isRaceOn === true) return false
+    const lap = telemetry?.lap
+    return currentTimeMs(telemetry) === 0
+      && raceTimeMs(telemetry) === 0
+      && lapTimeMs(telemetry) === null
+      && finite(lap?.distance) === 0
+  }
+
   function isCleanStart(telemetry) {
     if (telemetry?.isRaceOn !== true) return false
     const current = currentTimeMs(telemetry)
@@ -95,6 +109,8 @@
       finalTimeSource: null,
       runType: 'circuit',
       result: 'completed',
+      lastLiveRaceTimeMs: null,
+      sawZeroedRaceExit: false,
       car: carSnapshot(telemetry)
     }
   }
@@ -284,9 +300,27 @@
       return lastPersistence
     }
 
+    function confirmManualSprintFallback() {
+      const run = state.run
+      if (
+        !run
+        || run.laps.length > 0
+        || !run.sawZeroedRaceExit
+        || run.lastLiveRaceTimeMs === null
+        || run.lastLiveRaceTimeMs <= START_MAX_MS
+      ) return false
+
+      run.finalTimeMs = run.lastLiveRaceTimeMs
+      run.finalTimeSource = 'forza_live_race_time'
+      run.runType = 'sprint'
+      run.result = 'confirmed'
+      return true
+    }
+
     function stop() {
+      const usedSprintFallback = confirmManualSprintFallback()
       const pending = state.run
-        ? finishRun('stop')
+        ? finishRun(usedSprintFallback ? 'stop_result_reset' : 'stop')
         : (lastPersistence || Promise.resolve(result(null, 'discarded', 'There is no active run to save.')))
       state.armed = false
       state.eventId = null
@@ -311,6 +345,14 @@
       if (!state.run) {
         if (isCleanStart(telemetry)) {
           state.run = createRun(state.eventId, telemetry, state.armedAtMs || now())
+        }
+      }
+
+      if (state.run) {
+        const liveRaceTime = telemetry.isRaceOn === true ? raceTimeMs(telemetry) : null
+        if (liveRaceTime !== null) state.run.lastLiveRaceTimeMs = liveRaceTime
+        if (isZeroedNonLiveRacePacket(telemetry) && state.run.lastLiveRaceTimeMs !== null) {
+          state.run.sawZeroedRaceExit = true
         }
       }
 
@@ -348,6 +390,7 @@
     carSnapshot,
     isCleanStart,
     isStrongRestart,
+    isZeroedNonLiveRacePacket,
     normalizeRunsPayload
   }
 }))

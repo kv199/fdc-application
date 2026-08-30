@@ -54,9 +54,11 @@ available as the Events tab in Configuration, directly after Garage.
   completed lap. That confirmed restart saves a valid preceding attempt while
   **STOP** remains active.
 - A circuit attempt with no completed lap, or a sprint without a confirmed
-  result, is discarded rather than added to the saved-run list. Selecting
-  **STOP** saves only a valid current attempt and explicitly reports whether
-  it was saved, discarded, or could not be stored.
+  result, is discarded rather than added to the saved-run list. If a started
+  sprint reaches a zeroed non-live result packet before its final packet is
+  observed, **STOP** uses its last live race time as the manually confirmed
+  result. Selecting **STOP** explicitly reports whether the attempt was saved,
+  discarded, or could not be stored.
 - **DELETE** asks for confirmation, then permanently removes the event and
   returns to the list.
 
