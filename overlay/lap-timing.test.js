@@ -171,6 +171,20 @@ test('a post-finish LastLap advancing beyond the live clock is immediate evidenc
   assert.equal(state.finalTimeSource, timing.COMPLETE_SOURCES.circuit)
 })
 
+test('a new non-live LastLap equal to the last live clock completes a sprint', () => {
+  let state = timing.createState()
+  state = timing.update(state, telemetry({ lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 } }))
+  state = timing.update(state, telemetry({ lap: { number: 0, current: 108.713, last: 0, raceTime: 108.713, distance: 5951 } }))
+  state = timing.update(state, telemetry({
+    isRaceOn: false,
+    lap: { number: 0, current: 0, last: 108.713, raceTime: 108.713, distance: 5951 }
+  }))
+
+  assert.equal(state.phase, 'sprint_complete')
+  assert.equal(state.finalTimeMs, 108713)
+  assert.equal(state.finalTimeSource, timing.COMPLETE_SOURCES.circuit)
+})
+
 test('zero or equal stopped clocks remain paused instead of finishing a sprint', () => {
   let state = timing.createState()
   state = timing.update(state, telemetry({ lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 } }))

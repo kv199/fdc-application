@@ -130,7 +130,7 @@
       || hasLapBoundary(state, telemetry)
       || state.pendingLapBoundary
       || completedTimeMs === null
-      || completedTimeMs <= state.lastLiveCurrentTimeMs
+      || completedTimeMs < state.lastLiveCurrentTimeMs
       || completedTimeMs === state.lastObservedLapTimeMs
     ) return null
 

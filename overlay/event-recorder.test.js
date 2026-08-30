@@ -141,6 +141,28 @@ test('a confirmed sprint is saved immediately and the recorder remains armed', a
   assert.equal((await instance.stop()).outcome, 'saved')
 })
 
+test('a sprint LastLap equal to the live clock is persisted before stop', async () => {
+  const saved = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  instance.arm(13)
+  instance.update(telemetry())
+  instance.update(telemetry({ lap: { number: 0, current: 108.713, last: 0, raceTime: 108.713, distance: 5951 } }))
+  instance.update(telemetry({
+    isRaceOn: false,
+    lap: { number: 0, current: 0, last: 108.713, raceTime: 108.713, distance: 5951 }
+  }))
+
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(saved.length, 1)
+  assert.equal(saved[0].run.resultTimeMs, 108713)
+  assert.equal(saved[0].run.runType, 'sprint')
+  assert.equal((await instance.stop()).outcome, 'saved')
+})
+
 test('circuit stop saves every completed lap in one run', async () => {
   const saved = []
   const instance = recorder.createEventRecorder({
