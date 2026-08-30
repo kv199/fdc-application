@@ -5,8 +5,6 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   const START_MAX_MS = 2000
   const START_MAX_DISTANCE_M = 25
-  const RESTART_CLOCK_REWIND_S = 5
-  const RESTART_DISTANCE_REWIND_M = 100
 
   function finite(value) {
     if (value === null || value === undefined || value === '') return null
@@ -39,20 +37,15 @@
   }
 
   function isStrongRestart(previous, telemetry) {
-    if (!previous || telemetry?.isRaceOn !== true) return false
-    const previousClock = finite(previous.lastRaceTimeS)
-    const currentClock = finite(telemetry?.lap?.raceTime)
+    if (!previous || !isCleanStart(telemetry)) return false
     const previousLap = finite(previous.lastLapNumber)
     const currentLap = finite(telemetry?.lap?.number)
-    const previousDistance = finite(previous.lastDistanceM)
-    const currentDistance = finite(telemetry?.lap?.distance)
-    if (previousClock === null || currentClock === null || previousLap === null || currentLap === null) return false
-    const clockRewound = currentClock + RESTART_CLOCK_REWIND_S < previousClock
-    const lapRewound = currentLap < previousLap
-    const distanceRewound = previousDistance !== null
-      && currentDistance !== null
-      && currentDistance + RESTART_DISTANCE_REWIND_M < previousDistance
-    return clockRewound && (lapRewound || distanceRewound)
+    if (previousLap === null || currentLap === null) return false
+
+    // A race clock or distance rewind can happen while Forza rolls a driver
+    // back in the current attempt.  Only a clean start with an actual lap
+    // reset is strong enough evidence that a new attempt was started.
+    return currentLap === 0 && previousLap > currentLap
   }
 
   function carSnapshot(telemetry) {

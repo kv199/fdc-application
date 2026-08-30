@@ -43,11 +43,11 @@ available as the Events tab in Configuration, directly after Garage.
   next attempt. Circuit laps remain in their current run until **STOP** or a
   confirmed restart. Each row displays the local run start as
   `YYYY.MM.DD HH:MM:SS`.
-- Paused or non-live telemetry suspends capture without discarding a run. A
-  subsequent live sample is the same attempt unless the race clock has moved
-  backwards by more than five seconds and either lap number or distance has
-  also moved backwards. That confirmed restart saves a valid preceding attempt
-  and immediately begins a new run ID while **STOP** remains active.
+- Paused, non-live, free-roam, and in-race rewind telemetry suspend or resume
+  capture without discarding or splitting a run. A new run ID is created only
+  when live telemetry returns to a clean lap-zero race start after at least one
+  completed lap. That confirmed restart saves a valid preceding attempt while
+  **STOP** remains active.
 - A circuit attempt with no completed lap, or a sprint without a confirmed
   result, is discarded rather than added to the saved-run list. Selecting
   **STOP** saves only a valid current attempt and explicitly reports whether

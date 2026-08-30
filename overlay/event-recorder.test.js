@@ -46,14 +46,71 @@ test('strong restart persists the completed prior run and remains armed for a cl
   instance.update(telemetry())
   instance.update(telemetry({ lap: { number: 0, current: 32, last: 0, raceTime: 32, distance: 2500 } }))
   instance.update(telemetry({ lap: { number: 1, current: 0, last: 55.418, raceTime: 55.418, distance: 0 } }))
+  const previousRunId = instance.snapshot().run.runId
   instance.update(telemetry({ lap: { number: 1, current: 15, last: 55.418, raceTime: 55.4, distance: 1000 } }))
   instance.update(telemetry({ lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 } }))
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(saved.length, 1)
   assert.equal(saved[0].run.runType, 'circuit')
   assert.equal(saved[0].run.result, 'completed')
+  assert.equal(saved[0].run.laps.length, 1)
   assert.equal(instance.snapshot().armed, true)
   assert.ok(instance.snapshot().run)
+  assert.notEqual(instance.snapshot().run.runId, previousRunId)
+})
+
+test('mid-race clock and distance rewind stays in one run', async () => {
+  const saved = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  instance.arm(11)
+  instance.update(telemetry())
+  instance.update(telemetry({ lap: { number: 0, current: 32, last: 0, raceTime: 32, distance: 2500 } }))
+  instance.update(telemetry({ lap: { number: 1, current: 0, last: 55.418, raceTime: 55.418, distance: 0 } }))
+  const runId = instance.snapshot().run.runId
+  instance.update(telemetry({ lap: { number: 1, current: 20, last: 55.418, raceTime: 75.418, distance: 1000 } }))
+  instance.update(telemetry({ lap: { number: 1, current: 0.5, last: 55.418, raceTime: 0.5, distance: 10 } }))
+  assert.equal(instance.snapshot().run.runId, runId)
+  instance.update(telemetry({ lap: { number: 1, current: 20, last: 55.418, raceTime: 20.5, distance: 1000 } }))
+  instance.update(telemetry({ lap: { number: 2, current: 0, last: 56.125, raceTime: 76.625, distance: 0 } }))
+
+  const outcome = await instance.stop()
+  assert.equal(outcome.outcome, 'saved')
+  assert.equal(saved.length, 1)
+  assert.deepEqual(saved[0].run.laps, [
+    { lapNumber: 1, lapTimeMs: 55418 },
+    { lapNumber: 2, lapTimeMs: 56125 }
+  ])
+})
+
+test('free-roam tail does not replace the accumulated circuit run', async () => {
+  const saved = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  instance.arm(12)
+  instance.update(telemetry())
+  instance.update(telemetry({ lap: { number: 0, current: 32, last: 0, raceTime: 32, distance: 2500 } }))
+  instance.update(telemetry({ lap: { number: 1, current: 0, last: 55.418, raceTime: 55.418, distance: 0 } }))
+  instance.update(telemetry({ lap: { number: 1, current: 20, last: 55.418, raceTime: 75.418, distance: 1000 } }))
+  instance.update(telemetry({ lap: { number: 2, current: 0, last: 56.125, raceTime: 131.543, distance: 0 } }))
+  const runId = instance.snapshot().run.runId
+  instance.update(telemetry({ isRaceOn: false, lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 } }))
+  instance.update(telemetry({ isRaceOn: false, lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 } }))
+
+  assert.equal(instance.snapshot().run.runId, runId)
+  const outcome = await instance.stop()
+  assert.equal(outcome.outcome, 'saved')
+  assert.equal(saved.length, 1)
+  assert.deepEqual(saved[0].run.laps, [
+    { lapNumber: 1, lapTimeMs: 55418 },
+    { lapNumber: 2, lapTimeMs: 56125 }
+  ])
 })
 
 test('a confirmed sprint is saved immediately and the recorder remains armed', async () => {
