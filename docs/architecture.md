@@ -45,6 +45,13 @@ the HUD renderer, lap timing, Garage, Asphalt Coach, Shift Light, and Events
 runtime. The feature branches keep their own state; Garage, Shift Light, and
 Events write to the local SQLite profile store.
 
+Events uses this same normalized sample rather than the game's result-screen
+UI. Its recording logic reads `isRaceOn`, `lap.current`, `lap.raceTime`,
+`lap.distance`, `lap.number`, and `lap.last`, plus the normalized vehicle
+identity. A result time that Forza displays but does not emit through Direct
+Data Out is outside FDC's telemetry boundary and cannot be reconstructed as an
+official result.
+
 Connection lifecycle is a parallel status path. The native receiver emits
 `direct_status` for waiting, live, stale, offline, and incompatible-packet
 conditions. The overlay converts that state into the local route status shown

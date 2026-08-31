@@ -36,8 +36,9 @@ available as the Events tab in Configuration, directly after Garage.
   saves a non-empty name; Escape cancels that rename without leaving the page.
 - An event page has one green **RECORD RUN** control. Selecting it changes the same
   control to red **STOP** and arms capture for that event. FDC does not accept
-  a run already in progress: it waits for a new live race whose race clock and
-  distance are both within the bounded start window.
+  a run already in progress: it waits for a new live race whose Current Lap and
+  Current Race Time are at most two seconds and whose travelled distance is at
+  most 25 metres.
 - One saved run ID represents one driving attempt, including every completed
   circuit lap in that attempt. Completing another lap never creates another
   run ID. A circuit result stores each completed lap and shows the best lap and
@@ -63,6 +64,58 @@ available as the Events tab in Configuration, directly after Garage.
   discarded, or could not be stored.
 - **DELETE** asks for confirmation, then permanently removes the event and
   returns to the list.
+
+## Telemetry recording
+
+Events consumes the normalized Direct Data Out sample delivered through the
+shared browser `queueTelemetry` path. It does not read the game's result-screen
+UI or use a second telemetry source.
+
+| Forza field | Current Events use |
+| --- | --- |
+| `IsRaceOn` | Identifies live racing and non-live transitions. |
+| `CurrentLap` | Validates the clean start window and can confirm a sprint result when its non-live final value repeats. |
+| `CurrentRaceTime` | Validates the clean start window and provides the manual sprint fallback time. |
+| `DistanceTraveled` | Validates the clean start window. |
+| `LapNumber` | Detects circuit-lap boundaries and a confirmed clean restart. |
+| `LastLap` | Stores an official completed circuit lap and is the preferred sprint finish evidence. |
+| Vehicle ordinal, name, class, PI, and drivetrain | Snapshots the vehicle recorded with the run. |
+
+Forza `BestLap` is not persisted as an independent input. FDC derives a circuit
+run's best lap and its lap number from the stored `LastLap` records.
+
+### Run lifecycle
+
+- **Record Run** records the local system timestamp used as the run start time,
+  then waits for the clean live start described above before creating a run ID.
+- In a circuit, a higher `LapNumber` together with a positive `LastLap` records
+  that completed lap in the current run. If `LastLap` arrives one packet late,
+  FDC retains the pending boundary until that value arrives. The stored circuit
+  time is the `LastLap` value, not a sampled current clock.
+- In a sprint, a non-live positive `LastLap` that is new and compatible with
+  the live attempt confirms the finish immediately. A non-live advancing
+  `CurrentLap` can also confirm the finish after the same value is observed in
+  two consecutive packets. A confirmed sprint is stored immediately and
+  capture remains armed for another attempt.
+- A live clean lap-zero start after a completed lap is a confirmed restart.
+  FDC saves a valid preceding run and begins a new run ID. An in-race rewind,
+  pause, non-live transition, or free-roam tail does not by itself split a run.
+
+### Result reset and precision
+
+Some sprint result transitions clear `IsRaceOn`, `CurrentLap`,
+`CurrentRaceTime`, `LastLap`, and travelled distance before a final result is
+available to FDC. If **STOP** is selected after such a transition, FDC enters
+the temporary **FINALIZING** state and continues processing up to 48 subsequent
+Direct Data Out samples for at most one second.
+
+If those samples contain a confirmed final `LastLap` or Current Lap result,
+that official telemetry value is saved. If not, FDC saves the last live
+`CurrentRaceTime` as the manually confirmed sprint result so the run is not
+lost. That fallback is the last time received before the game cleared its
+telemetry and can differ by a few milliseconds from the time displayed by
+Forza on its result screen. FDC cannot reconstruct a more precise result when
+the corresponding value is absent from Direct Data Out.
 
 ## Mode colors
 
