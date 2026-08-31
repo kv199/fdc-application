@@ -48,6 +48,19 @@ test('completed laps persist three interpolated equal-distance sector times', as
   }])
 })
 
+test('sector splits use the current lap distance span when DistanceTraveled accumulates', () => {
+  assert.deepEqual(recorder.sectorTimesFromSamples([
+    { distance: 1000, elapsedMs: 0 },
+    { distance: 1300, elapsedMs: 10000 },
+    { distance: 1600, elapsedMs: 20000 },
+    { distance: 1900, elapsedMs: 30000 }
+  ], 36000), {
+    sector1TimeMs: 10000,
+    sector2TimeMs: 10000,
+    sector3TimeMs: 16000
+  })
+})
+
 test('a confirmed sprint persists one synthetic lap with interpolated sectors', async () => {
   const saved = []
   const instance = recorder.createEventRecorder({

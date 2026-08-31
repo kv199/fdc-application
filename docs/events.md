@@ -98,7 +98,9 @@ Forza `BestLap` is not persisted as an independent input. FDC derives a circuit
 run's best lap and its lap number from the stored `LastLap` records.
 
 For each new saved row, FDC retains only enough in-memory samples to interpolate
-the current-lap timestamps at one-third and two-thirds of travelled distance.
+the current-lap timestamps at one-third and two-thirds of that lap's travelled
+distance span, whether Forza resets or accumulates `DistanceTraveled` between
+laps.
 It stores the resulting three virtual-sector durations with the lap. This does
 not persist the telemetry stream. Runs created before sector storage have no
 sector values and therefore show `—` for them and no hypothetical time.

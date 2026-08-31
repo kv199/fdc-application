@@ -32,9 +32,11 @@
   }
 
   // The telemetry stream does not expose sector boundaries.  Use the observed
-  // lap distance as the lap length and interpolate the two crossings between
-  // adjacent samples.  The final sector ends at LastLap, which also makes the
-  // three rounded values add up to the persisted lap time.
+  // current-lap distance span and interpolate the two crossings between
+  // adjacent samples. DistanceTraveled can either reset at a lap boundary or
+  // keep accumulating through the race, so the split points are relative to
+  // the first observed sample for this lap. The final sector ends at LastLap,
+  // which also makes the three rounded values add up to the persisted lap time.
   function sectorTimesFromSamples(samples, lapTime) {
     const totalMs = finite(lapTime)
     if (!Array.isArray(samples) || samples.length < 2 || totalMs === null || totalMs <= 0) return null
@@ -51,7 +53,8 @@
       }
       points.push({ distance, elapsedMs })
     }
-    const lapDistance = points.at(-1)?.distance ?? 0
+    const startDistance = points[0]?.distance ?? 0
+    const lapDistance = (points.at(-1)?.distance ?? startDistance) - startDistance
     if (lapDistance <= 0 || points.length < 2) return null
 
     function crossingTime(targetDistance) {
@@ -67,8 +70,8 @@
       return null
     }
 
-    const first = crossingTime(lapDistance / 3)
-    const second = crossingTime((lapDistance * 2) / 3)
+    const first = crossingTime(startDistance + (lapDistance / 3))
+    const second = crossingTime(startDistance + ((lapDistance * 2) / 3))
     if (first === null || second === null || first < 0 || second < first || second > totalMs) return null
     const values = [first, second - first, totalMs - second].map(value => Math.round(value))
     if (values.some(value => value <= 0)) return null
