@@ -36,6 +36,13 @@ test('stacks the default Coach position above the Delta strip', () => {
   assert.match(source, /Math\.min\(460, Math\.max\(0, viewport\.width - 24\)\), height: 88/)
 })
 
+test('HUD Reset anchors its default position from the viewport, not its prior layout rect', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
+  assert.match(source, /left: \(viewport\.width - hudSize\.width\) \/ 2/)
+  assert.match(source, /top: viewport\.height - hudSize\.height - 28/)
+  assert.match(source, /if \(name === 'hud'\) return defaultHudAnchor/)
+})
+
 test('starts layout storage in a fresh FDC v1 namespace', () => {
   const source = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
   assert.match(source, /const STORAGE_KEY = 'fdc\.layout\.v1'/)

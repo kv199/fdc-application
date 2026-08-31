@@ -194,10 +194,16 @@
     function getDefaultAnchor(name, elementSize, viewport) {
       const hudRect = elements.hud.getBoundingClientRect()
       const hudSize = getElementSize(elements.hud, getFallbackSize('hud', viewport))
-      const hudLeft = hudRect.width ? hudRect.left : (viewport.width - hudSize.width) / 2
-      const hudTop = hudRect.height ? hudRect.top : viewport.height - hudSize.height - 28
+      const defaultHudAnchor = {
+        left: (viewport.width - hudSize.width) / 2,
+        top: viewport.height - hudSize.height - 28
+      }
 
-      if (name === 'hud') return { left: hudLeft, top: hudTop }
+      if (name === 'hud') return defaultHudAnchor
+
+      const hudLeft = hudRect.width ? hudRect.left : defaultHudAnchor.left
+      const hudTop = hudRect.height ? hudRect.top : defaultHudAnchor.top
+
       if (name === 'delta') return { left: hudLeft, top: hudTop - elementSize.height - 10 }
       const deltaSize = getElementSize(elements.delta, getFallbackSize('delta', viewport))
       return { left: hudLeft, top: hudTop - deltaSize.height - elementSize.height - 20 }
