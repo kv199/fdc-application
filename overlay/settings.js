@@ -1613,7 +1613,9 @@
       await call('layout_action', { action: 'edit', target })
       editingTarget = target
       updateLayoutRows()
-      setStatus(`EDITING ${target.toUpperCase()} — DRAG IT IN THE HUD`)
+      setStatus(target === 'hud'
+        ? 'EDITING HUD — DRAG IT OR A CORNER TO RESIZE'
+        : `EDITING ${target.toUpperCase()} — DRAG IT IN THE HUD`)
     } catch (error) {
       setStatus(error.message || 'Unable to enter edit mode', true)
     }
@@ -1643,7 +1645,9 @@
     if (isEditing) {
       editingTarget = target
       updateLayoutRows()
-      setStatus(`EDITING ${target.toUpperCase()} - DRAG IT IN THE HUD`)
+      setStatus(target === 'hud'
+        ? 'EDITING HUD - DRAG IT OR A CORNER TO RESIZE'
+        : `EDITING ${target.toUpperCase()} - DRAG IT IN THE HUD`)
       return
     }
 

@@ -100,11 +100,15 @@
         </main>
       </div>
       <div id="hud-edit-tools" class="layout-edit-tools" hidden>
-        <span class="layout-edit__hint">DRAG HUD</span>
+        <span class="layout-edit__hint">DRAG HUD OR A CORNER TO RESIZE</span>
         <button id="hud-reset" class="layout-edit__button" type="button">RESET</button>
         <button id="hud-cancel" class="layout-edit__button" type="button">CANCEL</button>
         <button id="hud-save" class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>
       </div>
+      <button class="hud-resize-handle hud-resize-handle--top-left" type="button" data-layout-resize-handle="top-left" aria-label="Resize HUD from top-left corner"></button>
+      <button class="hud-resize-handle hud-resize-handle--top-right" type="button" data-layout-resize-handle="top-right" aria-label="Resize HUD from top-right corner"></button>
+      <button class="hud-resize-handle hud-resize-handle--bottom-left" type="button" data-layout-resize-handle="bottom-left" aria-label="Resize HUD from bottom-left corner"></button>
+      <button class="hud-resize-handle hud-resize-handle--bottom-right" type="button" data-layout-resize-handle="bottom-right" aria-label="Resize HUD from bottom-right corner"></button>
     </div>
   </div>
 

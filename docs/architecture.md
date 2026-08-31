@@ -133,6 +133,9 @@ Configuration is a local Tauri settings window rather than a second runtime
 telemetry path. It provides:
 
 - overlay target editing for the Coach card, lap timer, and telemetry HUD;
+  the HUD can also be resized proportionally from any corner. Reset returns
+  the HUD to its responsive default size and position, while Coach and lap
+  timer reset only their positions;
 - visibility controls for the top-level overlay and HUD components;
 - speed-unit selection and Shift Light brightness;
 - standard minimize and maximize controls, a persisted Configuration
