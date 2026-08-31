@@ -166,6 +166,7 @@ test('Events expose deterministic persisted list sorting and in-memory run sorti
 test('Event lap rows expose trace details and time-weighted pedal statistics', () => {
   assert.match(settingsHtml, /events-run-table__caption[^>]*>Select a lap row to view its trace and pedal statistics\.<\/caption>/)
   assert.match(settingsJs, /function normalizeTracePoints\(value\)/)
+  assert.doesNotMatch(settingsJs, /TRACE · X \/ Z/)
   assert.match(settingsJs, /const positionX = finiteNumber/)
   assert.match(settingsJs, /const positionZ = finiteNumber/)
   assert.match(settingsJs, /function traceStats\(points/)
@@ -184,7 +185,10 @@ test('Event lap rows expose trace details and time-weighted pedal statistics', (
   assert.match(settingsCss, /\.events-lap-detail__trace--throttle\s*\{\s*stroke: #69e83f;/)
   assert.match(settingsCss, /\.events-lap-detail__trace--brake\s*\{\s*stroke: #ef4444;/)
   assert.match(settingsCss, /\.events-lap-detail__trace--coast\s*\{\s*stroke: #facc15;/)
-  assert.match(settingsCss, /\.events-lap-detail__sector-tick\s*\{\s*stroke: #050607;/)
+  assert.match(settingsCss, /\.events-lap-detail__sector-tick\s*\{\s*stroke: #f8fafc;/)
+  assert.match(settingsCss, /\.events-lap-detail__sector-label\s*\{\s*fill: #f8fafc;/)
+  assert.doesNotMatch(settingsJs, /events-lap-detail__stat-key/)
+  assert.match(settingsCss, /\.events-run-view__metric\s*\{[\s\S]*align-items: center;/)
 })
 
 test('Engine telemetry keeps the compact panel order and one visibility toggle', () => {

@@ -860,7 +860,7 @@ h1 {
 
 .events-run-view__metric {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   min-width: 0;
@@ -1018,7 +1018,7 @@ h1 {
 .events-lap-detail__svg {
   display: block;
   width: 100%;
-  height: 250px;
+  height: 380px;
   padding: 7px;
 }
 
@@ -1039,13 +1039,13 @@ h1 {
 .events-lap-detail__trace--coast { stroke: #facc15; }
 
 .events-lap-detail__sector-tick {
-  stroke: #050607;
+  stroke: #f8fafc;
   stroke-width: 1.2;
   stroke-linecap: square;
 }
 
 .events-lap-detail__sector-label {
-  fill: #c084fc;
+  fill: #f8fafc;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -1077,7 +1077,7 @@ h1 {
 
 .events-lap-detail__stat {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   margin: 0 11px;
@@ -1086,17 +1086,6 @@ h1 {
 }
 
 .events-lap-detail__stat:last-child { border-bottom: 0; }
-
-.events-lap-detail__stat-key {
-  display: inline-grid;
-  width: 23px;
-  height: 23px;
-  place-items: center;
-  border: 1px solid currentColor;
-  color: #f8fafc;
-  font-size: 11px;
-  font-weight: 900;
-}
 
 .events-lap-detail__stat-name {
   color: #a1a1aa;
@@ -1486,7 +1475,7 @@ h1 {
   }
 
   .events-lap-detail__svg {
-    height: 210px;
+    height: 280px;
   }
 }
 

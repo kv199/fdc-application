@@ -1174,10 +1174,6 @@
   function renderTraceMap(points) {
     const map = document.createElement('div')
     map.className = 'events-lap-detail__map'
-    const heading = document.createElement('div')
-    heading.className = 'events-lap-detail__label'
-    heading.textContent = 'TRACE · X / Z'
-    map.append(heading)
     if (points.length < 2) {
       const empty = document.createElement('p')
       empty.className = 'events-lap-detail__empty'
@@ -1190,9 +1186,9 @@
     const maxX = Math.max(...coordinates.map(point => point.x))
     const minZ = Math.min(...coordinates.map(point => point.z))
     const maxZ = Math.max(...coordinates.map(point => point.z))
-    const width = 640
-    const height = 300
-    const padding = 26
+    const width = 720
+    const height = 380
+    const padding = 30
     const scale = Math.min(
       (width - padding * 2) / Math.max(1, maxX - minX),
       (height - padding * 2) / Math.max(1, maxZ - minZ)
@@ -1256,23 +1252,20 @@
       return stats
     }
     const labels = [
-      ['throttle', 'X', 'THROTTLE'],
-      ['brake', 'A', 'BRAKE'],
-      ['coast', 'C', 'COAST']
+      ['throttle', 'THROTTLE'],
+      ['brake', 'BRAKE'],
+      ['coast', 'COAST']
     ]
-    for (const [key, button, label] of labels) {
+    for (const [key, label] of labels) {
       const row = document.createElement('div')
       row.className = `events-lap-detail__stat events-lap-detail__stat--${key}`
-      const badge = document.createElement('span')
-      badge.className = 'events-lap-detail__stat-key'
-      badge.textContent = button
       const name = document.createElement('span')
       name.className = 'events-lap-detail__stat-name'
       name.textContent = label
       const value = document.createElement('output')
       value.className = 'events-lap-detail__stat-value'
       value.textContent = `${values[key]}%`
-      row.append(badge, name, value)
+      row.append(name, value)
       stats.append(row)
     }
     return stats
