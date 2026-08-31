@@ -647,6 +647,22 @@ h1 {
   color: #090b0e;
 }
 
+.events-card__badge--class {
+  --events-class-color: #a1a1aa;
+  border-color: transparent;
+  color: #fff;
+  background: var(--events-class-color);
+}
+
+.events-card__badge--class[data-event-class="D"] { --events-class-color: #7dd3fc; }
+.events-card__badge--class[data-event-class="C"] { --events-class-color: #facc15; }
+.events-card__badge--class[data-event-class="B"] { --events-class-color: #f97316; }
+.events-card__badge--class[data-event-class="A"] { --events-class-color: #ef4444; }
+.events-card__badge--class[data-event-class="S1"] { --events-class-color: #c084fc; }
+.events-card__badge--class[data-event-class="S2"] { --events-class-color: #2563eb; }
+.events-card__badge--class[data-event-class="R"] { --events-class-color: #ec4899; }
+.events-card__badge--class[data-event-class="X"] { --events-class-color: #22c55e; }
+
 .events-card[data-event-mode="any"],
 .events-detail-view__summary[data-event-mode="any"] { --events-mode-color: #f97316; }
 .events-card[data-event-mode="eventlab"],
@@ -1356,6 +1372,10 @@ h1 {
   color: #a1a1aa;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.event-recorder__hint[data-tone="warning"] {
+  color: #f97316;
 }
 
 .event-recorder__feedback {

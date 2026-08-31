@@ -39,6 +39,11 @@ available as the Events tab in Configuration, directly after Garage.
   a run already in progress: it waits for a new live race whose Current Lap and
   Current Race Time are at most two seconds and whose travelled distance is at
   most 25 metres.
+- The recorder keeps an orange Sprint warning visible while idle, armed, or
+  recording: press **STOP** in free roam or before starting a new race. The
+  results screen can report an imprecise final time. A finalizing or
+  another-Event status temporarily replaces the warning with its operational
+  instruction.
 - One saved run ID represents one driving attempt, including every completed
   circuit lap in that attempt. Completing another lap never creates another
   run ID. A circuit result stores each completed lap and shows the best lap and

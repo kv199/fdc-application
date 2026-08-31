@@ -682,7 +682,11 @@
     const route = document.createElement('span')
     route.className = 'events-card__badge events-card__badge--route'
     route.textContent = eventRouteLabel(event.routeType)
-    meta.append(mode, route)
+    const eventClass = document.createElement('span')
+    eventClass.className = 'events-card__badge events-card__badge--class'
+    eventClass.dataset.eventClass = eventText(event.eventClass).toUpperCase() || 'ANY'
+    eventClass.textContent = eventText(event.eventClass).toUpperCase() || 'ANY'
+    meta.append(mode, route, eventClass)
     content.append(name, meta)
 
     open.append(id, content)
@@ -1405,15 +1409,14 @@
       eventRecorderToggle.disabled = recordingAnotherEvent || finalizing
     }
     if (eventRecorderHint) {
-      eventRecorderHint.textContent = recordingAnotherEvent
+      const sprintWarning = 'For Sprint Racing, press STOP in free roam or before starting a new race. The results screen can report an imprecise final time.'
+      const hint = recordingAnotherEvent
         ? `Recording Event #${recorderState.eventId}. Open that event to stop capture.`
-        : state === 'armed'
-        ? 'Waiting for a clean race start. Pauses are retained.'
         : finalizing
           ? 'Checking post-finish telemetry for the official result.'
-        : state === 'recording'
-          ? `${recorderState.lapCount || 0} completed ${(recorderState.lapCount || 0) === 1 ? 'lap' : 'laps'} in this run.`
-          : 'Arm capture, then start from the event grid. Pauses are retained.'
+          : sprintWarning
+      eventRecorderHint.textContent = hint
+      eventRecorderHint.dataset.tone = !recordingAnotherEvent && !finalizing ? 'warning' : ''
     }
     renderEventRuns()
   }
