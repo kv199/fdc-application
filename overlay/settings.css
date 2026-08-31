@@ -1015,6 +1015,7 @@ h1 {
 
 .event-recorder__status[data-state="armed"],
 .event-recorder__status[data-state="recording"] { color: #69e83f; }
+.event-recorder__status[data-state="finalizing"] { color: #eab308; }
 .event-recorder__status[data-state="stopped"] { color: #ef4444; }
 .event-recorder__status[hidden] { display: none; }
 

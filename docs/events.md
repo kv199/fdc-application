@@ -56,8 +56,10 @@ available as the Events tab in Configuration, directly after Garage.
 - A circuit attempt with no completed lap, or a sprint without a confirmed
   result, is discarded rather than added to the saved-run list. If a started
   sprint reaches a zeroed non-live result packet before its final packet is
-  observed, **STOP** uses its last live race time as the manually confirmed
-  result. Selecting **STOP** explicitly reports whether the attempt was saved,
+  observed, **STOP** checks up to 48 additional packets (for at most one
+  second) for the official final result. It uses that result when available;
+  otherwise it uses the last live race time as the manually confirmed result.
+  Selecting **STOP** explicitly reports whether the attempt was saved,
   discarded, or could not be stored.
 - **DELETE** asks for confirmation, then permanently removes the event and
   returns to the list.

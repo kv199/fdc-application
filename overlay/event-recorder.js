@@ -5,6 +5,8 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   const START_MAX_MS = 2000
   const START_MAX_DISTANCE_M = 25
+  const POST_FINISH_PACKET_WINDOW = 48
+  const POST_FINISH_WAIT_MS = 1000
 
   function finite(value) {
     if (value === null || value === undefined || value === '') return null
@@ -93,7 +95,8 @@
       pendingLapNumber: null,
       lastTelemetry: null,
       lastRunResult: null,
-      armedAtMs: null
+      armedAtMs: null,
+      finalizing: false
     }
   }
 
@@ -129,18 +132,21 @@
     const onStatus = typeof options.onStatus === 'function' ? options.onStatus : () => {}
     const onSaved = typeof options.onSaved === 'function' ? options.onSaved : () => {}
     const onResult = typeof options.onResult === 'function' ? options.onResult : () => {}
+    const schedule = typeof options.setTimeout === 'function' ? options.setTimeout : setTimeout
+    const cancelSchedule = typeof options.clearTimeout === 'function' ? options.clearTimeout : clearTimeout
     let state = createState()
     let persistQueue = Promise.resolve()
     let lastPersistence = null
     let lastStatusSignature = null
+    let pendingPostFinishStop = null
 
     function status(extra = {}, force = false) {
       const run = state.run
       const payload = {
         eventId: state.eventId,
         eventName: state.eventName,
-        recording: state.armed,
-        state: state.armed ? (run ? 'recording' : 'armed') : 'stopped',
+        recording: state.armed && !state.finalizing,
+        state: state.finalizing ? 'finalizing' : state.armed ? (run ? 'recording' : 'armed') : 'stopped',
         runId: run?.runId ?? null,
         lapCount: run?.laps.length ?? 0,
         laps: run?.laps.map(lap => ({ ...lap })) ?? [],
@@ -167,6 +173,17 @@
     function resetTiming() {
       state.timingState = timingApi?.createState?.() || null
       state.pendingLapNumber = null
+    }
+
+    function disarm(clearEvent = true) {
+      state.armed = false
+      state.finalizing = false
+      state.run = null
+      resetTiming()
+      if (clearEvent) {
+        state.eventId = null
+        state.eventName = null
+      }
     }
 
     function arm(eventId, eventName = null, armedAt = null) {
@@ -300,16 +317,20 @@
       return lastPersistence
     }
 
-    function confirmManualSprintFallback() {
+    function canUseManualSprintFallback() {
       const run = state.run
-      if (
-        !run
-        || run.laps.length > 0
-        || !run.sawZeroedRaceExit
-        || run.lastLiveRaceTimeMs === null
-        || run.lastLiveRaceTimeMs <= START_MAX_MS
-      ) return false
+      return Boolean(
+        run
+        && run.laps.length === 0
+        && run.sawZeroedRaceExit
+        && run.lastLiveRaceTimeMs !== null
+        && run.lastLiveRaceTimeMs > START_MAX_MS
+      )
+    }
 
+    function confirmManualSprintFallback() {
+      if (!canUseManualSprintFallback()) return false
+      const run = state.run
       run.finalTimeMs = run.lastLiveRaceTimeMs
       run.finalTimeSource = 'forza_live_race_time'
       run.runType = 'sprint'
@@ -317,16 +338,46 @@
       return true
     }
 
+    function settlePostFinishStop(persistence) {
+      const pending = pendingPostFinishStop
+      if (!pending) return persistence
+      pendingPostFinishStop = null
+      if (pending.timer !== null) cancelSchedule(pending.timer)
+      disarm(false)
+      status()
+      Promise.resolve(persistence).then(pending.resolve)
+      return persistence
+    }
+
+    function finishPostFinishStop() {
+      if (!pendingPostFinishStop) return null
+      const usedSprintFallback = confirmManualSprintFallback()
+      const persistence = state.run
+        ? finishRun(usedSprintFallback ? 'stop_result_reset' : 'stop')
+        : (lastPersistence || Promise.resolve(result(null, 'discarded', 'There is no active run to save.')))
+      return settlePostFinishStop(persistence)
+    }
+
+    function waitForPostFinishPackets() {
+      state.finalizing = true
+      const pending = {}
+      const promise = new Promise(resolve => { pending.resolve = resolve })
+      pending.promise = promise
+      pending.remaining = POST_FINISH_PACKET_WINDOW
+      pending.timer = schedule(() => { finishPostFinishStop() }, POST_FINISH_WAIT_MS)
+      pendingPostFinishStop = pending
+      status({ postFinishPacketsRemaining: pending.remaining })
+      return promise
+    }
+
     function stop() {
+      if (pendingPostFinishStop) return pendingPostFinishStop.promise
+      if (canUseManualSprintFallback()) return waitForPostFinishPackets()
       const usedSprintFallback = confirmManualSprintFallback()
       const pending = state.run
         ? finishRun(usedSprintFallback ? 'stop_result_reset' : 'stop')
         : (lastPersistence || Promise.resolve(result(null, 'discarded', 'There is no active run to save.')))
-      state.armed = false
-      state.eventId = null
-      state.eventName = null
-      state.run = null
-      resetTiming()
+      disarm()
       status()
       return pending
     }
@@ -364,9 +415,14 @@
           state.run.finalTimeSource = nextTiming.finalTimeSource || 'forza_lap_current'
           state.run.runType = 'sprint'
           state.run.result = 'confirmed'
-          void finishRun('sprint_complete')
+          const persistence = finishRun('sprint_complete')
+          if (pendingPostFinishStop) settlePostFinishStop(persistence)
         }
         state.timingState = nextTiming
+      }
+      if (pendingPostFinishStop) {
+        pendingPostFinishStop.remaining -= 1
+        if (pendingPostFinishStop.remaining <= 0) finishPostFinishStop()
       }
       state.lastTelemetry = telemetry
       return status({ restart })
@@ -385,6 +441,8 @@
   return {
     START_MAX_MS,
     START_MAX_DISTANCE_M,
+    POST_FINISH_PACKET_WINDOW,
+    POST_FINISH_WAIT_MS,
     createState,
     createEventRecorder,
     carSnapshot,

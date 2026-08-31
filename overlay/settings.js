@@ -967,23 +967,26 @@
     const recording = isSelected && recorderState.recording === true
     const recordingAnotherEvent = Boolean(recorderState.recording && !isSelected)
     const state = isSelected ? recorderState.state || (recording ? 'recording' : 'stopped') : 'stopped'
+    const finalizing = isSelected && state === 'finalizing'
     if (eventRecorderStatus) {
       eventRecorderStatus.dataset.state = state
       eventRecorderStatus.textContent = state.toUpperCase()
-      eventRecorderStatus.hidden = !recording
+      eventRecorderStatus.hidden = !recording && !finalizing
     }
     if (eventRecorderToggle) {
-      eventRecorderToggle.textContent = recording ? 'STOP' : 'RECORD RUN'
+      eventRecorderToggle.textContent = finalizing ? 'FINALIZING' : recording ? 'STOP' : 'RECORD RUN'
       eventRecorderToggle.classList.toggle('settings-button--danger', recording)
-      eventRecorderToggle.classList.toggle('event-recorder__record', !recording)
+      eventRecorderToggle.classList.toggle('event-recorder__record', !recording && !finalizing)
       eventRecorderToggle.setAttribute('aria-pressed', String(recording))
-      eventRecorderToggle.disabled = recordingAnotherEvent
+      eventRecorderToggle.disabled = recordingAnotherEvent || finalizing
     }
     if (eventRecorderHint) {
       eventRecorderHint.textContent = recordingAnotherEvent
         ? `Recording Event #${recorderState.eventId}. Open that event to stop capture.`
         : state === 'armed'
         ? 'Waiting for a clean race start. Pauses are retained.'
+        : finalizing
+          ? 'Checking post-finish telemetry for the official result.'
         : state === 'recording'
           ? `${recorderState.lapCount || 0} completed ${(recorderState.lapCount || 0) === 1 ? 'lap' : 'laps'} in this run.`
           : 'Arm capture, then start from the event grid. Pauses are retained.'

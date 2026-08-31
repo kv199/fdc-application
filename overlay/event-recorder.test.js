@@ -163,16 +163,18 @@ test('a sprint LastLap equal to the live clock is persisted before stop', async 
   assert.equal((await instance.stop()).outcome, 'saved')
 })
 
-test('Stop saves the last live sprint race time after a zeroed result packet', async () => {
+test('Stop waits for an exact post-finish LastLap before saving a sprint', async () => {
   const saved = []
+  const statuses = []
   const instance = recorder.createEventRecorder({
     timingApi: timing,
     now: () => 1700000000000,
+    onStatus: status => statuses.push(status),
     invoke: async (_command, payload) => { saved.push(payload); return payload }
   })
   instance.arm(14)
   instance.update(telemetry())
-  instance.update(telemetry({ lap: { number: 0, current: 113.916, last: 0, raceTime: 113.916, distance: 6200 } }))
+  instance.update(telemetry({ lap: { number: 0, current: 113.594, last: 0, raceTime: 113.594, distance: 6200 } }))
   instance.update(telemetry({
     isRaceOn: false,
     speedKmh: 0,
@@ -180,12 +182,69 @@ test('Stop saves the last live sprint race time after a zeroed result packet', a
     lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 }
   }))
 
-  const outcome = await instance.stop()
+  const stopping = instance.stop()
+  assert.equal(statuses.at(-1).state, 'finalizing')
+  instance.update(telemetry({
+    isRaceOn: false,
+    speedKmh: 0,
+    gear: 0,
+    lap: { number: 0, current: 0, last: 113.601, raceTime: 0, distance: 0 }
+  }))
+
+  const outcome = await stopping
   assert.equal(outcome.outcome, 'saved')
   assert.equal(saved.length, 1)
   assert.equal(saved[0].run.runType, 'sprint')
   assert.equal(saved[0].run.result, 'confirmed')
-  assert.equal(saved[0].run.resultTimeMs, 113916)
+  assert.equal(saved[0].run.resultTimeMs, 113601)
+  assert.equal(statuses.at(-1).eventId, '14')
+  assert.equal(statuses.at(-1).state, 'stopped')
+})
+
+test('Stop falls back after the bounded post-finish packet window', async () => {
+  const saved = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  instance.arm(16)
+  instance.update(telemetry())
+  instance.update(telemetry({ lap: { number: 0, current: 113.594, last: 0, raceTime: 113.594, distance: 6200 } }))
+  instance.update(telemetry({ isRaceOn: false, lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 } }))
+
+  const stopping = instance.stop()
+  for (let index = 0; index < recorder.POST_FINISH_PACKET_WINDOW; index += 1) {
+    instance.update(telemetry({ isRaceOn: false, lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 } }))
+  }
+
+  const outcome = await stopping
+  assert.equal(outcome.outcome, 'saved')
+  assert.equal(saved[0].run.resultTimeMs, 113594)
+})
+
+test('Stop falls back after one second when post-finish telemetry stops', async () => {
+  const saved = []
+  let timeoutCallback = null
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    setTimeout: callback => { timeoutCallback = callback; return 1 },
+    clearTimeout: () => {},
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  instance.arm(17)
+  instance.update(telemetry())
+  instance.update(telemetry({ lap: { number: 0, current: 113.594, last: 0, raceTime: 113.594, distance: 6200 } }))
+  instance.update(telemetry({ isRaceOn: false, lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 } }))
+
+  const stopping = instance.stop()
+  assert.equal(saved.length, 0)
+  timeoutCallback()
+
+  const outcome = await stopping
+  assert.equal(outcome.outcome, 'saved')
+  assert.equal(saved[0].run.resultTimeMs, 113594)
 })
 
 test('Stop does not use the sprint fallback for an ordinary paused run', async () => {
