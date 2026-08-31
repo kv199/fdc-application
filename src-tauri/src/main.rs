@@ -1087,6 +1087,46 @@ fn migrate_event_sectors_schema(connection: &mut Connection) -> Result<(), Strin
         .map_err(|error| format!("unable to commit Event sector schema migration: {error}"))
 }
 
+fn create_event_trace_tables(transaction: &Transaction<'_>) -> Result<(), String> {
+    transaction
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS event_run_lap_trace_points (
+               run_id INTEGER NOT NULL,
+               lap_number INTEGER NOT NULL,
+               sample_index INTEGER NOT NULL CHECK (sample_index >= 0),
+               elapsed_ms INTEGER NOT NULL CHECK (elapsed_ms >= 0),
+               distance REAL NOT NULL CHECK (distance >= 0),
+               position_x REAL NOT NULL,
+               position_y REAL NOT NULL,
+               position_z REAL NOT NULL,
+               throttle REAL NOT NULL CHECK (throttle >= 0 AND throttle <= 1),
+               brake REAL NOT NULL CHECK (brake >= 0 AND brake <= 1),
+               PRIMARY KEY (run_id, lap_number, sample_index),
+               FOREIGN KEY (run_id, lap_number)
+                 REFERENCES event_run_laps(run_id, lap_number)
+                 ON DELETE CASCADE
+             );
+             CREATE INDEX IF NOT EXISTS idx_event_run_lap_trace_points_order
+               ON event_run_lap_trace_points (run_id, lap_number, sample_index);",
+        )
+        .map_err(|error| format!("unable to create Event run trace schema: {error}"))
+}
+
+fn migrate_event_trace_schema(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Event trace schema migration: {error}"))?;
+    create_event_tables(&transaction)?;
+    create_event_run_tables(&transaction)?;
+    create_event_trace_tables(&transaction)?;
+    transaction
+        .execute("UPDATE hud_schema_version SET version = 10", [])
+        .map_err(|error| format!("unable to update Event trace schema version: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Event trace schema migration: {error}"))
+}
+
 fn migrate_garage_schema(connection: &mut Connection) -> Result<(), String> {
     let transaction = connection
         .transaction()
@@ -1499,6 +1539,19 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
     if version < 9 {
         migrate_event_sectors_schema(connection)?;
     }
+    if version < 10 {
+        migrate_event_trace_schema(connection)?;
+    } else {
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("unable to start Event trace schema check: {error}"))?;
+        create_event_tables(&transaction)?;
+        create_event_run_tables(&transaction)?;
+        create_event_trace_tables(&transaction)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("unable to commit Event trace schema check: {error}"))?;
+    }
     Ok(())
 }
 
@@ -1552,6 +1605,32 @@ struct EventRecord {
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct EventRunTracePointInput {
+    sample_index: i32,
+    elapsed_ms: i64,
+    distance: f64,
+    position_x: f64,
+    position_y: f64,
+    position_z: f64,
+    throttle: f64,
+    brake: f64,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EventRunTracePoint {
+    sample_index: i32,
+    elapsed_ms: i64,
+    distance: f64,
+    position_x: f64,
+    position_y: f64,
+    position_z: f64,
+    throttle: f64,
+    brake: f64,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct EventRunLapInput {
     lap_number: i32,
     lap_time_ms: i64,
@@ -1561,6 +1640,8 @@ struct EventRunLapInput {
     sector_2_time_ms: Option<i64>,
     #[serde(default)]
     sector_3_time_ms: Option<i64>,
+    #[serde(default)]
+    trace_points: Vec<EventRunTracePointInput>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -1588,6 +1669,8 @@ struct EventRunLap {
     sector_1_time_ms: Option<i64>,
     sector_2_time_ms: Option<i64>,
     sector_3_time_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    trace_points: Vec<EventRunTracePoint>,
 }
 
 #[derive(Clone, Serialize)]
@@ -1806,6 +1889,39 @@ fn normalize_event_run_input(mut run: NewEventRun) -> Result<NewEventRun, String
         if !lap_numbers.insert(lap.lap_number) {
             return Err("Event run lap numbers must be unique".to_string());
         }
+        if lap.trace_points.len() > 10_000 {
+            return Err("Event run lap trace must contain 10,000 points or fewer".to_string());
+        }
+        let mut sample_indexes = HashSet::with_capacity(lap.trace_points.len());
+        for point in &lap.trace_points {
+            if point.sample_index < 0 || point.elapsed_ms < 0 || point.distance < 0.0 {
+                return Err(
+                    "Event run lap trace indexes, elapsed time, and distance must not be negative"
+                        .to_string(),
+                );
+            }
+            if ![
+                point.distance,
+                point.position_x,
+                point.position_y,
+                point.position_z,
+                point.throttle,
+                point.brake,
+            ]
+            .into_iter()
+            .all(f64::is_finite)
+            {
+                return Err("Event run lap trace values must be finite".to_string());
+            }
+            if !(0.0..=1.0).contains(&point.throttle) || !(0.0..=1.0).contains(&point.brake) {
+                return Err(
+                    "Event run lap trace throttle and brake must be between 0 and 1".to_string(),
+                );
+            }
+            if !sample_indexes.insert(point.sample_index) {
+                return Err("Event run lap trace sample indexes must be unique".to_string());
+            }
+        }
     }
     run.laps.sort_by_key(|lap| lap.lap_number);
     match run.run_type.as_str() {
@@ -1833,6 +1949,7 @@ fn normalize_event_run_input(mut run: NewEventRun) -> Result<NewEventRun, String
 fn event_run_laps_from_connection(
     connection: &Connection,
     run_id: i64,
+    include_trace: bool,
 ) -> Result<Vec<EventRunLap>, String> {
     let mut statement = connection
         .prepare(
@@ -1843,7 +1960,7 @@ fn event_run_laps_from_connection(
              ORDER BY lap_number ASC",
         )
         .map_err(|error| format!("unable to prepare Event run lap query: {error}"))?;
-    statement
+    let laps = statement
         .query_map(params![run_id], |row| {
             Ok(EventRunLap {
                 lap_number: row.get(0)?,
@@ -1851,11 +1968,52 @@ fn event_run_laps_from_connection(
                 sector_1_time_ms: row.get(2)?,
                 sector_2_time_ms: row.get(3)?,
                 sector_3_time_ms: row.get(4)?,
+                trace_points: Vec::new(),
             })
         })
-        .map_err(|error| format!("unable to load Event run laps: {error}"))?
+        .map_err(|error| format!("unable to load Event run laps: {error}"))?;
+    let mut laps = laps
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("unable to decode Event run laps: {error}"))
+        .map_err(|error| format!("unable to decode Event run laps: {error}"))?;
+    if include_trace {
+        for lap in &mut laps {
+            lap.trace_points =
+                event_run_trace_points_from_connection(connection, run_id, lap.lap_number)?;
+        }
+    }
+    Ok(laps)
+}
+
+fn event_run_trace_points_from_connection(
+    connection: &Connection,
+    run_id: i64,
+    lap_number: i32,
+) -> Result<Vec<EventRunTracePoint>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT sample_index, elapsed_ms, distance,
+                    position_x, position_y, position_z, throttle, brake
+             FROM event_run_lap_trace_points
+             WHERE run_id = ?1 AND lap_number = ?2
+             ORDER BY sample_index ASC",
+        )
+        .map_err(|error| format!("unable to prepare Event run trace query: {error}"))?;
+    statement
+        .query_map(params![run_id, lap_number], |row| {
+            Ok(EventRunTracePoint {
+                sample_index: row.get(0)?,
+                elapsed_ms: row.get(1)?,
+                distance: row.get(2)?,
+                position_x: row.get(3)?,
+                position_y: row.get(4)?,
+                position_z: row.get(5)?,
+                throttle: row.get(6)?,
+                brake: row.get(7)?,
+            })
+        })
+        .map_err(|error| format!("unable to load Event run trace points: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("unable to decode Event run trace points: {error}"))
 }
 
 fn event_run_values_from_row(
@@ -1906,6 +2064,7 @@ fn event_run_from_values(
         Option<i64>,
         String,
     ),
+    include_trace: bool,
 ) -> Result<EventRunRecord, String> {
     let (
         id,
@@ -1934,7 +2093,7 @@ fn event_run_from_values(
         result,
         result_time_ms,
         created_at,
-        laps: event_run_laps_from_connection(connection, id)?,
+        laps: event_run_laps_from_connection(connection, id, include_trace)?,
     })
 }
 
@@ -1966,7 +2125,7 @@ fn load_event_run_from_connection(
             other => format!("unable to load Event run {run_id}: {other}"),
         })?;
     drop(statement);
-    event_run_from_values(connection, values)
+    event_run_from_values(connection, values, true)
 }
 
 fn load_event_runs_from_connection(
@@ -1998,7 +2157,7 @@ fn load_event_runs_from_connection(
         .map_err(|error| format!("unable to decode Event runs: {error}"))?;
     drop(statement);
     rows.into_iter()
-        .map(|values| event_run_from_values(connection, values))
+        .map(|values| event_run_from_values(connection, values, false))
         .collect()
 }
 
@@ -2056,6 +2215,7 @@ fn record_event_run_in_connection(
         .map_err(|error| format!("unable to record Event run: {error}"))?;
     let run_id = transaction.last_insert_rowid();
     for lap in run.laps {
+        let lap_number = lap.lap_number;
         transaction
             .execute(
                 "INSERT INTO event_run_laps
@@ -2064,7 +2224,7 @@ fn record_event_run_in_connection(
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
                     run_id,
-                    lap.lap_number,
+                    lap_number,
                     lap.lap_time_ms,
                     lap.sector_1_time_ms,
                     lap.sector_2_time_ms,
@@ -2072,6 +2232,28 @@ fn record_event_run_in_connection(
                 ],
             )
             .map_err(|error| format!("unable to record Event run lap: {error}"))?;
+        for point in lap.trace_points {
+            transaction
+                .execute(
+                    "INSERT INTO event_run_lap_trace_points
+                       (run_id, lap_number, sample_index, elapsed_ms, distance,
+                        position_x, position_y, position_z, throttle, brake)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    params![
+                        run_id,
+                        lap_number,
+                        point.sample_index,
+                        point.elapsed_ms,
+                        point.distance,
+                        point.position_x,
+                        point.position_y,
+                        point.position_z,
+                        point.throttle,
+                        point.brake,
+                    ],
+                )
+                .map_err(|error| format!("unable to record Event run trace point: {error}"))?;
+        }
     }
     transaction
         .commit()
@@ -2089,6 +2271,12 @@ fn record_event_run(app: AppHandle, run: NewEventRun) -> Result<EventRunRecord, 
 fn load_event_runs(app: AppHandle, event_id: Option<i64>) -> Result<Vec<EventRunRecord>, String> {
     let connection = open_shift_light_db(&app)?;
     load_event_runs_from_connection(&connection, event_id)
+}
+
+#[tauri::command]
+fn load_event_run(app: AppHandle, run_id: i64) -> Result<EventRunRecord, String> {
+    let connection = open_shift_light_db(&app)?;
+    load_event_run_from_connection(&connection, run_id)
 }
 
 #[tauri::command]
@@ -2986,6 +3174,7 @@ fn main() {
             delete_event,
             record_event_run,
             load_event_runs,
+            load_event_run,
             record_garage_vehicle,
             load_garage_snapshot,
             load_garage,
@@ -3229,7 +3418,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
         for table in [
             "shift_light_cars",
             "shift_light_variants",
@@ -3241,6 +3430,7 @@ mod tests {
             "events",
             "event_runs",
             "event_run_laps",
+            "event_run_lap_trace_points",
         ] {
             assert!(table_exists(&connection, table).unwrap(), "missing {table}");
         }
@@ -3322,7 +3512,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
         assert!(table_exists(&connection, "events").unwrap());
         assert_eq!(
             connection
@@ -3368,7 +3558,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
         assert_eq!(
             load_event_from_connection(&connection, event.id)
                 .unwrap()
@@ -3470,6 +3660,7 @@ mod tests {
                             sector_1_time_ms: None,
                             sector_2_time_ms: None,
                             sector_3_time_ms: None,
+                            trace_points: Vec::new(),
                         },
                         EventRunLapInput {
                             lap_number: 1,
@@ -3477,6 +3668,7 @@ mod tests {
                             sector_1_time_ms: None,
                             sector_2_time_ms: None,
                             sector_3_time_ms: None,
+                            trace_points: Vec::new(),
                         },
                     ],
                 ),
@@ -3505,6 +3697,7 @@ mod tests {
                         sector_1_time_ms: Some(30_000),
                         sector_2_time_ms: Some(29_500),
                         sector_3_time_ms: Some(30_000),
+                        trace_points: Vec::new(),
                     },
                     EventRunLapInput {
                         lap_number: 1,
@@ -3512,6 +3705,7 @@ mod tests {
                         sector_1_time_ms: Some(31_000),
                         sector_2_time_ms: Some(30_000),
                         sector_3_time_ms: Some(30_000),
+                        trace_points: Vec::new(),
                     },
                 ],
             ),
@@ -3571,6 +3765,7 @@ mod tests {
                 sector_1_time_ms: None,
                 sector_2_time_ms: None,
                 sector_3_time_ms: None,
+                trace_points: Vec::new(),
             }],
         );
         garage_named_run.car_ordinal = 261;
@@ -3588,6 +3783,65 @@ mod tests {
             load_event_runs_from_connection(&connection, None)
                 .unwrap()
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn event_run_trace_points_round_trip_only_on_selected_run_load() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Trace run", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let saved = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![EventRunLapInput {
+                    lap_number: 1,
+                    lap_time_ms: 90_000,
+                    sector_1_time_ms: Some(30_000),
+                    sector_2_time_ms: Some(30_000),
+                    sector_3_time_ms: Some(30_000),
+                    trace_points: vec![EventRunTracePointInput {
+                        sample_index: 0,
+                        elapsed_ms: 250,
+                        distance: 12.5,
+                        position_x: 1.0,
+                        position_y: 2.0,
+                        position_z: 3.0,
+                        throttle: 0.75,
+                        brake: 0.0,
+                    }],
+                }],
+            ),
+        )
+        .unwrap();
+        assert_eq!(saved.laps[0].trace_points.len(), 1);
+        assert!(
+            load_event_runs_from_connection(&connection, Some(event.id)).unwrap()[0].laps[0]
+                .trace_points
+                .is_empty()
+        );
+        let loaded = load_event_run_from_connection(&connection, saved.id).unwrap();
+        assert_eq!(loaded.laps[0].trace_points.len(), 1);
+        assert_eq!(loaded.laps[0].trace_points[0].sample_index, 0);
+        assert_eq!(loaded.laps[0].trace_points[0].elapsed_ms, 250);
+        assert_eq!(loaded.laps[0].trace_points[0].position_z, 3.0);
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM event_run_lap_trace_points",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            1
         );
     }
 
@@ -3986,7 +4240,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
         assert_eq!(
             connection
                 .query_row("SELECT next_sequence FROM garage_sequence", [], |row| {
@@ -4048,7 +4302,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
         let (drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (i32, i32, i64, i64) =
             connection
                 .query_row(
@@ -4121,7 +4375,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
         let (id, drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (
             i64,
             i32,

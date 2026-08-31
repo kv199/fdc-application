@@ -56,8 +56,22 @@ available as the Events tab in Configuration, directly after Garage.
   table is `Lap`, `Lap Time`, `Sector 1`, `Sector 2`, and `Sector 3`; it starts
   from the highest lap number and a Lap-header click reverses that temporary
   order. In each time column, every tied quickest value is purple, the next
-  distinct value is green, and all remaining values are white. **BACK** and
-  Escape return to the Event page.
+  distinct value is green, and all remaining values are white. Selecting a lap
+  row expands it beneath the table; selecting the same row again collapses it.
+  The expanded row shows a top-down X/Z trace on the left and pedal-use
+  statistics on the right. The first Escape collapses an open row; **BACK** or
+  a following Escape returns to the Event page.
+- Trace segments are thin and use green for throttle, red for brake, and
+  yellow for coasting. Brake takes precedence whenever both pedal inputs are
+  at least five percent. Thin black `S1`, `S2`, and `S3` ticks mark the ends
+  of the three virtual distance sectors. The white marker is the saved start
+  point.
+- Pedal statistics are time-weighted, not sample-count-weighted: Throttle
+  (`X`), Brake (`A`), and Coast (`C`) always total 100%. The first point owns
+  the initial interval from lap zero, each following point owns the interval
+  until the next point, and the last point owns the remaining time until the
+  saved lap result. A pre-trace lap keeps its normal timing row and shows an
+  unavailable trace state when expanded.
 - A Sprint is represented by one saved row when telemetry supplies enough data
   to compute its virtual sectors. Its run type is a capture hint only: the
   detail page uses the saved rows, so a Sprint recorded as a one-lap circuit
@@ -94,6 +108,8 @@ UI or use a second telemetry source.
 | `DistanceTraveled` | Validates the clean start window. |
 | `LapNumber` | Detects circuit-lap boundaries and a confirmed clean restart. |
 | `LastLap` | Stores an official completed circuit lap and is the preferred sprint finish evidence. |
+| `Position X`, `Position Y`, `Position Z` | Saves a compact per-lap vehicle trace; the detail map renders the top-down X/Z projection while retaining Y. |
+| `Throttle`, `Brake` | Saves the pedal inputs used by the existing HUD and derives trace colors and time-weighted pedal statistics. |
 | Vehicle ordinal, name, class, PI, and drivetrain | Snapshots the vehicle recorded with the run. |
 
 Forza `BestLap` is not persisted as an independent input. FDC derives a circuit
@@ -106,6 +122,13 @@ laps.
 It stores the resulting three virtual-sector durations with the lap. This does
 not persist the telemetry stream. Runs created before sector storage have no
 sector values and therefore show `—` for them and no hypothetical time.
+
+For a newly completed lap, FDC also stores a compact downsampled trace (at
+most 1,200 points) containing elapsed time, travelled distance, position, and
+pedal inputs. This is independent data for every lap: runs on the same route
+can look similar, but each trace and its colouring describe that exact drive.
+The same synthetic lap used for a confirmed Sprint receives a trace. Existing
+saved laps are not backfilled because the source telemetry no longer exists.
 
 ### Run lifecycle
 
@@ -161,7 +184,12 @@ version 7 adds the `events` table with a numeric event ID, name, Class, Route
 Type, Mode, optional notes, and creation/update timestamps. Schema version 8
 adds event runs and their completed circuit laps. Schema version 9 removes the
 obsolete Event archive timestamp and adds nullable Sector 1, Sector 2, and
-Sector 3 durations to each saved lap.
+Sector 3 durations to each saved lap. Schema version 10 adds
+`event_run_lap_trace_points`, keyed by `(run_id, lap_number, sample_index)`,
+with elapsed time, distance, `position_x`, `position_y`, `position_z`,
+`throttle`, and `brake`. The table has a composite foreign key to the saved
+lap and is deleted with that lap or its Event. Trace points are omitted from
+run-list reads and loaded only for the selected run detail.
 A run snapshots the vehicle ordinal, class, PI, drivetrain, start time, run
 type, and confirmed result. Run reads resolve the current Garage display name
 for the ordinal, so renaming a Garage car updates existing Event rows. Existing
@@ -179,3 +207,4 @@ notes before storing them; empty notes are stored as absent.
 - `delete_event`
 - `record_event_run`
 - `load_event_runs`
+- `load_event_run`

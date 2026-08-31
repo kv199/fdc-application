@@ -105,6 +105,7 @@
   let eventsDiscardConfirmOpen = false
   let eventRunsSort = { key: 'date', direction: 'desc' }
   let eventRunLapSortDirection = 'desc'
+  let expandedEventRunLap = null
   let eventsSortValue = 'id-desc'
   let editingTarget = null
   let shiftLightResetPending = false
@@ -781,6 +782,38 @@
     return number < 1000 ? Math.round(number * 1000) : Math.round(number)
   }
 
+  function finiteNumber(value) {
+    const number = Number(value)
+    return Number.isFinite(number) ? number : null
+  }
+
+  function normalizePedal(value) {
+    const number = finiteNumber(value)
+    if (number === null) return 0
+    return Math.max(0, Math.min(1, number > 1 ? number / 100 : number))
+  }
+
+  function normalizeTracePoints(value) {
+    const list = Array.isArray(value) ? value : []
+    return list.map(point => {
+      if (!point || typeof point !== 'object') return null
+      const position = point.position && typeof point.position === 'object' ? point.position : point
+      const positionX = finiteNumber(point.positionX ?? point.position_x ?? position.x)
+      const positionY = finiteNumber(point.positionY ?? point.position_y ?? position.y)
+      const positionZ = finiteNumber(point.positionZ ?? point.position_z ?? position.z)
+      if (positionX === null || positionZ === null) return null
+      return {
+        elapsedMs: runTimeMs(point.elapsedMs ?? point.elapsed_ms ?? point.timeMs ?? point.time_ms, 'ms'),
+        distanceM: finiteNumber(point.distanceM ?? point.distance_m ?? point.distance),
+        positionX,
+        positionY,
+        positionZ,
+        throttle: normalizePedal(point.throttle ?? point.throttleInput ?? point.throttle_input),
+        brake: normalizePedal(point.brake ?? point.brakeInput ?? point.brake_input)
+      }
+    }).filter(Boolean)
+  }
+
   function normalizeEventRun(value) {
     const source = value && typeof value === 'object' && value.run && typeof value.run === 'object' ? value.run : value
     if (!source || typeof source !== 'object') return null
@@ -794,6 +827,9 @@
             ?? fallbackKeys.map(key => sectors?.[key]).find(candidate => candidate !== undefined && candidate !== null)
           return value === undefined || value === null ? null : runTimeMs(value, 'ms')
         }
+        const tracePoints = normalizeTracePoints(
+          lap?.tracePoints ?? lap?.trace_points ?? lap?.trace ?? lap?.samples
+        )
         return {
           lapNumber: Number(lap?.lapNumber ?? lap?.lap_number ?? lap?.number),
           timeMs: lap?.lapTimeMs !== undefined
@@ -807,7 +843,8 @@
                   : runTimeMs(lap?.time ?? lap?.seconds),
           sector1TimeMs: valueFor(['sector1TimeMs', 'sector_1_time_ms', 'sector1Ms', 'sector_1_ms', 's1TimeMs', 's1_time_ms'], ['sector1TimeMs', 'sector_1_time_ms', 'sector1Ms', 'sector_1_ms', 's1TimeMs', 's1_time_ms', 's1']),
           sector2TimeMs: valueFor(['sector2TimeMs', 'sector_2_time_ms', 'sector2Ms', 'sector_2_ms', 's2TimeMs', 's2_time_ms'], ['sector2TimeMs', 'sector_2_time_ms', 'sector2Ms', 'sector_2_ms', 's2TimeMs', 's2_time_ms', 's2']),
-          sector3TimeMs: valueFor(['sector3TimeMs', 'sector_3_time_ms', 'sector3Ms', 'sector_3_ms', 's3TimeMs', 's3_time_ms'], ['sector3TimeMs', 'sector_3_time_ms', 'sector3Ms', 'sector_3_ms', 's3TimeMs', 's3_time_ms', 's3'])
+          sector3TimeMs: valueFor(['sector3TimeMs', 'sector_3_time_ms', 'sector3Ms', 'sector_3_ms', 's3TimeMs', 's3_time_ms'], ['sector3TimeMs', 'sector_3_time_ms', 'sector3Ms', 'sector_3_ms', 's3TimeMs', 's3_time_ms', 's3']),
+          tracePoints
         }
       }).filter(lap => Number.isFinite(lap.lapNumber) && lap.timeMs !== null)
       : []
@@ -829,7 +866,8 @@
         timeMs: finalTimeMs,
         sector1TimeMs: runTimeMs(source.sector1TimeMs ?? source.sector_1_time_ms ?? source.s1TimeMs ?? source.s1_time_ms, 'ms'),
         sector2TimeMs: runTimeMs(source.sector2TimeMs ?? source.sector_2_time_ms ?? source.s2TimeMs ?? source.s2_time_ms, 'ms'),
-        sector3TimeMs: runTimeMs(source.sector3TimeMs ?? source.sector_3_time_ms ?? source.s3TimeMs ?? source.s3_time_ms, 'ms')
+        sector3TimeMs: runTimeMs(source.sector3TimeMs ?? source.sector_3_time_ms ?? source.s3TimeMs ?? source.s3_time_ms, 'ms'),
+        tracePoints: normalizeTracePoints(source.tracePoints ?? source.trace_points ?? source.trace)
       }]
     return {
       id,
@@ -1051,6 +1089,202 @@
     return value
   }
 
+  const TRACE_COLORS = {
+    throttle: '#69e83f',
+    brake: '#ef4444',
+    coast: '#facc15'
+  }
+
+  function traceState(point) {
+    // Braking wins when both pedals are pressed, matching the HUD's safety-first
+    // interpretation of overlapping inputs.
+    if (normalizePedal(point?.brake) >= 0.05) return 'brake'
+    if (normalizePedal(point?.throttle) >= 0.05) return 'throttle'
+    return 'coast'
+  }
+
+  function traceStats(points, lapTimeMs = null) {
+    const totals = { throttle: 0, brake: 0, coast: 0 }
+    const firstElapsed = finiteNumber(points[0]?.elapsedMs)
+    if (Number.isFinite(firstElapsed) && firstElapsed > 0) {
+      totals[traceState(points[0])] += firstElapsed
+    }
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const elapsed = finiteNumber(points[index + 1]?.elapsedMs) - finiteNumber(points[index]?.elapsedMs)
+      if (!Number.isFinite(elapsed) || elapsed <= 0) continue
+      totals[traceState(points[index])] += elapsed
+    }
+    const lastElapsed = finiteNumber(points.at(-1)?.elapsedMs)
+    const remaining = Number.isFinite(lapTimeMs) && Number.isFinite(lastElapsed)
+      ? Math.max(0, lapTimeMs - lastElapsed)
+      : 0
+    if (remaining > 0 && points.length) totals[traceState(points.at(-1))] += remaining
+    const total = Object.values(totals).reduce((sum, value) => sum + value, 0)
+    if (total <= 0) return null
+    const exact = Object.fromEntries(Object.entries(totals).map(([key, value]) => [key, value / total * 100]))
+    const rounded = Object.fromEntries(Object.entries(exact).map(([key, value]) => [key, Math.floor(value)]))
+    let remainder = 100 - Object.values(rounded).reduce((sum, value) => sum + value, 0)
+    for (const [key] of Object.entries(exact).sort((left, right) => right[1] - Math.floor(right[1]) - (left[1] - Math.floor(left[1])))) {
+      if (remainder <= 0) break
+      rounded[key] += 1
+      remainder -= 1
+    }
+    return rounded
+  }
+
+  function svgElement(name, attributes = {}) {
+    const element = document.createElementNS('http://www.w3.org/2000/svg', name)
+    for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value))
+    return element
+  }
+
+  function traceSectorTicks(points, minDistance, maxDistance, project, minX, maxX, minZ, maxZ) {
+    const ticks = []
+    const distanceRange = maxDistance - minDistance
+    if (!(distanceRange > 0)) return ticks
+    for (let sector = 1; sector <= 3; sector += 1) {
+      const target = minDistance + distanceRange * sector / 3
+      let nearest = null
+      for (const point of points) {
+        if (point.distanceM === null) continue
+        const delta = Math.abs(point.distanceM - target)
+        if (!nearest || delta < nearest.delta) nearest = { point, delta }
+      }
+      if (!nearest) continue
+      const pointIndex = points.indexOf(nearest.point)
+      const previous = points[Math.max(0, pointIndex - 1)] || nearest.point
+      const next = points[Math.min(points.length - 1, pointIndex + 1)] || nearest.point
+      const current = project(nearest.point)
+      const dx = project(next).x - project(previous).x
+      const dz = project(next).y - project(previous).y
+      const length = Math.hypot(dx, dz) || 1
+      const normalX = -dz / length * 8
+      const normalY = dx / length * 8
+      ticks.push({
+        x1: current.x - normalX,
+        y1: current.y - normalY,
+        x2: current.x + normalX,
+        y2: current.y + normalY,
+        label: `S${sector}`
+      })
+    }
+    return ticks
+  }
+
+  function renderTraceMap(points) {
+    const map = document.createElement('div')
+    map.className = 'events-lap-detail__map'
+    const heading = document.createElement('div')
+    heading.className = 'events-lap-detail__label'
+    heading.textContent = 'TRACE · X / Z'
+    map.append(heading)
+    if (points.length < 2) {
+      const empty = document.createElement('p')
+      empty.className = 'events-lap-detail__empty'
+      empty.textContent = 'NO TRACE DATA SAVED FOR THIS LAP'
+      map.append(empty)
+      return map
+    }
+    const coordinates = points.map(point => ({ x: point.positionX, z: point.positionZ }))
+    const minX = Math.min(...coordinates.map(point => point.x))
+    const maxX = Math.max(...coordinates.map(point => point.x))
+    const minZ = Math.min(...coordinates.map(point => point.z))
+    const maxZ = Math.max(...coordinates.map(point => point.z))
+    const width = 640
+    const height = 300
+    const padding = 26
+    const scale = Math.min(
+      (width - padding * 2) / Math.max(1, maxX - minX),
+      (height - padding * 2) / Math.max(1, maxZ - minZ)
+    )
+    const project = point => ({
+      x: padding + (point.positionX - minX) * scale,
+      y: height - padding - (point.positionZ - minZ) * scale
+    })
+    const svg = svgElement('svg', {
+      class: 'events-lap-detail__svg',
+      viewBox: `0 0 ${width} ${height}`,
+      role: 'img',
+      'aria-label': 'Throttle, brake and coast trace map'
+    })
+    svg.append(svgElement('rect', { class: 'events-lap-detail__surface', x: 0, y: 0, width, height, rx: 2 }))
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const from = project(points[index])
+      const to = project(points[index + 1])
+      svg.append(svgElement('line', {
+        class: `events-lap-detail__trace events-lap-detail__trace--${traceState(points[index])}`,
+        x1: from.x,
+        y1: from.y,
+        x2: to.x,
+        y2: to.y
+      }))
+    }
+    const distances = points.map(point => point.distanceM).filter(value => value !== null)
+    const minDistance = distances.length ? Math.min(...distances) : 0
+    const maxDistance = distances.length ? Math.max(...distances) : 0
+    for (const tick of traceSectorTicks(points, minDistance, maxDistance, project, minX, maxX, minZ, maxZ)) {
+      svg.append(svgElement('line', {
+        class: 'events-lap-detail__sector-tick',
+        x1: tick.x1,
+        y1: tick.y1,
+        x2: tick.x2,
+        y2: tick.y2
+      }))
+      const label = svgElement('text', { class: 'events-lap-detail__sector-label', x: tick.x2 + 5, y: tick.y2 - 4 })
+      label.textContent = tick.label
+      svg.append(label)
+    }
+    const start = project(points[0])
+    svg.append(svgElement('circle', { class: 'events-lap-detail__start', cx: start.x, cy: start.y, r: 3 }))
+    map.append(svg)
+    return map
+  }
+
+  function renderTraceStats(points, lapTimeMs) {
+    const stats = document.createElement('aside')
+    stats.className = 'events-lap-detail__stats'
+    const heading = document.createElement('div')
+    heading.className = 'events-lap-detail__label'
+    heading.textContent = 'INPUT TIME'
+    stats.append(heading)
+    const values = traceStats(points, lapTimeMs)
+    if (!values) {
+      const empty = document.createElement('p')
+      empty.className = 'events-lap-detail__empty'
+      empty.textContent = 'STATISTICS UNAVAILABLE'
+      stats.append(empty)
+      return stats
+    }
+    const labels = [
+      ['throttle', 'X', 'THROTTLE'],
+      ['brake', 'A', 'BRAKE'],
+      ['coast', 'C', 'COAST']
+    ]
+    for (const [key, button, label] of labels) {
+      const row = document.createElement('div')
+      row.className = `events-lap-detail__stat events-lap-detail__stat--${key}`
+      const badge = document.createElement('span')
+      badge.className = 'events-lap-detail__stat-key'
+      badge.textContent = button
+      const name = document.createElement('span')
+      name.className = 'events-lap-detail__stat-name'
+      name.textContent = label
+      const value = document.createElement('output')
+      value.className = 'events-lap-detail__stat-value'
+      value.textContent = `${values[key]}%`
+      row.append(badge, name, value)
+      stats.append(row)
+    }
+    return stats
+  }
+
+  function toggleEventRunLap(lapNumber, row) {
+    const key = Number(lapNumber)
+    expandedEventRunLap = expandedEventRunLap === key ? null : key
+    if (eventsRunLaps) renderEventRunDetail(currentEventRun)
+    if (expandedEventRunLap !== null) row?.nextElementSibling?.scrollIntoView?.({ block: 'nearest' })
+  }
+
   function renderEventRunDetail(run) {
     if (!run) return
     const event = currentEventId === null ? null : eventsById.get(currentEventId)
@@ -1074,6 +1308,18 @@
       eventsRunLaps.replaceChildren()
       for (const lap of laps) {
         const row = document.createElement('tr')
+        const lapNumberValue = Number(lap.lapNumber)
+        const expanded = expandedEventRunLap === lapNumberValue
+        row.className = 'events-run-table__lap-row'
+        row.tabIndex = 0
+        row.setAttribute('aria-expanded', String(expanded))
+        row.setAttribute('aria-label', `Lap ${Number.isFinite(lapNumberValue) ? lapNumberValue : 'unknown'} details`)
+        row.addEventListener('click', () => toggleEventRunLap(lapNumberValue, row))
+        row.addEventListener('keydown', event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          toggleEventRunLap(lapNumberValue, row)
+        })
         const lapNumber = document.createElement('th')
         lapNumber.scope = 'row'
         lapNumber.textContent = Number.isFinite(lap.lapNumber) ? String(Math.round(lap.lapNumber)) : '—'
@@ -1086,26 +1332,51 @@
           row.append(sector)
         }
         eventsRunLaps.append(row)
+        if (expanded) {
+          const detailRow = document.createElement('tr')
+          detailRow.className = 'events-lap-detail-row'
+          const detailCell = document.createElement('td')
+          detailCell.colSpan = 5
+          const detail = document.createElement('div')
+          detail.className = 'events-lap-detail'
+          detail.append(renderTraceMap(lap.tracePoints || []), renderTraceStats(lap.tracePoints || [], lap.timeMs))
+          detailCell.append(detail)
+          detailRow.append(detailCell)
+          eventsRunLaps.append(detailRow)
+        }
       }
     }
     if (eventsRunEmpty) eventsRunEmpty.hidden = laps.length > 0
   }
 
-  function openEventRun(id) {
+  async function openEventRun(id) {
     if (currentEventId === null) return false
     const key = runId(id)
     const run = currentEventRuns.find(candidate => candidate.id === key)
     if (!run) return false
     currentEventRun = run
+    expandedEventRunLap = null
     eventRunLapSortDirection = 'desc'
     renderEventRunDetail(run)
     setEventsView('run')
     eventsRunBack?.focus()
+    try {
+      const nativeRunId = Number.isFinite(Number(key)) ? Math.round(Number(key)) : key
+      const loaded = normalizeEventRun(await call('load_event_run', { runId: nativeRunId }))
+      if (loaded && loaded.id === key && eventsView === 'run' && currentEventRun?.id === key) {
+        currentEventRun = loaded
+        currentEventRuns = currentEventRuns.map(candidate => candidate.id === key ? loaded : candidate)
+        renderEventRunDetail(loaded)
+      }
+    } catch {
+      // The list payload remains usable; trace details simply stay unavailable.
+    }
     return true
   }
 
   function closeEventRun() {
     currentEventRun = null
+    expandedEventRunLap = null
     if (eventsRunSummary) {
       eventsRunSummary.replaceChildren()
       delete eventsRunSummary.dataset.eventId
@@ -1991,6 +2262,11 @@
     }
     if (eventsView === 'run') {
       event.preventDefault()
+      if (expandedEventRunLap !== null) {
+        expandedEventRunLap = null
+        if (currentEventRun) renderEventRunDetail(currentEventRun)
+        return
+      }
       closeEventRun()
       return
     }

@@ -61,6 +61,37 @@ test('sector splits use the current lap distance span when DistanceTraveled accu
   })
 })
 
+test('completed laps persist compact Position and pedal trace points', async () => {
+  const saved = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  const frame = (current, distance, position, controls = {}) => telemetry({
+    lap: { number: 0, current, last: 0, raceTime: current, distance },
+    position,
+    ...controls
+  })
+  instance.arm(72)
+  instance.update(frame(0, 0, { x: 1, y: 2, z: 3 }))
+  instance.update(frame(0.05, 50, { x: 2, y: 2, z: 3 }))
+  instance.update(frame(0.15, 100, { x: 3, y: 2, z: 4 }, { throttle: 0.7, brake: 0.0 }))
+  instance.update(frame(0.3, 300, { x: 4, y: 2, z: 5 }, { throttle: 0.7, brake: 0.0 }))
+  instance.update(telemetry({
+    position: { x: 5, y: 2, z: 6 },
+    lap: { number: 1, current: 0, last: 0.3, raceTime: 0.3, distance: 0 }
+  }))
+
+  await instance.stop()
+  const trace = saved[0].run.laps[0].tracePoints
+  assert.equal(trace.length, 2)
+  assert.deepEqual(trace.map(point => point.sampleIndex), [0, 1])
+  assert.deepEqual(trace.map(point => point.positionX), [3, 4])
+  assert.equal(trace[0].throttle, 0.7)
+  assert.equal(trace[0].brake, 0)
+})
+
 test('a confirmed sprint persists one synthetic lap with interpolated sectors', async () => {
   const saved = []
   const instance = recorder.createEventRecorder({

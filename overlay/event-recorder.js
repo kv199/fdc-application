@@ -7,6 +7,8 @@
   const START_MAX_DISTANCE_M = 25
   const POST_FINISH_PACKET_WINDOW = 48
   const POST_FINISH_WAIT_MS = 1000
+  const TRACE_SAMPLE_INTERVAL_MS = 100
+  const TRACE_MAX_POINTS = 1200
 
   function finite(value) {
     if (value === null || value === undefined || value === '') return null
@@ -28,7 +30,18 @@
     const distance = finite(telemetry?.lap?.distance)
     const elapsedMs = currentTimeMs(telemetry)
     if (distance === null || distance < 0 || elapsedMs === null) return null
-    return { distance, elapsedMs }
+    const position = telemetry?.position && typeof telemetry.position === 'object' ? telemetry.position : {}
+    const throttle = finite(telemetry?.throttle)
+    const brake = finite(telemetry?.brake)
+    return {
+      distance,
+      elapsedMs,
+      positionX: finite(position.x),
+      positionY: finite(position.y),
+      positionZ: finite(position.z),
+      throttle: throttle === null ? null : Math.min(1, Math.max(0, throttle)),
+      brake: brake === null ? null : Math.min(1, Math.max(0, brake))
+    }
   }
 
   // The telemetry stream does not expose sector boundaries.  Use the observed
@@ -80,6 +93,29 @@
       sector2TimeMs: values[1],
       sector3TimeMs: values[2]
     }
+  }
+
+  function tracePointsFromSamples(samples) {
+    if (!Array.isArray(samples)) return []
+    return samples
+      .filter(sample => [sample.positionX, sample.positionY, sample.positionZ, sample.throttle, sample.brake]
+        .every(value => value !== null && Number.isFinite(value)))
+      .map((sample, sampleIndex) => ({
+        sampleIndex,
+        elapsedMs: sample.elapsedMs,
+        distance: sample.distance,
+        positionX: sample.positionX,
+        positionY: sample.positionY,
+        positionZ: sample.positionZ,
+        throttle: sample.throttle,
+        brake: sample.brake
+      }))
+  }
+
+  function pedalState(sample) {
+    if (sample?.brake >= 0.05) return 'brake'
+    if (sample?.throttle >= 0.05) return 'throttle'
+    return 'coast'
   }
 
   function currentTimeMs(telemetry) {
@@ -268,6 +304,8 @@
       if (state.run.laps.some(lap => lap.lapNumber === Math.round(number))) return false
       const lap = { lapNumber: Math.round(number), timeMs }
       Object.assign(lap, sectorTimesFromSamples(state.run.lapSamples, timeMs) || {})
+      const tracePoints = tracePointsFromSamples(state.run.lapSamples)
+      if (tracePoints.length > 0) lap.tracePoints = tracePoints
       state.run.laps.push(lap)
       state.run.laps.sort((left, right) => left.lapNumber - right.lapNumber)
       state.pendingLapNumber = null
@@ -286,6 +324,12 @@
       const previous = run.lapSamples.at(-1)
       if (previous && sample.distance < previous.distance) return
       if (previous && sample.distance === previous.distance && sample.elapsedMs <= previous.elapsedMs) return
+      if (previous
+        && sample.elapsedMs - previous.elapsedMs < TRACE_SAMPLE_INTERVAL_MS
+        && pedalState(sample) === pedalState(previous)) return
+      if (run.lapSamples.length >= TRACE_MAX_POINTS) {
+        run.lapSamples = run.lapSamples.filter((_, index) => index % 2 === 0)
+      }
       run.lapSamples.push(sample)
     }
 
@@ -293,6 +337,8 @@
       if (!run || run.runType !== 'sprint' || run.finalTimeMs === null || run.laps.length > 0) return
       const lap = { lapNumber: 1, timeMs: run.finalTimeMs }
       Object.assign(lap, sectorTimesFromSamples(run.lapSamples, run.finalTimeMs) || {})
+      const tracePoints = tracePointsFromSamples(run.lapSamples)
+      if (tracePoints.length > 0) lap.tracePoints = tracePoints
       run.laps.push(lap)
     }
 
@@ -359,6 +405,9 @@
         for (const key of ['sector1TimeMs', 'sector2TimeMs', 'sector3TimeMs']) {
           const value = finite(lap[key])
           if (value !== null && value > 0) payloadLap[key] = Math.round(value)
+        }
+        if (Array.isArray(lap.tracePoints) && lap.tracePoints.length > 0) {
+          payloadLap.tracePoints = lap.tracePoints.map(point => ({ ...point }))
         }
         return payloadLap
       })
@@ -538,6 +587,8 @@
     START_MAX_DISTANCE_M,
     POST_FINISH_PACKET_WINDOW,
     POST_FINISH_WAIT_MS,
+    TRACE_SAMPLE_INTERVAL_MS,
+    TRACE_MAX_POINTS,
     createState,
     createEventRecorder,
     carSnapshot,
@@ -545,6 +596,7 @@
     isStrongRestart,
     isZeroedNonLiveRacePacket,
     normalizeRunsPayload,
-    sectorTimesFromSamples
+    sectorTimesFromSamples,
+    tracePointsFromSamples
   }
 }))
