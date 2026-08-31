@@ -969,8 +969,7 @@ fn create_event_tables(transaction: &Transaction<'_>) -> Result<(), String> {
                mode TEXT NOT NULL CHECK (mode IN ('Any', 'Rivals', 'Online', 'EventLab', 'Official', 'Blueprint')),
                notes TEXT,
                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               archived_at TEXT
+               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
              );",
         )
         .map_err(|error| format!("unable to create Events schema: {error}"))
@@ -1000,6 +999,9 @@ fn create_event_run_tables(transaction: &Transaction<'_>) -> Result<(), String> 
                run_id INTEGER NOT NULL,
                lap_number INTEGER NOT NULL CHECK (lap_number > 0),
                lap_time_ms INTEGER NOT NULL CHECK (lap_time_ms > 0),
+               sector_1_time_ms INTEGER CHECK (sector_1_time_ms IS NULL OR sector_1_time_ms > 0),
+               sector_2_time_ms INTEGER CHECK (sector_2_time_ms IS NULL OR sector_2_time_ms > 0),
+               sector_3_time_ms INTEGER CHECK (sector_3_time_ms IS NULL OR sector_3_time_ms > 0),
                PRIMARY KEY (run_id, lap_number),
                FOREIGN KEY (run_id)
                  REFERENCES event_runs(id)
@@ -1036,6 +1038,53 @@ fn migrate_event_runs_schema(connection: &mut Connection) -> Result<(), String> 
     transaction
         .commit()
         .map_err(|error| format!("unable to commit Event run schema migration: {error}"))
+}
+
+fn migrate_event_sectors_schema(connection: &mut Connection) -> Result<(), String> {
+    let remove_archived_at = table_has_column(connection, "events", "archived_at")?;
+    let mut missing_sector_columns = Vec::new();
+    for (column, definition) in [
+        (
+            "sector_1_time_ms",
+            "INTEGER CHECK (sector_1_time_ms IS NULL OR sector_1_time_ms > 0)",
+        ),
+        (
+            "sector_2_time_ms",
+            "INTEGER CHECK (sector_2_time_ms IS NULL OR sector_2_time_ms > 0)",
+        ),
+        (
+            "sector_3_time_ms",
+            "INTEGER CHECK (sector_3_time_ms IS NULL OR sector_3_time_ms > 0)",
+        ),
+    ] {
+        if !table_has_column(connection, "event_run_laps", column)? {
+            missing_sector_columns.push((column, definition));
+        }
+    }
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Event sector schema migration: {error}"))?;
+    create_event_tables(&transaction)?;
+    create_event_run_tables(&transaction)?;
+    if remove_archived_at {
+        transaction
+            .execute("ALTER TABLE events DROP COLUMN archived_at", [])
+            .map_err(|error| format!("unable to remove archived Event data: {error}"))?;
+    }
+    for (column, definition) in missing_sector_columns {
+        transaction
+            .execute(
+                &format!("ALTER TABLE event_run_laps ADD COLUMN {column} {definition}"),
+                [],
+            )
+            .map_err(|error| format!("unable to add Event sector data: {error}"))?;
+    }
+    transaction
+        .execute("UPDATE hud_schema_version SET version = 9", [])
+        .map_err(|error| format!("unable to update Event sector schema version: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Event sector schema migration: {error}"))
 }
 
 fn migrate_garage_schema(connection: &mut Connection) -> Result<(), String> {
@@ -1447,6 +1496,9 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
             .commit()
             .map_err(|error| format!("unable to commit Event run schema check: {error}"))?;
     }
+    if version < 9 {
+        migrate_event_sectors_schema(connection)?;
+    }
     Ok(())
 }
 
@@ -1496,7 +1548,6 @@ struct EventRecord {
     notes: Option<String>,
     created_at: String,
     updated_at: String,
-    archived_at: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -1504,6 +1555,12 @@ struct EventRecord {
 struct EventRunLapInput {
     lap_number: i32,
     lap_time_ms: i64,
+    #[serde(default)]
+    sector_1_time_ms: Option<i64>,
+    #[serde(default)]
+    sector_2_time_ms: Option<i64>,
+    #[serde(default)]
+    sector_3_time_ms: Option<i64>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -1528,6 +1585,9 @@ struct NewEventRun {
 struct EventRunLap {
     lap_number: i32,
     lap_time_ms: i64,
+    sector_1_time_ms: Option<i64>,
+    sector_2_time_ms: Option<i64>,
+    sector_3_time_ms: Option<i64>,
 }
 
 #[derive(Clone, Serialize)]
@@ -1584,7 +1644,6 @@ fn event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EventRecord> {
         notes: row.get(5)?,
         created_at: row.get(6)?,
         updated_at: row.get(7)?,
-        archived_at: row.get(8)?,
     })
 }
 
@@ -1598,7 +1657,7 @@ fn load_event_from_connection(
     connection
         .query_row(
             "SELECT id, name, class, route, mode, notes,
-                    created_at, updated_at, archived_at
+                    created_at, updated_at
              FROM events WHERE id = ?1",
             params![event_id],
             event_from_row,
@@ -1613,9 +1672,8 @@ fn load_events_from_connection(connection: &Connection) -> Result<Vec<EventRecor
     let mut statement = connection
         .prepare(
             "SELECT id, name, class, route, mode, notes,
-                    created_at, updated_at, archived_at
+                    created_at, updated_at
              FROM events
-             WHERE archived_at IS NULL
              ORDER BY created_at DESC, id DESC",
         )
         .map_err(|error| format!("unable to prepare Event list query: {error}"))?;
@@ -1680,28 +1738,6 @@ fn rename_event_in_connection(
     load_event_from_connection(connection, event_id)
 }
 
-fn archive_event_in_connection(
-    connection: &Connection,
-    event_id: i64,
-) -> Result<EventRecord, String> {
-    if event_id <= 0 {
-        return Err("Event ID must be positive".to_string());
-    }
-    let changed = connection
-        .execute(
-            "UPDATE events
-             SET archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP),
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?1",
-            params![event_id],
-        )
-        .map_err(|error| format!("unable to archive Event: {error}"))?;
-    if changed == 0 {
-        return Err(format!("Event {event_id} does not exist"));
-    }
-    load_event_from_connection(connection, event_id)
-}
-
 fn delete_event_in_connection(connection: &Connection, event_id: i64) -> Result<(), String> {
     if event_id <= 0 {
         return Err("Event ID must be positive".to_string());
@@ -1756,6 +1792,17 @@ fn normalize_event_run_input(mut run: NewEventRun) -> Result<NewEventRun, String
         if lap.lap_number <= 0 || lap.lap_time_ms <= 0 {
             return Err("Event run lap number and time must be positive".to_string());
         }
+        if [
+            lap.sector_1_time_ms,
+            lap.sector_2_time_ms,
+            lap.sector_3_time_ms,
+        ]
+        .into_iter()
+        .flatten()
+        .any(|time| time <= 0)
+        {
+            return Err("Event run sector times must be positive".to_string());
+        }
         if !lap_numbers.insert(lap.lap_number) {
             return Err("Event run lap numbers must be unique".to_string());
         }
@@ -1789,7 +1836,8 @@ fn event_run_laps_from_connection(
 ) -> Result<Vec<EventRunLap>, String> {
     let mut statement = connection
         .prepare(
-            "SELECT lap_number, lap_time_ms
+            "SELECT lap_number, lap_time_ms,
+                    sector_1_time_ms, sector_2_time_ms, sector_3_time_ms
              FROM event_run_laps
              WHERE run_id = ?1
              ORDER BY lap_number ASC",
@@ -1800,6 +1848,9 @@ fn event_run_laps_from_connection(
             Ok(EventRunLap {
                 lap_number: row.get(0)?,
                 lap_time_ms: row.get(1)?,
+                sector_1_time_ms: row.get(2)?,
+                sector_2_time_ms: row.get(3)?,
+                sector_3_time_ms: row.get(4)?,
             })
         })
         .map_err(|error| format!("unable to load Event run laps: {error}"))?
@@ -2007,9 +2058,18 @@ fn record_event_run_in_connection(
     for lap in run.laps {
         transaction
             .execute(
-                "INSERT INTO event_run_laps (run_id, lap_number, lap_time_ms)
-                 VALUES (?1, ?2, ?3)",
-                params![run_id, lap.lap_number, lap.lap_time_ms],
+                "INSERT INTO event_run_laps
+                   (run_id, lap_number, lap_time_ms,
+                    sector_1_time_ms, sector_2_time_ms, sector_3_time_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    run_id,
+                    lap.lap_number,
+                    lap.lap_time_ms,
+                    lap.sector_1_time_ms,
+                    lap.sector_2_time_ms,
+                    lap.sector_3_time_ms,
+                ],
             )
             .map_err(|error| format!("unable to record Event run lap: {error}"))?;
     }
@@ -2069,12 +2129,6 @@ fn load_event(app: AppHandle, event_id: i64) -> Result<EventRecord, String> {
 fn rename_event(app: AppHandle, event_id: i64, name: String) -> Result<EventRecord, String> {
     let connection = open_shift_light_db(&app)?;
     rename_event_in_connection(&connection, event_id, name)
-}
-
-#[tauri::command]
-fn archive_event(app: AppHandle, event_id: i64) -> Result<EventRecord, String> {
-    let connection = open_shift_light_db(&app)?;
-    archive_event_in_connection(&connection, event_id)
 }
 
 #[tauri::command]
@@ -2929,7 +2983,6 @@ fn main() {
             load_events,
             load_event,
             rename_event,
-            archive_event,
             delete_event,
             record_event_run,
             load_event_runs,
@@ -3176,7 +3229,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         for table in [
             "shift_light_cars",
             "shift_light_variants",
@@ -3269,7 +3322,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         assert!(table_exists(&connection, "events").unwrap());
         assert_eq!(
             connection
@@ -3315,7 +3368,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         assert_eq!(
             load_event_from_connection(&connection, event.id)
                 .unwrap()
@@ -3324,6 +3377,65 @@ mod tests {
         );
         assert!(table_exists(&connection, "event_runs").unwrap());
         assert!(table_exists(&connection, "event_run_laps").unwrap());
+    }
+
+    #[test]
+    fn event_sectors_migrate_from_v8_and_remove_archived_event_data() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 CREATE TABLE hud_schema_version (version INTEGER NOT NULL);
+                 INSERT INTO hud_schema_version VALUES (8);
+                 CREATE TABLE events (
+                   id INTEGER PRIMARY KEY,
+                   name TEXT NOT NULL,
+                   class TEXT NOT NULL,
+                   route TEXT NOT NULL,
+                   mode TEXT NOT NULL,
+                   notes TEXT,
+                   created_at TEXT NOT NULL,
+                   updated_at TEXT NOT NULL,
+                   archived_at TEXT
+                 );
+                 INSERT INTO events
+                   (id, name, class, route, mode, created_at, updated_at, archived_at)
+                 VALUES (1, 'Existing event', 'A', 'Asphalt', 'Official', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL);
+                 CREATE TABLE event_runs (
+                   id INTEGER PRIMARY KEY,
+                   event_id INTEGER NOT NULL,
+                   car_ordinal INTEGER NOT NULL,
+                   car_name TEXT,
+                   car_class INTEGER NOT NULL,
+                   car_pi INTEGER NOT NULL,
+                   drivetrain INTEGER NOT NULL,
+                   started_at TEXT NOT NULL,
+                   run_type TEXT NOT NULL,
+                   result TEXT NOT NULL,
+                   result_time_ms INTEGER,
+                   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+                 );
+                 CREATE TABLE event_run_laps (
+                   run_id INTEGER NOT NULL,
+                   lap_number INTEGER NOT NULL,
+                   lap_time_ms INTEGER NOT NULL,
+                   PRIMARY KEY (run_id, lap_number),
+                   FOREIGN KEY (run_id) REFERENCES event_runs(id) ON DELETE CASCADE
+                 );",
+            )
+            .unwrap();
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        assert!(!table_has_column(&connection, "events", "archived_at").unwrap());
+        for column in ["sector_1_time_ms", "sector_2_time_ms", "sector_3_time_ms"] {
+            assert!(table_has_column(&connection, "event_run_laps", column).unwrap());
+        }
+        assert_eq!(
+            load_event_from_connection(&connection, 1).unwrap().name,
+            "Existing event"
+        );
     }
 
     #[test]
@@ -3354,11 +3466,17 @@ mod tests {
                     vec![
                         EventRunLapInput {
                             lap_number: 1,
-                            lap_time_ms: 91_000
+                            lap_time_ms: 91_000,
+                            sector_1_time_ms: None,
+                            sector_2_time_ms: None,
+                            sector_3_time_ms: None,
                         },
                         EventRunLapInput {
                             lap_number: 1,
-                            lap_time_ms: 90_000
+                            lap_time_ms: 90_000,
+                            sector_1_time_ms: None,
+                            sector_2_time_ms: None,
+                            sector_3_time_ms: None,
                         },
                     ],
                 ),
@@ -3384,10 +3502,16 @@ mod tests {
                     EventRunLapInput {
                         lap_number: 2,
                         lap_time_ms: 89_500,
+                        sector_1_time_ms: Some(30_000),
+                        sector_2_time_ms: Some(29_500),
+                        sector_3_time_ms: Some(30_000),
                     },
                     EventRunLapInput {
                         lap_number: 1,
                         lap_time_ms: 91_000,
+                        sector_1_time_ms: Some(31_000),
+                        sector_2_time_ms: Some(30_000),
+                        sector_3_time_ms: Some(30_000),
                     },
                 ],
             ),
@@ -3401,8 +3525,12 @@ mod tests {
         assert_eq!(circuit.result, "completed");
         assert_eq!(circuit.laps[0].lap_number, 1);
         assert_eq!(circuit.laps[0].lap_time_ms, 91_000);
+        assert_eq!(circuit.laps[0].sector_1_time_ms, Some(31_000));
+        assert_eq!(circuit.laps[0].sector_2_time_ms, Some(30_000));
+        assert_eq!(circuit.laps[0].sector_3_time_ms, Some(30_000));
         assert_eq!(circuit.laps[1].lap_number, 2);
         assert_eq!(circuit.laps[1].lap_time_ms, 89_500);
+        assert_eq!(circuit.laps[1].sector_1_time_ms, Some(30_000));
 
         let sprint = record_event_run_in_connection(
             &mut connection,
@@ -3440,6 +3568,9 @@ mod tests {
             vec![EventRunLapInput {
                 lap_number: 1,
                 lap_time_ms: 90_000,
+                sector_1_time_ms: None,
+                sector_2_time_ms: None,
+                sector_3_time_ms: None,
             }],
         );
         garage_named_run.car_ordinal = 261;
@@ -3528,7 +3659,7 @@ mod tests {
     }
 
     #[test]
-    fn events_validate_and_round_trip_with_active_only_list() {
+    fn events_validate_and_round_trip_without_archiving() {
         let mut connection = Connection::open_in_memory().unwrap();
         initialize_shift_light_schema(&mut connection).unwrap();
 
@@ -3570,7 +3701,6 @@ mod tests {
         assert_eq!(created.route, "Rally");
         assert_eq!(created.mode, "EventLab");
         assert_eq!(created.notes.as_deref(), Some("wet route"));
-        assert!(created.archived_at.is_none());
 
         let detail = load_event_from_connection(&connection, created.id).unwrap();
         assert_eq!(detail.id, created.id);
@@ -3582,17 +3712,7 @@ mod tests {
                 .unwrap();
         assert_eq!(renamed.name, "Night Sprint");
 
-        let archived = archive_event_in_connection(&connection, created.id).unwrap();
-        assert!(archived.archived_at.is_some());
-        assert!(load_events_from_connection(&connection).unwrap().is_empty());
-        let archived_again = archive_event_in_connection(&connection, created.id).unwrap();
-        assert_eq!(archived_again.archived_at, archived.archived_at);
-        assert_eq!(
-            load_event_from_connection(&connection, created.id)
-                .unwrap()
-                .name,
-            "Night Sprint"
-        );
+        assert_eq!(load_events_from_connection(&connection).unwrap().len(), 1);
 
         delete_event_in_connection(&connection, created.id).unwrap();
         assert!(load_event_from_connection(&connection, created.id).is_err());
@@ -3866,7 +3986,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         assert_eq!(
             connection
                 .query_row("SELECT next_sequence FROM garage_sequence", [], |row| {
@@ -3928,7 +4048,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         let (drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (i32, i32, i64, i64) =
             connection
                 .query_row(
@@ -4001,7 +4121,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         let (id, drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (
             i64,
             i32,

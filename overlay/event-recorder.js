@@ -23,6 +23,62 @@
     return value !== null && value > 0 ? Math.round(value * 1000) : null
   }
 
+  function sectorSample(telemetry) {
+    if (telemetry?.isRaceOn !== true) return null
+    const distance = finite(telemetry?.lap?.distance)
+    const elapsedMs = currentTimeMs(telemetry)
+    if (distance === null || distance < 0 || elapsedMs === null) return null
+    return { distance, elapsedMs }
+  }
+
+  // The telemetry stream does not expose sector boundaries.  Use the observed
+  // lap distance as the lap length and interpolate the two crossings between
+  // adjacent samples.  The final sector ends at LastLap, which also makes the
+  // three rounded values add up to the persisted lap time.
+  function sectorTimesFromSamples(samples, lapTime) {
+    const totalMs = finite(lapTime)
+    if (!Array.isArray(samples) || samples.length < 2 || totalMs === null || totalMs <= 0) return null
+    const points = []
+    for (const sample of samples) {
+      const distance = finite(sample?.distance)
+      const elapsedMs = finite(sample?.elapsedMs)
+      if (distance === null || distance < 0 || elapsedMs === null || elapsedMs < 0) continue
+      const previous = points.at(-1)
+      if (previous && distance < previous.distance) continue
+      if (previous && distance === previous.distance) {
+        if (elapsedMs > previous.elapsedMs) previous.elapsedMs = elapsedMs
+        continue
+      }
+      points.push({ distance, elapsedMs })
+    }
+    const lapDistance = points.at(-1)?.distance ?? 0
+    if (lapDistance <= 0 || points.length < 2) return null
+
+    function crossingTime(targetDistance) {
+      for (let index = 1; index < points.length; index += 1) {
+        const before = points[index - 1]
+        const after = points[index]
+        if (targetDistance > after.distance) continue
+        const distanceSpan = after.distance - before.distance
+        if (distanceSpan <= 0) return after.elapsedMs
+        const ratio = (targetDistance - before.distance) / distanceSpan
+        return before.elapsedMs + ((after.elapsedMs - before.elapsedMs) * ratio)
+      }
+      return null
+    }
+
+    const first = crossingTime(lapDistance / 3)
+    const second = crossingTime((lapDistance * 2) / 3)
+    if (first === null || second === null || first < 0 || second < first || second > totalMs) return null
+    const values = [first, second - first, totalMs - second].map(value => Math.round(value))
+    if (values.some(value => value <= 0)) return null
+    return {
+      sector1TimeMs: values[0],
+      sector2TimeMs: values[1],
+      sector3TimeMs: values[2]
+    }
+  }
+
   function currentTimeMs(telemetry) {
     const value = finite(telemetry?.lap?.current)
     return value !== null && value >= 0 ? Math.round(value * 1000) : null
@@ -108,6 +164,8 @@
       startedAt: new Date(safeTimestamp).toISOString(),
       startedAtMs: safeTimestamp,
       laps: [],
+      activeLapNumber: finite(telemetry?.lap?.number),
+      lapSamples: [],
       finalTimeMs: null,
       finalTimeSource: null,
       runType: 'circuit',
@@ -205,10 +263,34 @@
       const timeMs = lapTimeMs(telemetry)
       if (number === null || timeMs === null) return false
       if (state.run.laps.some(lap => lap.lapNumber === Math.round(number))) return false
-      state.run.laps.push({ lapNumber: Math.round(number), timeMs })
+      const lap = { lapNumber: Math.round(number), timeMs }
+      Object.assign(lap, sectorTimesFromSamples(state.run.lapSamples, timeMs) || {})
+      state.run.laps.push(lap)
       state.run.laps.sort((left, right) => left.lapNumber - right.lapNumber)
       state.pendingLapNumber = null
+      state.run.activeLapNumber = Math.round(number)
+      state.run.lapSamples = []
+      captureActiveSample(state.run, telemetry)
       return true
+    }
+
+    function captureActiveSample(run, telemetry) {
+      if (!run) return
+      const lapNumber = finite(telemetry?.lap?.number)
+      if (lapNumber === null || run.activeLapNumber === null || Math.round(lapNumber) !== run.activeLapNumber) return
+      const sample = sectorSample(telemetry)
+      if (!sample) return
+      const previous = run.lapSamples.at(-1)
+      if (previous && sample.distance < previous.distance) return
+      if (previous && sample.distance === previous.distance && sample.elapsedMs <= previous.elapsedMs) return
+      run.lapSamples.push(sample)
+    }
+
+    function ensureSprintLap(run) {
+      if (!run || run.runType !== 'sprint' || run.finalTimeMs === null || run.laps.length > 0) return
+      const lap = { lapNumber: 1, timeMs: run.finalTimeMs }
+      Object.assign(lap, sectorTimesFromSamples(run.lapSamples, run.finalTimeMs) || {})
+      run.laps.push(lap)
     }
 
     function detectLapCompletion(previousTiming, telemetry, afterTiming) {
@@ -269,6 +351,14 @@
       const carClass = run.car.class === null ? null : Number.isFinite(Number(run.car.class))
         ? Math.round(Number(run.car.class))
         : classLabels.indexOf(String(run.car.class).toUpperCase())
+      const laps = run.laps.map(lap => {
+        const payloadLap = { lapNumber: lap.lapNumber, lapTimeMs: lap.timeMs }
+        for (const key of ['sector1TimeMs', 'sector2TimeMs', 'sector3TimeMs']) {
+          const value = finite(lap[key])
+          if (value !== null && value > 0) payloadLap[key] = Math.round(value)
+        }
+        return payloadLap
+      })
       const payload = {
         run: {
           eventId: Number.isFinite(Number(run.eventId)) ? Math.round(Number(run.eventId)) : run.eventId,
@@ -281,7 +371,7 @@
           runType: run.runType,
           result: run.result,
           resultTimeMs: run.finalTimeMs,
-          laps: run.laps.map(lap => ({ lapNumber: lap.lapNumber, lapTimeMs: lap.timeMs }))
+          laps
         }
       }
       const queued = persistQueue.catch(() => undefined).then(() => {
@@ -311,6 +401,7 @@
       const run = { ...state.run, laps: state.run.laps.map(lap => ({ ...lap })) }
       if (finalTimeMs !== null) run.finalTimeMs = finalTimeMs
       if (finalTimeSource !== null) run.finalTimeSource = finalTimeSource
+      ensureSprintLap(run)
       state.lastRunResult = run
       state.run = null
       lastPersistence = persist(run, reason)
@@ -405,6 +496,7 @@
         if (isZeroedNonLiveRacePacket(telemetry) && state.run.lastLiveRaceTimeMs !== null) {
           state.run.sawZeroedRaceExit = true
         }
+        captureActiveSample(state.run, telemetry)
       }
 
       if (timingApi?.update && state.timingState) {
@@ -449,6 +541,7 @@
     isCleanStart,
     isStrongRestart,
     isZeroedNonLiveRacePacket,
-    normalizeRunsPayload
+    normalizeRunsPayload,
+    sectorTimesFromSamples
   }
 }))

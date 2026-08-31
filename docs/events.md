@@ -26,7 +26,7 @@ available as the Events tab in Configuration, directly after Garage.
 - Mode values are `Any`, `Rivals`, `Online`, `EventLab`, `Official`, and
   `Blueprint`.
 - A successful Create saves the event and opens its page immediately.
-- An event page contains only its controls and event identity. Mode, Route
+- An event page contains its controls, identity, and saved runs. Mode, Route
   Type, and Class appear beside the clickable title in one compact row when
   space permits; narrow layouts wrap that row below the title. Mode uses its
   configured color, and Class uses the existing Garage class color. Notes, when
@@ -48,7 +48,20 @@ available as the Events tab in Configuration, directly after Garage.
   confirmed restart. Each row displays the local run start as
   `YYYY.MM.DD HH:MM:SS`.
 - The saved-run header sorts by ID, Best, or Date. Its default is Date from
-  newest to oldest, and that temporary choice is not persisted.
+  newest to oldest, and that temporary choice is not persisted. Selecting a
+  saved run opens its detail page.
+- A run detail repeats the Event identity and shows a **Best Hypothetical
+  Time** when all three virtual sectors are available. It is the sum of the
+  quickest Sector 1, Sector 2, and Sector 3 across that run's rows. Its lap
+  table is `Lap`, `Lap Time`, `Sector 1`, `Sector 2`, and `Sector 3`; it starts
+  from the highest lap number and a Lap-header click reverses that temporary
+  order. In each time column, every tied quickest value is purple, the next
+  distinct value is green, and all remaining values are white. **BACK** and
+  Escape return to the Event page.
+- A Sprint is represented by one saved row when telemetry supplies enough data
+  to compute its virtual sectors. Its run type is a capture hint only: the
+  detail page uses the saved rows, so a Sprint recorded as a one-lap circuit
+  still renders correctly.
 - Paused, non-live, free-roam, and in-race rewind telemetry suspend or resume
   capture without discarding or splitting a run. A new run ID is created only
   when live telemetry returns to a clean lap-zero race start after at least one
@@ -83,6 +96,12 @@ UI or use a second telemetry source.
 
 Forza `BestLap` is not persisted as an independent input. FDC derives a circuit
 run's best lap and its lap number from the stored `LastLap` records.
+
+For each new saved row, FDC retains only enough in-memory samples to interpolate
+the current-lap timestamps at one-third and two-thirds of travelled distance.
+It stores the resulting three virtual-sector durations with the lap. This does
+not persist the telemetry stream. Runs created before sector storage have no
+sector values and therefore show `—` for them and no hypothetical time.
 
 ### Run lifecycle
 
@@ -135,17 +154,17 @@ uses the corresponding existing Forza-style class colors where specified:
 
 Events use the existing FDC application-data database, `fdc.sqlite`. Schema
 version 7 adds the `events` table with a numeric event ID, name, Class, Route
-Type, Mode, optional notes, creation/update timestamps, and an optional archive
-timestamp. Schema version 8 adds event runs and their completed circuit laps.
+Type, Mode, optional notes, and creation/update timestamps. Schema version 8
+adds event runs and their completed circuit laps. Schema version 9 removes the
+obsolete Event archive timestamp and adds nullable Sector 1, Sector 2, and
+Sector 3 durations to each saved lap.
 A run snapshots the vehicle ordinal, class, PI, drivetrain, start time, run
 type, and confirmed result. Run reads resolve the current Garage display name
 for the ordinal, so renaming a Garage car updates existing Event rows. Existing
 Garage and Shift Light data is retained during migration.
 
-The active Events list excludes archived records. Event detail remains loadable
-for an archived record by the native layer, while deletion removes the record
-permanently. FDC trims names and notes before storing them; empty notes are
-stored as absent.
+Deleting an Event permanently removes it and its runs. FDC trims names and
+notes before storing them; empty notes are stored as absent.
 
 ## Native commands
 
@@ -153,7 +172,6 @@ stored as absent.
 - `load_events`
 - `load_event`
 - `rename_event`
-- `archive_event`
 - `delete_event`
 - `record_event_run`
 - `load_event_runs`

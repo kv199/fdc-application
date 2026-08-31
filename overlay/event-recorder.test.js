@@ -23,6 +23,59 @@ test('Record arms without starting mid-race and starts only at a clean clock', (
   assert.equal(instance.snapshot().run.eventId, '7')
 })
 
+test('completed laps persist three interpolated equal-distance sector times', async () => {
+  const saved = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  instance.arm(70)
+  instance.update(telemetry())
+  instance.update(telemetry({ lap: { number: 0, current: 10, last: 0, raceTime: 10, distance: 300 } }))
+  instance.update(telemetry({ lap: { number: 0, current: 20, last: 0, raceTime: 20, distance: 600 } }))
+  instance.update(telemetry({ lap: { number: 0, current: 30, last: 0, raceTime: 30, distance: 900 } }))
+  instance.update(telemetry({ lap: { number: 1, current: 0, last: 36, raceTime: 36, distance: 0 } }))
+
+  const outcome = await instance.stop()
+  assert.equal(outcome.outcome, 'saved')
+  assert.deepEqual(saved[0].run.laps, [{
+    lapNumber: 1,
+    lapTimeMs: 36000,
+    sector1TimeMs: 10000,
+    sector2TimeMs: 10000,
+    sector3TimeMs: 16000
+  }])
+})
+
+test('a confirmed sprint persists one synthetic lap with interpolated sectors', async () => {
+  const saved = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  instance.arm(71)
+  instance.update(telemetry())
+  instance.update(telemetry({ lap: { number: 0, current: 10, last: 0, raceTime: 10, distance: 300 } }))
+  instance.update(telemetry({ lap: { number: 0, current: 20, last: 0, raceTime: 20, distance: 600 } }))
+  instance.update(telemetry({ lap: { number: 0, current: 30, last: 0, raceTime: 30, distance: 900 } }))
+  instance.update(telemetry({
+    isRaceOn: false,
+    lap: { number: 0, current: 0, last: 30, raceTime: 0, distance: 0 }
+  }))
+
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(saved.length, 1)
+  assert.deepEqual(saved[0].run.laps, [{
+    lapNumber: 1,
+    lapTimeMs: 30000,
+    sector1TimeMs: 10000,
+    sector2TimeMs: 10000,
+    sector3TimeMs: 10000
+  }])
+})
+
 test('pause preserves the active run and the first LastLap plus boundary is recorded', () => {
   const instance = recorder.createEventRecorder({ timingApi: timing, now: () => 1700000000000 })
   instance.arm(7)
@@ -32,7 +85,13 @@ test('pause preserves the active run and the first LastLap plus boundary is reco
   instance.update(telemetry({ isRaceOn: true, lap: { number: 1, current: 0, last: 55.418, raceTime: 55.418, distance: 0 } }))
   const snapshot = instance.snapshot()
   assert.equal(snapshot.run.laps.length, 1)
-  assert.deepEqual(snapshot.run.laps[0], { lapNumber: 1, timeMs: 55418 })
+  assert.deepEqual(snapshot.run.laps[0], {
+    lapNumber: 1,
+    timeMs: 55418,
+    sector1TimeMs: 10667,
+    sector2TimeMs: 10667,
+    sector3TimeMs: 34085
+  })
 })
 
 test('strong restart persists the completed prior run and remains armed for a clean next run', async () => {
@@ -81,8 +140,8 @@ test('mid-race clock and distance rewind stays in one run', async () => {
   assert.equal(outcome.outcome, 'saved')
   assert.equal(saved.length, 1)
   assert.deepEqual(saved[0].run.laps, [
-    { lapNumber: 1, lapTimeMs: 55418 },
-    { lapNumber: 2, lapTimeMs: 56125 }
+    { lapNumber: 1, lapTimeMs: 55418, sector1TimeMs: 10667, sector2TimeMs: 10667, sector3TimeMs: 34085 },
+    { lapNumber: 2, lapTimeMs: 56125, sector1TimeMs: 6667, sector2TimeMs: 6667, sector3TimeMs: 42792 }
   ])
 })
 
@@ -108,8 +167,8 @@ test('free-roam tail does not replace the accumulated circuit run', async () => 
   assert.equal(outcome.outcome, 'saved')
   assert.equal(saved.length, 1)
   assert.deepEqual(saved[0].run.laps, [
-    { lapNumber: 1, lapTimeMs: 55418 },
-    { lapNumber: 2, lapTimeMs: 56125 }
+    { lapNumber: 1, lapTimeMs: 55418, sector1TimeMs: 10667, sector2TimeMs: 10667, sector3TimeMs: 34085 },
+    { lapNumber: 2, lapTimeMs: 56125, sector1TimeMs: 6667, sector2TimeMs: 6667, sector3TimeMs: 42792 }
   ])
 })
 
@@ -273,8 +332,8 @@ test('circuit stop saves every completed lap in one run', async () => {
   const outcome = await instance.stop()
   assert.equal(outcome.outcome, 'saved')
   assert.deepEqual(saved[0].run.laps, [
-    { lapNumber: 1, lapTimeMs: 55418 },
-    { lapNumber: 2, lapTimeMs: 56125 }
+    { lapNumber: 1, lapTimeMs: 55418, sector1TimeMs: 10667, sector2TimeMs: 10667, sector3TimeMs: 34085 },
+    { lapNumber: 2, lapTimeMs: 56125, sector1TimeMs: 6667, sector2TimeMs: 6667, sector3TimeMs: 42792 }
   ])
 })
 

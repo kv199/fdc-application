@@ -324,6 +324,47 @@
           </div>
         </section>
       </section>
+
+      <section id="events-run-view" class="events-run-view" aria-labelledby="events-run-title" hidden>
+        <div class="events-detail-view__header">
+          <button id="events-run-back" class="settings-button" type="button">BACK</button>
+        </div>
+        <div class="events-detail-view__heading events-run-view__heading">
+          <h2 id="events-run-title" class="events-detail-view__title events-run-view__title">EVENT</h2>
+          <div id="events-run-summary" class="events-detail-view__summary" aria-label="Event details"></div>
+        </div>
+        <div class="events-run-view__meta">
+          <div class="events-run-view__metric">
+            <span class="events-run-view__metric-label">BEST HYPOTHETICAL TIME</span>
+            <output id="events-run-bht" class="events-run-view__metric-value">—</output>
+          </div>
+          <div class="events-run-view__metric events-run-view__metric--run">
+            <span class="events-run-view__metric-label">RUN</span>
+            <output id="events-run-id" class="events-run-view__metric-value">—</output>
+          </div>
+        </div>
+        <section class="events-run-table-section" aria-labelledby="events-run-table-title">
+          <div class="events-run-table-section__heading">
+            <h3 id="events-run-table-title">LAP BREAKDOWN</h3>
+            <span id="events-run-table-hint">SECTOR TIMES</span>
+          </div>
+          <div class="events-run-table-wrap">
+            <table class="events-run-table">
+              <thead>
+                <tr>
+                  <th scope="col"><button id="events-run-lap-sort" class="events-run-table__sort" type="button" aria-sort="descending">LAP</button></th>
+                  <th scope="col">LAP TIME</th>
+                  <th scope="col">SECTOR 1</th>
+                  <th scope="col">SECTOR 2</th>
+                  <th scope="col">SECTOR 3</th>
+                </tr>
+              </thead>
+              <tbody id="events-run-laps"></tbody>
+            </table>
+          </div>
+          <p id="events-run-empty" class="events-run-empty" hidden>No sector telemetry was saved for this run.</p>
+        </section>
+      </section>
     </section>
 
     <section id="shift-light-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="shift-light-tab" data-settings-panel="shift-light" hidden>

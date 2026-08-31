@@ -77,6 +77,16 @@
   const eventsDetailNotes = document.getElementById('events-detail-notes')
   const eventsDetailNotesValue = document.getElementById('events-detail-notes-value')
   const eventsDetailDelete = document.getElementById('events-detail-delete')
+  const eventsRunView = document.getElementById('events-run-view')
+  const eventsRunBack = document.getElementById('events-run-back')
+  const eventsRunTitle = document.getElementById('events-run-title')
+  const eventsRunSummary = document.getElementById('events-run-summary')
+  const eventsRunBht = document.getElementById('events-run-bht')
+  const eventsRunId = document.getElementById('events-run-id')
+  const eventsRunTableHint = document.getElementById('events-run-table-hint')
+  const eventsRunLapSort = document.getElementById('events-run-lap-sort')
+  const eventsRunLaps = document.getElementById('events-run-laps')
+  const eventsRunEmpty = document.getElementById('events-run-empty')
   const eventRecorderStatus = document.getElementById('event-recorder-status')
   const eventRecorderHint = document.getElementById('event-recorder-hint')
   const eventRecorderFeedback = document.getElementById('event-recorder-feedback')
@@ -87,12 +97,14 @@
   const eventRunsCount = document.getElementById('event-runs-count')
   const eventsById = new Map()
   let currentEventRuns = []
+  let currentEventRun = null
   let recorderState = { eventId: null, recording: false, state: 'stopped', lapCount: 0 }
   let eventsView = 'library'
   let currentEventId = null
   let eventsCreateOpen = false
   let eventsDiscardConfirmOpen = false
   let eventRunsSort = { key: 'date', direction: 'desc' }
+  let eventRunLapSortDirection = 'desc'
   let eventsSortValue = 'id-desc'
   let editingTarget = null
   let shiftLightResetPending = false
@@ -542,11 +554,7 @@
         ?? source?.last_recorded_at
         ?? source?.lastRecordedRunAt
         ?? source?.last_recorded_run_at
-        ?? null,
-      archived: source?.archived === true
-        || source?.isArchived === true
-        || source?.is_archived === true
-        || Boolean(source?.archivedAt ?? source?.archived_at)
+        ?? null
     }
   }
 
@@ -684,7 +692,6 @@
     if (!eventsGrid) return
     eventsGrid.replaceChildren()
     const activeEvents = [...eventsById.values()]
-      .filter(event => !event.archived)
       .sort(compareEvents)
     if (eventsGridEmpty) eventsGridEmpty.hidden = activeEvents.length > 0
     for (const event of activeEvents) eventsGrid.append(renderEventCard(event))
@@ -747,30 +754,14 @@
 
   function setEventsView(view) {
     eventsView = view
-    const detail = view === 'detail'
-    if (eventsLibraryView) eventsLibraryView.hidden = detail
-    if (eventsDetailView) eventsDetailView.hidden = !detail
+    if (eventsLibraryView) eventsLibraryView.hidden = view !== 'library'
+    if (eventsDetailView) eventsDetailView.hidden = view !== 'detail'
+    if (eventsRunView) eventsRunView.hidden = view !== 'run'
   }
 
   function renderEventDetail(event) {
     if (!event) return
-    if (eventsDetailTitle) eventsDetailTitle.textContent = event.name
-    if (eventsDetailSummary) {
-      eventsDetailSummary.replaceChildren()
-      eventsDetailSummary.dataset.eventId = event.id
-      eventsDetailSummary.dataset.eventMode = eventModeKey(event.mode)
-      const mode = document.createElement('span')
-      mode.className = 'events-detail-view__badge events-detail-view__badge--mode'
-      mode.textContent = eventModeLabel(event.mode)
-      const route = document.createElement('span')
-      route.className = 'events-detail-view__badge'
-      route.textContent = eventRouteLabel(event.routeType)
-      const eventClass = document.createElement('span')
-      eventClass.className = 'events-detail-view__badge events-detail-view__badge--class'
-      eventClass.dataset.eventClass = eventText(event.eventClass).toUpperCase() || 'Any'
-      eventClass.textContent = eventText(event.eventClass).toUpperCase() || 'ANY'
-      eventsDetailSummary.append(mode, route, eventClass)
-    }
+    renderEventIdentity(eventsDetailTitle, eventsDetailSummary, event)
     if (eventsDetailNotes) eventsDetailNotes.hidden = !event.notes
     if (eventsDetailNotesValue) eventsDetailNotesValue.textContent = event.notes || ''
     renderEventRecorder()
@@ -795,37 +786,59 @@
     const id = runId(source.runId ?? source.run_id ?? source.id)
     if (!id) return null
     const laps = Array.isArray(source.laps)
-      ? source.laps.map(lap => ({
-        lapNumber: Number(lap?.lapNumber ?? lap?.lap_number ?? lap?.number),
-        timeMs: lap?.lapTimeMs !== undefined
-          ? runTimeMs(lap.lapTimeMs, 'ms')
-          : lap?.lap_time_ms !== undefined
-            ? runTimeMs(lap.lap_time_ms, 'ms')
-            : lap?.timeMs !== undefined
-              ? runTimeMs(lap.timeMs, 'ms')
-              : lap?.time_ms !== undefined
-                ? runTimeMs(lap.time_ms, 'ms')
-                : runTimeMs(lap?.time ?? lap?.seconds)
-      })).filter(lap => Number.isFinite(lap.lapNumber) && lap.timeMs !== null)
+      ? source.laps.map(lap => {
+        const sectors = lap?.sectors && typeof lap.sectors === 'object' ? lap.sectors : null
+        const valueFor = (keys, fallbackKeys = []) => {
+          const value = keys.map(key => lap?.[key]).find(candidate => candidate !== undefined && candidate !== null)
+            ?? fallbackKeys.map(key => sectors?.[key]).find(candidate => candidate !== undefined && candidate !== null)
+          return value === undefined || value === null ? null : runTimeMs(value, 'ms')
+        }
+        return {
+          lapNumber: Number(lap?.lapNumber ?? lap?.lap_number ?? lap?.number),
+          timeMs: lap?.lapTimeMs !== undefined
+            ? runTimeMs(lap.lapTimeMs, 'ms')
+            : lap?.lap_time_ms !== undefined
+              ? runTimeMs(lap.lap_time_ms, 'ms')
+              : lap?.timeMs !== undefined
+                ? runTimeMs(lap.timeMs, 'ms')
+                : lap?.time_ms !== undefined
+                  ? runTimeMs(lap.time_ms, 'ms')
+                  : runTimeMs(lap?.time ?? lap?.seconds),
+          sector1TimeMs: valueFor(['sector1TimeMs', 'sector_1_time_ms', 'sector1Ms', 'sector_1_ms', 's1TimeMs', 's1_time_ms'], ['sector1TimeMs', 'sector_1_time_ms', 'sector1Ms', 'sector_1_ms', 's1TimeMs', 's1_time_ms', 's1']),
+          sector2TimeMs: valueFor(['sector2TimeMs', 'sector_2_time_ms', 'sector2Ms', 'sector_2_ms', 's2TimeMs', 's2_time_ms'], ['sector2TimeMs', 'sector_2_time_ms', 'sector2Ms', 'sector_2_ms', 's2TimeMs', 's2_time_ms', 's2']),
+          sector3TimeMs: valueFor(['sector3TimeMs', 'sector_3_time_ms', 'sector3Ms', 'sector_3_ms', 's3TimeMs', 's3_time_ms'], ['sector3TimeMs', 'sector_3_time_ms', 'sector3Ms', 'sector_3_ms', 's3TimeMs', 's3_time_ms', 's3'])
+        }
+      }).filter(lap => Number.isFinite(lap.lapNumber) && lap.timeMs !== null)
       : []
     const car = source.car && typeof source.car === 'object' ? source.car : source
+    const finalTimeMs = source.resultTimeMs !== undefined
+      ? runTimeMs(source.resultTimeMs, 'ms')
+      : source.result_time_ms !== undefined
+        ? runTimeMs(source.result_time_ms, 'ms')
+        : source.finalTimeMs !== undefined
+          ? runTimeMs(source.finalTimeMs, 'ms')
+          : source.final_time_ms !== undefined
+            ? runTimeMs(source.final_time_ms, 'ms')
+            : runTimeMs(source.finalTime ?? source.final_time)
+    const runType = eventText(source.runType ?? source.run_type).toLowerCase() || (laps.length ? 'circuit' : 'sprint')
+    const normalizedLaps = laps.length || finalTimeMs === null
+      ? laps
+      : [{
+        lapNumber: 1,
+        timeMs: finalTimeMs,
+        sector1TimeMs: runTimeMs(source.sector1TimeMs ?? source.sector_1_time_ms ?? source.s1TimeMs ?? source.s1_time_ms, 'ms'),
+        sector2TimeMs: runTimeMs(source.sector2TimeMs ?? source.sector_2_time_ms ?? source.s2TimeMs ?? source.s2_time_ms, 'ms'),
+        sector3TimeMs: runTimeMs(source.sector3TimeMs ?? source.sector_3_time_ms ?? source.s3TimeMs ?? source.s3_time_ms, 'ms')
+      }]
     return {
       id,
       eventId: eventKey(source.eventId ?? source.event_id),
       startedAt: source.startedAt ?? source.started_at ?? source.createdAt ?? source.created_at ?? null,
       recordedAt: source.createdAt ?? source.created_at ?? source.recordedAt ?? source.recorded_at ?? source.startedAt ?? source.started_at ?? null,
-      finalTimeMs: source.resultTimeMs !== undefined
-        ? runTimeMs(source.resultTimeMs, 'ms')
-        : source.result_time_ms !== undefined
-          ? runTimeMs(source.result_time_ms, 'ms')
-          : source.finalTimeMs !== undefined
-            ? runTimeMs(source.finalTimeMs, 'ms')
-            : source.final_time_ms !== undefined
-              ? runTimeMs(source.final_time_ms, 'ms')
-              : runTimeMs(source.finalTime ?? source.final_time),
-      runType: eventText(source.runType ?? source.run_type).toLowerCase() || (laps.length ? 'circuit' : 'sprint'),
+      finalTimeMs,
+      runType,
       result: eventText(source.result).toLowerCase() || 'completed',
-      laps,
+      laps: normalizedLaps,
       car: {
         name: eventText(car.name ?? car.displayName ?? car.carName ?? source.carName),
         ordinal: car.ordinal ?? car.carOrdinal ?? car.car_ordinal ?? source.carOrdinal ?? source.car_ordinal ?? null,
@@ -861,6 +874,26 @@
     return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
   }
 
+  function renderEventIdentity(titleElement, summaryElement, event) {
+    if (!event) return
+    if (titleElement) titleElement.textContent = event.name
+    if (!summaryElement) return
+    summaryElement.replaceChildren()
+    summaryElement.dataset.eventId = event.id
+    summaryElement.dataset.eventMode = eventModeKey(event.mode)
+    const mode = document.createElement('span')
+    mode.className = 'events-detail-view__badge events-detail-view__badge--mode'
+    mode.textContent = eventModeLabel(event.mode)
+    const route = document.createElement('span')
+    route.className = 'events-detail-view__badge'
+    route.textContent = eventRouteLabel(event.routeType)
+    const eventClass = document.createElement('span')
+    eventClass.className = 'events-detail-view__badge events-detail-view__badge--class'
+    eventClass.dataset.eventClass = eventText(event.eventClass).toUpperCase() || 'Any'
+    eventClass.textContent = eventText(event.eventClass).toUpperCase() || 'ANY'
+    summaryElement.append(mode, route, eventClass)
+  }
+
   function runCarName(run) {
     return run.car.name || (run.car.ordinal ? `CAR #${run.car.ordinal}` : 'UNKNOWN CAR')
   }
@@ -868,6 +901,33 @@
   function runBestTimeMs(run) {
     if (run?.runType === 'sprint') return run.finalTimeMs
     return run?.laps?.reduce((best, lap) => !best || lap.timeMs < best ? lap.timeMs : best, null)
+  }
+
+  function distinctTimeRanks(values) {
+    const valid = values.filter(value => Number.isFinite(value)).sort((left, right) => left - right)
+    const fastest = valid[0] ?? null
+    const second = valid.find(value => value > fastest) ?? null
+    return { fastest, second }
+  }
+
+  function timeTone(value, ranks) {
+    if (!Number.isFinite(value)) return ''
+    if (value === ranks.fastest) return 'best'
+    if (value === ranks.second) return 'second'
+    return ''
+  }
+
+  function runSectorBestTimes(run) {
+    const laps = run?.laps || []
+    return [0, 1, 2].map(index => {
+      const values = laps.map(lap => lap?.[`sector${index + 1}TimeMs`]).filter(value => Number.isFinite(value))
+      return distinctTimeRanks(values).fastest
+    })
+  }
+
+  function runBestHypotheticalTimeMs(run) {
+    const best = runSectorBestTimes(run)
+    return best.every(value => Number.isFinite(value)) ? best.reduce((sum, value) => sum + value, 0) : null
   }
 
   function runDateMs(run) {
@@ -932,8 +992,11 @@
     if (eventRunsEmpty) eventRunsEmpty.hidden = runs.length > 0
     if (eventRunsCount) eventRunsCount.textContent = `${runs.length} ${runs.length === 1 ? 'RUN' : 'RUNS'}`
     for (const run of runs) {
-      const row = document.createElement('div')
+      const row = document.createElement('button')
+      row.type = 'button'
       row.className = 'event-run-row'
+      row.setAttribute('aria-label', `Open run ${run.id}`)
+      row.addEventListener('click', () => openEventRun(run.id))
       const carDetails = [run.car.class, run.car.pi ? `PI ${run.car.pi}` : '', run.car.drivetrain].filter(Boolean).join(' · ') || '—'
       const bestLap = run.runType !== 'sprint'
         ? run.laps.reduce((best, lap) => !best || lap.timeMs < best.timeMs ? lap : best, null)
@@ -958,6 +1021,86 @@
         row.append(cell)
       }
       eventRunsList.append(row)
+    }
+  }
+
+  function renderRunTimeCell(timeMs, ranks) {
+    const value = document.createElement('span')
+    value.className = 'events-run-table__time'
+    if (!Number.isFinite(timeMs)) value.classList.add('is-missing')
+    const tone = timeTone(timeMs, ranks)
+    if (tone) value.dataset.tone = tone
+    value.textContent = formatRunTime(timeMs)
+    return value
+  }
+
+  function renderEventRunDetail(run) {
+    if (!run) return
+    const event = currentEventId === null ? null : eventsById.get(currentEventId)
+    if (!event) return
+    renderEventIdentity(eventsRunTitle, eventsRunSummary, event)
+    if (eventsRunId) eventsRunId.textContent = `#${run.id}`
+    if (eventsRunBht) eventsRunBht.textContent = formatRunTime(runBestHypotheticalTimeMs(run))
+    if (eventsRunTableHint) {
+      eventsRunTableHint.textContent = run.runType === 'sprint' ? 'SPRINT · ONE PASS' : 'SECTOR TIMES'
+    }
+    const laps = [...(run.laps || [])].sort((left, right) => {
+      const result = Number(left.lapNumber) - Number(right.lapNumber)
+      return eventRunLapSortDirection === 'asc' ? result : -result
+    })
+    const lapRanks = distinctTimeRanks(laps.map(lap => lap.timeMs))
+    const sectorRanks = [0, 1, 2].map(index => distinctTimeRanks(laps.map(lap => lap[`sector${index + 1}TimeMs`])))
+    if (eventsRunLapSort) {
+      eventsRunLapSort.setAttribute('aria-sort', eventRunLapSortDirection === 'asc' ? 'ascending' : 'descending')
+    }
+    if (eventsRunLaps) {
+      eventsRunLaps.replaceChildren()
+      for (const lap of laps) {
+        const row = document.createElement('tr')
+        const lapNumber = document.createElement('th')
+        lapNumber.scope = 'row'
+        lapNumber.textContent = Number.isFinite(lap.lapNumber) ? String(Math.round(lap.lapNumber)) : '—'
+        const lapTime = document.createElement('td')
+        lapTime.append(renderRunTimeCell(lap.timeMs, lapRanks))
+        row.append(lapNumber, lapTime)
+        for (let index = 0; index < 3; index += 1) {
+          const sector = document.createElement('td')
+          sector.append(renderRunTimeCell(lap[`sector${index + 1}TimeMs`], sectorRanks[index]))
+          row.append(sector)
+        }
+        eventsRunLaps.append(row)
+      }
+    }
+    if (eventsRunEmpty) eventsRunEmpty.hidden = laps.length > 0
+  }
+
+  function openEventRun(id) {
+    if (currentEventId === null) return false
+    const key = runId(id)
+    const run = currentEventRuns.find(candidate => candidate.id === key)
+    if (!run) return false
+    currentEventRun = run
+    eventRunLapSortDirection = 'desc'
+    renderEventRunDetail(run)
+    setEventsView('run')
+    eventsRunBack?.focus()
+    return true
+  }
+
+  function closeEventRun() {
+    currentEventRun = null
+    if (eventsRunSummary) {
+      eventsRunSummary.replaceChildren()
+      delete eventsRunSummary.dataset.eventId
+      delete eventsRunSummary.dataset.eventMode
+    }
+    if (eventsRunLaps) eventsRunLaps.replaceChildren()
+    setEventsView(currentEventId === null ? 'library' : 'detail')
+    if (currentEventId === null) renderEventsLibrary()
+    else {
+      const event = eventsById.get(currentEventId)
+      if (event) renderEventDetail(event)
+      eventsDetailBack?.focus()
     }
   }
 
@@ -1002,6 +1145,13 @@
       currentEventRuns = normalizeEventRunsPayload(await call('load_event_runs', { eventId: nativeEventId }))
       if (currentEventRuns.some(updateEventLastRecordedAt)) renderEventsLibrary()
       renderEventRuns()
+      if (eventsView === 'run' && currentEventRun) {
+        const refreshed = currentEventRuns.find(run => run.id === currentEventRun.id)
+        if (refreshed) {
+          currentEventRun = refreshed
+          renderEventRunDetail(refreshed)
+        }
+      }
       return true
     } catch (error) {
       currentEventRuns = []
@@ -1073,8 +1223,9 @@
         return false
       }
     }
-    if (!event || event.archived) return false
+    if (!event) return false
     currentEventId = event.id
+    currentEventRun = null
     clearEventRecorderFeedback()
     setEventsCreateOpen(false)
     renderEventDetail(event)
@@ -1085,6 +1236,10 @@
   }
 
   function closeEventDetail() {
+    if (eventsView === 'run') {
+      closeEventRun()
+      return
+    }
     currentEventId = null
     if (eventsDetailSummary) {
       eventsDetailSummary.replaceChildren()
@@ -1094,6 +1249,7 @@
     if (eventsDetailNotes) eventsDetailNotes.hidden = true
     if (eventsDetailNotesValue) eventsDetailNotesValue.textContent = ''
     currentEventRuns = []
+    currentEventRun = null
     setEventsView('library')
     renderEventsLibrary()
   }
@@ -1193,22 +1349,6 @@
       renderEventDetail(event)
       renderEventsLibrary()
       setStatus(error.message || 'Unable to rename event', true)
-      return false
-    }
-  }
-
-  async function archiveCurrentEvent() {
-    const event = currentEventId === null ? null : eventsById.get(currentEventId)
-    if (!event) return false
-    try {
-      await call('archive_event', { eventId: event.id })
-      event.archived = true
-      eventsById.set(event.id, event)
-      closeEventDetail()
-      setStatus('EVENT ARCHIVED')
-      return true
-    } catch (error) {
-      setStatus(error.message || 'Unable to archive event', true)
       return false
     }
   }
@@ -1806,6 +1946,11 @@
     button.addEventListener('click', () => setEventRunsSort(button.dataset.runSort))
   }
   eventsDetailBack?.addEventListener('click', closeEventDetail)
+  eventsRunBack?.addEventListener('click', closeEventRun)
+  eventsRunLapSort?.addEventListener('click', () => {
+    eventRunLapSortDirection = eventRunLapSortDirection === 'desc' ? 'asc' : 'desc'
+    if (currentEventRun) renderEventRunDetail(currentEventRun)
+  })
   eventsDetailTitle?.addEventListener('click', beginEventRename)
   eventsDetailDelete?.addEventListener('click', () => void deleteCurrentEvent())
   eventRecorderToggle?.addEventListener('click', () => {
@@ -1825,6 +1970,11 @@
     if (eventsView === 'library' && eventsCreateOpen) {
       event.preventDefault()
       requestEventsCreateClose()
+      return
+    }
+    if (eventsView === 'run') {
+      event.preventDefault()
+      closeEventRun()
       return
     }
     if (eventsView === 'detail') {
@@ -1854,6 +2004,8 @@
     resetShiftLight: requestShiftLightReset,
     loadEvents,
     openEventDetail,
-    closeEventDetail
+    closeEventDetail,
+    openEventRun,
+    closeEventRun
   }
 })(typeof globalThis === 'undefined' ? this : globalThis)
