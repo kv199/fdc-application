@@ -25,61 +25,51 @@ The native receiver accepts the normalized 324-byte FH6 packet format and emits
 valid packets as `direct_telemetry`. `queueTelemetry` rejects invalid telemetry,
 then updates Shift Light before updating the other HUD features. The runtime
 creates or reuses the learner, registers and loads the current database
-variant, and publishes a `ShiftLightSnapshot` through the FDC-local
+configuration, and publishes a `ShiftLightSnapshot` through the FDC-local
 `hud_shift_light` event. The overlay maps the snapshot phase to the light-bar
 presentation and schedules a render.
 
 ## Vehicle and tune identity
 
-The learner key is:
+The stable base key is:
 
 ```text
-fh6:<carOrdinal>:<PI>:<rpmMax>
+fh6:<carOrdinal>:<carClass>:<carPerformanceIndex>:<drivetrainType>:<numCylinders>:<rpmMax>
 ```
 
-`gameId` is currently `fh6`. `carOrdinal`, `PI`, and `rpmMax` must be finite
-positive values; the key uses rounded ordinal, PI, and RPM-limit values. PI and
-RPM max are part of the base tune identity, so changing either starts a
-separate learning context. The key is stable across runs and is the
-compatibility contract for persisted profiles.
+`gameId` is currently `fh6`. All fields come directly from normalized FH6 Data
+Out. `carOrdinal` identifies a car model rather than a Garage instance, so
+class, performance index, drivetrain, cylinder count, and RPM limit keep
+distinct builds apart. The base key is stable across runs.
 
 The UI exposes the current FH6 car ordinal, PI, and RPM limit. It does not
 depend on a localized or user-maintained vehicle name.
 
 ## Garage association
 
-Shift Light profiles remain owned by their existing key and gearbox-variant
-identity. Garage presents them as part of the matching local car: its snapshot
-matches `game_id`, `car_ordinal`, and `PI`, then summarizes all RPM-limit and
-gearbox configurations for that Garage variant. This uses the same
-`fdc.sqlite` database and does not copy or re-key calibration data.
+Shift Light profiles remain owned by their full game-data key and confirmed
+gear-count configuration. Garage presents them as part of the matching local
+car. This uses the same `fdc.sqlite` database and does not copy calibration
+data.
 
 Garage does not render a second Shift Light control or status. Detailed
 diagnostics and reset stay in the Shift Light tab for the live vehicle.
 
-## Gearbox variants
+## Gear-count configurations
 
-Each base identity can have more than one gearbox variant. A variant is
-identified by an immutable numeric SQLite `variantId` and stores a normalized
-gearbox signature made from adjacent-gear ratio drops.
+Each base identity has one Shift Light configuration per confirmed gear count.
+A configuration has an immutable numeric SQLite ID and an internal gearbox
+signature made from adjacent-gear ratio drops.
 
-The first valid vehicle identity creates or reuses a provisional variant,
-before calibration is complete. Once at least two adjacent ratio drops are
-reliably detected, FDC compares the signature with resolved variants for the
-same car ordinal, PI, and RPM max:
+FH6 sends the current gear but not the transmission maximum. FDC confirms the
+gear count after two full-throttle limiter observations on the highest observed
+forward gear without an upshift. Until then evidence remains in memory and is
+not saved into a 6-, 10-, or other count-specific configuration.
 
-- no detected signature keeps the variant provisional;
-- one compatible resolved match promotes or merges into that resolved row;
-- no compatible resolved match promotes the provisional row into a new
-  resolved variant;
-- multiple compatible matches remain ambiguous and keep learning on the
-  provisional variant.
-
-Known ratio features must agree within an absolute `0.005` tolerance. New
-higher-gear features can extend a compatible signature. A material ratio
-contradiction creates a separate resolved variant. When records are merged,
-the surviving numeric ID is retained; the ID is not recomputed from the
-signature.
+A different confirmed gear count selects a different configuration. Compatible
+ratio-signature growth updates the same configuration. A material contradiction
+in known ratio features clears that configuration and starts its learning
+again; it does not leave unusable red targets behind.
 
 ## Learning evidence
 
@@ -156,20 +146,20 @@ immediately.
 ## Configuration and reset
 
 The `SHIFT LIGHT` settings tab shows the current car identity, PI, RPM limit,
-current target, overall state, per-gear targets, and diagnostics. Diagnostics
-distinguish observed, optimal, learning, waiting-for-WOT, waiting-for-ratio,
-confirming, and gearbox-mismatch states.
+current target, overall state, per-gear targets, and diagnostics. Its primary
+states are `LEARNING`, `OBSERVED`, `OPTIMAL`, and `NEW GEARBOX · LEARNING`.
+Power-curve and ratio collection reasons remain row-level detail instead of
+being the primary state.
 
 Light-bar brightness is configurable from `0%` to `100%` in the UI and defaults
 to `80%`. The preference is stored separately in the browser preference key
 `fdc.display-preferences.v1`. Brightness filters the light-bar background; it
 does not dim the gear, speed, or RPM text.
 
-`RESET CURRENT CALIBRATION` targets the active numeric variant. The native
-reset also deletes the provisional variant for the same car ordinal, PI, and
-RPM max, while leaving other resolved gearbox variants intact. The result is
-reported only after the SQLite operation completes. The in-memory learner is
-then cleared and the HUD returns to its normal phase.
+`RESET CURRENT CALIBRATION` clears profiles for the active numeric
+configuration while retaining its game-data identity. The result is reported
+only after the SQLite operation completes. The in-memory learner is then
+cleared and the HUD returns to its normal phase.
 
 Pause, disconnect, and short telemetry gaps clear only the in-progress pull.
 They do not discard the current car identity, loaded targets, or persisted
@@ -183,16 +173,17 @@ application data directory.
 The versioned schema contains:
 
 - `shift_light_cars` for `game_id` and `car_ordinal`;
-- `shift_light_variants` for PI, RPM max, gearbox signature, provisional state,
-  and immutable numeric IDs;
-- `shift_light_profiles` for one method/target record per variant and gear;
-- `shift_light_profile_samples` for bounded observed evidence.
+- `shift_light_configs` for the full game-data identity, confirmed gear count,
+  gearbox signature, and immutable numeric IDs;
+- `shift_light_config_profiles` for one method/target record per configuration
+  and gear;
+- `shift_light_config_profile_samples` for bounded observed evidence.
 
 Profile writes are transactional and monotonic. Existing and incoming records
 are merged rather than blindly replaced: calibrated status and stronger
 evidence are preferred, samples are unioned and deduplicated up to the five
 sample limit, and five observed samples can complete a stored profile. Foreign
-keys keep profiles and samples attached to their variant.
+keys keep profiles and samples attached to their configuration.
 
 ## Source and build boundary
 
@@ -212,13 +203,15 @@ bundle; it does not run TypeScript or require Node.js or esbuild at runtime.
 
 The following are runtime and persistence contracts:
 
-- the key format `fh6:<carOrdinal>:<PI>:<rpmMax>`;
+- the base key format
+  `fh6:<carOrdinal>:<carClass>:<carPerformanceIndex>:<drivetrainType>:<numCylinders>:<rpmMax>`;
 - the learner exports used by `HudShiftLight`;
 - normalized telemetry fields consumed by the learner;
 - the `overlay/shift-light-engine.js` browser bundle path;
 - FDC-local `hud_shift_light` and reset-result events;
 - the HUD-local SQLite schema and migration behavior;
-- the separation between provisional and resolved numeric variant IDs.
+- the separation between a base identity and its confirmed gear-count
+  configuration IDs.
 
 Source relocation must not change learner behavior, profile identity,
 serialized profile fields, native/browser event names, or the database schema.
@@ -245,16 +238,15 @@ are not installed or dependency manifests have changed.
 ## Current limitations
 
 - The implementation is for FH6 normalized Direct Data Out telemetry only.
-- A valid positive car ordinal, PI, and RPM max are required to establish a
-  persisted vehicle identity; without them the runtime cannot create or load a
-  matching identity.
+- Valid car ordinal, class, performance index, drivetrain, cylinder count, and
+  RPM limit are required to establish a persisted base identity.
+- The confirmed gear count is unavailable until limiter evidence establishes
+  the highest observed forward gear, so a newly encountered gearbox starts in
+  learning mode.
 - Learning is per source gear and requires driving the gear. It does not
   pre-populate targets for unseen gears.
 - Optimal targets are unavailable until enough WOT power and adjacent-gear
   ratio evidence has been collected; the feature then remains on observed or
   fallback behavior while candidates are being confirmed.
-- Multiple compatible gearbox records can remain ambiguous, in which case
-  learning continues provisionally instead of selecting a database row by
-  guesswork.
 - There is no manual target-entry workflow or car-name database. Calibration
   comes from live telemetry and the local FDC database.

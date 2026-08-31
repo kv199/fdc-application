@@ -375,6 +375,16 @@ struct ShiftLightVariantResolution {
     ratio_features: Option<String>,
 }
 
+#[derive(Clone, Copy)]
+struct ShiftLightConfigIdentity {
+    car_ordinal: i32,
+    car_class: i32,
+    car_performance_index: i32,
+    drivetrain_type: i32,
+    num_cylinders: i32,
+    rpm_max: i32,
+}
+
 #[derive(Clone)]
 struct StoredShiftLightProfile {
     gear: i32,
@@ -418,6 +428,38 @@ fn parse_shift_light_key(key: &str) -> Result<(i32, i32, i32), String> {
         return Err("invalid Shift Light profile key".to_string());
     }
     Ok((car_ordinal, pi, rpm_max))
+}
+
+fn parse_shift_light_config_key(key: &str) -> Result<ShiftLightConfigIdentity, String> {
+    let mut parts = key.split(':');
+    if parts.next() != Some("fh6") {
+        return Err("invalid Shift Light configuration key".to_string());
+    }
+    let parse = |value: Option<&str>| {
+        value
+            .ok_or_else(|| "invalid Shift Light configuration key".to_string())?
+            .parse::<i32>()
+            .map_err(|_| "invalid Shift Light configuration key".to_string())
+    };
+    let identity = ShiftLightConfigIdentity {
+        car_ordinal: parse(parts.next())?,
+        car_class: parse(parts.next())?,
+        car_performance_index: parse(parts.next())?,
+        drivetrain_type: parse(parts.next())?,
+        num_cylinders: parse(parts.next())?,
+        rpm_max: parse(parts.next())?,
+    };
+    if parts.next().is_some()
+        || identity.car_ordinal <= 0
+        || identity.car_class < 0
+        || identity.car_performance_index <= 0
+        || identity.drivetrain_type < 0
+        || identity.num_cylinders <= 0
+        || identity.rpm_max <= 0
+    {
+        return Err("invalid Shift Light configuration key".to_string());
+    }
+    Ok(identity)
 }
 
 fn parse_ratio_features(features: &str) -> Result<Vec<RatioFeature>, String> {
@@ -670,6 +712,108 @@ fn write_stored_profile(
     Ok(())
 }
 
+fn read_config_profiles(
+    connection: &Connection,
+    config_id: i64,
+) -> Result<Vec<StoredShiftLightProfile>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT gear, status, shift_rpm, sample_count, method, ratio_drop
+             FROM shift_light_config_profiles WHERE config_id = ?1 ORDER BY gear",
+        )
+        .map_err(|error| {
+            format!("unable to prepare Shift Light configuration profile query: {error}")
+        })?;
+    let rows = statement
+        .query_map(params![config_id], |row| {
+            Ok(StoredShiftLightProfile {
+                gear: row.get(0)?,
+                status: row.get(1)?,
+                shift_rpm: row.get(2)?,
+                sample_count: row.get(3)?,
+                method: row.get(4)?,
+                ratio_drop: row.get(5)?,
+                samples: Vec::new(),
+            })
+        })
+        .map_err(|error| format!("unable to read Shift Light configuration profiles: {error}"))?;
+    let mut profiles = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("unable to decode Shift Light configuration profiles: {error}"))?;
+    let mut sample_statement = connection
+        .prepare(
+            "SELECT gear, rpm FROM shift_light_config_profile_samples
+             WHERE config_id = ?1 ORDER BY gear, sample_index",
+        )
+        .map_err(|error| {
+            format!("unable to prepare Shift Light configuration evidence query: {error}")
+        })?;
+    let samples = sample_statement
+        .query_map(params![config_id], |row| {
+            Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?))
+        })
+        .map_err(|error| format!("unable to read Shift Light configuration evidence: {error}"))?;
+    for sample in samples {
+        let (gear, rpm) = sample.map_err(|error| {
+            format!("unable to decode Shift Light configuration evidence: {error}")
+        })?;
+        if let Some(profile) = profiles.iter_mut().find(|profile| profile.gear == gear) {
+            profile.samples.push(rpm);
+        }
+    }
+    for profile in &mut profiles {
+        complete_observed_profile(profile);
+    }
+    Ok(profiles)
+}
+
+fn write_config_profile(
+    connection: &Connection,
+    config_id: i64,
+    profile: &StoredShiftLightProfile,
+) -> Result<(), String> {
+    let mut profile = profile.clone();
+    complete_observed_profile(&mut profile);
+    connection
+        .execute(
+            "INSERT INTO shift_light_config_profiles
+               (config_id, gear, status, shift_rpm, sample_count, method, ratio_drop, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)
+             ON CONFLICT (config_id, gear) DO UPDATE SET
+               status = excluded.status, shift_rpm = excluded.shift_rpm,
+               sample_count = excluded.sample_count, method = excluded.method,
+               ratio_drop = excluded.ratio_drop, updated_at = CURRENT_TIMESTAMP",
+            params![
+                config_id,
+                profile.gear,
+                profile.status,
+                profile.shift_rpm,
+                profile.sample_count,
+                profile.method,
+                profile.ratio_drop
+            ],
+        )
+        .map_err(|error| format!("unable to save Shift Light configuration profile: {error}"))?;
+    connection
+        .execute(
+            "DELETE FROM shift_light_config_profile_samples WHERE config_id = ?1 AND gear = ?2",
+            params![config_id, profile.gear],
+        )
+        .map_err(|error| {
+            format!("unable to replace Shift Light configuration evidence: {error}")
+        })?;
+    for (sample_index, rpm) in profile.samples.iter().enumerate() {
+        connection
+            .execute(
+                "INSERT INTO shift_light_config_profile_samples (config_id, gear, sample_index, rpm)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![config_id, profile.gear, sample_index as i32, rpm],
+            )
+            .map_err(|error| format!("unable to save Shift Light configuration evidence: {error}"))?;
+    }
+    Ok(())
+}
+
 fn merge_variant_records(
     transaction: &Transaction<'_>,
     target_id: i64,
@@ -917,6 +1061,54 @@ fn create_shift_light_tables(connection: &Connection) -> Result<(), String> {
              );",
         )
         .map_err(|error| format!("unable to create HUD Shift Light schema: {error}"))
+}
+
+fn create_shift_light_config_tables(connection: &Connection) -> Result<(), String> {
+    connection
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS shift_light_configs (
+               id INTEGER PRIMARY KEY,
+               game_id TEXT NOT NULL,
+               car_ordinal INTEGER NOT NULL,
+               car_class INTEGER NOT NULL,
+               car_performance_index INTEGER NOT NULL,
+               drivetrain_type INTEGER NOT NULL,
+               num_cylinders INTEGER NOT NULL,
+               rpm_max INTEGER NOT NULL,
+               gear_count INTEGER NOT NULL CHECK (gear_count BETWEEN 1 AND 10),
+               gearbox_signature TEXT NOT NULL DEFAULT '',
+               first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               UNIQUE (game_id, car_ordinal, car_class, car_performance_index,
+                       drivetrain_type, num_cylinders, rpm_max, gear_count)
+             );
+             CREATE TABLE IF NOT EXISTS shift_light_config_profiles (
+               config_id INTEGER NOT NULL,
+               gear INTEGER NOT NULL,
+               status TEXT NOT NULL DEFAULT 'learning',
+               shift_rpm INTEGER,
+               sample_count INTEGER NOT NULL DEFAULT 0,
+               method TEXT NOT NULL DEFAULT 'observed',
+               ratio_drop REAL,
+               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               PRIMARY KEY (config_id, gear),
+               FOREIGN KEY (config_id) REFERENCES shift_light_configs(id) ON DELETE CASCADE
+             );
+             CREATE TABLE IF NOT EXISTS shift_light_config_profile_samples (
+               config_id INTEGER NOT NULL,
+               gear INTEGER NOT NULL,
+               sample_index INTEGER NOT NULL,
+               rpm INTEGER NOT NULL,
+               PRIMARY KEY (config_id, gear, sample_index),
+               FOREIGN KEY (config_id, gear)
+                 REFERENCES shift_light_config_profiles(config_id, gear) ON DELETE CASCADE
+             );
+             CREATE INDEX IF NOT EXISTS idx_shift_light_configs_latest
+               ON shift_light_configs
+               (game_id, car_ordinal, car_class, car_performance_index,
+                drivetrain_type, num_cylinders, rpm_max, last_seen_at DESC);",
+        )
+        .map_err(|error| format!("unable to create Shift Light configuration schema: {error}"))
 }
 
 fn create_garage_tables(transaction: &Transaction<'_>) -> Result<(), String> {
@@ -1304,6 +1496,7 @@ fn migrate_shift_light_schema(connection: &Connection) -> Result<(), String> {
     }
 
     create_shift_light_tables(connection)?;
+    create_shift_light_config_tables(connection)?;
 
     if legacy_exists || table_exists(connection, "shift_light_profiles_legacy")? {
         connection
@@ -1551,6 +1744,14 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
         transaction
             .commit()
             .map_err(|error| format!("unable to commit Event trace schema check: {error}"))?;
+    }
+    create_shift_light_config_tables(connection)?;
+    if version < 11 {
+        connection
+            .execute("UPDATE hud_schema_version SET version = 11", [])
+            .map_err(|error| {
+                format!("unable to update Shift Light configuration schema version: {error}")
+            })?;
     }
     Ok(())
 }
@@ -2404,21 +2605,38 @@ fn load_garage_shift_light_summary(
 ) -> Result<GarageShiftLightSummary, String> {
     let (tune_count, calibrated_gear_count, learning_gear_count): (i64, i64, i64) = connection
         .query_row(
-            "SELECT COUNT(DISTINCT variants.id),
+            "WITH configuration_profiles AS (
+                SELECT 'legacy:' || variants.id AS configuration_id,
+                       profiles.status AS status,
+                       profiles.shift_rpm AS shift_rpm,
+                       profiles.gear AS gear
+                FROM shift_light_variants AS variants
+                LEFT JOIN shift_light_profiles AS profiles ON profiles.variant_id = variants.id
+                WHERE variants.game_id = 'fh6'
+                  AND variants.car_ordinal = ?1
+                  AND variants.pi = ?2
+                UNION ALL
+                SELECT 'config:' || configs.id AS configuration_id,
+                       profiles.status AS status,
+                       profiles.shift_rpm AS shift_rpm,
+                       profiles.gear AS gear
+                FROM shift_light_configs AS configs
+                LEFT JOIN shift_light_config_profiles AS profiles ON profiles.config_id = configs.id
+                WHERE configs.game_id = 'fh6'
+                  AND configs.car_ordinal = ?1
+                  AND configs.car_performance_index = ?2
+             )
+             SELECT COUNT(DISTINCT configuration_id),
                     COALESCE(SUM(CASE
-                      WHEN profiles.status = 'calibrated' AND profiles.shift_rpm IS NOT NULL THEN 1
+                      WHEN status = 'calibrated' AND shift_rpm IS NOT NULL THEN 1
                       ELSE 0
                     END), 0),
                     COALESCE(SUM(CASE
-                      WHEN profiles.gear IS NOT NULL
-                       AND (profiles.status <> 'calibrated' OR profiles.shift_rpm IS NULL) THEN 1
+                      WHEN gear IS NOT NULL
+                       AND (status <> 'calibrated' OR shift_rpm IS NULL) THEN 1
                       ELSE 0
                     END), 0)
-             FROM shift_light_variants AS variants
-             LEFT JOIN shift_light_profiles AS profiles ON profiles.variant_id = variants.id
-             WHERE variants.game_id = 'fh6'
-               AND variants.car_ordinal = ?1
-               AND variants.pi = ?2",
+             FROM configuration_profiles",
             params![car_ordinal, pi],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
@@ -2864,6 +3082,253 @@ fn reset_shift_light_profiles(app: AppHandle, variant_id: i64) -> Result<(), Str
     delete_shift_light_profiles(&mut connection, variant_id)
 }
 
+fn read_shift_light_config_identity(
+    connection: &Connection,
+    config_id: i64,
+) -> Result<(ShiftLightConfigIdentity, i32, String), String> {
+    connection
+        .query_row(
+            "SELECT car_ordinal, car_class, car_performance_index, drivetrain_type,
+                    num_cylinders, rpm_max, gear_count, gearbox_signature
+             FROM shift_light_configs WHERE id = ?1",
+            params![config_id],
+            |row| {
+                Ok((
+                    ShiftLightConfigIdentity {
+                        car_ordinal: row.get(0)?,
+                        car_class: row.get(1)?,
+                        car_performance_index: row.get(2)?,
+                        drivetrain_type: row.get(3)?,
+                        num_cylinders: row.get(4)?,
+                        rpm_max: row.get(5)?,
+                    },
+                    row.get(6)?,
+                    row.get(7)?,
+                ))
+            },
+        )
+        .map_err(|error| match error {
+            SqliteError::QueryReturnedNoRows => {
+                format!("Shift Light configuration {config_id} does not exist")
+            }
+            other => format!("unable to resolve Shift Light configuration {config_id}: {other}"),
+        })
+}
+
+fn assert_shift_light_config_matches_key(
+    connection: &Connection,
+    config_id: i64,
+    key: &str,
+) -> Result<(ShiftLightConfigIdentity, i32, String), String> {
+    let (identity, gear_count, signature) =
+        read_shift_light_config_identity(connection, config_id)?;
+    let expected = parse_shift_light_config_key(key)?;
+    if identity.car_ordinal != expected.car_ordinal
+        || identity.car_class != expected.car_class
+        || identity.car_performance_index != expected.car_performance_index
+        || identity.drivetrain_type != expected.drivetrain_type
+        || identity.num_cylinders != expected.num_cylinders
+        || identity.rpm_max != expected.rpm_max
+    {
+        return Err(format!(
+            "Shift Light configuration {config_id} does not match its key"
+        ));
+    }
+    Ok((identity, gear_count, signature))
+}
+
+#[tauri::command]
+fn get_latest_shift_light_config(app: AppHandle, key: String) -> Result<Option<i32>, String> {
+    let identity = parse_shift_light_config_key(&key)?;
+    let connection = open_shift_light_db(&app)?;
+    connection
+        .query_row(
+            "SELECT gear_count FROM shift_light_configs
+             WHERE game_id = 'fh6' AND car_ordinal = ?1 AND car_class = ?2
+               AND car_performance_index = ?3 AND drivetrain_type = ?4
+               AND num_cylinders = ?5 AND rpm_max = ?6
+             ORDER BY last_seen_at DESC, id DESC LIMIT 1",
+            params![
+                identity.car_ordinal,
+                identity.car_class,
+                identity.car_performance_index,
+                identity.drivetrain_type,
+                identity.num_cylinders,
+                identity.rpm_max
+            ],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("unable to load latest Shift Light configuration: {error}"))
+}
+
+#[tauri::command]
+fn register_shift_light_config(
+    app: AppHandle,
+    key: String,
+    gear_count: i32,
+    gearbox_signature: Option<String>,
+) -> Result<ShiftLightVariantResolution, String> {
+    if !(1..=10).contains(&gear_count) {
+        return Err("invalid learned Shift Light gear count".to_string());
+    }
+    let identity = parse_shift_light_config_key(&key)?;
+    let signature = gearbox_signature.unwrap_or_default();
+    if signature.len() > 256 {
+        return Err("invalid Shift Light gearbox signature".to_string());
+    }
+    parse_ratio_features(&signature)?;
+    let mut connection = open_shift_light_db(&app)?;
+    let transaction = connection.transaction().map_err(|error| {
+        format!("unable to start Shift Light configuration transaction: {error}")
+    })?;
+    transaction
+        .execute(
+            "INSERT INTO shift_light_configs
+           (game_id, car_ordinal, car_class, car_performance_index, drivetrain_type,
+            num_cylinders, rpm_max, gear_count, gearbox_signature)
+         VALUES ('fh6', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         ON CONFLICT (game_id, car_ordinal, car_class, car_performance_index,
+                      drivetrain_type, num_cylinders, rpm_max, gear_count)
+         DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP",
+            params![
+                identity.car_ordinal,
+                identity.car_class,
+                identity.car_performance_index,
+                identity.drivetrain_type,
+                identity.num_cylinders,
+                identity.rpm_max,
+                gear_count,
+                signature
+            ],
+        )
+        .map_err(|error| format!("unable to register Shift Light configuration: {error}"))?;
+    let (config_id, stored_signature): (i64, String) = transaction
+        .query_row(
+            "SELECT id, gearbox_signature FROM shift_light_configs
+         WHERE game_id = 'fh6' AND car_ordinal = ?1 AND car_class = ?2
+           AND car_performance_index = ?3 AND drivetrain_type = ?4
+           AND num_cylinders = ?5 AND rpm_max = ?6 AND gear_count = ?7",
+            params![
+                identity.car_ordinal,
+                identity.car_class,
+                identity.car_performance_index,
+                identity.drivetrain_type,
+                identity.num_cylinders,
+                identity.rpm_max,
+                gear_count
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|error| format!("unable to resolve Shift Light configuration: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Shift Light configuration: {error}"))?;
+    Ok(ShiftLightVariantResolution {
+        variant_id: config_id,
+        status: "ready".to_string(),
+        ratio_features: (!stored_signature.is_empty()).then_some(stored_signature),
+    })
+}
+
+#[tauri::command]
+fn load_shift_light_config_profiles(
+    app: AppHandle,
+    key: String,
+    config_id: i64,
+) -> Result<Vec<ShiftLightProfile>, String> {
+    let connection = open_shift_light_db(&app)?;
+    let (_, _, signature) = assert_shift_light_config_matches_key(&connection, config_id, &key)?;
+    Ok(read_config_profiles(&connection, config_id)?
+        .into_iter()
+        .map(|profile| ShiftLightProfile {
+            key: key.clone(),
+            gear: profile.gear,
+            shift_rpm: profile.shift_rpm,
+            sample_count: profile.sample_count,
+            status: profile.status,
+            samples: profile.samples,
+            method: profile.method,
+            ratio_drop: profile.ratio_drop,
+            gearbox_signature: (!signature.is_empty()).then_some(signature.clone()),
+        })
+        .collect())
+}
+
+#[tauri::command]
+fn save_shift_light_config_profile(
+    app: AppHandle,
+    config_id: i64,
+    profile: ShiftLightProfile,
+) -> Result<(), String> {
+    if !(1..=10).contains(&profile.gear)
+        || profile.shift_rpm.is_some_and(|rpm| rpm < 0)
+        || profile.sample_count < 0
+        || profile.samples.len() > MAX_SHIFT_LIGHT_SAMPLES
+        || profile.samples.iter().any(|sample| *sample < 0)
+        || !["learning", "calibrated"].contains(&profile.status.as_str())
+        || !["observed", "optimal"].contains(&profile.method.as_str())
+    {
+        return Err("invalid Shift Light configuration profile".to_string());
+    }
+    let mut connection = open_shift_light_db(&app)?;
+    assert_shift_light_config_matches_key(&connection, config_id, &profile.key)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Shift Light configuration save: {error}"))?;
+    let incoming = StoredShiftLightProfile {
+        gear: profile.gear,
+        status: profile.status,
+        shift_rpm: profile.shift_rpm,
+        sample_count: profile.sample_count,
+        method: profile.method,
+        ratio_drop: profile.ratio_drop,
+        samples: profile.samples,
+    };
+    let existing = read_config_profiles(&transaction, config_id)?
+        .into_iter()
+        .find(|stored| stored.gear == incoming.gear);
+    let merged = existing
+        .as_ref()
+        .map(|stored| merge_stored_profiles(stored, &incoming))
+        .unwrap_or(incoming);
+    write_config_profile(&transaction, config_id, &merged)?;
+    transaction
+        .execute(
+            "UPDATE shift_light_configs SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?1",
+            params![config_id],
+        )
+        .map_err(|error| format!("unable to update Shift Light configuration: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Shift Light configuration profile: {error}"))
+}
+
+#[tauri::command]
+fn clear_shift_light_config(
+    app: AppHandle,
+    config_id: i64,
+    gearbox_signature: Option<String>,
+) -> Result<(), String> {
+    let signature = gearbox_signature.unwrap_or_default();
+    parse_ratio_features(&signature)?;
+    let mut connection = open_shift_light_db(&app)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Shift Light configuration clear: {error}"))?;
+    transaction
+        .execute(
+            "DELETE FROM shift_light_config_profiles WHERE config_id = ?1",
+            params![config_id],
+        )
+        .map_err(|error| format!("unable to clear Shift Light configuration profiles: {error}"))?;
+    transaction.execute("UPDATE shift_light_configs SET gearbox_signature = ?1, last_seen_at = CURRENT_TIMESTAMP WHERE id = ?2", params![signature, config_id])
+        .map_err(|error| format!("unable to update Shift Light configuration signature: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Shift Light configuration clear: {error}"))
+}
+
 #[tauri::command]
 fn reset_shift_light(app: AppHandle) -> Result<(), String> {
     let Some(window) = app.get_webview_window("main") else {
@@ -3166,6 +3631,11 @@ fn main() {
             save_shift_light_profile,
             register_shift_light_variant,
             reset_shift_light_profiles,
+            get_latest_shift_light_config,
+            register_shift_light_config,
+            load_shift_light_config_profiles,
+            save_shift_light_config_profile,
+            clear_shift_light_config,
             reset_shift_light,
             create_event,
             load_events,
@@ -3418,12 +3888,15 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         for table in [
             "shift_light_cars",
             "shift_light_variants",
             "shift_light_profiles",
             "shift_light_profile_samples",
+            "shift_light_configs",
+            "shift_light_config_profiles",
+            "shift_light_config_profile_samples",
             "garage_cars",
             "garage_variants",
             "garage_sequence",
@@ -3512,7 +3985,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         assert!(table_exists(&connection, "events").unwrap());
         assert_eq!(
             connection
@@ -3558,7 +4031,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         assert_eq!(
             load_event_from_connection(&connection, event.id)
                 .unwrap()
@@ -4186,6 +4659,52 @@ mod tests {
     }
 
     #[test]
+    fn garage_variant_summarizes_shift_light_configurations() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let vehicle = GarageVehicle {
+            ordinal: 260,
+            class: 8,
+            pi: 600,
+            car_group: 42,
+            drivetrain: 1,
+            cylinders: 4,
+        };
+        record_garage_vehicle_in_connection(&mut connection, &vehicle).unwrap();
+        connection
+            .execute(
+                "INSERT INTO shift_light_configs
+                   (game_id, car_ordinal, car_class, car_performance_index, drivetrain_type,
+                    num_cylinders, rpm_max, gear_count, gearbox_signature)
+                 VALUES ('fh6', 260, 8, 600, 1, 4, 8500, 10, '2:0.8000')",
+                [],
+            )
+            .unwrap();
+        let config_id = connection.last_insert_rowid();
+        write_config_profile(
+            &connection,
+            config_id,
+            &StoredShiftLightProfile {
+                gear: 2,
+                status: "calibrated".to_string(),
+                shift_rpm: Some(7800),
+                sample_count: 5,
+                method: "observed".to_string(),
+                ratio_drop: Some(0.8),
+                samples: vec![7800; 5],
+            },
+        )
+        .unwrap();
+
+        let snapshot = load_garage_snapshot_from_connection(&connection).unwrap();
+        let summary = &snapshot.cars[0].variants[0].shift_light;
+        assert_eq!(summary.status, "ready");
+        assert_eq!(summary.tune_count, 1);
+        assert_eq!(summary.calibrated_gear_count, 1);
+        assert_eq!(summary.learning_gear_count, 0);
+    }
+
+    #[test]
     fn garage_renaming_is_persistent_and_empty_name_clears_it() {
         let mut connection = Connection::open_in_memory().unwrap();
         initialize_shift_light_schema(&mut connection).unwrap();
@@ -4240,7 +4759,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         assert_eq!(
             connection
                 .query_row("SELECT next_sequence FROM garage_sequence", [], |row| {
@@ -4302,7 +4821,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         let (drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (i32, i32, i64, i64) =
             connection
                 .query_row(
@@ -4375,7 +4894,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         let (id, drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (
             i64,
             i32,

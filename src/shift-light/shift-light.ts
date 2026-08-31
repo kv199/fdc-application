@@ -59,6 +59,12 @@ export interface ShiftLightSnapshot {
   carOrdinal: number | null
   pi: number | null
   rpmMax: number | null
+  carClass: number | null
+  drivetrain: number | null
+  cylinders: number | null
+  gearCount: number | null
+  observedGearCount: number
+  gearboxChanged: boolean
   gearboxSignature: string | null
   currentGear: number | null
   method: ShiftLightMethod | null
@@ -69,6 +75,7 @@ export interface ShiftLightSnapshot {
 export interface ShiftLightLearnerOptions {
   onCalibrated?: (profile: ShiftLightProfile) => void
   onProgress?: (profile: ShiftLightProfile) => void
+  onGearboxChanged?: (gearboxSignature: string) => void
 }
 
 const MIN_THROTTLE = 0.95
@@ -92,6 +99,7 @@ const MAX_SHIFT_SIGNAL_LEAD_RPM = 1200
 const MAX_APPROACH_SIGNAL_LEAD_RPM = 1800
 const MAX_RPM_RATE = 50_000
 const RPM_RATE_ALPHA = 0.25
+const REQUIRED_TERMINAL_LIMITER_SAMPLES = 2
 
 function isForwardGear(gear: number): boolean {
   return Number.isFinite(gear) && gear >= 1 && gear <= 10
@@ -151,11 +159,20 @@ function signaturesHaveCompatibleKnownParts(
   })
 }
 
+function signaturesShareKnownPart(
+  left: GearboxSignaturePart[],
+  right: GearboxSignaturePart[]
+): boolean {
+  const rightGears = new Set(right.map(part => part.gear))
+  return left.some(part => rightGears.has(part.gear))
+}
+
 function signaturesAreCompatible(left: string, right: string): boolean {
   const leftParts = parseGearboxSignature(left)
   const rightParts = parseGearboxSignature(right)
   if (leftParts.length === 0 || rightParts.length === 0) return false
-  return signaturesHaveCompatibleKnownParts(leftParts, rightParts)
+  return signaturesShareKnownPart(leftParts, rightParts)
+    && signaturesHaveCompatibleKnownParts(leftParts, rightParts)
     && signaturesHaveCompatibleKnownParts(rightParts, leftParts)
 }
 
@@ -164,7 +181,7 @@ function mergeGearboxSignatures(previous: string | null, detected: string): stri
   const previousParts = parseGearboxSignature(previous)
   const detectedParts = parseGearboxSignature(detected)
   if (previousParts.length === 0 || detectedParts.length === 0) return detected
-  if (!signaturesHaveCompatibleKnownParts(previousParts, detectedParts)) return detected
+  if (!signaturesAreCompatible(previous, detected)) return detected
 
   const detectedGears = new Set(detectedParts.map(part => part.gear))
   if (previousParts.some(part => !detectedGears.has(part.gear))) return previous
@@ -196,18 +213,35 @@ function isSignatureExtension(previous: string, next: string): boolean {
  */
 export function getShiftLightCarKey(telemetry: Telemetry): string | null {
   const ordinal = telemetry.car?.ordinal
+  const carClass = telemetry.car?.class
   const pi = telemetry.car?.pi
+  const drivetrain = telemetry.car?.drivetrain
+  const cylinders = telemetry.car?.cylinders
   const rpmMax = telemetry.rpmMax
   if (!Number.isFinite(ordinal) || ordinal <= 0) return null
+  if (!Number.isFinite(carClass) || carClass < 0) return null
   if (!Number.isFinite(pi) || pi <= 0) return null
+  if (!Number.isFinite(drivetrain) || drivetrain < 0) return null
+  if (!Number.isFinite(cylinders) || cylinders <= 0) return null
   if (!Number.isFinite(rpmMax) || rpmMax <= 0) return null
-  return `fh6:${Math.round(ordinal)}:${Math.round(pi)}:${roundRpm(rpmMax)}`
+  return [
+    'fh6',
+    Math.round(ordinal),
+    Math.round(carClass),
+    Math.round(pi),
+    Math.round(drivetrain),
+    Math.round(cylinders),
+    roundRpm(rpmMax)
+  ].join(':')
 }
 
 export function getShiftLightIdentity(telemetry: Telemetry): {
   gameId: string
   carOrdinal: number
+  carClass: number
   pi: number
+  drivetrain: number
+  cylinders: number
   rpmMax: number
   key: string
 } | null {
@@ -217,8 +251,11 @@ export function getShiftLightIdentity(telemetry: Telemetry): {
   return {
     gameId: 'fh6',
     carOrdinal: Number(parts[1]),
-    pi: Number(parts[2]),
-    rpmMax: Number(parts[3]),
+    carClass: Number(parts[2]),
+    pi: Number(parts[3]),
+    drivetrain: Number(parts[4]),
+    cylinders: Number(parts[5]),
+    rpmMax: Number(parts[6]),
     key
   }
 }
@@ -249,6 +286,7 @@ export class ShiftLightLearner {
   private readonly optimalEstimator = new OptimalShiftEstimator()
   private readonly mismatchedOptimalGears = new Set<number>()
   private readonly storedGearboxSignatures = new Map<number, string | null>()
+  private readonly terminalLimiterSamples = new Map<number, number>()
   private previous: Telemetry | null = null
   private pullGear: number | null = null
   private pullPeakRpm = 0
@@ -257,6 +295,9 @@ export class ShiftLightLearner {
   private pendingUpshift: PendingUpshift | null = null
   private rpmRate: number | null = null
   private gearboxSignature: string | null = null
+  private maxObservedGear = 0
+  private confirmedGearCount: number | null = null
+  private gearboxChanged = false
   private readonly dirtyGears = new Set<number>()
 
   constructor(
@@ -336,6 +377,10 @@ export class ShiftLightLearner {
     this.dirtyGears.clear()
     this.optimalEstimator.reset()
     this.gearboxSignature = null
+    this.maxObservedGear = 0
+    this.confirmedGearCount = null
+    this.terminalLimiterSamples.clear()
+    this.gearboxChanged = false
     this.resetPull()
     this.previous = null
     this.rpmRate = null
@@ -361,7 +406,10 @@ export class ShiftLightLearner {
     const forward = isForwardGear(telemetry.gear)
     const neutral = telemetry.gear === NEUTRAL_GEAR
 
-    if (forward) this.observedGears.add(telemetry.gear)
+    if (forward) {
+      this.observedGears.add(telemetry.gear)
+      this.observeGear(telemetry.gear)
+    }
     this.optimalEstimator.ingest(telemetry)
     const detectedGearboxSignature = this.optimalEstimator.getGearboxSignature()
     if (detectedGearboxSignature) this.updateGearboxSignature(detectedGearboxSignature)
@@ -404,6 +452,7 @@ export class ShiftLightLearner {
       ) {
         if (this.limiterCandidate?.gear === telemetry.gear) {
           this.recordSample(telemetry.gear, this.limiterCandidate.peakRpm)
+          this.recordTerminalLimiterEvidence(telemetry.gear)
           this.limiterCandidate = null
           this.limiterCommitted = true
         } else {
@@ -488,6 +537,12 @@ export class ShiftLightLearner {
       carOrdinal: identity?.carOrdinal ?? null,
       pi: identity?.pi ?? null,
       rpmMax: identity?.rpmMax ?? null,
+      carClass: identity?.carClass ?? null,
+      drivetrain: identity?.drivetrain ?? null,
+      cylinders: identity?.cylinders ?? null,
+      gearCount: this.confirmedGearCount,
+      observedGearCount: this.maxObservedGear,
+      gearboxChanged: this.gearboxChanged,
       gearboxSignature: this.gearboxSignature,
       currentGear,
       method: activeProfile?.method ?? null,
@@ -671,6 +726,21 @@ export class ShiftLightLearner {
     this.pendingUpshift = null
   }
 
+  private observeGear(gear: number): void {
+    if (gear <= this.maxObservedGear) return
+    this.maxObservedGear = gear
+    if (this.confirmedGearCount !== null && gear > this.confirmedGearCount) {
+      this.confirmedGearCount = null
+    }
+  }
+
+  private recordTerminalLimiterEvidence(gear: number): void {
+    if (gear !== this.maxObservedGear) return
+    const count = (this.terminalLimiterSamples.get(gear) ?? 0) + 1
+    this.terminalLimiterSamples.set(gear, count)
+    if (count >= REQUIRED_TERMINAL_LIMITER_SAMPLES) this.confirmedGearCount = gear
+  }
+
   private recordSample(gear: number, observedRpm: number): void {
     if (gear < 1 || gear > 10 || this.hasCompatibleProfile(gear) || !Number.isFinite(observedRpm)) return
     const gearSamples = this.samples.get(gear) ?? []
@@ -721,6 +791,12 @@ export class ShiftLightLearner {
   }
 
   private updateGearboxSignature(signature: string): void {
+    if (this.gearboxSignature !== null && !signaturesAreCompatible(this.gearboxSignature, signature)) {
+      this.clearCalibrationForGearboxChange()
+      this.gearboxSignature = signature
+      this.options.onGearboxChanged?.(signature)
+      return
+    }
     const nextSignature = mergeGearboxSignatures(this.gearboxSignature, signature)
     if (nextSignature === this.gearboxSignature) return
 
@@ -772,6 +848,22 @@ export class ShiftLightLearner {
     }
   }
 
+  private clearCalibrationForGearboxChange(): void {
+    this.profiles.clear()
+    this.pendingOptimalProfiles.clear()
+    this.samples.clear()
+    this.optimalCandidates.clear()
+    this.mismatchedOptimalGears.clear()
+    this.storedGearboxSignatures.clear()
+    this.dirtyGears.clear()
+    this.gearboxChanged = true
+  }
+
+  clearConfiguration(): void {
+    this.clearCalibrationForGearboxChange()
+    this.gearboxChanged = false
+  }
+
   private isGearboxCompatible(signature: string | null | undefined): boolean {
     if (!this.gearboxSignature) return true
     const normalized = normalizeGearboxSignature(signature)
@@ -791,20 +883,34 @@ export class ShiftLightLearner {
     return deltaMs >= 0 && deltaMs <= MAX_TIMESTAMP_GAP_MS
   }
 
-  private parseIdentity(): { gameId: string, carOrdinal: number, pi: number, rpmMax: number } | null {
+  private parseIdentity(): {
+    gameId: string
+    carOrdinal: number
+    carClass: number
+    pi: number
+    drivetrain: number
+    cylinders: number
+    rpmMax: number
+  } | null {
     const parts = this.key.split(':')
-    if (parts.length !== 4 || parts[0] !== 'fh6') return null
+    if (parts.length !== 7 || parts[0] !== 'fh6') return null
     const values = parts.slice(1).map(value => Number(value))
-    const [carOrdinal, pi, rpmMax] = values
+    const [carOrdinal, carClass, pi, drivetrain, cylinders, rpmMax] = values
     if (
       carOrdinal === undefined || !Number.isFinite(carOrdinal) || carOrdinal <= 0
+      || carClass === undefined || !Number.isFinite(carClass) || carClass < 0
       || pi === undefined || !Number.isFinite(pi) || pi <= 0
+      || drivetrain === undefined || !Number.isFinite(drivetrain) || drivetrain < 0
+      || cylinders === undefined || !Number.isFinite(cylinders) || cylinders <= 0
       || rpmMax === undefined || !Number.isFinite(rpmMax) || rpmMax <= 0
     ) return null
     return {
       gameId: 'fh6',
       carOrdinal,
+      carClass,
       pi,
+      drivetrain,
+      cylinders,
       rpmMax
     }
   }

@@ -261,6 +261,7 @@ var HudShiftLight = (() => {
   var MAX_APPROACH_SIGNAL_LEAD_RPM = 1800;
   var MAX_RPM_RATE = 5e4;
   var RPM_RATE_ALPHA = 0.25;
+  var REQUIRED_TERMINAL_LIMITER_SAMPLES = 2;
   function isForwardGear2(gear) {
     return Number.isFinite(gear) && gear >= 1 && gear <= 10;
   }
@@ -299,18 +300,22 @@ var HudShiftLight = (() => {
       return detectedRatio === void 0 || Math.abs(detectedRatio - part.ratioDrop) <= GEARBOX_SIGNATURE_TOLERANCE;
     });
   }
+  function signaturesShareKnownPart(left, right) {
+    const rightGears = new Set(right.map((part) => part.gear));
+    return left.some((part) => rightGears.has(part.gear));
+  }
   function signaturesAreCompatible(left, right) {
     const leftParts = parseGearboxSignature(left);
     const rightParts = parseGearboxSignature(right);
     if (leftParts.length === 0 || rightParts.length === 0) return false;
-    return signaturesHaveCompatibleKnownParts(leftParts, rightParts) && signaturesHaveCompatibleKnownParts(rightParts, leftParts);
+    return signaturesShareKnownPart(leftParts, rightParts) && signaturesHaveCompatibleKnownParts(leftParts, rightParts) && signaturesHaveCompatibleKnownParts(rightParts, leftParts);
   }
   function mergeGearboxSignatures(previous, detected) {
     if (!previous) return detected;
     const previousParts = parseGearboxSignature(previous);
     const detectedParts = parseGearboxSignature(detected);
     if (previousParts.length === 0 || detectedParts.length === 0) return detected;
-    if (!signaturesHaveCompatibleKnownParts(previousParts, detectedParts)) return detected;
+    if (!signaturesAreCompatible(previous, detected)) return detected;
     const detectedGears = new Set(detectedParts.map((part) => part.gear));
     if (previousParts.some((part) => !detectedGears.has(part.gear))) return previous;
     const previousByGear = new Map(previousParts.map((part) => [part.gear, part]));
@@ -328,12 +333,26 @@ var HudShiftLight = (() => {
   }
   function getShiftLightCarKey(telemetry) {
     const ordinal = telemetry.car?.ordinal;
+    const carClass = telemetry.car?.class;
     const pi = telemetry.car?.pi;
+    const drivetrain = telemetry.car?.drivetrain;
+    const cylinders = telemetry.car?.cylinders;
     const rpmMax = telemetry.rpmMax;
     if (!Number.isFinite(ordinal) || ordinal <= 0) return null;
+    if (!Number.isFinite(carClass) || carClass < 0) return null;
     if (!Number.isFinite(pi) || pi <= 0) return null;
+    if (!Number.isFinite(drivetrain) || drivetrain < 0) return null;
+    if (!Number.isFinite(cylinders) || cylinders <= 0) return null;
     if (!Number.isFinite(rpmMax) || rpmMax <= 0) return null;
-    return `fh6:${Math.round(ordinal)}:${Math.round(pi)}:${roundRpm(rpmMax)}`;
+    return [
+      "fh6",
+      Math.round(ordinal),
+      Math.round(carClass),
+      Math.round(pi),
+      Math.round(drivetrain),
+      Math.round(cylinders),
+      roundRpm(rpmMax)
+    ].join(":");
   }
   function getShiftLightIdentity(telemetry) {
     const key = getShiftLightCarKey(telemetry);
@@ -342,8 +361,11 @@ var HudShiftLight = (() => {
     return {
       gameId: "fh6",
       carOrdinal: Number(parts[1]),
-      pi: Number(parts[2]),
-      rpmMax: Number(parts[3]),
+      carClass: Number(parts[2]),
+      pi: Number(parts[3]),
+      drivetrain: Number(parts[4]),
+      cylinders: Number(parts[5]),
+      rpmMax: Number(parts[6]),
       key
     };
   }
@@ -362,6 +384,7 @@ var HudShiftLight = (() => {
     optimalEstimator = new OptimalShiftEstimator();
     mismatchedOptimalGears = /* @__PURE__ */ new Set();
     storedGearboxSignatures = /* @__PURE__ */ new Map();
+    terminalLimiterSamples = /* @__PURE__ */ new Map();
     previous = null;
     pullGear = null;
     pullPeakRpm = 0;
@@ -370,6 +393,9 @@ var HudShiftLight = (() => {
     pendingUpshift = null;
     rpmRate = null;
     gearboxSignature = null;
+    maxObservedGear = 0;
+    confirmedGearCount = null;
+    gearboxChanged = false;
     dirtyGears = /* @__PURE__ */ new Set();
     /** Compatibility helper for callers that only have one stored profile. */
     setProfile(profile) {
@@ -433,6 +459,10 @@ var HudShiftLight = (() => {
       this.dirtyGears.clear();
       this.optimalEstimator.reset();
       this.gearboxSignature = null;
+      this.maxObservedGear = 0;
+      this.confirmedGearCount = null;
+      this.terminalLimiterSamples.clear();
+      this.gearboxChanged = false;
       this.resetPull();
       this.previous = null;
       this.rpmRate = null;
@@ -455,7 +485,10 @@ var HudShiftLight = (() => {
       const wot = Number.isFinite(telemetry.throttle) && telemetry.throttle >= MIN_THROTTLE;
       const forward = isForwardGear2(telemetry.gear);
       const neutral = telemetry.gear === NEUTRAL_GEAR;
-      if (forward) this.observedGears.add(telemetry.gear);
+      if (forward) {
+        this.observedGears.add(telemetry.gear);
+        this.observeGear(telemetry.gear);
+      }
       this.optimalEstimator.ingest(telemetry);
       const detectedGearboxSignature = this.optimalEstimator.getGearboxSignature();
       if (detectedGearboxSignature) this.updateGearboxSignature(detectedGearboxSignature);
@@ -489,6 +522,7 @@ var HudShiftLight = (() => {
         if (!this.hasCompatibleProfile(telemetry.gear) && !this.limiterCommitted && this.pullPeakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION && this.pullPeakRpm - telemetry.rpm >= rpmDrop) {
           if (this.limiterCandidate?.gear === telemetry.gear) {
             this.recordSample(telemetry.gear, this.limiterCandidate.peakRpm);
+            this.recordTerminalLimiterEvidence(telemetry.gear);
             this.limiterCandidate = null;
             this.limiterCommitted = true;
           } else {
@@ -548,6 +582,12 @@ var HudShiftLight = (() => {
         carOrdinal: identity?.carOrdinal ?? null,
         pi: identity?.pi ?? null,
         rpmMax: identity?.rpmMax ?? null,
+        carClass: identity?.carClass ?? null,
+        drivetrain: identity?.drivetrain ?? null,
+        cylinders: identity?.cylinders ?? null,
+        gearCount: this.confirmedGearCount,
+        observedGearCount: this.maxObservedGear,
+        gearboxChanged: this.gearboxChanged,
         gearboxSignature: this.gearboxSignature,
         currentGear,
         method: activeProfile?.method ?? null,
@@ -682,6 +722,19 @@ var HudShiftLight = (() => {
       this.limiterCandidate = null;
       this.pendingUpshift = null;
     }
+    observeGear(gear) {
+      if (gear <= this.maxObservedGear) return;
+      this.maxObservedGear = gear;
+      if (this.confirmedGearCount !== null && gear > this.confirmedGearCount) {
+        this.confirmedGearCount = null;
+      }
+    }
+    recordTerminalLimiterEvidence(gear) {
+      if (gear !== this.maxObservedGear) return;
+      const count = (this.terminalLimiterSamples.get(gear) ?? 0) + 1;
+      this.terminalLimiterSamples.set(gear, count);
+      if (count >= REQUIRED_TERMINAL_LIMITER_SAMPLES) this.confirmedGearCount = gear;
+    }
     recordSample(gear, observedRpm) {
       if (gear < 1 || gear > 10 || this.hasCompatibleProfile(gear) || !Number.isFinite(observedRpm)) return;
       const gearSamples = this.samples.get(gear) ?? [];
@@ -726,6 +779,12 @@ var HudShiftLight = (() => {
       return samples.filter((sample) => Number.isFinite(sample)).slice(0, MAX_EVIDENCE_SAMPLES).map((sample) => roundRpm(sample));
     }
     updateGearboxSignature(signature) {
+      if (this.gearboxSignature !== null && !signaturesAreCompatible(this.gearboxSignature, signature)) {
+        this.clearCalibrationForGearboxChange();
+        this.gearboxSignature = signature;
+        this.options.onGearboxChanged?.(signature);
+        return;
+      }
       const nextSignature = mergeGearboxSignatures(this.gearboxSignature, signature);
       if (nextSignature === this.gearboxSignature) return;
       const previousSignature = this.gearboxSignature;
@@ -772,6 +831,20 @@ var HudShiftLight = (() => {
         this.dirtyGears.delete(gear);
       }
     }
+    clearCalibrationForGearboxChange() {
+      this.profiles.clear();
+      this.pendingOptimalProfiles.clear();
+      this.samples.clear();
+      this.optimalCandidates.clear();
+      this.mismatchedOptimalGears.clear();
+      this.storedGearboxSignatures.clear();
+      this.dirtyGears.clear();
+      this.gearboxChanged = true;
+    }
+    clearConfiguration() {
+      this.clearCalibrationForGearboxChange();
+      this.gearboxChanged = false;
+    }
     isGearboxCompatible(signature) {
       if (!this.gearboxSignature) return true;
       const normalized = normalizeGearboxSignature(signature);
@@ -790,14 +863,17 @@ var HudShiftLight = (() => {
     }
     parseIdentity() {
       const parts = this.key.split(":");
-      if (parts.length !== 4 || parts[0] !== "fh6") return null;
+      if (parts.length !== 7 || parts[0] !== "fh6") return null;
       const values = parts.slice(1).map((value) => Number(value));
-      const [carOrdinal, pi, rpmMax] = values;
-      if (carOrdinal === void 0 || !Number.isFinite(carOrdinal) || carOrdinal <= 0 || pi === void 0 || !Number.isFinite(pi) || pi <= 0 || rpmMax === void 0 || !Number.isFinite(rpmMax) || rpmMax <= 0) return null;
+      const [carOrdinal, carClass, pi, drivetrain, cylinders, rpmMax] = values;
+      if (carOrdinal === void 0 || !Number.isFinite(carOrdinal) || carOrdinal <= 0 || carClass === void 0 || !Number.isFinite(carClass) || carClass < 0 || pi === void 0 || !Number.isFinite(pi) || pi <= 0 || drivetrain === void 0 || !Number.isFinite(drivetrain) || drivetrain < 0 || cylinders === void 0 || !Number.isFinite(cylinders) || cylinders <= 0 || rpmMax === void 0 || !Number.isFinite(rpmMax) || rpmMax <= 0) return null;
       return {
         gameId: "fh6",
         carOrdinal,
+        carClass,
         pi,
+        drivetrain,
+        cylinders,
         rpmMax
       };
     }

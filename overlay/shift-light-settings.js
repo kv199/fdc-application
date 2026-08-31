@@ -8,6 +8,8 @@
     sampleCount: 0,
     carKey: null,
     currentGear: null,
+    gearCount: null,
+    gearboxChanged: false,
     method: null,
     gears: [],
     diagnostics: []
@@ -89,6 +91,10 @@
       currentGear: Number.isInteger(state.currentGear) && state.currentGear >= 1 && state.currentGear <= 10
         ? state.currentGear
         : null,
+      gearCount: Number.isInteger(state.gearCount) && state.gearCount >= 1 && state.gearCount <= 10
+        ? state.gearCount
+        : null,
+      gearboxChanged: state.gearboxChanged === true,
       method: ['observed', 'optimal'].includes(state.method) ? state.method : null,
       gears,
       diagnostics

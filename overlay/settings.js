@@ -1909,8 +1909,13 @@
       : '—'
     shiftLightCarPi.textContent = state.pi ? `PI ${state.pi}` : '—'
     shiftLightCarRpmMax.textContent = state.rpmMax ? `${state.rpmMax} RPM` : '—'
-    shiftLightCurrentTarget.textContent = state.shiftRpm ? `${state.shiftRpm} RPM` : 'FALLBACK'
-    const activeState = state.method?.toUpperCase() || state.status.toUpperCase()
+    const fallbackShiftRpm = state.rpmMax ? Math.round(state.rpmMax * 0.98) : null
+    shiftLightCurrentTarget.textContent = state.shiftRpm
+      ? `${state.shiftRpm} RPM`
+      : fallbackShiftRpm ? `FALLBACK · SHIFT AT ${fallbackShiftRpm} RPM` : 'FALLBACK'
+    const activeState = state.gearboxChanged
+      ? 'NEW GEARBOX · LEARNING'
+      : state.method?.toUpperCase() || state.status.toUpperCase()
     shiftLightState.textContent = `${activeState}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
     shiftLightGearRows.replaceChildren()
 
@@ -1919,7 +1924,9 @@
     for (const gear of state.gears) {
       const diagnostic = diagnosticsByGear.get(gear.gear)
       const method = diagnostic?.method || gear.method
-      const diagnosticStatus = diagnostic?.status || method || gear.status
+      const diagnosticStatus = diagnostic?.status === 'gearbox-mismatch'
+        ? 'learning'
+        : diagnostic?.status || method || gear.status
       const row = document.createElement('tr')
       row.dataset.state = diagnosticStatus
 
@@ -1955,7 +1962,7 @@
       const stateCell = document.createElement('td')
       appendCellText(
         stateCell,
-        method?.toUpperCase() || gear.status.toUpperCase(),
+        diagnosticStatus === 'learning' ? 'LEARNING' : method?.toUpperCase() || gear.status.toUpperCase(),
         formatDiagnosticStatus(diagnosticStatus)
       )
       row.append(stateCell)

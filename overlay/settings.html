@@ -400,11 +400,8 @@
         <dl>
           <div><dt>OBSERVED</dt><dd>Fallback target learned from your real upshifts.</dd></div>
           <div><dt>OPTIMAL</dt><dd>Power crossover is stable and the gearbox ratio is validated.</dd></div>
-          <div><dt>LEARNING</dt><dd>The car or gear has not collected enough usable evidence.</dd></div>
-          <div><dt>WAITING FOR WOT</dt><dd>The power curve needs more full-throttle RPM coverage.</dd></div>
-          <div><dt>WAITING FOR RATIO</dt><dd>The current and next gear need more driven-wheel ratio samples.</dd></div>
-          <div><dt>CONFIRMING</dt><dd>A target was found and is being checked for stability.</dd></div>
-          <div><dt>GEARBOX MISMATCH</dt><dd>The live RPM drop does not match the stored gearbox evidence.</dd></div>
+          <div><dt>LEARNING</dt><dd>The car or gear has not collected enough usable evidence yet. Details may say whether it needs full-throttle power coverage or current/next-gear ratio samples.</dd></div>
+          <div><dt>NEW GEARBOX · LEARNING</dt><dd>The measured gear ratios changed for this configuration. FDC clears its old targets and learns this configuration again.</dd></div>
         </dl>
         <p>Power is measured at the target RPM before the shift and at the predicted RPM after the shift. The target is not simply the engine's peak-power RPM.</p>
       </div>

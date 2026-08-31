@@ -15,6 +15,8 @@ test('normalizes the per-gear shift-light diagnostic state', () => {
     pi: 800,
     rpmMax: 8000,
     currentGear: 3,
+    gearCount: null,
+    gearboxChanged: false,
     method: 'optimal',
     diagnostics: [{
       gear: 3,
@@ -50,6 +52,8 @@ test('normalizes the per-gear shift-light diagnostic state', () => {
     pi: 800,
     rpmMax: 8000,
     currentGear: 3,
+    gearCount: null,
+    gearboxChanged: false,
     method: 'optimal',
     diagnostics: [{
       gear: 3,
@@ -88,6 +92,8 @@ test('turns an unavailable or malformed state into a safe empty state', () => {
     pi: null,
     rpmMax: null,
     currentGear: null,
+    gearCount: null,
+    gearboxChanged: false,
     method: null,
     gears: [],
     diagnostics: []

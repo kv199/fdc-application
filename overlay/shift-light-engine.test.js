@@ -6,7 +6,7 @@ const { getShiftLightCarKey, ShiftLightLearner } = require('./shift-light-engine
 function frame(overrides = {}) {
   return {
     timestampMs: 1000,
-    car: { ordinal: 123, pi: 800, drivetrain: 1 },
+    car: { ordinal: 123, class: 4, pi: 800, drivetrain: 1, cylinders: 8 },
     gear: 1,
     rpm: 5000,
     rpmMax: 8000,
@@ -44,7 +44,7 @@ function validateStoredOptimalProfile(learner, nextRatio) {
 }
 
 test('uses the car identity and limiter for the profile key', () => {
-  assert.equal(getShiftLightCarKey(frame()), 'fh6:123:800:8000')
+  assert.equal(getShiftLightCarKey(frame()), 'fh6:123:4:800:1:8:8000')
   assert.equal(getShiftLightCarKey(frame({ car: { ordinal: 0, pi: 800 } })), null)
 })
 
@@ -57,7 +57,7 @@ test('keeps learning isolated for each car and PI/RPM configuration', () => {
   ]
 
   const results = configurations.map((configuration, configurationIndex) => {
-    const car = { ordinal: configuration.ordinal, pi: configuration.pi, drivetrain: 1 }
+    const car = { ordinal: configuration.ordinal, class: 4, pi: configuration.pi, drivetrain: 1, cylinders: 8 }
     const key = getShiftLightCarKey(frame({ car, rpmMax: configuration.rpmMax }))
     const learner = new ShiftLightLearner(key)
 
@@ -82,7 +82,7 @@ test('keeps learning isolated for each car and PI/RPM configuration', () => {
 })
 
 test('accepts a Porsche-length neutral transition by elapsed time', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   learner.update(frame({ gear: 2, rpm: 8000, timestampMs: 0 }))
   for (let index = 1; index <= 18; index += 1) {
     learner.update(frame({ gear: 11, rpm: 7800, timestampMs: index * 7 }))
@@ -92,7 +92,7 @@ test('accepts a Porsche-length neutral transition by elapsed time', () => {
 })
 
 test('does not double-count a limiter candidate followed by an upshift', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   learner.update(frame({ gear: 2, rpm: 8000, timestampMs: 0 }))
   learner.update(frame({ gear: 2, rpm: 7800, timestampMs: 16 }))
   learner.update(frame({ gear: 2, rpm: 7750, timestampMs: 32 }))
@@ -102,7 +102,7 @@ test('does not double-count a limiter candidate followed by an upshift', () => {
 })
 
 test('clears a stale limiter candidate when the pull rearms below 85 percent', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   learner.update(frame({ gear: 2, rpm: 8000, timestampMs: 0 }))
   learner.update(frame({ gear: 2, rpm: 7800, timestampMs: 16 }))
   learner.update(frame({ gear: 2, rpm: 6700, timestampMs: 32 }))
@@ -113,9 +113,9 @@ test('clears a stale limiter candidate when the pull rearms below 85 percent', (
 })
 
 test('restores bounded partial evidence without marking it calibrated', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   learner.setProfile({
-    key: 'fh6:123:800:8000',
+    key: 'fh6:123:4:800:1:8:8000',
     gear: 2,
     shiftRpm: null,
     sampleCount: 3,
@@ -135,9 +135,9 @@ test('restores bounded partial evidence without marking it calibrated', () => {
 })
 
 test('uses RPM-rate lead for observed profiles', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   learner.setProfile({
-    key: 'fh6:123:800:8000',
+    key: 'fh6:123:4:800:1:8:8000',
     gear: 2,
     shiftRpm: 7600,
     sampleCount: 5,
@@ -148,7 +148,7 @@ test('uses RPM-rate lead for observed profiles', () => {
 })
 
 test('calibrates observed targets from clean full-throttle upshifts', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
 
   assert.equal(learner.update(frame()).status, 'learning')
   for (const gear of [1, 2, 3, 4, 5]) {
@@ -166,9 +166,9 @@ test('calibrates observed targets from clean full-throttle upshifts', () => {
 })
 
 test('restores a calibrated profile without a user-facing car card', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   learner.setProfile({
-    key: 'fh6:123:800:8000',
+    key: 'fh6:123:4:800:1:8:8000',
     gear: 3,
     shiftRpm: 7925,
     sampleCount: 5
@@ -179,9 +179,9 @@ test('restores a calibrated profile without a user-facing car card', () => {
 })
 
 test('keeps an optimal target only when the live gearbox matches', () => {
-  const matching = new ShiftLightLearner('fh6:123:800:8000')
+  const matching = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   matching.setProfile({
-    key: 'fh6:123:800:8000',
+    key: 'fh6:123:4:800:1:8:8000',
     gear: 2,
     shiftRpm: 7600,
     sampleCount: 40,
@@ -190,9 +190,9 @@ test('keeps an optimal target only when the live gearbox matches', () => {
   })
   validateStoredOptimalProfile(matching, 48)
 
-  const mismatching = new ShiftLightLearner('fh6:123:800:8000')
+  const mismatching = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   mismatching.setProfile({
-    key: 'fh6:123:800:8000',
+    key: 'fh6:123:4:800:1:8:8000',
     gear: 2,
     shiftRpm: 7600,
     sampleCount: 40,
@@ -207,9 +207,9 @@ test('keeps an optimal target only when the live gearbox matches', () => {
 })
 
 test('rejects an observed profile when the confirmed gearbox signature differs', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   learner.setProfile({
-    key: 'fh6:123:800:8000',
+    key: 'fh6:123:4:800:1:8:8000',
     gear: 2,
     shiftRpm: 7600,
     sampleCount: 5,
@@ -230,9 +230,9 @@ test('rejects an observed profile when the confirmed gearbox signature differs',
 })
 
 test('restores a tolerance-matched observed profile from the live gearbox', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   learner.setProfile({
-    key: 'fh6:123:800:8000',
+    key: 'fh6:123:4:800:1:8:8000',
     gear: 2,
     shiftRpm: 7600,
     sampleCount: 5,
@@ -252,9 +252,9 @@ test('restores a tolerance-matched observed profile from the live gearbox', () =
 })
 
 test('completes observed calibration restored from five merged samples', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   learner.setProfile({
-    key: 'fh6:123:800:8000',
+    key: 'fh6:123:4:800:1:8:8000',
     gear: 2,
     shiftRpm: null,
     sampleCount: 5,
@@ -275,14 +275,14 @@ test('completes observed calibration restored from five merged samples', () => {
 })
 
 test('migrates signed partial evidence when the gearbox signature expands', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   for (let sample = 0; sample < 20; sample += 1) {
     learner.update(ratioFrame(2, 60, 4000 + sample, 1000 + sample * 32))
     learner.update(ratioFrame(3, 48, 4000 + sample, 2000 + sample * 32))
     learner.update(ratioFrame(4, 42, 4000 + sample, 3000 + sample * 32))
   }
   learner.setProfile({
-    key: 'fh6:123:800:8000',
+    key: 'fh6:123:4:800:1:8:8000',
     gear: 2,
     shiftRpm: null,
     sampleCount: 1,
@@ -302,14 +302,14 @@ test('migrates signed partial evidence when the gearbox signature expands', () =
 })
 
 test('keeps the active signature through a small independent ratio change', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   for (let sample = 0; sample < 20; sample += 1) {
     learner.update(ratioFrame(2, 60, 4000 + sample, 1000 + sample * 32))
     learner.update(ratioFrame(3, 48, 4000 + sample, 2000 + sample * 32))
     learner.update(ratioFrame(4, 42, 4000 + sample, 3000 + sample * 32))
   }
   learner.setProfile({
-    key: 'fh6:123:800:8000',
+    key: 'fh6:123:4:800:1:8:8000',
     gear: 2,
     shiftRpm: null,
     sampleCount: 1,
@@ -331,9 +331,9 @@ test('keeps the active signature through a small independent ratio change', () =
 })
 
 test('projects the optimal cue while RPM is rising quickly', () => {
-  const learner = new ShiftLightLearner('fh6:123:800:8000')
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   learner.setProfile({
-    key: 'fh6:123:800:8000',
+    key: 'fh6:123:4:800:1:8:8000',
     gear: 2,
     shiftRpm: 7600,
     sampleCount: 40,

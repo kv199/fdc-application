@@ -28,11 +28,8 @@
   let profileMutationQueue = Promise.resolve()
   let resettingLearner = null
   let currentVariantId = null
-  let currentVariantStatus = 'provisional'
-  let variantRegistrationPending = false
-  let requestedVariantSignature = null
-  let variantResolutionPending = false
-  let lastVariantResolutionAt = 0
+  let currentGearCount = null
+  let configurationRegistrationPending = false
   let variantIdsByLearner = new WeakMap()
   let pendingProfilesByLearner = new WeakMap()
 
@@ -79,8 +76,8 @@
           pendingProfiles.set(profile.gear, profile)
           return undefined
         }
-        return invokeCommand('save_shift_light_profile', {
-          variantId: learnerVariantId,
+        return invokeCommand('save_shift_light_config_profile', {
+          configId: learnerVariantId,
           profile
         })
       }).catch(() => {})
@@ -98,12 +95,12 @@
     flushPendingProfiles(expectedLearner)
   }
 
-  function registerVariant(key, expectedLearner, gearboxSignature = null) {
-    if (!key) return Promise.resolve(null)
+  function registerConfiguration(key, expectedLearner, gearCount, gearboxSignature = null) {
+    if (!key || !Number.isInteger(gearCount) || gearCount < 1) return Promise.resolve(null)
     return enqueueProfileMutation(async () => {
-      const args = { key }
+      const args = { key, gearCount }
       if (gearboxSignature) args.gearboxSignature = gearboxSignature
-      const resolution = await invokeCommand('register_shift_light_variant', args)
+      const resolution = await invokeCommand('register_shift_light_config', args)
       if (
         !resolution
         || !Number.isInteger(resolution.variantId)
@@ -111,14 +108,13 @@
       variantIdsByLearner.set(expectedLearner, resolution.variantId)
       if (expectedLearner === learner) {
         currentVariantId = resolution.variantId
-        currentVariantStatus = resolution.status || 'provisional'
       }
       return resolution
     })
   }
 
-  function loadVariantProfiles(key, variantId, expectedLearner, requestedLoadGeneration) {
-    invokeCommand('load_shift_light_profiles', { key, variantId })
+  function loadConfigurationProfiles(key, configId, expectedLearner, requestedLoadGeneration) {
+    invokeCommand('load_shift_light_config_profiles', { key, configId })
       .then(profiles => {
         if (
           key !== currentKey
@@ -136,83 +132,61 @@
   function createLearner(key) {
     const localGeneration = ++generation
     const localLearner = new globalScope.HudShiftLight.ShiftLightLearner(key, {
+      onProgress: profile => persistProfile(profile, localLearner),
       onCalibrated: profile => {
         if (profile.method === 'optimal') persistProfile(profile, localLearner)
       },
-      onProgress: profile => persistProfile(profile, localLearner)
+      onGearboxChanged: signature => clearConfiguration(localLearner, signature)
     })
     learner = localLearner
     currentKey = key
     currentVariantId = null
-    currentVariantStatus = 'provisional'
-    requestedVariantSignature = null
-    variantResolutionPending = false
-    lastVariantResolutionAt = 0
+    currentGearCount = null
     variantIdsByLearner.set(localLearner, null)
     pendingProfilesByLearner.set(localLearner, new Map())
     latestState = localLearner.snapshot(latestTelemetry)
     publish(latestState)
 
-    variantRegistrationPending = true
-    registerVariant(key, localLearner)
-      .then(resolution => {
-        variantRegistrationPending = false
-        if (
-          !resolution
-          || key !== currentKey
-          || localGeneration !== generation
-          || localLearner !== learner
-        ) return
-        const requestedLoadGeneration = ++loadGeneration
-        loadVariantProfiles(key, resolution.variantId, localLearner, requestedLoadGeneration)
-        flushPendingProfiles(localLearner)
+    invokeCommand('get_latest_shift_light_config', { key })
+      .then(gearCount => {
+        if (key !== currentKey || localGeneration !== generation || localLearner !== learner) return
+        if (Number.isInteger(gearCount) && gearCount >= 1) activateConfiguration(key, localLearner, gearCount)
       })
-      .catch(() => {
-        variantRegistrationPending = false
-        // Learning remains available in memory when the local database is unavailable.
-      })
+      .catch(() => {})
   }
 
-  function syncVariantSignature(key, state, expectedLearner) {
-    const signature = typeof state?.gearboxSignature === 'string' && state.gearboxSignature.length > 0
-      ? state.gearboxSignature
-      : null
-    if (!signature || expectedLearner !== learner) return
-    const now = Date.now()
-    if (
-      variantResolutionPending
-      || signature === requestedVariantSignature
-        && (currentVariantStatus !== 'ambiguous' || now - lastVariantResolutionAt < 1000)
-    ) return
-
-    requestedVariantSignature = signature
-    lastVariantResolutionAt = now
-    variantResolutionPending = true
-    registerVariant(key, expectedLearner, signature)
+  function activateConfiguration(key, expectedLearner, gearCount) {
+    if (configurationRegistrationPending || expectedLearner !== learner) return
+    configurationRegistrationPending = true
+    const state = expectedLearner.snapshot(latestTelemetry)
+    const signature = typeof state?.gearboxSignature === 'string' ? state.gearboxSignature : null
+    registerConfiguration(key, expectedLearner, gearCount, signature)
       .then(resolution => {
-        variantResolutionPending = false
+        configurationRegistrationPending = false
         if (
           !resolution
           || key !== currentKey
           || expectedLearner !== learner
         ) return
-        currentVariantStatus = resolution.status || 'provisional'
-        if (resolution.status === 'ambiguous') {
-          variantIdsByLearner.set(expectedLearner, resolution.variantId)
-          currentVariantId = resolution.variantId
-          flushPendingProfiles(expectedLearner)
-          return
-        }
         variantIdsByLearner.set(expectedLearner, resolution.variantId)
         currentVariantId = resolution.variantId
+        currentGearCount = gearCount
         const requestedLoadGeneration = ++loadGeneration
-        loadVariantProfiles(key, resolution.variantId, expectedLearner, requestedLoadGeneration)
+        loadConfigurationProfiles(key, resolution.variantId, expectedLearner, requestedLoadGeneration)
         flushPendingProfiles(expectedLearner)
       })
       .catch(() => {
-        variantResolutionPending = false
-        // The live learner remains usable when the signed variant is not yet persisted.
+        configurationRegistrationPending = false
       })
+  }
+
+  function clearConfiguration(expectedLearner, signature) {
+    const configId = variantIdsByLearner.get(expectedLearner)
+    if (!configId) return
+    enqueueProfileMutation(() => invokeCommand('clear_shift_light_config', {
+      configId,
+      gearboxSignature: signature
+    })).catch(() => {})
   }
 
   function update(telemetry) {
@@ -225,23 +199,19 @@
 
     latestTelemetry = telemetry
     if (key !== currentKey || !learner) createLearner(key)
-    else if (!variantIdsByLearner.get(learner) && !variantRegistrationPending) {
-      const expectedLearner = learner
-      variantRegistrationPending = true
-      registerVariant(key, expectedLearner)
-        .then(resolution => {
-          variantRegistrationPending = false
-          if (!resolution || key !== currentKey || expectedLearner !== learner) return
-          const requestedLoadGeneration = ++loadGeneration
-          loadVariantProfiles(key, resolution.variantId, expectedLearner, requestedLoadGeneration)
-          flushPendingProfiles(expectedLearner)
-        })
-        .catch(() => {
-          variantRegistrationPending = false
-        })
+    let state = learner.update(telemetry)
+    const confirmedGearCount = Number.isInteger(state?.gearCount) ? state.gearCount : null
+    const observedGearCount = Number.isInteger(state?.observedGearCount) ? state.observedGearCount : 0
+    if (currentGearCount !== null && observedGearCount > currentGearCount) {
+      createLearner(key)
+      state = learner.update(telemetry)
+    } else if (confirmedGearCount !== null && confirmedGearCount !== currentGearCount) {
+      if (currentGearCount !== null) {
+        learner.clearConfiguration()
+        pendingProfilesByLearner.get(learner)?.clear()
+      }
+      activateConfiguration(key, learner, confirmedGearCount)
     }
-    const state = learner.update(telemetry)
-    syncVariantSignature(key, state, learner)
     return publish(state)
   }
 
@@ -264,15 +234,9 @@
     resettingLearner = currentLearner
     try {
       await enqueueProfileMutation(async () => {
-        let variantId = variantIdsByLearner.get(currentLearner) || null
-        if (!variantId) {
-          const resolution = await invokeCommand('register_shift_light_variant', { key })
-          variantId = resolution?.variantId || null
-          if (variantId) variantIdsByLearner.set(currentLearner, variantId)
-          currentVariantId = variantId
-        }
-        if (!variantId) throw new Error('Unable to resolve the active HUD variant')
-        return invokeCommand('reset_shift_light_profiles', { variantId })
+        const configId = variantIdsByLearner.get(currentLearner) || null
+        if (!configId) throw new Error('Drive to the confirmed top gear before resetting this calibration')
+        return invokeCommand('clear_shift_light_config', { configId })
       })
     } catch (error) {
       if (resettingLearner === currentLearner) resettingLearner = null
@@ -296,15 +260,13 @@
     generation += 1
     currentLearner.reset()
     currentVariantId = null
-    currentVariantStatus = 'provisional'
-    requestedVariantSignature = null
-    variantResolutionPending = false
+    currentGearCount = null
     variantIdsByLearner.set(currentLearner, null)
     const pendingProfiles = pendingProfilesByLearner.get(currentLearner)
     pendingProfiles?.clear()
     publish({ ...currentLearner.snapshot(latestTelemetry), phase: 'normal' })
     if (resettingLearner === currentLearner) resettingLearner = null
-    variantRegistrationPending = false
+    configurationRegistrationPending = false
     return publishResetResult({ ok: true, carKey: key })
   }
 
