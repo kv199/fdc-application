@@ -488,7 +488,8 @@
         const details = []
         if (id) details.push(`ID ${id}`)
         if (run?.laps?.length) details.push(`${run.laps.length} ${run.laps.length === 1 ? 'LAP' : 'LAPS'}`)
-        if (Number.isFinite(run?.finalTimeMs)) details.push(formatRunTime(run.finalTimeMs))
+        const savedTimeLabel = savedRunTimeLabel(run)
+        if (savedTimeLabel) details.push(savedTimeLabel)
         const message = `RUN SAVED${details.length ? ` · ${details.join(' · ')}` : ''}`
         setEventRecorderFeedback(message, 'saved')
         setStatus(message)
@@ -864,6 +865,22 @@
     const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0')
     const seconds = (totalSeconds - minutes * 60).toFixed(3).padStart(6, '0')
     return `${minutes}:${seconds}`
+  }
+
+  function latestPersistedLap(run) {
+    return (run?.laps || []).reduce((latest, lap) => {
+      const lapNumber = Number(lap?.lapNumber)
+      if (!Number.isFinite(lapNumber) || !Number.isFinite(lap?.timeMs)) return latest
+      return !latest || lapNumber > latest.lapNumber ? lap : latest
+    }, null)
+  }
+
+  function savedRunTimeLabel(run) {
+    if (run?.runType === 'sprint') {
+      return Number.isFinite(run.finalTimeMs) ? `RESULT ${formatRunTime(run.finalTimeMs)}` : null
+    }
+    const lap = latestPersistedLap(run)
+    return Number.isFinite(lap?.timeMs) ? `LAST ${formatRunTime(lap.timeMs)}` : null
   }
 
   function formatRunDate(value) {

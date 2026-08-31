@@ -74,7 +74,9 @@ available as the Events tab in Configuration, directly after Garage.
   second) for the official final result. It uses that result when available;
   otherwise it uses the last live race time as the manually confirmed result.
   Selecting **STOP** explicitly reports whether the attempt was saved,
-  discarded, or could not be stored.
+  discarded, or could not be stored. A saved circuit reports its latest stored
+  completed lap as **LAST**; a saved Sprint reports its stored final result as
+  **RESULT**. The feedback never uses the live clock after the game resets it.
 - **DELETE** asks for confirmation, then permanently removes the event and
   returns to the list.
 
