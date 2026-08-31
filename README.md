@@ -185,6 +185,18 @@ least five seconds. Do not repeat checks that already passed for the same
 final state. Run `npm ci` only when dependencies are not installed or
 dependency manifests have changed.
 
+## Release versioning
+
+`src-tauri/Cargo.toml` is the canonical application version. FDC increases the
+version component that matches the user impact—major for breaking changes,
+minor for new user-facing runtime features, and patch for fixes or safe UI and
+behavior improvements—without resetting the other components. For example, a
+feature changes `1.1.14` to `1.2.14`; a following fix changes it to `1.2.15`.
+
+Every runtime version bump also updates `src-tauri/Cargo.lock`, passes the
+release verification cycle, and is committed, pushed to `main`, and annotated
+as tag `vX.Y.Z`.
+
 ## Current limitations
 
 - FDC currently supports Forza Horizon 6 Direct Data Out on Windows.

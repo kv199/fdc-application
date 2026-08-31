@@ -18,6 +18,11 @@
   features require a minor bump; fixes and safe UI or behavior improvements
   require a patch bump; breaking compatibility, persistence, or contract
   changes require a major bump.
+- Never reset lower-order version components when bumping a release. For
+  example, a user-facing feature changes `1.1.14` to `1.2.14`, a subsequent
+  fix changes it to `1.2.15`, and a breaking change changes it to `2.2.15`.
+  This is an intentional FDC versioning rule and does not use SemVer's reset
+  convention.
 - Documentation-only changes, tests-only changes, and nonbehavioral refactors
   do not bump the release version.
 - Every version bump must update `src-tauri/Cargo.toml`, be reflected in
