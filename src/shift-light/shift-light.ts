@@ -10,6 +10,7 @@ export type ShiftLightStatus = 'fallback' | 'learning' | 'calibrated'
 export type ShiftLightPhase = 'normal' | 'approach' | 'shift'
 export type ShiftLightGearStatus = 'learning' | 'calibrated'
 export type ShiftLightMethod = 'observed' | 'optimal'
+export type GearboxValidation = 'validating' | 'verified' | 'checking' | null
 export type ShiftLightDiagnosticStatus
   = 'observed'
     | 'optimal'
@@ -65,6 +66,7 @@ export interface ShiftLightSnapshot {
   gearCount: number | null
   observedGearCount: number
   gearboxChanged: boolean
+  gearboxValidation: GearboxValidation
   gearboxSignature: string | null
   currentGear: number | null
   method: ShiftLightMethod | null
@@ -279,12 +281,10 @@ interface LimiterCandidate {
  */
 export class ShiftLightLearner {
   private readonly profiles = new Map<number, ShiftLightProfile>()
-  private readonly pendingOptimalProfiles = new Map<number, ShiftLightProfile>()
   private readonly samples = new Map<number, number[]>()
   private readonly observedGears = new Set<number>()
   private readonly optimalCandidates = new Map<number, OptimalShiftEstimate[]>()
   private readonly optimalEstimator = new OptimalShiftEstimator()
-  private readonly mismatchedOptimalGears = new Set<number>()
   private readonly storedGearboxSignatures = new Map<number, string | null>()
   private readonly terminalLimiterSamples = new Map<number, number>()
   private previous: Telemetry | null = null
@@ -352,11 +352,10 @@ export class ShiftLightLearner {
         this.observedGears.add(normalized.gear)
         continue
       }
-      if (normalized.method === 'optimal' && normalized.ratioDrop !== null) {
-        this.pendingOptimalProfiles.set(normalized.gear, normalized)
-      } else {
-        this.profiles.set(normalized.gear, normalized)
-      }
+      // A persisted optimal target is the best known result for this exact
+      // vehicle identity. Keep it active across restarts while fresh telemetry
+      // validates it in the background; validation must not turn the HUD blank.
+      this.profiles.set(normalized.gear, normalized)
       if (samples.length > 0) this.samples.set(normalized.gear, samples)
       if (normalized.gear > 0) this.observedGears.add(normalized.gear)
     }
@@ -368,11 +367,9 @@ export class ShiftLightLearner {
 
   reset(): void {
     this.profiles.clear()
-    this.pendingOptimalProfiles.clear()
     this.samples.clear()
     this.observedGears.clear()
     this.optimalCandidates.clear()
-    this.mismatchedOptimalGears.clear()
     this.storedGearboxSignatures.clear()
     this.dirtyGears.clear()
     this.optimalEstimator.reset()
@@ -413,7 +410,6 @@ export class ShiftLightLearner {
     this.optimalEstimator.ingest(telemetry)
     const detectedGearboxSignature = this.optimalEstimator.getGearboxSignature()
     if (detectedGearboxSignature) this.updateGearboxSignature(detectedGearboxSignature)
-    this.activateStoredOptimalProfiles()
     this.updateOptimalProfiles()
     this.updateRpmRate(previous, telemetry, wot, forward)
 
@@ -513,12 +509,11 @@ export class ShiftLightLearner {
     const activeStoredProfile = currentGear === null
       ? this.profiles.get(0)
       : this.profiles.get(currentGear) ?? this.profiles.get(0)
-    const activeProfile = activeStoredProfile && this.isGearboxCompatible(activeStoredProfile.gearboxSignature)
+    const activeProfile = activeStoredProfile && this.isProfileUsable(activeStoredProfile)
       ? activeStoredProfile
       : null
-    const currentSamples = currentGear === null || !this.isGearboxCompatible(this.storedGearboxSignatures.get(currentGear))
-      ? []
-      : this.samples.get(currentGear) ?? []
+    const currentSamples = currentGear === null ? [] : this.samples.get(currentGear) ?? []
+    const gearboxValidation = this.getGearboxValidation(currentGear, activeProfile)
     const status: ShiftLightStatus = activeProfile ? 'calibrated' : 'learning'
     const shiftRpm = activeProfile?.shiftRpm ?? null
     let phase = fallbackPhase(telemetry?.rpm ?? 0, telemetry?.rpmMax ?? 0)
@@ -556,6 +551,7 @@ export class ShiftLightLearner {
       gearCount: this.confirmedGearCount,
       observedGearCount: this.maxObservedGear,
       gearboxChanged: this.gearboxChanged,
+      gearboxValidation,
       gearboxSignature: this.gearboxSignature,
       currentGear,
       method: activeProfile?.method ?? null,
@@ -592,16 +588,15 @@ export class ShiftLightLearner {
     ])
     return [...gears].sort((left, right) => left - right).map((gear) => {
       const profile = this.profiles.get(gear)
-      const profileCompatible = !profile || this.isGearboxCompatible(profile.gearboxSignature)
-      const samplesCompatible = this.isGearboxCompatible(this.storedGearboxSignatures.get(gear))
-      const samples = samplesCompatible ? this.samples.get(gear) ?? [] : []
+      const profileUsable = this.isProfileUsable(profile)
+      const samples = this.samples.get(gear) ?? []
       return {
         gear,
-        status: profileCompatible && profile ? 'calibrated' : 'learning',
-        shiftRpm: profileCompatible ? profile?.shiftRpm ?? null : null,
-        sampleCount: profileCompatible && profile ? profile.sampleCount : samples.length,
-        method: profileCompatible ? profile?.method ?? null : null,
-        ratioDrop: profileCompatible ? profile?.ratioDrop ?? null : null
+        status: profileUsable && profile ? 'calibrated' : 'learning',
+        shiftRpm: profileUsable ? profile?.shiftRpm ?? null : null,
+        sampleCount: profileUsable && profile ? profile.sampleCount : samples.length,
+        method: profileUsable ? profile?.method ?? null : null,
+        ratioDrop: profileUsable ? profile?.ratioDrop ?? null : null
       }
     })
   }
@@ -611,7 +606,6 @@ export class ShiftLightLearner {
       ...this.observedGears,
       ...this.samples.keys(),
       ...this.profiles.keys(),
-      ...this.pendingOptimalProfiles.keys(),
       ...this.storedGearboxSignatures.keys()
     ])
     return [...gears]
@@ -619,20 +613,11 @@ export class ShiftLightLearner {
       .sort((left, right) => left - right)
       .map((gear) => {
         const storedProfile = this.profiles.get(gear)
-        const storedSignature = storedProfile
-          ? storedProfile.gearboxSignature
-          : this.storedGearboxSignatures.get(gear)
-        const compatible = this.isGearboxCompatible(storedSignature)
-        const profile = compatible ? storedProfile : undefined
+        const profile = this.isProfileUsable(storedProfile) ? storedProfile : undefined
         const diagnostics = this.optimalEstimator.diagnose(gear)
-        const storedRatioMismatch = profile?.method === 'optimal'
-          && typeof profile.ratioDrop === 'number'
-          && diagnostics.ratioDrop !== null
-          && Math.abs(diagnostics.ratioDrop - profile.ratioDrop) / profile.ratioDrop > 0.025
         let status: ShiftLightDiagnosticStatus
 
-        if (!compatible || storedRatioMismatch || this.mismatchedOptimalGears.has(gear)) status = 'gearbox-mismatch'
-        else if (profile?.method === 'optimal') status = 'optimal'
+        if (profile?.method === 'optimal') status = 'optimal'
         else if (diagnostics.powerBinCount === 0 || diagnostics.powerCurveCoverage < 0.9) status = 'waiting-for-wot'
         else if (
           diagnostics.currentRatioSamples < 20
@@ -649,23 +634,6 @@ export class ShiftLightLearner {
           method: profile?.method ?? null
         }
       })
-  }
-
-  private activateStoredOptimalProfiles(): void {
-    for (const [gear, profile] of this.pendingOptimalProfiles) {
-      if (!this.isGearboxCompatible(profile.gearboxSignature)) {
-        this.pendingOptimalProfiles.delete(gear)
-        this.mismatchedOptimalGears.add(gear)
-        continue
-      }
-      const ratio = this.optimalEstimator.getRatioDrop(gear)
-      if (!ratio || profile.ratioDrop === null || profile.ratioDrop === undefined) continue
-
-      this.pendingOptimalProfiles.delete(gear)
-      const relativeDifference = Math.abs(ratio.ratioDrop - profile.ratioDrop) / profile.ratioDrop
-      if (relativeDifference <= 0.025) this.profiles.set(gear, profile)
-      else this.mismatchedOptimalGears.add(gear)
-    }
   }
 
   private updateOptimalProfiles(): void {
@@ -686,7 +654,6 @@ export class ShiftLightLearner {
       const existing = this.profiles.get(gear)
       if (
         existing?.method === 'optimal'
-        && this.isGearboxCompatible(existing.gearboxSignature)
         && existing.shiftRpm !== null
         && Math.abs(existing.shiftRpm - target) < OPTIMAL_UPDATE_RPM
       ) continue
@@ -702,8 +669,6 @@ export class ShiftLightLearner {
         ratioDrop: latest.ratioDrop,
         gearboxSignature: this.gearboxSignature
       }
-      this.pendingOptimalProfiles.delete(gear)
-      this.mismatchedOptimalGears.delete(gear)
       this.profiles.set(gear, profile)
       this.options.onCalibrated?.(profile)
     }
@@ -806,9 +771,12 @@ export class ShiftLightLearner {
 
   private updateGearboxSignature(signature: string): void {
     if (this.gearboxSignature !== null && !signaturesAreCompatible(this.gearboxSignature, signature)) {
-      this.clearCalibrationForGearboxChange()
+      // Wheel-derived AWD ratios can legitimately float. A contradictory live
+      // signature is a diagnostic signal, never authorization to erase a
+      // persisted calibration. The cached target stays available until an
+      // explicit reset or a later, deliberate gearbox-generation workflow.
+      this.gearboxChanged = true
       this.gearboxSignature = signature
-      this.options.onGearboxChanged?.(signature)
       return
     }
     const nextSignature = mergeGearboxSignatures(this.gearboxSignature, signature)
@@ -821,6 +789,7 @@ export class ShiftLightLearner {
     const canMigrateEvidence = previousSignature !== null
       && isSignatureExtension(previousSignature, nextSignature)
     this.gearboxSignature = nextSignature
+    this.gearboxChanged = false
     const migratedGears = new Set<number>()
 
     if (canMigrateEvidence) {
@@ -828,13 +797,6 @@ export class ShiftLightLearner {
         if (profile.gearboxSignature !== previousSignature) continue
         const migrated = { ...profile, gearboxSignature: nextSignature }
         this.profiles.set(gear, migrated)
-        migratedGears.add(gear)
-        this.options.onProgress?.(migrated)
-      }
-      for (const [gear, profile] of this.pendingOptimalProfiles) {
-        if (profile.gearboxSignature !== previousSignature) continue
-        const migrated = { ...profile, gearboxSignature: nextSignature }
-        this.pendingOptimalProfiles.set(gear, migrated)
         migratedGears.add(gear)
         this.options.onProgress?.(migrated)
       }
@@ -868,10 +830,8 @@ export class ShiftLightLearner {
 
   private clearCalibrationForGearboxChange(): void {
     this.profiles.clear()
-    this.pendingOptimalProfiles.clear()
     this.samples.clear()
     this.optimalCandidates.clear()
-    this.mismatchedOptimalGears.clear()
     this.storedGearboxSignatures.clear()
     this.dirtyGears.clear()
     this.gearboxChanged = true
@@ -889,13 +849,6 @@ export class ShiftLightLearner {
       if (profile.gearboxSignature !== null && profile.gearboxSignature !== undefined) continue
       const bound = { ...profile, gearboxSignature: signature }
       this.profiles.set(gear, bound)
-      boundGears.add(gear)
-      this.options.onProgress?.(bound)
-    }
-    for (const [gear, profile] of this.pendingOptimalProfiles) {
-      if (profile.gearboxSignature !== null && profile.gearboxSignature !== undefined) continue
-      const bound = { ...profile, gearboxSignature: signature }
-      this.pendingOptimalProfiles.set(gear, bound)
       boundGears.add(gear)
       this.options.onProgress?.(bound)
     }
@@ -920,8 +873,29 @@ export class ShiftLightLearner {
   }
 
   private hasCompatibleProfile(gear: number): boolean {
-    const profile = this.profiles.get(gear)
-    return profile !== undefined && this.isGearboxCompatible(profile.gearboxSignature)
+    return this.isProfileUsable(this.profiles.get(gear))
+  }
+
+  private isProfileUsable(profile: ShiftLightProfile | undefined): boolean {
+    if (!profile) return false
+    // An observed target is weak, driver-dependent evidence and should be
+    // relearned when its gearbox evidence contradicts it. An optimal target is
+    // a persisted physics result: keep it visible and validate in background.
+    return profile.method === 'optimal' || this.isGearboxCompatible(profile.gearboxSignature)
+  }
+
+  private getGearboxValidation(
+    gear: number | null,
+    profile: ShiftLightProfile | null
+  ): GearboxValidation {
+    if (profile?.method !== 'optimal' || profile.ratioDrop === null || profile.ratioDrop === undefined) return null
+    if (this.gearboxChanged) return 'checking'
+    if (gear === null) return 'validating'
+    const liveRatio = this.optimalEstimator.getRatioDrop(gear)
+    if (!liveRatio) return 'validating'
+    const relativeDifference = Math.abs(liveRatio.ratioDrop - profile.ratioDrop) / profile.ratioDrop
+    if (relativeDifference > 0.025) return 'checking'
+    return this.gearboxSignature ? 'verified' : 'validating'
   }
 
   private hasContinuousTimestamp(previous: Telemetry, telemetry: Telemetry): boolean {

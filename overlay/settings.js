@@ -1913,9 +1913,13 @@
     shiftLightCurrentTarget.textContent = state.shiftRpm
       ? `${state.shiftRpm} RPM`
       : fallbackShiftRpm ? `FALLBACK · SHIFT AT ${fallbackShiftRpm} RPM` : 'FALLBACK'
-    const activeState = state.gearboxChanged
-      ? 'NEW GEARBOX · LEARNING'
-      : state.method?.toUpperCase() || state.status.toUpperCase()
+    const activeState = state.method === 'optimal' && state.gearboxValidation === 'validating'
+      ? 'OPTIMAL · VALIDATING'
+      : state.method === 'optimal' && state.gearboxValidation === 'checking'
+        ? 'OPTIMAL · GEARBOX CHECK'
+        : state.gearboxChanged
+          ? 'NEW GEARBOX · LEARNING'
+          : state.method?.toUpperCase() || state.status.toUpperCase()
     shiftLightState.textContent = `${activeState}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
     shiftLightGearRows.replaceChildren()
 

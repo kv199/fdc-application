@@ -128,12 +128,15 @@ kept in memory only and does not change the persistence format. Three similar
 estimates, within `100 RPM`, confirm an optimal profile. Its evidence value is
 bounded to 999.
 
-When a stored optimal profile is loaded, its live ratio drop must remain within
-`2.5%` relative difference. Otherwise the gear is reported as a gearbox
-mismatch instead of using the stored optimal target. A profile learned before
-the first live gearbox signature is bound to that first signature rather than
-being invalidated. A later compatible optimal estimate clears its stale
-gearbox-mismatch diagnostic.
+Stored optimal profiles are cache-first: the target is published immediately
+after loading and remains available while fresh telemetry validates it. Until a
+ratio for the active gear is available the state is `OPTIMAL · VALIDATING`.
+When that ratio differs from the stored ratio by more than `2.5%`, the state is
+`OPTIMAL · GEARBOX CHECK`; this is non-destructive and does not erase the saved
+target. A profile learned before the first live gearbox signature is bound to
+that first signature rather than being invalidated. `observed` profiles remain
+strict: confirmed incompatible gearbox evidence hides their target and returns
+the gear to learning.
 
 ## Visual behavior
 

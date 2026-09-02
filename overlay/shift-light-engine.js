@@ -453,12 +453,10 @@ var HudShiftLight = (() => {
     key;
     options;
     profiles = /* @__PURE__ */ new Map();
-    pendingOptimalProfiles = /* @__PURE__ */ new Map();
     samples = /* @__PURE__ */ new Map();
     observedGears = /* @__PURE__ */ new Set();
     optimalCandidates = /* @__PURE__ */ new Map();
     optimalEstimator = new OptimalShiftEstimator();
-    mismatchedOptimalGears = /* @__PURE__ */ new Set();
     storedGearboxSignatures = /* @__PURE__ */ new Map();
     terminalLimiterSamples = /* @__PURE__ */ new Map();
     previous = null;
@@ -512,11 +510,7 @@ var HudShiftLight = (() => {
           this.observedGears.add(normalized.gear);
           continue;
         }
-        if (normalized.method === "optimal" && normalized.ratioDrop !== null) {
-          this.pendingOptimalProfiles.set(normalized.gear, normalized);
-        } else {
-          this.profiles.set(normalized.gear, normalized);
-        }
+        this.profiles.set(normalized.gear, normalized);
         if (samples.length > 0) this.samples.set(normalized.gear, samples);
         if (normalized.gear > 0) this.observedGears.add(normalized.gear);
       }
@@ -526,11 +520,9 @@ var HudShiftLight = (() => {
     }
     reset() {
       this.profiles.clear();
-      this.pendingOptimalProfiles.clear();
       this.samples.clear();
       this.observedGears.clear();
       this.optimalCandidates.clear();
-      this.mismatchedOptimalGears.clear();
       this.storedGearboxSignatures.clear();
       this.dirtyGears.clear();
       this.optimalEstimator.reset();
@@ -568,7 +560,6 @@ var HudShiftLight = (() => {
       this.optimalEstimator.ingest(telemetry);
       const detectedGearboxSignature = this.optimalEstimator.getGearboxSignature();
       if (detectedGearboxSignature) this.updateGearboxSignature(detectedGearboxSignature);
-      this.activateStoredOptimalProfiles();
       this.updateOptimalProfiles();
       this.updateRpmRate(previous, telemetry, wot, forward);
       if (forward) {
@@ -642,8 +633,9 @@ var HudShiftLight = (() => {
       const identity = this.parseIdentity();
       const currentGear = telemetry && isForwardGear2(telemetry.gear) ? telemetry.gear : null;
       const activeStoredProfile = currentGear === null ? this.profiles.get(0) : this.profiles.get(currentGear) ?? this.profiles.get(0);
-      const activeProfile = activeStoredProfile && this.isGearboxCompatible(activeStoredProfile.gearboxSignature) ? activeStoredProfile : null;
-      const currentSamples = currentGear === null || !this.isGearboxCompatible(this.storedGearboxSignatures.get(currentGear)) ? [] : this.samples.get(currentGear) ?? [];
+      const activeProfile = activeStoredProfile && this.isProfileUsable(activeStoredProfile) ? activeStoredProfile : null;
+      const currentSamples = currentGear === null ? [] : this.samples.get(currentGear) ?? [];
+      const gearboxValidation = this.getGearboxValidation(currentGear, activeProfile);
       const status = activeProfile ? "calibrated" : "learning";
       const shiftRpm = activeProfile?.shiftRpm ?? null;
       let phase = fallbackPhase(telemetry?.rpm ?? 0, telemetry?.rpmMax ?? 0);
@@ -673,6 +665,7 @@ var HudShiftLight = (() => {
         gearCount: this.confirmedGearCount,
         observedGearCount: this.maxObservedGear,
         gearboxChanged: this.gearboxChanged,
+        gearboxValidation,
         gearboxSignature: this.gearboxSignature,
         currentGear,
         method: activeProfile?.method ?? null,
@@ -698,16 +691,15 @@ var HudShiftLight = (() => {
       ]);
       return [...gears].sort((left, right) => left - right).map((gear) => {
         const profile = this.profiles.get(gear);
-        const profileCompatible = !profile || this.isGearboxCompatible(profile.gearboxSignature);
-        const samplesCompatible = this.isGearboxCompatible(this.storedGearboxSignatures.get(gear));
-        const samples = samplesCompatible ? this.samples.get(gear) ?? [] : [];
+        const profileUsable = this.isProfileUsable(profile);
+        const samples = this.samples.get(gear) ?? [];
         return {
           gear,
-          status: profileCompatible && profile ? "calibrated" : "learning",
-          shiftRpm: profileCompatible ? profile?.shiftRpm ?? null : null,
-          sampleCount: profileCompatible && profile ? profile.sampleCount : samples.length,
-          method: profileCompatible ? profile?.method ?? null : null,
-          ratioDrop: profileCompatible ? profile?.ratioDrop ?? null : null
+          status: profileUsable && profile ? "calibrated" : "learning",
+          shiftRpm: profileUsable ? profile?.shiftRpm ?? null : null,
+          sampleCount: profileUsable && profile ? profile.sampleCount : samples.length,
+          method: profileUsable ? profile?.method ?? null : null,
+          ratioDrop: profileUsable ? profile?.ratioDrop ?? null : null
         };
       });
     }
@@ -716,19 +708,14 @@ var HudShiftLight = (() => {
         ...this.observedGears,
         ...this.samples.keys(),
         ...this.profiles.keys(),
-        ...this.pendingOptimalProfiles.keys(),
         ...this.storedGearboxSignatures.keys()
       ]);
       return [...gears].filter((gear) => gear > 0).sort((left, right) => left - right).map((gear) => {
         const storedProfile = this.profiles.get(gear);
-        const storedSignature = storedProfile ? storedProfile.gearboxSignature : this.storedGearboxSignatures.get(gear);
-        const compatible = this.isGearboxCompatible(storedSignature);
-        const profile = compatible ? storedProfile : void 0;
+        const profile = this.isProfileUsable(storedProfile) ? storedProfile : void 0;
         const diagnostics = this.optimalEstimator.diagnose(gear);
-        const storedRatioMismatch = profile?.method === "optimal" && typeof profile.ratioDrop === "number" && diagnostics.ratioDrop !== null && Math.abs(diagnostics.ratioDrop - profile.ratioDrop) / profile.ratioDrop > 0.025;
         let status;
-        if (!compatible || storedRatioMismatch || this.mismatchedOptimalGears.has(gear)) status = "gearbox-mismatch";
-        else if (profile?.method === "optimal") status = "optimal";
+        if (profile?.method === "optimal") status = "optimal";
         else if (diagnostics.powerBinCount === 0 || diagnostics.powerCurveCoverage < 0.9) status = "waiting-for-wot";
         else if (diagnostics.currentRatioSamples < 20 || diagnostics.nextRatioSamples < 20 || diagnostics.ratioDrop === null) status = "waiting-for-ratio";
         else if (diagnostics.targetRpm !== null) status = "confirming";
@@ -740,21 +727,6 @@ var HudShiftLight = (() => {
           method: profile?.method ?? null
         };
       });
-    }
-    activateStoredOptimalProfiles() {
-      for (const [gear, profile] of this.pendingOptimalProfiles) {
-        if (!this.isGearboxCompatible(profile.gearboxSignature)) {
-          this.pendingOptimalProfiles.delete(gear);
-          this.mismatchedOptimalGears.add(gear);
-          continue;
-        }
-        const ratio = this.optimalEstimator.getRatioDrop(gear);
-        if (!ratio || profile.ratioDrop === null || profile.ratioDrop === void 0) continue;
-        this.pendingOptimalProfiles.delete(gear);
-        const relativeDifference = Math.abs(ratio.ratioDrop - profile.ratioDrop) / profile.ratioDrop;
-        if (relativeDifference <= 0.025) this.profiles.set(gear, profile);
-        else this.mismatchedOptimalGears.add(gear);
-      }
     }
     updateOptimalProfiles() {
       for (const gear of this.observedGears) {
@@ -770,7 +742,7 @@ var HudShiftLight = (() => {
         const target = roundRpm(targetValues.reduce((sum, value) => sum + value, 0) / targetValues.length);
         const latest = candidates.at(-1);
         const existing = this.profiles.get(gear);
-        if (existing?.method === "optimal" && this.isGearboxCompatible(existing.gearboxSignature) && existing.shiftRpm !== null && Math.abs(existing.shiftRpm - target) < OPTIMAL_UPDATE_RPM) continue;
+        if (existing?.method === "optimal" && existing.shiftRpm !== null && Math.abs(existing.shiftRpm - target) < OPTIMAL_UPDATE_RPM) continue;
         const profile = {
           key: this.key,
           gear,
@@ -782,8 +754,6 @@ var HudShiftLight = (() => {
           ratioDrop: latest.ratioDrop,
           gearboxSignature: this.gearboxSignature
         };
-        this.pendingOptimalProfiles.delete(gear);
-        this.mismatchedOptimalGears.delete(gear);
         this.profiles.set(gear, profile);
         this.options.onCalibrated?.(profile);
       }
@@ -866,9 +836,8 @@ var HudShiftLight = (() => {
     }
     updateGearboxSignature(signature) {
       if (this.gearboxSignature !== null && !signaturesAreCompatible(this.gearboxSignature, signature)) {
-        this.clearCalibrationForGearboxChange();
+        this.gearboxChanged = true;
         this.gearboxSignature = signature;
-        this.options.onGearboxChanged?.(signature);
         return;
       }
       const nextSignature = mergeGearboxSignatures(this.gearboxSignature, signature);
@@ -877,19 +846,13 @@ var HudShiftLight = (() => {
       const unsignedEvidenceGears = previousSignature === null ? this.bindUnsignedEvidence(nextSignature) : /* @__PURE__ */ new Set();
       const canMigrateEvidence = previousSignature !== null && isSignatureExtension(previousSignature, nextSignature);
       this.gearboxSignature = nextSignature;
+      this.gearboxChanged = false;
       const migratedGears = /* @__PURE__ */ new Set();
       if (canMigrateEvidence) {
         for (const [gear, profile] of this.profiles) {
           if (profile.gearboxSignature !== previousSignature) continue;
           const migrated = { ...profile, gearboxSignature: nextSignature };
           this.profiles.set(gear, migrated);
-          migratedGears.add(gear);
-          this.options.onProgress?.(migrated);
-        }
-        for (const [gear, profile] of this.pendingOptimalProfiles) {
-          if (profile.gearboxSignature !== previousSignature) continue;
-          const migrated = { ...profile, gearboxSignature: nextSignature };
-          this.pendingOptimalProfiles.set(gear, migrated);
           migratedGears.add(gear);
           this.options.onProgress?.(migrated);
         }
@@ -921,10 +884,8 @@ var HudShiftLight = (() => {
     }
     clearCalibrationForGearboxChange() {
       this.profiles.clear();
-      this.pendingOptimalProfiles.clear();
       this.samples.clear();
       this.optimalCandidates.clear();
-      this.mismatchedOptimalGears.clear();
       this.storedGearboxSignatures.clear();
       this.dirtyGears.clear();
       this.gearboxChanged = true;
@@ -941,13 +902,6 @@ var HudShiftLight = (() => {
         if (profile.gearboxSignature !== null && profile.gearboxSignature !== void 0) continue;
         const bound = { ...profile, gearboxSignature: signature };
         this.profiles.set(gear, bound);
-        boundGears.add(gear);
-        this.options.onProgress?.(bound);
-      }
-      for (const [gear, profile] of this.pendingOptimalProfiles) {
-        if (profile.gearboxSignature !== null && profile.gearboxSignature !== void 0) continue;
-        const bound = { ...profile, gearboxSignature: signature };
-        this.pendingOptimalProfiles.set(gear, bound);
         boundGears.add(gear);
         this.options.onProgress?.(bound);
       }
@@ -969,8 +923,21 @@ var HudShiftLight = (() => {
       return normalized !== null && signaturesAreCompatible(this.gearboxSignature, normalized);
     }
     hasCompatibleProfile(gear) {
-      const profile = this.profiles.get(gear);
-      return profile !== void 0 && this.isGearboxCompatible(profile.gearboxSignature);
+      return this.isProfileUsable(this.profiles.get(gear));
+    }
+    isProfileUsable(profile) {
+      if (!profile) return false;
+      return profile.method === "optimal" || this.isGearboxCompatible(profile.gearboxSignature);
+    }
+    getGearboxValidation(gear, profile) {
+      if (profile?.method !== "optimal" || profile.ratioDrop === null || profile.ratioDrop === void 0) return null;
+      if (this.gearboxChanged) return "checking";
+      if (gear === null) return "validating";
+      const liveRatio = this.optimalEstimator.getRatioDrop(gear);
+      if (!liveRatio) return "validating";
+      const relativeDifference = Math.abs(liveRatio.ratioDrop - profile.ratioDrop) / profile.ratioDrop;
+      if (relativeDifference > 0.025) return "checking";
+      return this.gearboxSignature ? "verified" : "validating";
     }
     hasContinuousTimestamp(previous, telemetry) {
       const previousTimestampMs = previous.timestampMs;

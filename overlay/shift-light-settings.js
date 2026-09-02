@@ -10,6 +10,7 @@
     currentGear: null,
     gearCount: null,
     gearboxChanged: false,
+    gearboxValidation: null,
     method: null,
     gears: [],
     diagnostics: []
@@ -95,6 +96,9 @@
         ? state.gearCount
         : null,
       gearboxChanged: state.gearboxChanged === true,
+      gearboxValidation: ['validating', 'verified', 'checking'].includes(state.gearboxValidation)
+        ? state.gearboxValidation
+        : null,
       method: ['observed', 'optimal'].includes(state.method) ? state.method : null,
       gears,
       diagnostics

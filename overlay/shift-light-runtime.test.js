@@ -92,3 +92,31 @@ test('does not save a profile before the top-gear count is confirmed', async () 
 
   assert.equal(calls.some(call => call.command === 'save_shift_light_config_profile'), false)
 })
+
+test('publishes a stored optimal profile immediately after configuration load', async () => {
+  const { calls, runtime } = createRuntime({
+    latestGearCount: 6,
+    profiles: [{
+      key: 'fh6:123:4:800:1:8:8000',
+      gear: 3,
+      shiftRpm: 7600,
+      sampleCount: 40,
+      status: 'calibrated',
+      samples: [],
+      method: 'optimal',
+      ratioDrop: 0.8,
+      gearboxSignature: '2:0.8000|3:0.7000'
+    }]
+  })
+
+  runtime.update(frame({ gear: 3, rpm: 6500, timestampMs: 0 }))
+  await flushPromises()
+  await flushPromises()
+
+  const state = runtime.getState()
+  assert.equal(calls.some(call => call.command === 'load_shift_light_config_profiles'), true)
+  assert.equal(state.status, 'calibrated')
+  assert.equal(state.method, 'optimal')
+  assert.equal(state.shiftRpm, 7600)
+  assert.equal(state.gears.find(gear => gear.gear === 3)?.method, 'optimal')
+})

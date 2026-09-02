@@ -222,6 +222,60 @@ test('restores a calibrated profile without a user-facing car card', () => {
   assert.equal(learner.update(frame({ gear: 3, rpm: 7925 })).phase, 'shift')
 })
 
+test('uses a stored optimal profile before live gearbox evidence arrives', () => {
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
+  learner.setProfile({
+    key: 'fh6:123:4:800:1:8:8000',
+    gear: 2,
+    shiftRpm: 7600,
+    sampleCount: 40,
+    status: 'calibrated',
+    method: 'optimal',
+    ratioDrop: 0.8,
+    gearboxSignature: '2:0.8000|3:0.7000'
+  })
+
+  const snapshot = learner.update(frame({ gear: 2, rpm: 7000, timestampMs: 0 }))
+  assert.equal(snapshot.status, 'calibrated')
+  assert.equal(snapshot.method, 'optimal')
+  assert.equal(snapshot.shiftRpm, 7600)
+  assert.equal(snapshot.gearboxValidation, 'validating')
+  assert.deepEqual(snapshot.gears.find(gear => gear.gear === 2), {
+    gear: 2,
+    status: 'calibrated',
+    shiftRpm: 7600,
+    sampleCount: 40,
+    method: 'optimal',
+    ratioDrop: 0.8
+  })
+})
+
+test('keeps a cached optimal target visible after an incompatible live ratio appears', () => {
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
+  learner.setProfile({
+    key: 'fh6:123:4:800:1:8:8000',
+    gear: 2,
+    shiftRpm: 7600,
+    sampleCount: 40,
+    status: 'calibrated',
+    method: 'optimal',
+    ratioDrop: 0.8,
+    gearboxSignature: '2:0.8000|3:0.7000'
+  })
+
+  const beforeValidation = learner.update(frame({ gear: 2, rpm: 7000, timestampMs: 0 }))
+  assert.equal(beforeValidation.status, 'calibrated')
+  assert.equal(beforeValidation.shiftRpm, 7600)
+
+  validateStoredOptimalProfile(learner, 42)
+
+  const afterValidation = learner.snapshot(ratioFrame(2, 60, 7000, 3000))
+  assert.equal(afterValidation.status, 'calibrated')
+  assert.equal(afterValidation.method, 'optimal')
+  assert.equal(afterValidation.shiftRpm, 7600)
+  assert.equal(afterValidation.gearboxValidation, 'checking')
+})
+
 test('keeps an observed profile active when the first live gearbox signature appears', () => {
   const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   learner.setProfile({
@@ -245,7 +299,7 @@ test('keeps an observed profile active when the first live gearbox signature app
   assert.equal(snapshot.shiftRpm, 7600)
 })
 
-test('keeps an optimal target only when the live gearbox matches', () => {
+test('keeps a cached optimal target while the live gearbox is being checked', () => {
   const matching = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   matching.setProfile({
     key: 'fh6:123:4:800:1:8:8000',
@@ -269,11 +323,14 @@ test('keeps an optimal target only when the live gearbox matches', () => {
   validateStoredOptimalProfile(mismatching, 42)
 
   assert.equal(matching.snapshot(ratioFrame(2, 60, 7000, 3000)).method, 'optimal')
-  assert.equal(mismatching.snapshot(ratioFrame(2, 60, 7000, 3000)).status, 'learning')
-  assert.equal(mismatching.snapshot(ratioFrame(2, 60, 7000, 3000)).diagnostics.find(row => row.gear === 2).status, 'gearbox-mismatch')
+  const mismatchingSnapshot = mismatching.snapshot(ratioFrame(2, 60, 7000, 3000))
+  assert.equal(mismatchingSnapshot.status, 'calibrated')
+  assert.equal(mismatchingSnapshot.method, 'optimal')
+  assert.equal(mismatchingSnapshot.shiftRpm, 7600)
+  assert.equal(mismatchingSnapshot.gearboxValidation, 'checking')
 })
 
-test('rejects an observed profile when the confirmed gearbox signature differs', () => {
+test('hides an observed profile when the confirmed gearbox signature differs', () => {
   const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   learner.setProfile({
     key: 'fh6:123:4:800:1:8:8000',
@@ -293,7 +350,7 @@ test('rejects an observed profile when the confirmed gearbox signature differs',
   const snapshot = learner.snapshot(ratioFrame(2, 60, 7000, 4000))
   assert.equal(snapshot.gearboxSignature, '2:0.8000|3:0.8750')
   assert.equal(snapshot.status, 'learning')
-  assert.equal(snapshot.diagnostics.find(row => row.gear === 2).status, 'gearbox-mismatch')
+  assert.equal(snapshot.diagnostics.find(row => row.gear === 2).status, 'waiting-for-wot')
 })
 
 test('restores a tolerance-matched observed profile from the live gearbox', () => {

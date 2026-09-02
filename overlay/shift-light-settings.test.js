@@ -17,6 +17,7 @@ test('normalizes the per-gear shift-light diagnostic state', () => {
     currentGear: 3,
     gearCount: null,
     gearboxChanged: false,
+    gearboxValidation: 'verified',
     method: 'optimal',
     diagnostics: [{
       gear: 3,
@@ -54,6 +55,7 @@ test('normalizes the per-gear shift-light diagnostic state', () => {
     currentGear: 3,
     gearCount: null,
     gearboxChanged: false,
+    gearboxValidation: 'verified',
     method: 'optimal',
     diagnostics: [{
       gear: 3,
@@ -94,6 +96,7 @@ test('turns an unavailable or malformed state into a safe empty state', () => {
     currentGear: null,
     gearCount: null,
     gearboxChanged: false,
+    gearboxValidation: null,
     method: null,
     gears: [],
     diagnostics: []
