@@ -104,24 +104,36 @@ FDC supports two profile methods:
   driven-wheel angular speed, so it does not assume a final drive, tire radius,
   or drivetrain-efficiency value.
 
-The optimal estimator accepts power samples at throttle `≥ 0.95`, clutch `≤
-0.05`, positive power, and valid RPM data. Power is binned at `100 RPM`; a bin
-needs at least three samples. Ratio evidence uses forward gears, engine RPM
-at least `1200`, clutch `≤ 0.05`, and driven-wheel speed of at least `5 rad/s`.
-Both the current and next gear need at least 20 ratio samples. Valid ratio
-drops are bounded to `0.45` through `0.95`.
+The optimal estimator accepts clean power and wheel-ratio evidence only at
+full throttle (`≥ 0.95`), with clutch `≤ 0.05`, brake and handbrake released,
+positive power, valid RPM, and no excessive driven-wheel combined slip. Power
+is retained in bounded `200 RPM` bins; a bin needs two samples and uses its
+median instead of a single peak. Wheel-ratio evidence uses forward gears,
+engine RPM at least `1200`, and driven-wheel speed of at least `5 rad/s`.
+After five samples, ratio outliers more than `8%` from the running median are
+discarded. Both the current and next gear need at least 20 wheel-ratio samples.
+
+Completed clean upshifts also contribute the direct post-shift/source-peak RPM
+drop for their source gear. Three agreeing direct drops are preferred over the
+wheel-derived fallback, avoiding a persistent wheel-speed dependency during a
+pull. Valid ratio drops are bounded to `0.45` through `0.95`.
 
 An optimal target requires at least eight reliable power bins and reliable
 coverage through at least `90%` of `rpmMax`. Candidate targets are scanned in
 `25 RPM` steps from `65%` to `99%` of `rpmMax`; the first crossover is accepted
 after three consecutive confirming steps. If no crossover is found, a
-validated limiter target at `98%` of `rpmMax` can be used. Three similar
+validated limiter target at `98%` of `rpmMax` can be used. A confirmed live
+limiter observation lowers that fallback by `100 RPM` when necessary; it is
+kept in memory only and does not change the persistence format. Three similar
 estimates, within `100 RPM`, confirm an optimal profile. Its evidence value is
 bounded to 999.
 
 When a stored optimal profile is loaded, its live ratio drop must remain within
 `2.5%` relative difference. Otherwise the gear is reported as a gearbox
-mismatch instead of using the stored optimal target.
+mismatch instead of using the stored optimal target. A profile learned before
+the first live gearbox signature is bound to that first signature rather than
+being invalidated. A later compatible optimal estimate clears its stale
+gearbox-mismatch diagnostic.
 
 ## Visual behavior
 

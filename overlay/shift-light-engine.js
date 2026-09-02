@@ -30,10 +30,13 @@ var HudShiftLight = (() => {
   var FORWARD_GEAR_MIN = 1;
   var FORWARD_GEAR_MAX = 10;
   var WOT_THRESHOLD = 0.95;
-  var POWER_BIN_RPM = 100;
-  var MIN_POWER_SAMPLES = 3;
+  var POWER_BIN_RPM = 200;
+  var MIN_POWER_SAMPLES = 2;
+  var MAX_POWER_SAMPLES_PER_BIN = 24;
   var MAX_RATIO_SAMPLES = 240;
   var MIN_RATIO_SAMPLES = 20;
+  var MAX_DIRECT_RATIO_SAMPLES = 24;
+  var MIN_DIRECT_RATIO_SAMPLES = 3;
   var MIN_GEARBOX_SIGNATURE_DROPS = 2;
   var MAX_GEARBOX_SIGNATURE_DROPS = FORWARD_GEAR_MAX - FORWARD_GEAR_MIN;
   var GEARBOX_SIGNATURE_SCALE = 1e3;
@@ -41,15 +44,20 @@ var HudShiftLight = (() => {
   var MIN_DRIVEN_WHEEL_RAD_S = 5;
   var MIN_ENGINE_RPM = 1200;
   var MAX_CLUTCH = 0.05;
+  var MAX_BRAKE = 0.02;
+  var MAX_HANDBRAKE = 0.02;
+  var MAX_DRIVEN_COMBINED_SLIP = 0.2;
   var MIN_RATIO_DROP = 0.45;
   var MAX_RATIO_DROP = 0.95;
   var MIN_TARGET_RPM_FRACTION = 0.65;
   var MAX_TARGET_RPM_FRACTION = 0.99;
   var CURVE_COVERAGE_FRACTION = 0.9;
   var LIMITER_TARGET_FRACTION = 0.98;
+  var LIMITER_SAFETY_RPM = 100;
   var MAX_INTERPOLATION_GAP_RPM = POWER_BIN_RPM * 2;
   var TARGET_STEP_RPM = 25;
   var CROSSOVER_CONFIRM_STEPS = 3;
+  var RATIO_OUTLIER_FRACTION = 0.08;
   function isForwardGear(gear) {
     return Number.isFinite(gear) && gear >= FORWARD_GEAR_MIN && gear <= FORWARD_GEAR_MAX;
   }
@@ -68,9 +76,25 @@ var HudShiftLight = (() => {
     const average = values.reduce((sum, value) => sum + Math.abs(value), 0) / values.length;
     return average >= MIN_DRIVEN_WHEEL_RAD_S ? average : null;
   }
+  function drivenWheelValues(telemetry, values) {
+    return telemetry.car.drivetrain === 0 ? [values.fl, values.fr] : telemetry.car.drivetrain === 1 ? [values.rl, values.rr] : [values.fl, values.fr, values.rl, values.rr];
+  }
+  function hasCleanDriveEvidence(telemetry) {
+    if (Number.isFinite(telemetry.brake) && telemetry.brake > MAX_BRAKE) return false;
+    if (Number.isFinite(telemetry.handBrake) && telemetry.handBrake > MAX_HANDBRAKE) return false;
+    const slip = telemetry.combinedSlip;
+    if (!slip) return true;
+    const drivenSlip = drivenWheelValues(telemetry, slip);
+    return drivenSlip.every((value) => !Number.isFinite(value) || Math.abs(value) <= MAX_DRIVEN_COMBINED_SLIP);
+  }
+  function representativePower(bin) {
+    return median(bin.powers);
+  }
   var OptimalShiftEstimator = class {
     powerBins = /* @__PURE__ */ new Map();
     ratioSamples = /* @__PURE__ */ new Map();
+    directRatioDrops = /* @__PURE__ */ new Map();
+    limiterSamples = [];
     rpmMax = 0;
     ingest(telemetry) {
       if (Number.isFinite(telemetry.rpmMax) && telemetry.rpmMax > this.rpmMax) {
@@ -82,9 +106,35 @@ var HudShiftLight = (() => {
     reset() {
       this.powerBins.clear();
       this.ratioSamples.clear();
+      this.directRatioDrops.clear();
+      this.limiterSamples.length = 0;
       this.rpmMax = 0;
     }
+    /**
+     * A ratio measured across a completed upshift does not depend on tyre size,
+     * driven-wheel selection, or wheelspin during the pull. It is preferred once
+     * repeated clean shifts agree, while wheel-derived ratios remain a fallback.
+     */
+    observeUpshiftRatio(gear, ratioDrop) {
+      if (!isForwardGear(gear) || !Number.isFinite(ratioDrop)) return;
+      if (ratioDrop < MIN_RATIO_DROP || ratioDrop > MAX_RATIO_DROP) return;
+      const samples = this.directRatioDrops.get(gear) ?? [];
+      this.pushStableRatio(samples, ratioDrop, MAX_DIRECT_RATIO_SAMPLES);
+      this.directRatioDrops.set(gear, samples);
+    }
+    observeLimiter(rpm) {
+      if (!Number.isFinite(rpm) || rpm <= 0) return;
+      this.limiterSamples.push(rpm);
+      if (this.limiterSamples.length > 5) this.limiterSamples.shift();
+    }
     getRatioDrop(gear) {
+      const directSamples = this.directRatioDrops.get(gear) ?? [];
+      if (directSamples.length >= MIN_DIRECT_RATIO_SAMPLES && this.ratiosAreConsistent(directSamples)) {
+        const directRatioDrop = median(directSamples);
+        if (directRatioDrop !== null && directRatioDrop >= MIN_RATIO_DROP && directRatioDrop <= MAX_RATIO_DROP) {
+          return { ratioDrop: directRatioDrop, evidence: directSamples.length };
+        }
+      }
       const currentSamples = this.ratioSamples.get(gear) ?? [];
       const nextSamples = this.ratioSamples.get(gear + 1) ?? [];
       if (currentSamples.length < MIN_RATIO_SAMPLES || nextSamples.length < MIN_RATIO_SAMPLES) return null;
@@ -124,7 +174,11 @@ var HudShiftLight = (() => {
       const ratioDrop = rawRatioDrop !== null && rawRatioDrop >= MIN_RATIO_DROP && rawRatioDrop <= MAX_RATIO_DROP ? rawRatioDrop : null;
       const reliableBins = this.getReliablePowerBins();
       const highestReliableRpm = reliableBins.at(-1)?.[0] ?? 0;
-      const peakPower = reliableBins.reduce((best, candidate) => !best || candidate[1].maxPower > best[1].maxPower ? candidate : best, null);
+      const peakPower = reliableBins.reduce((best, candidate) => {
+        const candidatePower = representativePower(candidate[1]);
+        const bestPower = best ? representativePower(best[1]) : null;
+        return candidatePower !== null && (bestPower === null || candidatePower > bestPower) ? candidate : best;
+      }, null);
       const estimate = this.estimate(gear);
       const targetRpm = estimate?.shiftRpm ?? null;
       const postShiftRpm = targetRpm !== null && ratioDrop !== null ? targetRpm * ratioDrop : null;
@@ -154,9 +208,10 @@ var HudShiftLight = (() => {
       const highestReliableRpm = reliableBins.at(-1)[0];
       if (highestReliableRpm < this.rpmMax * CURVE_COVERAGE_FRACTION) return null;
       const firstCandidate = Math.round(this.rpmMax * MIN_TARGET_RPM_FRACTION / TARGET_STEP_RPM) * TARGET_STEP_RPM;
+      const limiterCap = this.getLimiterCap();
       const lastCandidate = Math.min(
         highestReliableRpm,
-        Math.floor(this.rpmMax * MAX_TARGET_RPM_FRACTION / TARGET_STEP_RPM) * TARGET_STEP_RPM
+        Math.floor(Math.min(this.rpmMax * MAX_TARGET_RPM_FRACTION, limiterCap) / TARGET_STEP_RPM) * TARGET_STEP_RPM
       );
       let confirmedSteps = 0;
       let firstCrossingRpm = null;
@@ -179,7 +234,7 @@ var HudShiftLight = (() => {
           };
         }
       }
-      const limiterTarget = Math.round(this.rpmMax * LIMITER_TARGET_FRACTION / TARGET_STEP_RPM) * TARGET_STEP_RPM;
+      const limiterTarget = Math.round(limiterCap / TARGET_STEP_RPM) * TARGET_STEP_RPM;
       if (highestReliableRpm >= limiterTarget && this.powerAt(limiterTarget, reliableBins) !== null && this.powerAt(limiterTarget * ratio.ratioDrop, reliableBins) !== null) {
         return {
           gear,
@@ -192,15 +247,16 @@ var HudShiftLight = (() => {
     }
     ingestRatio(telemetry) {
       if (!isForwardGear(telemetry.gear)) return;
+      if (!Number.isFinite(telemetry.throttle) || telemetry.throttle < WOT_THRESHOLD) return;
       if (!Number.isFinite(telemetry.rpm) || telemetry.rpm < MIN_ENGINE_RPM) return;
       if (!Number.isFinite(telemetry.clutch) || telemetry.clutch > MAX_CLUTCH) return;
+      if (!hasCleanDriveEvidence(telemetry)) return;
       const wheelSpeed = drivenWheelSpeed(telemetry);
       if (wheelSpeed === null) return;
       const ratio = telemetry.rpm / wheelSpeed;
       if (!Number.isFinite(ratio) || ratio <= 0) return;
       const samples = this.ratioSamples.get(telemetry.gear) ?? [];
-      samples.push(ratio);
-      if (samples.length > MAX_RATIO_SAMPLES) samples.shift();
+      this.pushStableRatio(samples, ratio, MAX_RATIO_SAMPLES);
       this.ratioSamples.set(telemetry.gear, samples);
     }
     ingestPower(telemetry) {
@@ -210,17 +266,34 @@ var HudShiftLight = (() => {
       if (!Number.isFinite(telemetry.rpm) || telemetry.rpm <= 0) return;
       if (!Number.isFinite(telemetry.rpmMax) || telemetry.rpmMax <= 0 || telemetry.rpm > telemetry.rpmMax * 1.05) return;
       if (!Number.isFinite(telemetry.power) || telemetry.power <= 0) return;
+      if (!hasCleanDriveEvidence(telemetry)) return;
       const rpmBin = Math.round(telemetry.rpm / POWER_BIN_RPM) * POWER_BIN_RPM;
       const existing = this.powerBins.get(rpmBin);
       if (existing) {
-        existing.maxPower = Math.max(existing.maxPower, telemetry.power);
-        existing.samples += 1;
+        existing.powers.push(telemetry.power);
+        if (existing.powers.length > MAX_POWER_SAMPLES_PER_BIN) existing.powers.shift();
       } else {
-        this.powerBins.set(rpmBin, { maxPower: telemetry.power, samples: 1 });
+        this.powerBins.set(rpmBin, { powers: [telemetry.power] });
       }
     }
     getReliablePowerBins() {
-      return [...this.powerBins.entries()].filter(([, bin]) => bin.samples >= MIN_POWER_SAMPLES && bin.maxPower > 0).sort(([left], [right]) => left - right);
+      return [...this.powerBins.entries()].filter(([, bin]) => bin.powers.length >= MIN_POWER_SAMPLES && (representativePower(bin) ?? 0) > 0).sort(([left], [right]) => left - right);
+    }
+    getLimiterCap() {
+      const fallback = this.rpmMax * LIMITER_TARGET_FRACTION;
+      const observedLimiter = median(this.limiterSamples);
+      if (observedLimiter === null) return fallback;
+      return Math.max(0, Math.min(fallback, observedLimiter - LIMITER_SAFETY_RPM));
+    }
+    pushStableRatio(samples, ratio, maximum) {
+      const baseline = samples.length >= 5 ? median(samples) : null;
+      if (baseline !== null && Math.abs(ratio - baseline) / baseline > RATIO_OUTLIER_FRACTION) return;
+      samples.push(ratio);
+      if (samples.length > maximum) samples.shift();
+    }
+    ratiosAreConsistent(samples) {
+      const baseline = median(samples);
+      return baseline !== null && samples.every((sample) => Math.abs(sample - baseline) / baseline <= RATIO_OUTLIER_FRACTION);
     }
     powerAt(rpm, bins) {
       let lower = null;
@@ -233,9 +306,12 @@ var HudShiftLight = (() => {
         }
       }
       if (!lower || !upper || upper[0] - lower[0] > MAX_INTERPOLATION_GAP_RPM) return null;
-      if (lower[0] === upper[0]) return lower[1].maxPower;
+      const lowerPower = representativePower(lower[1]);
+      const upperPower = representativePower(upper[1]);
+      if (lowerPower === null || upperPower === null) return null;
+      if (lower[0] === upper[0]) return lowerPower;
       const fraction = (rpm - lower[0]) / (upper[0] - lower[0]);
-      return lower[1].maxPower + (upper[1].maxPower - lower[1].maxPower) * fraction;
+      return lowerPower + (upperPower - lowerPower) * fraction;
     }
   };
 
@@ -504,6 +580,12 @@ var HudShiftLight = (() => {
         }
         if (transition && transition.peakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION) {
           if (!this.limiterCommitted) this.recordSample(transition.sourceGear, transition.peakRpm);
+          if (telemetry.gear === transition.sourceGear + 1 && telemetry.rpm > 0 && Number.isFinite(telemetry.clutch) && telemetry.clutch <= 0.05) {
+            this.optimalEstimator.observeUpshiftRatio(
+              transition.sourceGear,
+              telemetry.rpm / transition.peakRpm
+            );
+          }
           this.limiterCandidate = null;
         }
         this.pendingUpshift = null;
@@ -519,9 +601,12 @@ var HudShiftLight = (() => {
           this.limiterCandidate = null;
         }
         const rpmDrop = Math.max(MIN_RPM_DROP, telemetry.rpmMax * RPM_DROP_FRACTION);
-        if (!this.hasCompatibleProfile(telemetry.gear) && !this.limiterCommitted && this.pullPeakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION && this.pullPeakRpm - telemetry.rpm >= rpmDrop) {
+        if (!this.limiterCommitted && this.pullPeakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION && this.pullPeakRpm - telemetry.rpm >= rpmDrop) {
           if (this.limiterCandidate?.gear === telemetry.gear) {
-            this.recordSample(telemetry.gear, this.limiterCandidate.peakRpm);
+            if (!this.hasCompatibleProfile(telemetry.gear)) {
+              this.recordSample(telemetry.gear, this.limiterCandidate.peakRpm);
+            }
+            this.optimalEstimator.observeLimiter(this.limiterCandidate.peakRpm);
             this.recordTerminalLimiterEvidence(telemetry.gear);
             this.limiterCandidate = null;
             this.limiterCommitted = true;
@@ -698,6 +783,7 @@ var HudShiftLight = (() => {
           gearboxSignature: this.gearboxSignature
         };
         this.pendingOptimalProfiles.delete(gear);
+        this.mismatchedOptimalGears.delete(gear);
         this.profiles.set(gear, profile);
         this.options.onCalibrated?.(profile);
       }
@@ -788,6 +874,7 @@ var HudShiftLight = (() => {
       const nextSignature = mergeGearboxSignatures(this.gearboxSignature, signature);
       if (nextSignature === this.gearboxSignature) return;
       const previousSignature = this.gearboxSignature;
+      const unsignedEvidenceGears = previousSignature === null ? this.bindUnsignedEvidence(nextSignature) : /* @__PURE__ */ new Set();
       const canMigrateEvidence = previousSignature !== null && isSignatureExtension(previousSignature, nextSignature);
       this.gearboxSignature = nextSignature;
       const migratedGears = /* @__PURE__ */ new Set();
@@ -808,6 +895,7 @@ var HudShiftLight = (() => {
         }
       }
       for (const [gear, storedSignature] of this.storedGearboxSignatures) {
+        if (unsignedEvidenceGears.has(gear)) continue;
         if (canMigrateEvidence && storedSignature === previousSignature) {
           this.storedGearboxSignatures.set(gear, nextSignature);
           const samples = this.samples.get(gear);
@@ -840,6 +928,36 @@ var HudShiftLight = (() => {
       this.storedGearboxSignatures.clear();
       this.dirtyGears.clear();
       this.gearboxChanged = true;
+    }
+    /**
+     * Profiles may be learned before enough adjacent gears have been driven to
+     * create a gearbox signature. The first signature is evidence for that same
+     * live gearbox, not a tune change, so attach unsigned evidence instead of
+     * invalidating it.
+     */
+    bindUnsignedEvidence(signature) {
+      const boundGears = /* @__PURE__ */ new Set();
+      for (const [gear, profile] of this.profiles) {
+        if (profile.gearboxSignature !== null && profile.gearboxSignature !== void 0) continue;
+        const bound = { ...profile, gearboxSignature: signature };
+        this.profiles.set(gear, bound);
+        boundGears.add(gear);
+        this.options.onProgress?.(bound);
+      }
+      for (const [gear, profile] of this.pendingOptimalProfiles) {
+        if (profile.gearboxSignature !== null && profile.gearboxSignature !== void 0) continue;
+        const bound = { ...profile, gearboxSignature: signature };
+        this.pendingOptimalProfiles.set(gear, bound);
+        boundGears.add(gear);
+        this.options.onProgress?.(bound);
+      }
+      for (const [gear, storedSignature] of this.storedGearboxSignatures) {
+        if (storedSignature === null || storedSignature === void 0) {
+          this.storedGearboxSignatures.set(gear, signature);
+          boundGears.add(gear);
+        }
+      }
+      return boundGears;
     }
     clearConfiguration() {
       this.clearCalibrationForGearboxChange();

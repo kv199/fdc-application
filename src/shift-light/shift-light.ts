@@ -426,6 +426,17 @@ export class ShiftLightLearner {
       }
       if (transition && transition.peakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION) {
         if (!this.limiterCommitted) this.recordSample(transition.sourceGear, transition.peakRpm)
+        if (
+          telemetry.gear === transition.sourceGear + 1
+          && telemetry.rpm > 0
+          && Number.isFinite(telemetry.clutch)
+          && telemetry.clutch <= 0.05
+        ) {
+          this.optimalEstimator.observeUpshiftRatio(
+            transition.sourceGear,
+            telemetry.rpm / transition.peakRpm
+          )
+        }
         this.limiterCandidate = null
       }
 
@@ -445,13 +456,15 @@ export class ShiftLightLearner {
 
       const rpmDrop = Math.max(MIN_RPM_DROP, telemetry.rpmMax * RPM_DROP_FRACTION)
       if (
-        !this.hasCompatibleProfile(telemetry.gear)
-        && !this.limiterCommitted
+        !this.limiterCommitted
         && this.pullPeakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION
         && this.pullPeakRpm - telemetry.rpm >= rpmDrop
       ) {
         if (this.limiterCandidate?.gear === telemetry.gear) {
-          this.recordSample(telemetry.gear, this.limiterCandidate.peakRpm)
+          if (!this.hasCompatibleProfile(telemetry.gear)) {
+            this.recordSample(telemetry.gear, this.limiterCandidate.peakRpm)
+          }
+          this.optimalEstimator.observeLimiter(this.limiterCandidate.peakRpm)
           this.recordTerminalLimiterEvidence(telemetry.gear)
           this.limiterCandidate = null
           this.limiterCommitted = true
@@ -690,6 +703,7 @@ export class ShiftLightLearner {
         gearboxSignature: this.gearboxSignature
       }
       this.pendingOptimalProfiles.delete(gear)
+      this.mismatchedOptimalGears.delete(gear)
       this.profiles.set(gear, profile)
       this.options.onCalibrated?.(profile)
     }
@@ -801,6 +815,9 @@ export class ShiftLightLearner {
     if (nextSignature === this.gearboxSignature) return
 
     const previousSignature = this.gearboxSignature
+    const unsignedEvidenceGears = previousSignature === null
+      ? this.bindUnsignedEvidence(nextSignature)
+      : new Set<number>()
     const canMigrateEvidence = previousSignature !== null
       && isSignatureExtension(previousSignature, nextSignature)
     this.gearboxSignature = nextSignature
@@ -824,6 +841,7 @@ export class ShiftLightLearner {
     }
 
     for (const [gear, storedSignature] of this.storedGearboxSignatures) {
+      if (unsignedEvidenceGears.has(gear)) continue
       if (canMigrateEvidence && storedSignature === previousSignature) {
         this.storedGearboxSignatures.set(gear, nextSignature)
         const samples = this.samples.get(gear)
@@ -857,6 +875,37 @@ export class ShiftLightLearner {
     this.storedGearboxSignatures.clear()
     this.dirtyGears.clear()
     this.gearboxChanged = true
+  }
+
+  /**
+   * Profiles may be learned before enough adjacent gears have been driven to
+   * create a gearbox signature. The first signature is evidence for that same
+   * live gearbox, not a tune change, so attach unsigned evidence instead of
+   * invalidating it.
+   */
+  private bindUnsignedEvidence(signature: string): Set<number> {
+    const boundGears = new Set<number>()
+    for (const [gear, profile] of this.profiles) {
+      if (profile.gearboxSignature !== null && profile.gearboxSignature !== undefined) continue
+      const bound = { ...profile, gearboxSignature: signature }
+      this.profiles.set(gear, bound)
+      boundGears.add(gear)
+      this.options.onProgress?.(bound)
+    }
+    for (const [gear, profile] of this.pendingOptimalProfiles) {
+      if (profile.gearboxSignature !== null && profile.gearboxSignature !== undefined) continue
+      const bound = { ...profile, gearboxSignature: signature }
+      this.pendingOptimalProfiles.set(gear, bound)
+      boundGears.add(gear)
+      this.options.onProgress?.(bound)
+    }
+    for (const [gear, storedSignature] of this.storedGearboxSignatures) {
+      if (storedSignature === null || storedSignature === undefined) {
+        this.storedGearboxSignatures.set(gear, signature)
+        boundGears.add(gear)
+      }
+    }
+    return boundGears
   }
 
   clearConfiguration(): void {

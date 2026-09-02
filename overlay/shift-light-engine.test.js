@@ -43,6 +43,50 @@ function validateStoredOptimalProfile(learner, nextRatio) {
   }
 }
 
+function syntheticPower(rpm) {
+  return 300000 - 50 * Math.abs(rpm - 6000)
+}
+
+function feedSyntheticPowerCurve(learner, { polluted = false } = {}) {
+  for (let sample = 0; sample < 20; sample += 1) {
+    const timestampMs = 1000 + sample * 32
+    learner.update(ratioFrame(2, 60, 4000 + sample, timestampMs))
+    learner.update(ratioFrame(3, 48, 4000 + sample, timestampMs + 16))
+  }
+
+  let timestampMs = 3000
+  if (polluted) {
+    learner.update(frame({
+      gear: 2,
+      rpm: 6800,
+      power: 500000,
+      brake: 1,
+      wheelRotation: { fl: 6800 / 60, fr: 6800 / 60, rl: 6800 / 60, rr: 6800 / 60 },
+      timestampMs: timestampMs++
+    }))
+    learner.update(frame({
+      gear: 2,
+      rpm: 7000,
+      power: 500000,
+      combinedSlip: { fl: 2, fr: 2, rl: 2, rr: 2 },
+      wheelRotation: { fl: 7000 / 60, fr: 7000 / 60, rl: 7000 / 60, rr: 7000 / 60 },
+      timestampMs: timestampMs++
+    }))
+  }
+
+  for (let rpm = 4000; rpm <= 8000; rpm += 100) {
+    for (let sample = 0; sample < 3; sample += 1) {
+      learner.update(frame({
+        gear: 2,
+        rpm,
+        power: syntheticPower(rpm),
+        wheelRotation: { fl: rpm / 60, fr: rpm / 60, rl: rpm / 60, rr: rpm / 60 },
+        timestampMs: timestampMs++
+      }))
+    }
+  }
+}
+
 test('uses the car identity and limiter for the profile key', () => {
   assert.equal(getShiftLightCarKey(frame()), 'fh6:123:4:800:1:8:8000')
   assert.equal(getShiftLightCarKey(frame({ car: { ordinal: 0, pi: 800 } })), null)
@@ -176,6 +220,29 @@ test('restores a calibrated profile without a user-facing car card', () => {
 
   assert.equal(learner.update(frame({ gear: 3, rpm: 7700 })).status, 'calibrated')
   assert.equal(learner.update(frame({ gear: 3, rpm: 7925 })).phase, 'shift')
+})
+
+test('keeps an observed profile active when the first live gearbox signature appears', () => {
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
+  learner.setProfile({
+    key: 'fh6:123:4:800:1:8:8000',
+    gear: 2,
+    shiftRpm: 7600,
+    sampleCount: 5,
+    method: 'observed'
+  })
+
+  for (let sample = 0; sample < 20; sample += 1) {
+    const timestampMs = 1000 + sample * 32
+    learner.update(ratioFrame(2, 60, 4000 + sample, timestampMs))
+    learner.update(ratioFrame(3, 48, 4000 + sample, timestampMs + 8))
+    learner.update(ratioFrame(4, 42, 4000 + sample, timestampMs + 16))
+  }
+
+  const snapshot = learner.snapshot(ratioFrame(2, 60, 7000, 2000))
+  assert.equal(snapshot.status, 'calibrated')
+  assert.equal(snapshot.method, 'observed')
+  assert.equal(snapshot.shiftRpm, 7600)
 })
 
 test('keeps an optimal target only when the live gearbox matches', () => {
@@ -347,4 +414,31 @@ test('projects the optimal cue while RPM is rising quickly', () => {
 
   assert.equal(snapshot.shiftRpm, 7600)
   assert.equal(snapshot.phase, 'shift')
+})
+
+test('ignores brake and wheel-slip pollution when learning the power curve', () => {
+  const clean = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
+  const polluted = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
+
+  feedSyntheticPowerCurve(clean)
+  feedSyntheticPowerCurve(polluted, { polluted: true })
+
+  const cleanTarget = clean.snapshot(frame({ gear: 2, rpm: 6000 })).diagnostics.find(row => row.gear === 2)?.targetRpm
+  const pollutedTarget = polluted.snapshot(frame({ gear: 2, rpm: 6000 })).diagnostics.find(row => row.gear === 2)?.targetRpm
+  assert.equal(cleanTarget, 6725)
+  assert.equal(pollutedTarget, cleanTarget)
+})
+
+test('confirms a stable synthetic power crossover', () => {
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
+  feedSyntheticPowerCurve(learner)
+
+  const snapshot = learner.snapshot(frame({ gear: 2, rpm: 6000 }))
+  const gear = snapshot.gears.find(row => row.gear === 2)
+  const diagnostic = snapshot.diagnostics.find(row => row.gear === 2)
+  assert.equal(gear?.status, 'calibrated')
+  assert.equal(gear?.method, 'optimal')
+  assert.equal(gear?.shiftRpm, 6725)
+  assert.equal(diagnostic?.status, 'optimal')
+  assert.equal(diagnostic?.targetRpm, 6725)
 })

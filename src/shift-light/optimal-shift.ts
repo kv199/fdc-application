@@ -26,17 +26,19 @@ export interface OptimalShiftDiagnostics {
 }
 
 interface PowerBin {
-  maxPower: number
-  samples: number
+  powers: number[]
 }
 
 const FORWARD_GEAR_MIN = 1
 const FORWARD_GEAR_MAX = 10
 const WOT_THRESHOLD = 0.95
-const POWER_BIN_RPM = 100
-const MIN_POWER_SAMPLES = 3
+const POWER_BIN_RPM = 200
+const MIN_POWER_SAMPLES = 2
+const MAX_POWER_SAMPLES_PER_BIN = 24
 const MAX_RATIO_SAMPLES = 240
 const MIN_RATIO_SAMPLES = 20
+const MAX_DIRECT_RATIO_SAMPLES = 24
+const MIN_DIRECT_RATIO_SAMPLES = 3
 const MIN_GEARBOX_SIGNATURE_DROPS = 2
 const MAX_GEARBOX_SIGNATURE_DROPS = FORWARD_GEAR_MAX - FORWARD_GEAR_MIN
 const GEARBOX_SIGNATURE_SCALE = 1000
@@ -44,15 +46,20 @@ const GEARBOX_SIGNATURE_FORMAT_DECIMALS = 4
 const MIN_DRIVEN_WHEEL_RAD_S = 5
 const MIN_ENGINE_RPM = 1200
 const MAX_CLUTCH = 0.05
+const MAX_BRAKE = 0.02
+const MAX_HANDBRAKE = 0.02
+const MAX_DRIVEN_COMBINED_SLIP = 0.2
 const MIN_RATIO_DROP = 0.45
 const MAX_RATIO_DROP = 0.95
 const MIN_TARGET_RPM_FRACTION = 0.65
 const MAX_TARGET_RPM_FRACTION = 0.99
 const CURVE_COVERAGE_FRACTION = 0.90
 const LIMITER_TARGET_FRACTION = 0.98
+const LIMITER_SAFETY_RPM = 100
 const MAX_INTERPOLATION_GAP_RPM = POWER_BIN_RPM * 2
 const TARGET_STEP_RPM = 25
 const CROSSOVER_CONFIRM_STEPS = 3
+const RATIO_OUTLIER_FRACTION = 0.08
 
 function isForwardGear(gear: number): boolean {
   return Number.isFinite(gear) && gear >= FORWARD_GEAR_MIN && gear <= FORWARD_GEAR_MAX
@@ -81,6 +88,28 @@ function drivenWheelSpeed(telemetry: Telemetry): number | null {
   return average >= MIN_DRIVEN_WHEEL_RAD_S ? average : null
 }
 
+function drivenWheelValues(telemetry: Telemetry, values: { fl: number, fr: number, rl: number, rr: number }): number[] {
+  return telemetry.car.drivetrain === 0
+    ? [values.fl, values.fr]
+    : telemetry.car.drivetrain === 1
+      ? [values.rl, values.rr]
+      : [values.fl, values.fr, values.rl, values.rr]
+}
+
+function hasCleanDriveEvidence(telemetry: Telemetry): boolean {
+  if (Number.isFinite(telemetry.brake) && telemetry.brake > MAX_BRAKE) return false
+  if (Number.isFinite(telemetry.handBrake) && telemetry.handBrake > MAX_HANDBRAKE) return false
+
+  const slip = telemetry.combinedSlip
+  if (!slip) return true
+  const drivenSlip = drivenWheelValues(telemetry, slip)
+  return drivenSlip.every(value => !Number.isFinite(value) || Math.abs(value) <= MAX_DRIVEN_COMBINED_SLIP)
+}
+
+function representativePower(bin: PowerBin): number | null {
+  return median(bin.powers)
+}
+
 /**
  * Builds the two facts required for an acceleration-optimal upshift:
  *
@@ -95,6 +124,8 @@ function drivenWheelSpeed(telemetry: Telemetry): number | null {
 export class OptimalShiftEstimator {
   private readonly powerBins = new Map<number, PowerBin>()
   private readonly ratioSamples = new Map<number, number[]>()
+  private readonly directRatioDrops = new Map<number, number[]>()
+  private readonly limiterSamples: number[] = []
   private rpmMax = 0
 
   ingest(telemetry: Telemetry): void {
@@ -109,10 +140,39 @@ export class OptimalShiftEstimator {
   reset(): void {
     this.powerBins.clear()
     this.ratioSamples.clear()
+    this.directRatioDrops.clear()
+    this.limiterSamples.length = 0
     this.rpmMax = 0
   }
 
+  /**
+   * A ratio measured across a completed upshift does not depend on tyre size,
+   * driven-wheel selection, or wheelspin during the pull. It is preferred once
+   * repeated clean shifts agree, while wheel-derived ratios remain a fallback.
+   */
+  observeUpshiftRatio(gear: number, ratioDrop: number): void {
+    if (!isForwardGear(gear) || !Number.isFinite(ratioDrop)) return
+    if (ratioDrop < MIN_RATIO_DROP || ratioDrop > MAX_RATIO_DROP) return
+    const samples = this.directRatioDrops.get(gear) ?? []
+    this.pushStableRatio(samples, ratioDrop, MAX_DIRECT_RATIO_SAMPLES)
+    this.directRatioDrops.set(gear, samples)
+  }
+
+  observeLimiter(rpm: number): void {
+    if (!Number.isFinite(rpm) || rpm <= 0) return
+    this.limiterSamples.push(rpm)
+    if (this.limiterSamples.length > 5) this.limiterSamples.shift()
+  }
+
   getRatioDrop(gear: number): { ratioDrop: number, evidence: number } | null {
+    const directSamples = this.directRatioDrops.get(gear) ?? []
+    if (directSamples.length >= MIN_DIRECT_RATIO_SAMPLES && this.ratiosAreConsistent(directSamples)) {
+      const directRatioDrop = median(directSamples)
+      if (directRatioDrop !== null && directRatioDrop >= MIN_RATIO_DROP && directRatioDrop <= MAX_RATIO_DROP) {
+        return { ratioDrop: directRatioDrop, evidence: directSamples.length }
+      }
+    }
+
     const currentSamples = this.ratioSamples.get(gear) ?? []
     const nextSamples = this.ratioSamples.get(gear + 1) ?? []
     if (currentSamples.length < MIN_RATIO_SAMPLES || nextSamples.length < MIN_RATIO_SAMPLES) return null
@@ -160,9 +220,11 @@ export class OptimalShiftEstimator {
       : null
     const reliableBins = this.getReliablePowerBins()
     const highestReliableRpm = reliableBins.at(-1)?.[0] ?? 0
-    const peakPower = reliableBins.reduce<[number, PowerBin] | null>((best, candidate) => (
-      !best || candidate[1].maxPower > best[1].maxPower ? candidate : best
-    ), null)
+    const peakPower = reliableBins.reduce<[number, PowerBin] | null>((best, candidate) => {
+      const candidatePower = representativePower(candidate[1])
+      const bestPower = best ? representativePower(best[1]) : null
+      return candidatePower !== null && (bestPower === null || candidatePower > bestPower) ? candidate : best
+    }, null)
     const estimate = this.estimate(gear)
     const targetRpm = estimate?.shiftRpm ?? null
     const postShiftRpm = targetRpm !== null && ratioDrop !== null
@@ -202,9 +264,10 @@ export class OptimalShiftEstimator {
     // never precede the absolute power peak. Unusual multi-peak curves are
     // still decided by the same-power-at-the-same-road-speed comparison.
     const firstCandidate = Math.round(this.rpmMax * MIN_TARGET_RPM_FRACTION / TARGET_STEP_RPM) * TARGET_STEP_RPM
+    const limiterCap = this.getLimiterCap()
     const lastCandidate = Math.min(
       highestReliableRpm,
-      Math.floor(this.rpmMax * MAX_TARGET_RPM_FRACTION / TARGET_STEP_RPM) * TARGET_STEP_RPM
+      Math.floor(Math.min(this.rpmMax * MAX_TARGET_RPM_FRACTION, limiterCap) / TARGET_STEP_RPM) * TARGET_STEP_RPM
     )
     let confirmedSteps = 0
     let firstCrossingRpm: number | null = null
@@ -230,7 +293,7 @@ export class OptimalShiftEstimator {
       }
     }
 
-    const limiterTarget = Math.round(this.rpmMax * LIMITER_TARGET_FRACTION / TARGET_STEP_RPM) * TARGET_STEP_RPM
+    const limiterTarget = Math.round(limiterCap / TARGET_STEP_RPM) * TARGET_STEP_RPM
     if (
       highestReliableRpm >= limiterTarget
       && this.powerAt(limiterTarget, reliableBins) !== null
@@ -249,8 +312,10 @@ export class OptimalShiftEstimator {
 
   private ingestRatio(telemetry: Telemetry): void {
     if (!isForwardGear(telemetry.gear)) return
+    if (!Number.isFinite(telemetry.throttle) || telemetry.throttle < WOT_THRESHOLD) return
     if (!Number.isFinite(telemetry.rpm) || telemetry.rpm < MIN_ENGINE_RPM) return
     if (!Number.isFinite(telemetry.clutch) || telemetry.clutch > MAX_CLUTCH) return
+    if (!hasCleanDriveEvidence(telemetry)) return
 
     const wheelSpeed = drivenWheelSpeed(telemetry)
     if (wheelSpeed === null) return
@@ -258,8 +323,7 @@ export class OptimalShiftEstimator {
     if (!Number.isFinite(ratio) || ratio <= 0) return
 
     const samples = this.ratioSamples.get(telemetry.gear) ?? []
-    samples.push(ratio)
-    if (samples.length > MAX_RATIO_SAMPLES) samples.shift()
+    this.pushStableRatio(samples, ratio, MAX_RATIO_SAMPLES)
     this.ratioSamples.set(telemetry.gear, samples)
   }
 
@@ -270,21 +334,42 @@ export class OptimalShiftEstimator {
     if (!Number.isFinite(telemetry.rpm) || telemetry.rpm <= 0) return
     if (!Number.isFinite(telemetry.rpmMax) || telemetry.rpmMax <= 0 || telemetry.rpm > telemetry.rpmMax * 1.05) return
     if (!Number.isFinite(telemetry.power) || telemetry.power <= 0) return
+    if (!hasCleanDriveEvidence(telemetry)) return
 
     const rpmBin = Math.round(telemetry.rpm / POWER_BIN_RPM) * POWER_BIN_RPM
     const existing = this.powerBins.get(rpmBin)
     if (existing) {
-      existing.maxPower = Math.max(existing.maxPower, telemetry.power)
-      existing.samples += 1
+      existing.powers.push(telemetry.power)
+      if (existing.powers.length > MAX_POWER_SAMPLES_PER_BIN) existing.powers.shift()
     } else {
-      this.powerBins.set(rpmBin, { maxPower: telemetry.power, samples: 1 })
+      this.powerBins.set(rpmBin, { powers: [telemetry.power] })
     }
   }
 
   private getReliablePowerBins(): [number, PowerBin][] {
     return [...this.powerBins.entries()]
-      .filter(([, bin]) => bin.samples >= MIN_POWER_SAMPLES && bin.maxPower > 0)
+      .filter(([, bin]) => bin.powers.length >= MIN_POWER_SAMPLES && (representativePower(bin) ?? 0) > 0)
       .sort(([left], [right]) => left - right)
+  }
+
+  private getLimiterCap(): number {
+    const fallback = this.rpmMax * LIMITER_TARGET_FRACTION
+    const observedLimiter = median(this.limiterSamples)
+    if (observedLimiter === null) return fallback
+    return Math.max(0, Math.min(fallback, observedLimiter - LIMITER_SAFETY_RPM))
+  }
+
+  private pushStableRatio(samples: number[], ratio: number, maximum: number): void {
+    const baseline = samples.length >= 5 ? median(samples) : null
+    if (baseline !== null && Math.abs(ratio - baseline) / baseline > RATIO_OUTLIER_FRACTION) return
+    samples.push(ratio)
+    if (samples.length > maximum) samples.shift()
+  }
+
+  private ratiosAreConsistent(samples: number[]): boolean {
+    const baseline = median(samples)
+    return baseline !== null
+      && samples.every(sample => Math.abs(sample - baseline) / baseline <= RATIO_OUTLIER_FRACTION)
   }
 
   private powerAt(rpm: number, bins: [number, PowerBin][]): number | null {
@@ -298,9 +383,12 @@ export class OptimalShiftEstimator {
       }
     }
     if (!lower || !upper || upper[0] - lower[0] > MAX_INTERPOLATION_GAP_RPM) return null
-    if (lower[0] === upper[0]) return lower[1].maxPower
+    const lowerPower = representativePower(lower[1])
+    const upperPower = representativePower(upper[1])
+    if (lowerPower === null || upperPower === null) return null
+    if (lower[0] === upper[0]) return lowerPower
 
     const fraction = (rpm - lower[0]) / (upper[0] - lower[0])
-    return lower[1].maxPower + (upper[1].maxPower - lower[1].maxPower) * fraction
+    return lowerPower + (upperPower - lowerPower) * fraction
   }
 }
