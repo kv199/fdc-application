@@ -567,8 +567,9 @@ body.is-editing .coachbar {
 }
 
 .delta-strip {
+  --delta-user-scale: 1;
   width: 100%;
-  padding: 8px 12px 10px;
+  padding: calc(8px * var(--delta-user-scale)) calc(12px * var(--delta-user-scale)) calc(10px * var(--delta-user-scale));
   background: rgb(8 10 12 / 74%);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
@@ -590,10 +591,68 @@ body.is-editing .coachbar {
 .delta-strip__lap-time {
   flex: 0 0 auto;
   color: #f8fafc;
-  font-size: 15px;
+  font-size: calc(15px * var(--delta-user-scale));
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
+}
+
+.delta-strip__value {
+  display: block;
+  margin: calc(5px * var(--delta-user-scale)) auto calc(4px * var(--delta-user-scale));
+  color: #f8fafc;
+  font-size: calc(18px * var(--delta-user-scale));
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.delta-strip__value[data-tone='ahead'] {
+  color: var(--gas);
+}
+
+.delta-strip__value[data-tone='behind'] {
+  color: var(--brake);
+}
+
+.delta-strip__bar {
+  position: relative;
+  width: 100%;
+  height: calc(10px * var(--delta-user-scale));
+  overflow: hidden;
+  background: #030507;
+}
+
+.delta-strip__bar::before {
+  position: absolute;
+  inset: 0 auto 0 50%;
+  width: max(1px, calc(1px * var(--delta-user-scale)));
+  background: rgb(248 250 252 / 76%);
+  content: '';
+  transform: translateX(-50%);
+  z-index: 1;
+}
+
+.delta-strip__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: auto;
+  right: auto;
+  width: 0;
+}
+
+.delta-strip__bar[data-tone='ahead'] .delta-strip__fill {
+  left: 50%;
+  right: auto;
+  background: var(--gas);
+}
+
+.delta-strip__bar[data-tone='behind'] .delta-strip__fill {
+  left: auto;
+  right: 50%;
+  background: var(--brake);
 }
 
 /* Layout editor: Coach, Delta, and the telemetry HUD are independent targets. */
@@ -602,7 +661,7 @@ body.is-editing .coachbar {
   right: 0;
   bottom: 28px;
   left: 0;
-  width: min(1472px, calc(100vw - 16px));
+  width: min(calc(1472px * var(--delta-user-scale)), calc(100vw - 16px));
   height: calc(69px * var(--hud-scale));
   margin: 0 auto;
 }
@@ -746,7 +805,7 @@ body.is-editing .coachbar {
   }
 }
 
-.hud-resize-handle {
+.layout-resize-handle {
   position: absolute;
   z-index: 6;
   display: none;
@@ -760,29 +819,30 @@ body.is-editing .coachbar {
   touch-action: none;
 }
 
-.hud-frame.is-editing .hud-resize-handle {
+.hud-frame.is-editing .layout-resize-handle,
+.delta-strip.is-editing .layout-resize-handle {
   display: block;
 }
 
-.hud-resize-handle--top-left {
+.layout-resize-handle--top-left {
   top: -13px;
   left: -13px;
   cursor: nwse-resize;
 }
 
-.hud-resize-handle--top-right {
+.layout-resize-handle--top-right {
   top: -13px;
   right: -13px;
   cursor: nesw-resize;
 }
 
-.hud-resize-handle--bottom-left {
+.layout-resize-handle--bottom-left {
   bottom: -13px;
   left: -13px;
   cursor: nesw-resize;
 }
 
-.hud-resize-handle--bottom-right {
+.layout-resize-handle--bottom-right {
   right: -13px;
   bottom: -13px;
   cursor: nwse-resize;

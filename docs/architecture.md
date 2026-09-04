@@ -8,7 +8,7 @@ in the feature documents for [Garage](garage.md), [Asphalt Coach](asphalt-coach.
 
 FDC is a standalone Windows Tauri application for Forza Horizon 6. The
 repository owns the native Direct Data Out receiver and decoder, the browser
-overlay, Configuration, lap timing, Garage, Asphalt Coach, Shift Light, Events,
+overlay, Configuration, lap timing, Delta, Garage, Asphalt Coach, Shift Light, Events,
 and local HUD profile persistence.
 
 The runtime boundary ends at the local application. The current source of
@@ -30,18 +30,18 @@ Normalized telemetry
             |
             v
 queueTelemetry
-    |       |          |             |            |            |
-    v       v          v             v            v            v
-Telemetry  Lap timing  Garage         Asphalt      Shift Light  Events
-HUD                     |              Coach          |          |
-                        v                             v          v
-                    fdc.sqlite                     fdc.sqlite  fdc.sqlite
+    |       |          |       |             |            |            |
+    v       v          v       v             v            v            v
+Telemetry  Lap timing  Delta   Garage         Asphalt      Shift Light  Events
+HUD                         |                   Coach          |          |
+                            v                                  v          v
+                        fdc.sqlite                          fdc.sqlite  fdc.sqlite
 ```
 
 The native layer emits one normalized telemetry payload for each valid FH6
 packet. The browser overlay receives it through the `direct_telemetry` Tauri
 event and passes it to `queueTelemetry`. That function fans the sample out to
-the HUD renderer, lap timing, Garage, Asphalt Coach, Shift Light, and Events
+the HUD renderer, lap timing, Delta, Garage, Asphalt Coach, Shift Light, and Events
 runtime. The feature branches keep their own state; Garage, Shift Light, and
 Events write to the local SQLite profile store.
 
@@ -81,13 +81,16 @@ boundary.
 ## Browser overlay
 
 `overlay/index.html` is the static main-window entry point. It loads the
-telemetry route, display preferences, presentation, Coach, lap timing, layout,
+telemetry route, display preferences, presentation, Coach, lap timing, Delta, layout,
 HUD preference, Tauri event, Garage, Shift Light, and overlay modules in dependency
 order. The Tauri configuration uses `overlay/` as the frontend distribution.
 
 The main window is a transparent, always-on-top HUD positioned across the
 primary monitor. The browser layer renders the current telemetry HUD, lap time,
-Coach card, Garage persistence, and Shift Light presentation. It schedules visual updates through
+Delta, Coach card, Garage persistence, and Shift Light presentation. Delta is
+configured only when Event recording arms a saved Event reference; it reads the
+existing normalized telemetry stream and the Event's local best trace rather
+than a second transport. It schedules visual updates through
 `requestAnimationFrame`; the normalized sample remains the shared input rather
 than each feature subscribing to the UDP source independently.
 
@@ -139,10 +142,10 @@ requirements are documented in [Shift Light](shift-light.md).
 Configuration is a local Tauri settings window rather than a second runtime
 telemetry path. It provides:
 
-- overlay target editing for the Coach card, lap timer, and telemetry HUD;
-  the HUD can also be resized proportionally from any corner. Reset returns
-  the HUD to its responsive default size and position, while Coach and lap
-  timer reset only their positions;
+- overlay target editing for the Coach card, Delta, and telemetry HUD; Delta
+  and HUD can be resized proportionally from any corner. Reset returns each to
+  its responsive default size and position, while Coach resets only its
+  position;
 - visibility controls for the top-level overlay and HUD components;
 - speed-unit selection and Shift Light brightness;
 - standard minimize and maximize controls, a persisted Configuration

@@ -18,7 +18,6 @@ const coachbar = document.getElementById('coachbar')
 const coachKicker = document.getElementById('coach-kicker')
 const coachStatus = document.getElementById('coach-status')
 const deltaStrip = document.getElementById('delta-strip')
-const currentLapTime = document.getElementById('current-lap-time')
 const tireElements = {
   fl: document.getElementById('tire-fl'),
   fr: document.getElementById('tire-fr'),
@@ -46,7 +45,6 @@ const SHIFT_RPM_FRACTION = 0.98
 const ASPHALT_BRIEF_DURATION_MS = 25000
 
 let latestTelemetry = null
-let latestLiveLapTimeSeconds = null
 let lapTimingState = window.HudLapTiming.createState()
 let latestSteer = 0
 let renderScheduled = false
@@ -104,6 +102,8 @@ const eventRecorder = window.HudEventRecorder?.createEventRecorder?.({
   onSaved: payload => emitRecorderEvent('event_recorder_run_saved', payload),
   onResult: payload => emitRecorderEvent('event_recorder_result', payload)
 }) || null
+const deltaRuntime = window.HudDelta?.createDeltaRuntime?.() || null
+let deltaReferenceRequest = 0
 
 const steeringWheelImage = new Image()
 steeringWheelImage.addEventListener('load', () => {
@@ -221,29 +221,22 @@ function setRpmSignal(signal) {
   hud.dataset.signal = signal
 }
 
-function formatLapTime(secondsValue) {
-  const seconds = Number(secondsValue)
-  if (!Number.isFinite(seconds) || seconds < 0) return '--:--.---'
-
-  const minutes = Math.floor(seconds / 60)
-  const remainder = (seconds - minutes * 60).toFixed(3).padStart(6, '0')
-  return `${minutes}:${remainder}`
-}
-
 function renderCoach() {
   const hasAsphaltGuidance = latestAsphaltCoach.mode === 'cue' || latestAsphaltCoach.mode === 'brief'
   const hasAsphaltStatus = latestAsphaltCoach.mode === 'status'
     || (latestTelemetry?.isRaceOn === true && !hasAsphaltGuidance)
   const hasCoachGuidance = hasAsphaltGuidance || hasAsphaltStatus
   const isCoachEditing = window.HudLayout?.isEditing?.('coach') === true
+  const isDeltaEditing = window.HudLayout?.isEditing?.('delta') === true
   const isCoachVisible = window.HudPreferences?.isOverlayVisible?.('coach') !== false
   const isDeltaVisible = window.HudPreferences?.isOverlayVisible?.('delta') !== false
+  const hasDeltaReference = Boolean(deltaRuntime?.getState?.().reference)
   coachCard.dataset.hasCoachGuidance = hasCoachGuidance || isCoachEditing ? 'true' : 'false'
   coachCard.dataset.coachMode = hasAsphaltGuidance
     ? latestAsphaltCoach.mode
     : 'status'
   coachCard.hidden = !isCoachEditing && (!isCoachVisible || !hasCoachGuidance)
-  deltaStrip.hidden = !isDeltaVisible || latestTelemetry === null
+  deltaStrip.hidden = !isDeltaEditing && (!isDeltaVisible || !hasDeltaReference)
 
   if (hasAsphaltGuidance) {
     const cue = latestAsphaltCoach.cue
@@ -606,12 +599,6 @@ function drawHistory() {
 function renderTelemetry() {
   renderScheduled = false
   const telemetry = latestTelemetry
-  const timingPrefix = lapTimingState.phase === 'circuit_complete' || lapTimingState.phase === 'sprint_complete'
-    ? 'FINAL'
-    : lapTimingState.phase === 'paused'
-      ? 'PAUSED LAP'
-      : 'LIVE LAP'
-  currentLapTime.textContent = `${timingPrefix} ${formatLapTime(latestLiveLapTimeSeconds)}`
   if (!telemetry) {
     renderCoach()
     return
@@ -649,6 +636,7 @@ function queueTelemetry(telemetry) {
 
   garageRuntime?.update?.(telemetry)
   eventRecorder?.update?.(telemetry)
+  deltaRuntime?.update?.(telemetry)
   const shiftLightState = window.HudShiftLightRuntime?.update?.(telemetry)
   if (shiftLightState) queueShiftLight(shiftLightState)
   const previousTimingState = lapTimingState
@@ -659,9 +647,6 @@ function queueTelemetry(telemetry) {
     previousTimingState,
     telemetry
   })
-  const displayedTimeMs = window.HudLapTiming.displayTimeMs(lapTimingState)
-  if (displayedTimeMs !== null) latestLiveLapTimeSeconds = displayedTimeMs / 1000
-
   if (raceRestart) beginAsphaltAttempt()
   updateAsphaltCoach(telemetry, { presentationAttemptBegan: raceRestart })
   if (!raceRestart) handleAsphaltLapLifecycle(previousTimingState, previousLapNumber, telemetry)
@@ -682,7 +667,7 @@ function scheduleTelemetryRender() {
 
 function resetDirectPresentation() {
   latestTelemetry = null
-  latestLiveLapTimeSeconds = null
+  deltaRuntime?.update?.(null)
   resetAsphaltCoach('direct_restart')
   lapTimingState = window.HudLapTiming.resetForRestart()
   latestSteer = 0
@@ -835,11 +820,31 @@ async function listenEventRecorderEvents() {
     const payload = event?.payload || {}
     if (payload.action === 'record') {
       eventRecorder.arm(payload.eventId, payload.eventName, payload.armedAt)
+      void configureDeltaReference(payload.eventId)
     } else if (payload.action === 'stop') {
+      deltaReferenceRequest += 1
+      deltaRuntime?.clearReference?.()
+      scheduleTelemetryRender()
       void eventRecorder.stop()
     }
   })
   await eventApi.listen('event_recorder_status_request', () => eventRecorder.status({}, true))
+}
+
+async function configureDeltaReference(eventId) {
+  const request = ++deltaReferenceRequest
+  deltaRuntime?.clearReference?.()
+  try {
+    const reference = await invokeTauri('load_event_absolute_best', { eventId })
+    if (request !== deltaReferenceRequest) return
+    deltaRuntime?.setActiveEvent?.(reference)
+    scheduleTelemetryRender()
+  } catch (error) {
+    if (request !== deltaReferenceRequest) return
+    deltaRuntime?.clearReference?.()
+    scheduleTelemetryRender()
+    console.warn('[hud] unable to load Event delta reference', error)
+  }
 }
 
 async function retryDirectSource() {
@@ -966,7 +971,6 @@ function startDemo() {
     lap: { current: 50.123 },
     tireTempC: { fl: 79, fr: 84, rl: 77, rr: 77 }
   }
-  latestLiveLapTimeSeconds = latestTelemetry.lap.current
   setDemoCoach(demoCoach, false)
   setDemoSignal(demoSignal)
   renderTelemetry()

@@ -1194,6 +1194,33 @@ h1 {
   margin: 24px 0 16px;
 }
 
+.events-detail-view__absolute-best {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0;
+  padding: 12px 14px;
+  border: 1px solid rgb(192 132 252 / 44%);
+  background: rgb(192 132 252 / 7%);
+}
+
+.events-detail-view__absolute-best-label {
+  color: #a1a1aa;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.events-detail-view__absolute-best-value {
+  color: #c084fc;
+  font-size: 21px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
 .events-detail-view__title {
   width: fit-content;
   max-width: 100%;
@@ -1481,6 +1508,7 @@ h1 {
 
   .events-detail-view__summary,
   .events-detail-view__notes,
+  .events-detail-view__absolute-best,
   .events-run-view__meta,
   .events-run-view__metric {
     width: 100%;

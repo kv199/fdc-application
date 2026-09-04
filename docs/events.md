@@ -29,9 +29,12 @@ available as the Events tab in Configuration, directly after Garage.
 - An event page contains its controls, identity, and saved runs. Mode, Route
   Type, and Class appear beside the clickable title in one compact row when
   space permits; narrow layouts wrap that row below the title. Mode uses its
-  configured color, and Class uses the existing Garage class color. Notes, when
-  supplied, appear in their own framed area directly beneath that row. The
-  top-left **BACK** action and Escape both return to the Events list.
+  configured color, and Class uses the existing Garage class color. The same
+  row starts with the event's database ID as `#ID`. Notes, when supplied,
+  appear in their own framed area directly beneath that row. The page also
+  shows a purple **Absolute Best**: the quickest actual saved circuit lap or
+  confirmed Sprint result across that Event. The top-left **BACK** action and
+  Escape both return to the Events list.
 - Selecting the event title starts inline renaming. Enter or leaving the input
   saves a non-empty name; Escape cancels that rename without leaving the page.
 - An event page has one green **RECORD RUN** control. Selecting it changes the same
@@ -104,6 +107,15 @@ available as the Events tab in Configuration, directly after Garage.
 Events consumes the normalized Direct Data Out sample delivered through the
 shared browser `queueTelemetry` path. It does not read the game's result-screen
 UI or use a second telemetry source.
+
+When **Record Run** arms an Event with an Absolute Best trace, the browser
+Delta widget loads that Event's exact fastest saved result as its reference. In
+a live race it interpolates that trace's elapsed time at the current lap
+distance and shows current elapsed time minus reference elapsed time. Negative
+values are ahead and green; positive values are behind and red. The center-out
+bar reaches its corresponding edge at one second in either direction. An Event
+without a usable recorded reference leaves Delta inactive; stopping capture
+clears its reference.
 
 | Forza field | Current Events use |
 | --- | --- |
@@ -213,3 +225,4 @@ notes before storing them; empty notes are stored as absent.
 - `record_event_run`
 - `load_event_runs`
 - `load_event_run`
+- `load_event_absolute_best`

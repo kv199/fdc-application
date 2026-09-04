@@ -77,6 +77,7 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsHtml, /id="events-detail-title"/)
   assert.match(settingsHtml, /id="events-detail-summary"[^>]+aria-label="Event details"/)
   assert.match(settingsHtml, /id="events-detail-notes"[^>]+hidden/)
+  assert.match(settingsHtml, /id="events-detail-absolute-best"/)
   assert.doesNotMatch(settingsHtml, /id="events-detail-hint"|id="events-detail-card"|id="events-detail-metadata"/)
   assert.doesNotMatch(settingsHtml, /id="events-detail-archive"/)
   assert.match(settingsHtml, /id="events-detail-delete"/)
@@ -104,6 +105,8 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsJs, /eventsDetailNotes\.hidden = !event\.notes/)
   assert.doesNotMatch(settingsJs, /function renderEventDetail\([^]*renderEventCard\(event, true\)/)
   assert.match(settingsJs, /id\.textContent = `#\$\{event\.id\}`/)
+  assert.match(settingsJs, /function eventAbsoluteBestTimeMs\(/)
+  assert.match(settingsJs, /eventsDetailAbsoluteBest\.textContent = formatRunTime\(eventAbsoluteBestTimeMs\(\)\)/)
   assert.doesNotMatch(settingsJs, /events-card__image/)
   assert.doesNotMatch(settingsJs, /copyEventId|events-card__copy|clipboard\.writeText/)
   assert.match(settingsJs, /eventsView === 'detail'/)
@@ -135,6 +138,7 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsCss, /\.events-detail-view__badge--class\[data-event-class="S1"\][\s\S]*#c084fc/)
   assert.match(settingsCss, /\.events-run-table__time\[data-tone="best"\][\s\S]*#c084fc/)
   assert.match(settingsCss, /\.events-run-table__time\[data-tone="second"\][\s\S]*#69e83f/)
+  assert.match(settingsCss, /\.events-detail-view__absolute-best-value\s*\{[\s\S]*#c084fc/)
 })
 
 test('Event recorder uses the compact idle control and local run timestamps', () => {

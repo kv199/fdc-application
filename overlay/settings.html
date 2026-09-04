@@ -87,13 +87,13 @@
 
         <article class="layout-row" data-layout-target="delta">
           <div class="layout-row__content">
-            <h3>Lap Delta</h3>
-          <p>Place the live lap timer independently.</p>
+            <h3>Delta</h3>
+            <p>Move and resize the Event time comparison independently.</p>
           </div>
           <div class="layout-row__actions">
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
             <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
-            <button class="visibility-toggle" type="button" data-overlay-toggle="delta" aria-label="Toggle Lap Delta" aria-pressed="true">
+            <button class="visibility-toggle" type="button" data-overlay-toggle="delta" aria-label="Toggle Delta" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
           </div>
@@ -297,6 +297,10 @@
         <section id="events-detail-notes" class="events-detail-view__notes" aria-labelledby="events-detail-notes-label" hidden>
           <span id="events-detail-notes-label" class="events-detail-view__notes-label">NOTES</span>
           <p id="events-detail-notes-value" class="events-detail-view__notes-value"></p>
+        </section>
+        <section class="events-detail-view__absolute-best" aria-labelledby="events-detail-absolute-best-label">
+          <span id="events-detail-absolute-best-label" class="events-detail-view__absolute-best-label">ABSOLUTE BEST</span>
+          <output id="events-detail-absolute-best" class="events-detail-view__absolute-best-value">—</output>
         </section>
         <section class="event-recorder" aria-labelledby="event-recorder-title">
           <div class="event-recorder__heading">

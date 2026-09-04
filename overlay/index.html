@@ -29,16 +29,21 @@
       </div>
     </div>
 
-    <section id="delta-strip" class="delta-strip" aria-label="Lap time">
-      <div class="delta-strip__topline">
-        <output id="current-lap-time" class="delta-strip__lap-time" aria-label="Current lap time">LAP --:--.---</output>
+    <section id="delta-strip" class="delta-strip" aria-label="Lap delta">
+      <output id="delta-value" class="delta-strip__value" data-delta-value aria-label="Lap delta">&mdash;</output>
+      <div id="delta-bar" class="delta-strip__bar" data-delta-bar role="meter" aria-label="Lap delta bar" aria-valuemin="-1" aria-valuemax="1" aria-valuenow="0">
+        <div id="delta-fill" class="delta-strip__fill" data-delta-fill aria-hidden="true"></div>
       </div>
       <div id="delta-edit-tools" class="layout-edit-tools" hidden>
-        <span class="layout-edit__hint">DRAG LAP TIME</span>
+        <span class="layout-edit__hint">DRAG DELTA OR A CORNER TO RESIZE</span>
         <button id="delta-reset" class="layout-edit__button" type="button">RESET</button>
         <button id="delta-cancel" class="layout-edit__button" type="button">CANCEL</button>
         <button id="delta-save" class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>
       </div>
+      <button class="layout-resize-handle layout-resize-handle--top-left" type="button" data-layout-resize-target="delta" data-layout-resize-handle="top-left" aria-label="Resize Delta from top-left corner"></button>
+      <button class="layout-resize-handle layout-resize-handle--top-right" type="button" data-layout-resize-target="delta" data-layout-resize-handle="top-right" aria-label="Resize Delta from top-right corner"></button>
+      <button class="layout-resize-handle layout-resize-handle--bottom-left" type="button" data-layout-resize-target="delta" data-layout-resize-handle="bottom-left" aria-label="Resize Delta from bottom-left corner"></button>
+      <button class="layout-resize-handle layout-resize-handle--bottom-right" type="button" data-layout-resize-target="delta" data-layout-resize-handle="bottom-right" aria-label="Resize Delta from bottom-right corner"></button>
     </section>
 
     <div id="hud-frame" class="hud-frame">
@@ -105,10 +110,10 @@
         <button id="hud-cancel" class="layout-edit__button" type="button">CANCEL</button>
         <button id="hud-save" class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>
       </div>
-      <button class="hud-resize-handle hud-resize-handle--top-left" type="button" data-layout-resize-handle="top-left" aria-label="Resize HUD from top-left corner"></button>
-      <button class="hud-resize-handle hud-resize-handle--top-right" type="button" data-layout-resize-handle="top-right" aria-label="Resize HUD from top-right corner"></button>
-      <button class="hud-resize-handle hud-resize-handle--bottom-left" type="button" data-layout-resize-handle="bottom-left" aria-label="Resize HUD from bottom-left corner"></button>
-      <button class="hud-resize-handle hud-resize-handle--bottom-right" type="button" data-layout-resize-handle="bottom-right" aria-label="Resize HUD from bottom-right corner"></button>
+      <button class="layout-resize-handle layout-resize-handle--top-left" type="button" data-layout-resize-target="hud" data-layout-resize-handle="top-left" aria-label="Resize HUD from top-left corner"></button>
+      <button class="layout-resize-handle layout-resize-handle--top-right" type="button" data-layout-resize-target="hud" data-layout-resize-handle="top-right" aria-label="Resize HUD from top-right corner"></button>
+      <button class="layout-resize-handle layout-resize-handle--bottom-left" type="button" data-layout-resize-target="hud" data-layout-resize-handle="bottom-left" aria-label="Resize HUD from bottom-left corner"></button>
+      <button class="layout-resize-handle layout-resize-handle--bottom-right" type="button" data-layout-resize-target="hud" data-layout-resize-handle="bottom-right" aria-label="Resize HUD from bottom-right corner"></button>
     </div>
   </div>
 
@@ -120,6 +125,7 @@
   <script src="asphalt-coach-presentation.js"></script>
   <script src="asphalt-coach-lifecycle.js"></script>
   <script src="lap-timing.js"></script>
+  <script src="delta-runtime.js"></script>
   <script src="event-recorder.js"></script>
   <script src="coach-layout.js"></script>
   <script src="hud-preferences.js"></script>

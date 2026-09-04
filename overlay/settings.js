@@ -83,6 +83,7 @@
   const eventsDetailSummary = document.getElementById('events-detail-summary')
   const eventsDetailNotes = document.getElementById('events-detail-notes')
   const eventsDetailNotesValue = document.getElementById('events-detail-notes-value')
+  const eventsDetailAbsoluteBest = document.getElementById('events-detail-absolute-best')
   const eventsDetailDelete = document.getElementById('events-detail-delete')
   const eventsRunView = document.getElementById('events-run-view')
   const eventsRunBack = document.getElementById('events-run-back')
@@ -777,6 +778,7 @@
     renderEventIdentity(eventsDetailTitle, eventsDetailSummary, event)
     if (eventsDetailNotes) eventsDetailNotes.hidden = !event.notes
     if (eventsDetailNotesValue) eventsDetailNotesValue.textContent = event.notes || ''
+    renderEventAbsoluteBest()
     renderEventRecorder()
   }
 
@@ -947,6 +949,9 @@
     summaryElement.replaceChildren()
     summaryElement.dataset.eventId = event.id
     summaryElement.dataset.eventMode = eventModeKey(event.mode)
+    const id = document.createElement('span')
+    id.className = 'events-detail-view__badge events-detail-view__badge--id'
+    id.textContent = `#${event.id}`
     const mode = document.createElement('span')
     mode.className = 'events-detail-view__badge events-detail-view__badge--mode'
     mode.textContent = eventModeLabel(event.mode)
@@ -957,7 +962,7 @@
     eventClass.className = 'events-detail-view__badge events-detail-view__badge--class'
     eventClass.dataset.eventClass = eventText(event.eventClass).toUpperCase() || 'Any'
     eventClass.textContent = eventText(event.eventClass).toUpperCase() || 'ANY'
-    summaryElement.append(mode, route, eventClass)
+    summaryElement.append(id, mode, route, eventClass)
   }
 
   function runCarName(run) {
@@ -967,6 +972,18 @@
   function runBestTimeMs(run) {
     if (run?.runType === 'sprint') return run.finalTimeMs
     return run?.laps?.reduce((best, lap) => !best || lap.timeMs < best ? lap.timeMs : best, null)
+  }
+
+  function eventAbsoluteBestTimeMs(runs = currentEventRuns) {
+    return runs.reduce((best, run) => {
+      const time = runBestTimeMs(run)
+      return Number.isFinite(time) && (best === null || time < best) ? time : best
+    }, null)
+  }
+
+  function renderEventAbsoluteBest() {
+    if (!eventsDetailAbsoluteBest) return
+    eventsDetailAbsoluteBest.textContent = formatRunTime(eventAbsoluteBestTimeMs())
   }
 
   function distinctTimeRanks(values) {
@@ -1053,6 +1070,7 @@
   function renderEventRuns() {
     if (!eventRunsList) return
     eventRunsList.replaceChildren()
+    renderEventAbsoluteBest()
     updateEventRunSortButtons()
     const runs = [...currentEventRuns].sort(compareEventRuns)
     if (eventRunsEmpty) eventRunsEmpty.hidden = runs.length > 0

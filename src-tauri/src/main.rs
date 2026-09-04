@@ -1892,6 +1892,17 @@ struct EventRunRecord {
     laps: Vec<EventRunLap>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EventAbsoluteBestReference {
+    event_id: i64,
+    run_id: i64,
+    run_type: String,
+    lap_number: Option<i32>,
+    time_ms: i64,
+    trace_points: Vec<EventRunTracePoint>,
+}
+
 fn validate_event_choice(value: &str, field: &str, allowed: &[&str]) -> Result<(), String> {
     if allowed.contains(&value) {
         Ok(())
@@ -2362,6 +2373,91 @@ fn load_event_runs_from_connection(
         .collect()
 }
 
+fn load_event_absolute_best_from_connection(
+    connection: &Connection,
+    event_id: i64,
+) -> Result<Option<EventAbsoluteBestReference>, String> {
+    if event_id <= 0 {
+        return Err("Event ID must be positive".to_string());
+    }
+
+    let event_exists: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM events WHERE id = ?1)",
+            params![event_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("unable to verify Event: {error}"))?;
+    if !event_exists {
+        return Err(format!("Event {event_id} does not exist"));
+    }
+
+    // A circuit candidate is each saved completed lap. A sprint candidate is
+    // its confirmed final result; MIN(lap_number) is used only to locate the
+    // optional synthetic sprint trace row.
+    let candidate = connection
+        .query_row(
+            "WITH candidates AS (
+                SELECT event_runs.id AS run_id,
+                       event_runs.event_id AS event_id,
+                       event_runs.run_type AS run_type,
+                       event_run_laps.lap_number AS lap_number,
+                       event_run_laps.lap_time_ms AS time_ms
+                FROM event_runs
+                JOIN event_run_laps ON event_run_laps.run_id = event_runs.id
+                WHERE event_runs.event_id = ?1
+                  AND event_runs.run_type = 'circuit'
+                  AND event_runs.result = 'completed'
+                  AND event_run_laps.lap_time_ms > 0
+                UNION ALL
+                SELECT event_runs.id AS run_id,
+                       event_runs.event_id AS event_id,
+                       event_runs.run_type AS run_type,
+                       MIN(event_run_laps.lap_number) AS lap_number,
+                       event_runs.result_time_ms AS time_ms
+                FROM event_runs
+                LEFT JOIN event_run_laps ON event_run_laps.run_id = event_runs.id
+                WHERE event_runs.event_id = ?1
+                  AND event_runs.run_type = 'sprint'
+                  AND event_runs.result = 'confirmed'
+                  AND event_runs.result_time_ms > 0
+                GROUP BY event_runs.id
+            )
+            SELECT event_id, run_id, run_type, lap_number, time_ms
+            FROM candidates
+            ORDER BY time_ms ASC, run_id DESC, lap_number ASC
+            LIMIT 1",
+            params![event_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<i32>>(3)?,
+                    row.get::<_, i64>(4)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| format!("unable to load Event absolute best: {error}"))?;
+
+    let Some((event_id, run_id, run_type, lap_number, time_ms)) = candidate else {
+        return Ok(None);
+    };
+    let trace_points = lap_number
+        .map(|lap_number| event_run_trace_points_from_connection(connection, run_id, lap_number))
+        .transpose()?
+        .unwrap_or_default();
+    Ok(Some(EventAbsoluteBestReference {
+        event_id,
+        run_id,
+        run_type,
+        lap_number,
+        time_ms,
+        trace_points,
+    }))
+}
+
 fn record_event_run_in_connection(
     connection: &mut Connection,
     run: NewEventRun,
@@ -2478,6 +2574,15 @@ fn load_event_runs(app: AppHandle, event_id: Option<i64>) -> Result<Vec<EventRun
 fn load_event_run(app: AppHandle, run_id: i64) -> Result<EventRunRecord, String> {
     let connection = open_shift_light_db(&app)?;
     load_event_run_from_connection(&connection, run_id)
+}
+
+#[tauri::command]
+fn load_event_absolute_best(
+    app: AppHandle,
+    event_id: i64,
+) -> Result<Option<EventAbsoluteBestReference>, String> {
+    let connection = open_shift_light_db(&app)?;
+    load_event_absolute_best_from_connection(&connection, event_id)
 }
 
 #[tauri::command]
@@ -3675,6 +3780,7 @@ fn main() {
             record_event_run,
             load_event_runs,
             load_event_run,
+            load_event_absolute_best,
             record_garage_vehicle,
             load_garage_snapshot,
             load_garage,
@@ -4363,6 +4469,120 @@ mod tests {
                 .unwrap(),
             1
         );
+    }
+
+    #[test]
+    fn event_absolute_best_selects_fastest_lap_or_sprint_and_loads_its_trace() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Absolute best", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+
+        let trace = |distance: f64| EventRunTracePointInput {
+            sample_index: 0,
+            elapsed_ms: 500,
+            distance,
+            position_x: 1.0,
+            position_y: 2.0,
+            position_z: 3.0,
+            throttle: 0.75,
+            brake: 0.0,
+        };
+        let circuit = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![EventRunLapInput {
+                    lap_number: 1,
+                    lap_time_ms: 80_000,
+                    sector_1_time_ms: None,
+                    sector_2_time_ms: None,
+                    sector_3_time_ms: None,
+                    trace_points: vec![trace(100.0)],
+                }],
+            ),
+        )
+        .unwrap();
+        let sprint = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "sprint",
+                "confirmed",
+                Some(75_000),
+                vec![EventRunLapInput {
+                    lap_number: 1,
+                    lap_time_ms: 75_000,
+                    sector_1_time_ms: None,
+                    sector_2_time_ms: None,
+                    sector_3_time_ms: None,
+                    trace_points: vec![trace(150.0)],
+                }],
+            ),
+        )
+        .unwrap();
+        let sprint_best = load_event_absolute_best_from_connection(&connection, event.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(sprint_best.event_id, event.id);
+        assert_eq!(sprint_best.run_id, sprint.id);
+        assert_eq!(sprint_best.run_type, "sprint");
+        assert_eq!(sprint_best.lap_number, Some(1));
+        assert_eq!(sprint_best.time_ms, 75_000);
+        assert_eq!(sprint_best.trace_points.len(), 1);
+        assert_eq!(sprint_best.trace_points[0].distance, 150.0);
+
+        let faster_circuit = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![EventRunLapInput {
+                    lap_number: 1,
+                    lap_time_ms: 70_000,
+                    sector_1_time_ms: None,
+                    sector_2_time_ms: None,
+                    sector_3_time_ms: None,
+                    trace_points: vec![trace(200.0)],
+                }],
+            ),
+        )
+        .unwrap();
+        let circuit_best = load_event_absolute_best_from_connection(&connection, event.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(circuit_best.run_id, faster_circuit.id);
+        assert_eq!(circuit_best.run_type, "circuit");
+        assert_eq!(circuit_best.lap_number, Some(1));
+        assert_eq!(circuit_best.time_ms, 70_000);
+        assert_eq!(circuit_best.trace_points.len(), 1);
+        assert_eq!(circuit_best.trace_points[0].distance, 200.0);
+        assert_ne!(circuit_best.run_id, circuit.id);
+    }
+
+    #[test]
+    fn event_absolute_best_returns_none_for_event_without_saved_results() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("No best", "Any", "Asphalt", "Any", None),
+        )
+        .unwrap();
+        assert!(
+            load_event_absolute_best_from_connection(&connection, event.id)
+                .unwrap()
+                .is_none()
+        );
+        assert!(load_event_absolute_best_from_connection(&connection, 999).is_err());
     }
 
     #[test]

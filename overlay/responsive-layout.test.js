@@ -19,11 +19,12 @@ test('responsive HUD scale keeps the Engine layout readable through the intermed
   assert.equal(expectedScale(1600), 2)
 })
 
-test('HUD frame and Delta use the same responsive width and vertical scale anchor', () => {
+test('HUD frame and Delta keep responsive width while Delta has its own scale', () => {
   assert.match(overlayCss, /\.hud-frame[\s\S]*?width:\s*min\(1472px,\s*calc\(100vw - 16px\)\)/)
-  assert.match(overlayCss, /\.delta-strip[\s\S]*?width:\s*min\(1472px,\s*calc\(100vw - 16px\)\)/)
+  assert.match(overlayCss, /\.delta-strip[\s\S]*?width:\s*min\(calc\(1472px \* var\(--delta-user-scale\)\),\s*calc\(100vw - 16px\)\)/)
   assert.match(overlayCss, /bottom:\s*calc\(38px \+ 69px \* var\(--hud-scale\)\)/)
 
   const layoutSource = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
-  assert.match(layoutSource, /elements\.delta\.style\.width = `\$\{Math\.round\(hudRect\.width\)\}px`/)
+  assert.match(layoutSource, /elements\.delta\.style\.setProperty\('--delta-user-scale'/)
+  assert.doesNotMatch(layoutSource, /elements\.delta\.style\.width =/)
 })

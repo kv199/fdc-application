@@ -3,9 +3,9 @@
 
   const STORAGE_KEY = 'fdc.layout.v1'
   const TARGET_NAMES = ['coach', 'delta', 'hud']
-  const HUD_DEFAULT_SIZE = 0
-  const MIN_HUD_SIZE = 0.5
-  const MAX_HUD_SIZE = 2
+  const DEFAULT_SIZE = 0
+  const MIN_WIDGET_SIZE = 0.5
+  const MAX_WIDGET_SIZE = 2
 
   function clamp(value, minimum, maximum) {
     const number = Number(value)
@@ -26,10 +26,10 @@
     return safePosition || { x: 0, y: 0 }
   }
 
-  function sanitizeHudSize(raw) {
+  function sanitizeWidgetSize(raw) {
     const size = Number(raw)
-    if (!Number.isFinite(size) || size <= HUD_DEFAULT_SIZE) return HUD_DEFAULT_SIZE
-    return clamp(size, MIN_HUD_SIZE, MAX_HUD_SIZE)
+    if (!Number.isFinite(size) || size <= DEFAULT_SIZE) return DEFAULT_SIZE
+    return clamp(size, MIN_WIDGET_SIZE, MAX_WIDGET_SIZE)
   }
 
   function getViewport() {
@@ -62,7 +62,7 @@
           const position = sanitizePosition(raw[name])
           if (position) {
             result[name] = position
-            if (name === 'hud') result[name].size = sanitizeHudSize(raw[name].size)
+            if (name === 'hud' || name === 'delta') result[name].size = sanitizeWidgetSize(raw[name].size)
           }
           return result
         }, {})
@@ -78,7 +78,7 @@
       const safePositions = TARGET_NAMES.reduce((result, name) => {
         if (positions[name]) {
           result[name] = clampPosition(positions[name])
-          if (name === 'hud') result[name].size = sanitizeHudSize(positions[name].size)
+          if (name === 'hud' || name === 'delta') result[name].size = sanitizeWidgetSize(positions[name].size)
         }
         return result
       }, {})
@@ -152,37 +152,41 @@
       if (!hudRect.width || !hudRect.height) return
       elements.hud.style.width = `${Math.round(hudRect.width)}px`
       elements.hud.style.height = `${Math.round(hudRect.height)}px`
-      elements.delta.style.width = `${Math.round(hudRect.width)}px`
     }
 
-    function getHudSize() {
-      return sanitizeHudSize(positions.hud?.size)
+    function getWidgetSize(name) {
+      return sanitizeWidgetSize(positions[name]?.size)
     }
 
-    function getHudScaleFactor() {
-      const size = getHudSize()
-      return size === HUD_DEFAULT_SIZE ? 1 : size
+    function getWidgetScaleFactor(name) {
+      const size = getWidgetSize(name)
+      return size === DEFAULT_SIZE ? 1 : size
     }
 
     function applyHudSize() {
-      hud.style.setProperty('--hud-user-scale', String(getHudScaleFactor()))
+      hud.style.setProperty('--hud-user-scale', String(getWidgetScaleFactor('hud')))
     }
 
-    function getHudBaseSize() {
-      const rendered = getElementSize(hud, getFallbackSize('hud', getViewport()))
-      const factor = getHudScaleFactor()
+    function applyDeltaSize() {
+      elements.delta.style.setProperty('--delta-user-scale', String(getWidgetScaleFactor('delta')))
+    }
+
+    function getWidgetBaseSize(name) {
+      const element = name === 'hud' ? hud : elements.delta
+      const rendered = getElementSize(element, getFallbackSize(name, getViewport()))
+      const factor = getWidgetScaleFactor(name)
       return {
         width: factor > 0 ? rendered.width / factor : rendered.width,
         height: factor > 0 ? rendered.height / factor : rendered.height
       }
     }
 
-    function getMaximumHudSize() {
+    function getMaximumWidgetSize(name) {
       const viewport = getViewport()
-      const baseSize = getHudBaseSize()
-      const widthLimit = baseSize.width > 0 ? viewport.width / baseSize.width : MAX_HUD_SIZE
-      const heightLimit = baseSize.height > 0 ? viewport.height / baseSize.height : MAX_HUD_SIZE
-      return Math.max(MIN_HUD_SIZE, Math.min(MAX_HUD_SIZE, widthLimit, heightLimit))
+      const baseSize = getWidgetBaseSize(name)
+      const widthLimit = baseSize.width > 0 ? viewport.width / baseSize.width : MAX_WIDGET_SIZE
+      const heightLimit = baseSize.height > 0 ? viewport.height / baseSize.height : MAX_WIDGET_SIZE
+      return Math.max(MIN_WIDGET_SIZE, Math.min(MAX_WIDGET_SIZE, widthLimit, heightLimit))
     }
 
     function getFallbackSize(name, viewport) {
@@ -221,7 +225,7 @@
         x: available.width > 0 ? clamp(anchor.left / available.width, 0, 1) : 0,
         y: available.height > 0 ? clamp(anchor.top / available.height, 0, 1) : 0
       }
-      if (name === 'hud') positions[name].size = HUD_DEFAULT_SIZE
+      if (name === 'hud' || name === 'delta') positions[name].size = DEFAULT_SIZE
       return positions[name]
     }
 
@@ -230,6 +234,7 @@
       if (element.hidden && name !== editingTarget) return
 
       if (name === 'hud') applyHudSize()
+      if (name === 'delta') applyDeltaSize()
 
       const viewport = getViewport()
       const elementSize = getElementSize(element, getFallbackSize(name, viewport))
@@ -244,6 +249,7 @@
 
     function refreshLayout() {
       applyHudSize()
+      applyDeltaSize()
       syncHudFrameSize()
       applyPosition('hud')
       syncHudFrameSize()
@@ -253,7 +259,7 @@
 
     function persistPosition(name) {
       positions[name] = clampPosition(positions[name])
-      if (name === 'hud') positions[name].size = getHudSize()
+      if (name === 'hud' || name === 'delta') positions[name].size = getWidgetSize(name)
       saveStoredPositions(positions)
     }
 
@@ -269,6 +275,7 @@
       ) {
         elements.coach.hidden = true
       }
+      if (editingTarget === 'delta' && targetWasHidden) elements.delta.hidden = true
       targetWasHidden = false
     }
 
@@ -297,9 +304,9 @@
       if (editingTarget === name) return
       if (editingTarget) cancelEditMode()
 
-      if (name === 'coach' && elements.coach.hidden) {
+      if ((name === 'coach' || name === 'delta') && elements[name].hidden) {
         targetWasHidden = true
-        elements.coach.hidden = false
+        elements[name].hidden = false
       }
 
       syncHudFrameSize()
@@ -344,7 +351,7 @@
       if (!editingTarget) return
       const name = editingTarget
       const element = elements[name]
-      const hudSize = name === 'hud' ? getHudSize() : null
+      const widgetSize = name === 'hud' || name === 'delta' ? getWidgetSize(name) : null
       const viewport = getViewport()
       const elementSize = getElementSize(element, getFallbackSize(name, viewport))
       const available = getAvailableSize(viewport, elementSize)
@@ -354,13 +361,14 @@
         x: available.width > 0 ? clamp(left / available.width, 0, 1) : 0,
         y: available.height > 0 ? clamp(top / available.height, 0, 1) : 0
       }
-      if (name === 'hud') positions[name].size = hudSize
+      if (name === 'hud' || name === 'delta') positions[name].size = widgetSize
       applyPosition(name)
     }
 
-    function updateHudSizeFromPointer(clientX, clientY) {
-      if (!resizing || editingTarget !== 'hud' || !resizeSnapshot || !resizeHandle) return
+    function updateWidgetSizeFromPointer(clientX, clientY) {
+      if (!resizing || !resizeSnapshot || !resizeHandle) return
 
+      const name = resizeSnapshot.name
       const { rect, baseSize } = resizeSnapshot
       const horizontalDirection = resizeHandle.includes('left') ? -1 : 1
       const verticalDirection = resizeHandle.includes('top') ? -1 : 1
@@ -368,31 +376,32 @@
       const heightFromPointer = rect.height + (clientY - resizeSnapshot.startY) * verticalDirection
       const widthScale = baseSize.width > 0 ? widthFromPointer / baseSize.width : 1
       const heightScale = baseSize.height > 0 ? heightFromPointer / baseSize.height : 1
-      const currentSize = getHudScaleFactor()
+      const currentSize = getWidgetScaleFactor(name)
       const requestedSize = Math.abs(widthScale - currentSize) >= Math.abs(heightScale - currentSize)
         ? widthScale
         : heightScale
-      const size = clamp(requestedSize, MIN_HUD_SIZE, getMaximumHudSize())
+      const size = clamp(requestedSize, MIN_WIDGET_SIZE, getMaximumWidgetSize(name))
 
-      positions.hud = {
-        ...ensurePosition('hud'),
+      positions[name] = {
+        ...ensurePosition(name),
         size
       }
-      applyHudSize()
+      if (name === 'hud') applyHudSize()
+      else applyDeltaSize()
 
-      const nextSize = getElementSize(hud, getFallbackSize('hud', getViewport()))
+      const nextSize = getElementSize(elements[name], getFallbackSize(name, getViewport()))
       const viewport = getViewport()
       const fixedRight = rect.left + rect.width
       const fixedBottom = rect.top + rect.height
       const left = horizontalDirection < 0 ? fixedRight - nextSize.width : rect.left
       const top = verticalDirection < 0 ? fixedBottom - nextSize.height : rect.top
       const available = getAvailableSize(viewport, nextSize)
-      positions.hud.x = available.width > 0 ? clamp(left / available.width, 0, 1) : 0
-      positions.hud.y = available.height > 0 ? clamp(top / available.height, 0, 1) : 0
-      applyPosition('hud')
-      syncHudFrameSize()
-      applyPosition('delta')
-      applyPosition('coach')
+      positions[name].x = available.width > 0 ? clamp(left / available.width, 0, 1) : 0
+      positions[name].y = available.height > 0 ? clamp(top / available.height, 0, 1) : 0
+      applyPosition(name)
+      if (name === 'hud') syncHudFrameSize()
+      if (name !== 'delta') applyPosition('delta')
+      if (name !== 'coach') applyPosition('coach')
     }
 
     function startDrag(name, event) {
@@ -423,15 +432,17 @@
       elements[name].releasePointerCapture?.(event.pointerId)
     }
 
-    function startHudResize(event) {
-      if (editingTarget !== 'hud' || event.button !== 0) return
+    function startWidgetResize(event) {
+      const name = event.currentTarget.dataset.layoutResizeTarget
+      if (!['hud', 'delta'].includes(name) || editingTarget !== name || event.button !== 0) return
       const handle = event.currentTarget.dataset.layoutResizeHandle
       if (!handle) return
-      const rect = elements.hud.getBoundingClientRect()
+      const rect = elements[name].getBoundingClientRect()
       resizeHandle = handle
       resizeSnapshot = {
+        name,
         rect,
-        baseSize: getHudBaseSize(),
+        baseSize: getWidgetBaseSize(name),
         startX: event.clientX,
         startY: event.clientY
       }
@@ -441,12 +452,12 @@
       event.stopPropagation()
     }
 
-    function moveHudResize(event) {
+    function moveWidgetResize(event) {
       if (!resizing) return
-      updateHudSizeFromPointer(event.clientX, event.clientY)
+      updateWidgetSizeFromPointer(event.clientX, event.clientY)
     }
 
-    function finishHudResize(event) {
+    function finishWidgetResize(event) {
       if (!resizing) return
       resizing = false
       resizeHandle = null
@@ -468,10 +479,10 @@
     }
 
     for (const handle of document.querySelectorAll('[data-layout-resize-handle]')) {
-      handle.addEventListener('pointerdown', startHudResize)
-      handle.addEventListener('pointermove', moveHudResize)
-      handle.addEventListener('pointerup', finishHudResize)
-      handle.addEventListener('pointercancel', finishHudResize)
+      handle.addEventListener('pointerdown', startWidgetResize)
+      handle.addEventListener('pointermove', moveWidgetResize)
+      handle.addEventListener('pointerup', finishWidgetResize)
+      handle.addEventListener('pointercancel', finishWidgetResize)
     }
 
     window.addEventListener('resize', () => {
@@ -485,6 +496,7 @@
         if (!dragging && !resizing) refreshLayout()
       })
     resizeObserver?.observe(hud)
+    resizeObserver?.observe(elements.delta)
 
     window.addEventListener('keydown', event => {
       if (event.key === 'Escape' && editingTarget) {
@@ -517,7 +529,7 @@
     clamp,
     clampPosition,
     sanitizePosition,
-    sanitizeHudSize
+    sanitizeWidgetSize
   }
 
   if (typeof document !== 'undefined') {

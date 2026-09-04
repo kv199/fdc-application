@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { clampPosition, sanitizeHudSize, sanitizePosition } = require('./coach-layout.js')
+const { clampPosition, sanitizeWidgetSize, sanitizePosition } = require('./coach-layout.js')
 
 test('sanitizePosition accepts finite coordinates and clamps them to the screen', () => {
   assert.deepEqual(sanitizePosition({ x: -0.2, y: 1.4 }), { x: 0, y: 1 })
@@ -20,14 +20,14 @@ test('clampPosition falls back to the top-left for invalid positions', () => {
   assert.deepEqual(clampPosition({ x: 0.25, y: 0.75 }), { x: 0.25, y: 0.75 })
 })
 
-test('HUD size uses zero for its responsive default and bounds custom scales', () => {
-  assert.equal(sanitizeHudSize(0), 0)
-  assert.equal(sanitizeHudSize(undefined), 0)
-  assert.equal(sanitizeHudSize('invalid'), 0)
-  assert.equal(sanitizeHudSize(-1), 0)
-  assert.equal(sanitizeHudSize(0.1), 0.5)
-  assert.equal(sanitizeHudSize(1.25), 1.25)
-  assert.equal(sanitizeHudSize(3), 2)
+test('HUD and Delta sizes use zero for the responsive default and bound custom scales', () => {
+  assert.equal(sanitizeWidgetSize(0), 0)
+  assert.equal(sanitizeWidgetSize(undefined), 0)
+  assert.equal(sanitizeWidgetSize('invalid'), 0)
+  assert.equal(sanitizeWidgetSize(-1), 0)
+  assert.equal(sanitizeWidgetSize(0.1), 0.5)
+  assert.equal(sanitizeWidgetSize(1.25), 1.25)
+  assert.equal(sanitizeWidgetSize(3), 2)
 })
 
 test('stacks the default Coach position above the Delta strip', () => {
@@ -49,19 +49,21 @@ test('starts layout storage in a fresh FDC v1 namespace', () => {
   assert.doesNotMatch(source, /LEGACY_COACH_STORAGE_KEY|forza-horizon-6-hud\./)
 })
 
-test('HUD has four edit-only resize handles and persists its size without adding sizes to other targets', () => {
+test('HUD and Delta have four edit-only resize handles and persist their independent sizes', () => {
   const layoutSource = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
   const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
   const css = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
 
-  assert.equal((html.match(/data-layout-resize-handle=/g) || []).length, 4)
-  for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right']) {
-    assert.match(html, new RegExp(`data-layout-resize-handle="${corner}"`, 'u'))
+  assert.equal((html.match(/data-layout-resize-handle=/g) || []).length, 8)
+  for (const target of ['hud', 'delta']) {
+    for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right']) {
+      assert.match(html, new RegExp(`data-layout-resize-target="${target}"[^>]+data-layout-resize-handle="${corner}"`, 'u'))
+    }
   }
-  assert.match(layoutSource, /if \(name === 'hud'\) result\[name\]\.size = sanitizeHudSize\(/)
-  assert.match(layoutSource, /if \(name === 'hud'\) positions\[name\]\.size = HUD_DEFAULT_SIZE/)
+  assert.match(layoutSource, /if \(name === 'hud' \|\| name === 'delta'\) result\[name\]\.size = sanitizeWidgetSize\(/)
+  assert.match(layoutSource, /if \(name === 'hud' \|\| name === 'delta'\) positions\[name\]\.size = DEFAULT_SIZE/)
   assert.match(layoutSource, /for \(const handle of document\.querySelectorAll\('\[data-layout-resize-handle\]'\)\)/)
-  assert.match(css, /\.hud-frame\.is-editing \.hud-resize-handle/)
+  assert.match(css, /\.delta-strip\.is-editing \.layout-resize-handle/)
 })
 
 test('every widget Reset uses the shared target reset contract, with HUD size reset by entry removal', () => {
