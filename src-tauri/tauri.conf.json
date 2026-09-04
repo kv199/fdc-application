@@ -10,7 +10,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "FDC · Forza Horizon 6 HUD",
+        "title": "FDC · HUD",
         "width": 1280,
         "height": 192,
         "resizable": false,
@@ -27,7 +27,7 @@
       },
       {
         "label": "settings",
-        "title": "FDC Configuration · Forza Horizon 6 HUD",
+        "title": "FDC · HUD",
         "url": "settings.html",
         "width": 820,
         "height": 620,

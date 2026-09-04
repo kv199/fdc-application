@@ -3469,6 +3469,21 @@ fn show_settings<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     Ok(())
 }
 
+fn settings_window_context_label(context: &str) -> Option<&'static str> {
+    match context {
+        "hud" => Some("HUD"),
+        "garage" => Some("GARAGE"),
+        "events" => Some("EVENTS"),
+        "shift-light" => Some("SHIFT LIGHT"),
+        "settings" => Some("SETTINGS"),
+        _ => None,
+    }
+}
+
+fn settings_window_title(context: &str) -> String {
+    format!("FDC · {context} · v{}", get_app_version())
+}
+
 fn eval_main<R: Runtime>(app: &AppHandle<R>, script: &str) -> Result<(), String> {
     let Some(window) = app.get_webview_window("main") else {
         return Err("main HUD window is not available".to_string());
@@ -3596,6 +3611,20 @@ fn set_configuration_always_on_top(app: AppHandle, always_on_top: bool) -> Resul
 }
 
 #[tauri::command]
+fn set_settings_window_context(app: AppHandle, context: String) -> Result<(), String> {
+    let Some(context_label) = settings_window_context_label(&context) else {
+        return Err("unknown Configuration window context".to_string());
+    };
+    let Some(window) = app.get_webview_window("settings") else {
+        return Err("Configuration window is not available".to_string());
+    };
+    let title = settings_window_title(context_label);
+    window
+        .set_title(&title)
+        .map_err(|error| format!("unable to update Configuration window title: {error}"))
+}
+
+#[tauri::command]
 fn sync_route_status(app: AppHandle) -> Result<(), String> {
     eval_main(&app, "window.HudOverlay?.syncRouteStatus?.()")
 }
@@ -3621,6 +3650,7 @@ fn main() {
             set_overlay_visibility,
             set_display_preferences,
             set_configuration_always_on_top,
+            set_settings_window_context,
             sync_route_status,
             sync_shift_light_status,
             get_app_version,
@@ -3773,6 +3803,23 @@ mod tests {
     #[test]
     fn exposes_the_compiled_cargo_package_version() {
         assert_eq!(get_app_version(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn configuration_window_titles_use_known_sections_and_the_compiled_version() {
+        assert_eq!(settings_window_context_label("hud"), Some("HUD"));
+        assert_eq!(settings_window_context_label("garage"), Some("GARAGE"));
+        assert_eq!(settings_window_context_label("events"), Some("EVENTS"));
+        assert_eq!(
+            settings_window_context_label("shift-light"),
+            Some("SHIFT LIGHT")
+        );
+        assert_eq!(settings_window_context_label("settings"), Some("SETTINGS"));
+        assert_eq!(settings_window_context_label("Forza Horizon 6"), None);
+        assert_eq!(
+            settings_window_title("GARAGE"),
+            format!("FDC · GARAGE · v{}", get_app_version())
+        );
     }
 
     #[test]

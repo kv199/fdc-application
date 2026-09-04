@@ -31,6 +31,13 @@
   const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
   const displayPreferencesApi = globalScope.DisplayPreferences
   const DEFAULT_HUD_OPACITY = displayPreferencesApi?.DEFAULTS?.hudOpacity ?? 80
+  const SETTINGS_WINDOW_CONTEXTS = Object.freeze({
+    hud: 'HUD',
+    garage: 'GARAGE',
+    events: 'EVENTS',
+    'shift-light': 'SHIFT LIGHT',
+    settings: 'SETTINGS'
+  })
   const speedUnitInputs = [...document.querySelectorAll('input[name="speed-unit"]')]
   const configurationAlwaysOnTop = document.getElementById('configuration-always-on-top')
   const shiftLightBrightness = document.getElementById('shift-light-brightness')
@@ -1663,7 +1670,15 @@
     for (const panel of settingsPanels) {
       panel.hidden = panel.dataset.settingsPanel !== tabName
     }
+    updateSettingsWindowContext(tabName)
     if (tabName === 'events' && eventsView === 'library') void loadEvents()
+  }
+
+  function updateSettingsWindowContext(tabName) {
+    const context = SETTINGS_WINDOW_CONTEXTS[tabName]
+    if (!context) return
+    document.title = `FDC · ${context}`
+    void call('set_settings_window_context', { context: tabName }).catch(() => undefined)
   }
 
   function setStatus(message, error = false) {
