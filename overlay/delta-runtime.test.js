@@ -116,7 +116,9 @@ test('runtime accepts an active Event reference and updates its presentation sta
 test('the shared telemetry path loads and clears the Event reference with recording', () => {
   const overlaySource = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
   assert.match(overlaySource, /deltaRuntime\?\.update\?\.\(telemetry\)/)
-  assert.match(overlaySource, /invokeTauri\('load_event_absolute_best', \{ eventId \}\)/)
+  assert.match(overlaySource, /const nativeEventId = Number\(eventId\)/)
+  assert.match(overlaySource, /Number\.isSafeInteger\(nativeEventId\) \|\| nativeEventId <= 0/)
+  assert.match(overlaySource, /invokeTauri\('load_event_absolute_best', \{ eventId: nativeEventId \}\)/)
   assert.match(overlaySource, /deltaRuntime\?\.setActiveEvent\?\.\(reference\)/)
   assert.match(overlaySource, /deltaRuntime\?\.clearReference\?\.\(\)/)
 })

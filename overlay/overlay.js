@@ -834,8 +834,14 @@ async function listenEventRecorderEvents() {
 async function configureDeltaReference(eventId) {
   const request = ++deltaReferenceRequest
   deltaRuntime?.clearReference?.()
+  const nativeEventId = Number(eventId)
+  if (!Number.isSafeInteger(nativeEventId) || nativeEventId <= 0) {
+    scheduleTelemetryRender()
+    console.warn('[hud] unable to load Event delta reference: invalid Event ID', eventId)
+    return
+  }
   try {
-    const reference = await invokeTauri('load_event_absolute_best', { eventId })
+    const reference = await invokeTauri('load_event_absolute_best', { eventId: nativeEventId })
     if (request !== deltaReferenceRequest) return
     deltaRuntime?.setActiveEvent?.(reference)
     scheduleTelemetryRender()
