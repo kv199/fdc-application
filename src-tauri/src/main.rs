@@ -3243,6 +3243,89 @@ fn assert_shift_light_config_matches_key(
 }
 
 #[tauri::command]
+fn resolve_shift_light_config(
+    app: AppHandle,
+    key: String,
+    observed_gear: i32,
+) -> Result<ShiftLightVariantResolution, String> {
+    let mut connection = open_shift_light_db(&app)?;
+    resolve_shift_light_config_in_connection(&mut connection, &key, observed_gear)
+}
+
+fn resolve_shift_light_config_in_connection(
+    connection: &mut Connection,
+    key: &str,
+    observed_gear: i32,
+) -> Result<ShiftLightVariantResolution, String> {
+    if !(1..=10).contains(&observed_gear) {
+        return Err("invalid observed Shift Light gear".to_string());
+    }
+    let identity = parse_shift_light_config_key(key)?;
+    let transaction = connection.transaction().map_err(|error| {
+        format!("unable to start Shift Light configuration resolution: {error}")
+    })?;
+    let existing: Option<(i64, String)> = transaction
+        .query_row(
+            "SELECT id, gearbox_signature FROM shift_light_configs
+             WHERE game_id = 'fh6' AND car_ordinal = ?1 AND car_class = ?2
+               AND car_performance_index = ?3 AND drivetrain_type = ?4
+               AND num_cylinders = ?5 AND rpm_max = ?6
+             ORDER BY last_seen_at DESC, id DESC LIMIT 1",
+            params![
+                identity.car_ordinal,
+                identity.car_class,
+                identity.car_performance_index,
+                identity.drivetrain_type,
+                identity.num_cylinders,
+                identity.rpm_max
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|error| format!("unable to resolve current Shift Light configuration: {error}"))?;
+    let (config_id, signature) = if let Some(existing) = existing {
+        existing
+    } else {
+        // Retain the legacy schema and IDs. This creation-time observation is
+        // not a transmission maximum and must never gate profile persistence.
+        transaction
+            .execute(
+                "INSERT INTO shift_light_configs
+                 (game_id, car_ordinal, car_class, car_performance_index, drivetrain_type,
+                  num_cylinders, rpm_max, gear_count)
+                 VALUES ('fh6', ?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    identity.car_ordinal,
+                    identity.car_class,
+                    identity.car_performance_index,
+                    identity.drivetrain_type,
+                    identity.num_cylinders,
+                    identity.rpm_max,
+                    observed_gear
+                ],
+            )
+            .map_err(|error| {
+                format!("unable to create current Shift Light configuration: {error}")
+            })?;
+        (transaction.last_insert_rowid(), String::new())
+    };
+    transaction
+        .execute(
+            "UPDATE shift_light_configs SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?1",
+            params![config_id],
+        )
+        .map_err(|error| format!("unable to update current Shift Light configuration: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit current Shift Light configuration: {error}"))?;
+    Ok(ShiftLightVariantResolution {
+        variant_id: config_id,
+        status: "ready".to_string(),
+        ratio_features: (!signature.is_empty()).then_some(signature),
+    })
+}
+
+#[tauri::command]
 fn get_latest_shift_light_config(app: AppHandle, key: String) -> Result<Option<i32>, String> {
     let identity = parse_shift_light_config_key(&key)?;
     let connection = open_shift_light_db(&app)?;
@@ -3767,6 +3850,7 @@ fn main() {
             register_shift_light_variant,
             reset_shift_light_profiles,
             get_latest_shift_light_config,
+            resolve_shift_light_config,
             register_shift_light_config,
             load_shift_light_config_profiles,
             save_shift_light_config_profile,
@@ -4923,6 +5007,106 @@ mod tests {
         assert_eq!(summary.tune_count, 1);
         assert_eq!(summary.calibrated_gear_count, 1);
         assert_eq!(summary.learning_gear_count, 0);
+    }
+
+    #[test]
+    fn shift_light_resolution_preserves_342_profiles_above_legacy_gear_count() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO shift_light_configs
+             (id, game_id, car_ordinal, car_class, car_performance_index,
+              drivetrain_type, num_cylinders, rpm_max, gear_count, last_seen_at)
+             VALUES (3, 'fh6', 342, 3, 678, 1, 12, 9500, 2, '2000-08-31 18:49:42'),
+                    (4, 'fh6', 342, 3, 678, 1, 12, 9500, 1, '2000-09-05 14:36:57');",
+            )
+            .unwrap();
+        let profile = StoredShiftLightProfile {
+            gear: 6,
+            status: "calibrated".to_string(),
+            shift_rpm: Some(8602),
+            sample_count: 5,
+            method: "observed".to_string(),
+            ratio_drop: None,
+            samples: vec![8677; 5],
+        };
+        write_config_profile(&connection, 4, &profile).unwrap();
+        for gear in [3, 6, 1, 10] {
+            let resolution = resolve_shift_light_config_in_connection(
+                &mut connection,
+                "fh6:342:3:678:1:12:9500",
+                gear,
+            )
+            .unwrap();
+            assert_eq!(resolution.variant_id, 4);
+        }
+        let profiles = read_config_profiles(&connection, 4).unwrap();
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].shift_rpm, Some(8602));
+        assert_eq!(profiles[0].samples, profile.samples);
+        let count: i64 = connection
+            .query_row("SELECT count(*) FROM shift_light_configs", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 2);
+        assert!(
+            connection
+                .prepare("PRAGMA foreign_key_check")
+                .unwrap()
+                .query([])
+                .unwrap()
+                .next()
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn shift_light_resolution_saves_before_limiter_and_preserves_schema_and_identity() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let key = "fh6:342:3:678:1:12:9500";
+        let first = resolve_shift_light_config_in_connection(&mut connection, key, 1).unwrap();
+        write_config_profile(
+            &connection,
+            first.variant_id,
+            &StoredShiftLightProfile {
+                gear: 3,
+                status: "learning".to_string(),
+                shift_rpm: None,
+                sample_count: 1,
+                method: "observed".to_string(),
+                ratio_drop: None,
+                samples: vec![8500],
+            },
+        )
+        .unwrap();
+        // Schema initialization on a later open must not reinterpret or delete
+        // profiles whose gear exceeds the old creation-time count field.
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let next = resolve_shift_light_config_in_connection(&mut connection, key, 6).unwrap();
+        assert_eq!(first.variant_id, next.variant_id);
+        assert_eq!(
+            read_config_profiles(&connection, next.variant_id).unwrap()[0].samples,
+            vec![8500]
+        );
+        for other_key in [
+            "fh6:342:3:678:2:12:9500",
+            "fh6:342:3:679:1:12:9500",
+            "fh6:342:4:678:1:12:9500",
+            "fh6:342:3:678:1:8:9500",
+            "fh6:342:3:678:1:12:9000",
+            "fh6:343:3:678:1:12:9500",
+        ] {
+            let other =
+                resolve_shift_light_config_in_connection(&mut connection, other_key, 1).unwrap();
+            assert_ne!(first.variant_id, other.variant_id);
+        }
+        for gear in [0, 11, -1] {
+            assert!(resolve_shift_light_config_in_connection(&mut connection, key, gear).is_err());
+        }
     }
 
     #[test]

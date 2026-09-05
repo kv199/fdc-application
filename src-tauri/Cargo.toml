@@ -1,6 +1,6 @@
 [package]
 name = "fdc-application"
-version = "2.5.19"
+version = "3.5.19"
 description = "Standalone real-time telemetry HUD application for Forza Horizon 6"
 edition = "2024"
 rust-version = "1.85"

@@ -23,15 +23,13 @@
   let currentKey = null
   let latestTelemetry = null
   let latestState = EMPTY_STATE
-  let generation = 0
   let loadGeneration = 0
   let profileMutationQueue = Promise.resolve()
   let resettingLearner = null
-  let currentVariantId = null
-  let currentGearCount = null
-  let configurationRegistrationPending = false
-  let variantIdsByLearner = new WeakMap()
-  let pendingProfilesByLearner = new WeakMap()
+  const variantIdsByLearner = new WeakMap()
+  const pendingProfilesByLearner = new WeakMap()
+  const resolvingLearners = new WeakSet()
+  const retryAfterByLearner = new WeakMap()
 
   function invokeCommand(command, args) {
     if (typeof invoke !== 'function') return Promise.reject(new Error('Tauri commands are unavailable'))
@@ -95,42 +93,7 @@
     flushPendingProfiles(expectedLearner)
   }
 
-  function registerConfiguration(key, expectedLearner, gearCount, gearboxSignature = null) {
-    if (!key || !Number.isInteger(gearCount) || gearCount < 1) return Promise.resolve(null)
-    return enqueueProfileMutation(async () => {
-      const args = { key, gearCount }
-      if (gearboxSignature) args.gearboxSignature = gearboxSignature
-      const resolution = await invokeCommand('register_shift_light_config', args)
-      if (
-        !resolution
-        || !Number.isInteger(resolution.variantId)
-      ) return null
-      variantIdsByLearner.set(expectedLearner, resolution.variantId)
-      if (expectedLearner === learner) {
-        currentVariantId = resolution.variantId
-      }
-      return resolution
-    })
-  }
-
-  function loadConfigurationProfiles(key, configId, expectedLearner, requestedLoadGeneration) {
-    invokeCommand('load_shift_light_config_profiles', { key, configId })
-      .then(profiles => {
-        if (
-          key !== currentKey
-          || requestedLoadGeneration !== loadGeneration
-          || expectedLearner !== learner
-        ) return
-        if (Array.isArray(profiles)) expectedLearner.setProfiles(profiles)
-        publish(expectedLearner.snapshot(latestTelemetry))
-      })
-      .catch(() => {
-        // The live learner remains usable when the local database is unavailable.
-      })
-  }
-
   function createLearner(key) {
-    const localGeneration = ++generation
     const localLearner = new globalScope.HudShiftLight.ShiftLightLearner(key, {
       onProgress: profile => persistProfile(profile, localLearner),
       onCalibrated: profile => {
@@ -140,44 +103,46 @@
     })
     learner = localLearner
     currentKey = key
-    currentVariantId = null
-    currentGearCount = null
     variantIdsByLearner.set(localLearner, null)
     pendingProfilesByLearner.set(localLearner, new Map())
     latestState = localLearner.snapshot(latestTelemetry)
     publish(latestState)
-
-    invokeCommand('get_latest_shift_light_config', { key })
-      .then(gearCount => {
-        if (key !== currentKey || localGeneration !== generation || localLearner !== learner) return
-        if (Number.isInteger(gearCount) && gearCount >= 1) activateConfiguration(key, localLearner, gearCount)
-      })
-      .catch(() => {})
   }
 
-  function activateConfiguration(key, expectedLearner, gearCount) {
-    if (configurationRegistrationPending || expectedLearner !== learner) return
-    configurationRegistrationPending = true
-    const state = expectedLearner.snapshot(latestTelemetry)
-    const signature = typeof state?.gearboxSignature === 'string' ? state.gearboxSignature : null
-    registerConfiguration(key, expectedLearner, gearCount, signature)
-      .then(resolution => {
-        configurationRegistrationPending = false
-        if (
-          !resolution
-          || key !== currentKey
-          || expectedLearner !== learner
-        ) return
-        variantIdsByLearner.set(expectedLearner, resolution.variantId)
-        currentVariantId = resolution.variantId
-        currentGearCount = gearCount
-        const requestedLoadGeneration = ++loadGeneration
-        loadConfigurationProfiles(key, resolution.variantId, expectedLearner, requestedLoadGeneration)
-        flushPendingProfiles(expectedLearner)
+  function resolveConfiguration(key, expectedLearner, observedGear) {
+    if (
+      variantIdsByLearner.get(expectedLearner)
+      || resolvingLearners.has(expectedLearner)
+      || expectedLearner === resettingLearner
+      || Date.now() < (retryAfterByLearner.get(expectedLearner) || 0)
+      || !Number.isInteger(observedGear) || observedGear < 1 || observedGear > 10
+    ) return
+    resolvingLearners.add(expectedLearner)
+    const requestedLoadGeneration = loadGeneration
+    enqueueProfileMutation(async () => {
+      if (expectedLearner !== learner) return
+      // A higher observed gear cannot prove a different gearbox. Resolve once
+      // by the full vehicle key, keeping both the learner and its numeric ID.
+      const resolution = await invokeCommand('resolve_shift_light_config', { key, observedGear })
+      if (!Number.isInteger(resolution?.variantId) || resolution.variantId < 1) {
+        throw new Error('Invalid Shift Light configuration')
+      }
+      const profiles = await invokeCommand('load_shift_light_config_profiles', {
+        key, configId: resolution.variantId
       })
+      if (expectedLearner !== learner || key !== currentKey) return
+      if (!Array.isArray(profiles)) throw new Error('Invalid Shift Light profiles')
+      variantIdsByLearner.set(expectedLearner, resolution.variantId)
+      if (requestedLoadGeneration !== loadGeneration || expectedLearner === resettingLearner) return
+      expectedLearner.setProfiles(profiles)
+      publish(expectedLearner.snapshot(latestTelemetry))
+      flushPendingProfiles(expectedLearner)
+    })
       .catch(() => {
-        configurationRegistrationPending = false
+        // Keep live evidence and retry storage without recreating the learner.
+        retryAfterByLearner.set(expectedLearner, Date.now() + 1000)
       })
+      .finally(() => resolvingLearners.delete(expectedLearner))
   }
 
   function clearConfiguration(expectedLearner, signature) {
@@ -199,19 +164,8 @@
 
     latestTelemetry = telemetry
     if (key !== currentKey || !learner) createLearner(key)
-    let state = learner.update(telemetry)
-    const confirmedGearCount = Number.isInteger(state?.gearCount) ? state.gearCount : null
-    const observedGearCount = Number.isInteger(state?.observedGearCount) ? state.observedGearCount : 0
-    if (currentGearCount !== null && observedGearCount > currentGearCount) {
-      createLearner(key)
-      state = learner.update(telemetry)
-    } else if (confirmedGearCount !== null && confirmedGearCount !== currentGearCount) {
-      if (currentGearCount !== null) {
-        learner.clearConfiguration()
-        pendingProfilesByLearner.get(learner)?.clear()
-      }
-      activateConfiguration(key, learner, confirmedGearCount)
-    }
+    const state = learner.update(telemetry)
+    resolveConfiguration(key, learner, state.observedGearCount)
     return publish(state)
   }
 
@@ -235,11 +189,14 @@
     try {
       await enqueueProfileMutation(async () => {
         const configId = variantIdsByLearner.get(currentLearner) || null
-        if (!configId) throw new Error('Drive to the confirmed top gear before resetting this calibration')
+        if (!configId) throw new Error('The calibration database is not available yet')
         return invokeCommand('clear_shift_light_config', { configId })
       })
     } catch (error) {
       if (resettingLearner === currentLearner) resettingLearner = null
+      // A load finishing during reset is intentionally not published. If the
+      // clear fails, reload the still-persisted calibration on the next frame.
+      variantIdsByLearner.delete(currentLearner)
       return publishResetResult({
         ok: false,
         carKey: key,
@@ -257,16 +214,11 @@
     }
 
     loadGeneration += 1
-    generation += 1
     currentLearner.reset()
-    currentVariantId = null
-    currentGearCount = null
-    variantIdsByLearner.set(currentLearner, null)
     const pendingProfiles = pendingProfilesByLearner.get(currentLearner)
     pendingProfiles?.clear()
     publish({ ...currentLearner.snapshot(latestTelemetry), phase: 'normal' })
     if (resettingLearner === currentLearner) resettingLearner = null
-    configurationRegistrationPending = false
     return publishResetResult({ ok: true, carKey: key })
   }
 

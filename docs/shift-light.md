@@ -47,29 +47,43 @@ depend on a localized or user-maintained vehicle name.
 
 ## Garage association
 
-Shift Light profiles remain owned by their full game-data key and confirmed
-gear-count configuration. Garage presents them as part of the matching local
+Shift Light profiles remain owned by their full game-data key and numeric
+configuration ID. Garage presents them as part of the matching local
 car. This uses the same `fdc.sqlite` database and does not copy calibration
 data.
 
 Garage does not render a second Shift Light control or status. Detailed
 diagnostics and reset stay in the Shift Light tab for the live vehicle.
 
-## Gear-count configurations
+## Configuration selection
 
-Each base identity has one Shift Light configuration per confirmed gear count.
-A configuration has an immutable numeric SQLite ID and an internal gearbox
-signature made from adjacent-gear ratio drops.
+FH6 sends the current gear, not the transmission maximum. Neither an observed
+gear nor repeated limiter observations prove how many gears the gearbox has.
+The runtime does not use the learner's legacy `gearCount` estimate to select,
+reset, or save a configuration.
 
-FH6 sends the current gear but not the transmission maximum. FDC confirms the
-gear count after two full-throttle limiter observations on the highest observed
-forward gear without an upshift. Until then evidence remains in memory and is
-not saved into a 6-, 10-, or other count-specific configuration.
+On the first forward-gear sample, `resolve_shift_light_config` selects the
+most recently used configuration for the full base identity, breaking timestamp
+ties by numeric ID. If none exists, it creates one immediately. The learner and
+configuration ID remain stable when a higher gear is observed. Qualifying
+learning progress is saved without requiring top-gear or limiter evidence.
 
-A different confirmed gear count selects a different configuration. Compatible
-ratio-signature growth updates the same configuration. A material contradiction
-in known ratio features clears that configuration and starts its learning
-again; it does not leave unusable red targets behind.
+Existing configurations and profiles retain their immutable numeric SQLite IDs.
+No profiles are merged across historical configurations. The legacy `gear_count`
+column and older registration commands remain for storage compatibility; new
+configurations record the first observed gear there as creation metadata, not
+as a transmission maximum. The live runtime does not route by that column.
+
+The existing learner validates targets using adjacent-gear ratio evidence.
+Compatible signature growth extends evidence; a contradictory live signature
+sets diagnostic state without deleting persisted calibration. Stored optimal
+targets remain available while being validated, and incompatible observed
+targets are hidden by the learner's compatibility checks.
+
+Resolution and loading are serialized with profile writes. Progress collected
+before loading completes is buffered, and storage failures retry after at least
+one second on subsequent telemetry without recreating the learner. Responses
+from a previous car cannot replace the current car's state.
 
 ## Learning evidence
 
@@ -188,7 +202,7 @@ application data directory.
 The versioned schema contains:
 
 - `shift_light_cars` for `game_id` and `car_ordinal`;
-- `shift_light_configs` for the full game-data identity, confirmed gear count,
+- `shift_light_configs` for the full game-data identity, legacy gear-count metadata,
   gearbox signature, and immutable numeric IDs;
 - `shift_light_config_profiles` for one method/target record per configuration
   and gear;
@@ -225,8 +239,7 @@ The following are runtime and persistence contracts:
 - the `overlay/shift-light-engine.js` browser bundle path;
 - FDC-local `hud_shift_light` and reset-result events;
 - the HUD-local SQLite schema and migration behavior;
-- the separation between a base identity and its confirmed gear-count
-  configuration IDs.
+- immutable numeric configuration IDs and full base-identity isolation.
 
 Source relocation must not change learner behavior, profile identity,
 serialized profile fields, native/browser event names, or the database schema.
@@ -255,9 +268,9 @@ are not installed or dependency manifests have changed.
 - The implementation is for FH6 normalized Direct Data Out telemetry only.
 - Valid car ordinal, class, performance index, drivetrain, cylinder count, and
   RPM limit are required to establish a persisted base identity.
-- The confirmed gear count is unavailable until limiter evidence establishes
-  the highest observed forward gear, so a newly encountered gearbox starts in
-  learning mode.
+- The total gear count is unknown. A gearbox change that preserves the full
+  base identity is assessed through the existing ratio diagnostics; automatic
+  archival and selection of separate gearbox generations is not implemented.
 - Learning is per source gear and requires driving the gear. It does not
   pre-populate targets for unseen gears.
 - Optimal targets are unavailable until enough WOT power and adjacent-gear
