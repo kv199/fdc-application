@@ -2,10 +2,12 @@
   "name": "fdc-application",
   "private": true,
   "scripts": {
+    "build:installer": "tauri build --bundles nsis -- --locked",
     "build:shift-light": "node tools/build-shift-light.mjs",
     "test:shift-light": "node --test overlay/shift-light-engine.test.js overlay/shift-light-runtime.test.js tools/build-shift-light.test.mjs"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
     "esbuild": "0.27.7"
   }
 }

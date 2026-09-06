@@ -76,6 +76,15 @@ start.
 
 ## Run FDC
 
+Run the Windows x64 `FDC_<version>_x64-setup.exe` installer, then launch FDC
+from the Start menu. Installation is scoped to the current Windows user.
+If Microsoft Edge WebView2 Runtime is missing, setup downloads and installs it;
+that step requires an internet connection.
+
+The installer is currently unsigned.
+
+For a source build:
+
 Build the release executable, then launch:
 
 ```powershell
@@ -184,6 +193,22 @@ handing off a release build, launch it and confirm that it stays alive for at
 least five seconds. Do not repeat checks that already passed for the same
 final state. Run `npm ci` only when dependencies are not installed or
 dependency manifests have changed.
+
+### Windows EXE installer
+
+On Windows x64 with the Rust MSVC toolchain and Visual Studio C++ Build Tools,
+install the locked JavaScript dependencies with `npm ci` when needed, then run:
+
+```powershell
+npm run build:installer
+```
+
+This uses the project-pinned Tauri CLI to build with Cargo in release mode and
+package an NSIS installer. The version comes from `src-tauri/Cargo.toml`.
+The output is
+`src-tauri/target/release/bundle/nsis/FDC_<version>_x64-setup.exe`.
+The first packaging run may download NSIS tooling. Keep installer artifacts
+out of Git and perform the release verification cycle before distribution.
 
 ## Release versioning
 
