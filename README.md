@@ -77,7 +77,9 @@ start.
 ## Run FDC
 
 Run the Windows x64 `FDC_<version>_x64-setup.exe` installer, then launch FDC
-from the Start menu. Installation is scoped to the current Windows user.
+from the Start menu. Installation is available to all Windows users, requires
+administrator approval, and defaults to `C:\Program Files\FDC` on Windows x64.
+Each user's database and preferences remain in their own application-data storage.
 If Microsoft Edge WebView2 Runtime is missing, setup downloads and installs it;
 that step requires an internet connection.
 

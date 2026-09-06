@@ -60,7 +60,7 @@
         "silent": true
       },
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "perMachine"
       }
     }
   }
