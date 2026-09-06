@@ -42,6 +42,10 @@ Out. `carOrdinal` identifies a car model rather than a Garage instance, so
 class, performance index, drivetrain, cylinder count, and RPM limit keep
 distinct builds apart. The base key is stable across runs.
 
+A different PI selects a separate configuration profile, even for the same
+car ordinal. The previous profile is retained; returning to its full base
+identity loads that identity's most recently used configuration again.
+
 The UI exposes the current FH6 car ordinal, PI, and RPM limit. It does not
 depend on a localized or user-maintained vehicle name.
 
@@ -81,9 +85,11 @@ targets remain available while being validated, and incompatible observed
 targets are hidden by the learner's compatibility checks.
 
 Resolution and loading are serialized with profile writes. Progress collected
-before loading completes is buffered, and storage failures retry after at least
-one second on subsequent telemetry without recreating the learner. Responses
-from a previous car cannot replace the current car's state.
+before loading completes is buffered. If configuration resolution or profile
+loading fails, the runtime retries on subsequent telemetry after at least one
+second, without recreating the learner or discarding its accumulated live
+evidence. Responses from a previous car cannot replace the current car's state.
+This retry applies to resolution and loading, not to individual profile writes.
 
 ## Learning evidence
 
@@ -190,6 +196,20 @@ configuration while retaining its game-data identity. The result is reported
 only after the SQLite operation completes. The in-memory learner is then
 cleared and the HUD returns to its normal phase.
 
+After replacing a gearbox, the user must reset the current calibration if all
+base-identity fields remain unchanged. For example, replacing a six-speed
+gearbox with a ten-speed gearbox at the same PI, class, drivetrain, cylinder
+count, and RPM limit reuses the same active profile. Existing targets can be
+unsuitable for the replacement gearbox; ratio diagnostics do not create a
+separate saved gearbox configuration automatically.
+
+Reset removes the old targets and partial learning for that active numeric
+configuration only. Other cars and separate configuration profiles are retained.
+The removed six-speed targets are not archived for automatic restoration if
+the user later reinstalls that gearbox. If the replacement changes PI or
+another base-identity field, it selects a separate configuration instead and
+does not require clearing the previous configuration's calibration.
+
 Pause, disconnect, and short telemetry gaps clear only the in-progress pull.
 They do not discard the current car identity, loaded targets, or persisted
 learning evidence.
@@ -213,6 +233,13 @@ are merged rather than blindly replaced: calibrated status and stronger
 evidence are preferred, samples are unioned and deduplicated up to the five
 sample limit, and five observed samples can complete a stored profile. Foreign
 keys keep profiles and samples attached to their configuration.
+
+New learning results are submitted to SQLite as progress is collected. An
+individual failed profile write has no guaranteed automatic retry. Its evidence
+can remain in the running learner, but unsaved progress can be lost when the
+application closes unless a later successful profile update saves it. The
+resolution/loading retry described above does not guarantee durable storage
+of every learning update.
 
 ## Source and build boundary
 
