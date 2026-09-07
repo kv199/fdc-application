@@ -1,10 +1,69 @@
-// Canonical build-time dependency of the FDC HUD Shift Light learner.
 import type { Telemetry } from './telemetry'
+
+/** Bump when persisted learning facts become semantically incompatible. */
+export const SHIFT_LIGHT_LEARNING_VERSION = 2
+
+export type ShiftLearningOutcome = 'better' | 'too_early' | 'invalid'
+export type ShiftLearningStatus = 'learning' | 'confirming' | 'optimal'
+
+export interface PowerBinState {
+  rpmBucket: number
+  sampleCount: number
+  medianPower: number
+  medianTorque: number | null
+  medianSpeed: number | null
+  powerSum: number
+  torqueSum: number
+  torqueSampleCount: number
+  speedSum: number
+  speedSampleCount: number
+}
+
+export interface ShiftEvidenceState {
+  sourceGear: number
+  destinationGear: number
+  beforeTimestampMs: number
+  afterTimestampMs: number
+  beforeRpm: number
+  afterRpm: number
+  beforePower: number
+  afterPower: number
+  beforeTorque: number | null
+  afterTorque: number | null
+  beforeSpeedKmh: number
+  afterSpeedKmh: number
+  /** Host materialization aliases retained in the JSON contract. */
+  beforeSpeed: number
+  afterSpeed: number
+  outcome: ShiftLearningOutcome
+}
+
+export interface GearLearningState {
+  sourceGear: number
+  status: ShiftLearningStatus
+  targetRpm: number | null
+  candidateRpm: number | null
+  confirmingRpms: number[]
+  confirmingCount: number
+  replacementCandidateRpm: number | null
+  replacementConfirmingRpms: number[]
+  targetContradicted: boolean
+  lastReason: string | null
+  powerBins: PowerBinState[]
+  evidence: ShiftEvidenceState[]
+}
+
+/** Plain JSON contract persisted by the host; no in-progress pull is included. */
+export interface ShiftLightLearningState {
+  modelVersion: number
+  version: number
+  key: string
+  gears: GearLearningState[]
+}
 
 export interface OptimalShiftEstimate {
   gear: number
   shiftRpm: number
-  ratioDrop: number
   evidence: number
 }
 
@@ -23,454 +82,493 @@ export interface OptimalShiftDiagnostics {
   powerAtTarget: number | null
   powerAfterShift: number | null
   estimateEvidence: number
+  status: ShiftLearningStatus
+  confirmingCount: number
+  lastReason: string | null
+  evidenceCount: number
 }
 
-interface PowerBin {
-  powers: number[]
+export interface ShiftTransitionObservation {
+  sourceGear: number
+  destinationGear: number
+  before: Telemetry
+  after: Telemetry
 }
 
 const FORWARD_GEAR_MIN = 1
 const FORWARD_GEAR_MAX = 10
-const WOT_THRESHOLD = 0.95
 const POWER_BIN_RPM = 200
-const MIN_POWER_SAMPLES = 2
+const MAX_POWER_BINS_PER_GEAR = 64
 const MAX_POWER_SAMPLES_PER_BIN = 24
-const MAX_RATIO_SAMPLES = 240
-const MIN_RATIO_SAMPLES = 20
-const MAX_DIRECT_RATIO_SAMPLES = 24
-const MIN_DIRECT_RATIO_SAMPLES = 3
-const MIN_GEARBOX_SIGNATURE_DROPS = 2
-const MAX_GEARBOX_SIGNATURE_DROPS = FORWARD_GEAR_MAX - FORWARD_GEAR_MIN
-const GEARBOX_SIGNATURE_SCALE = 1000
-const GEARBOX_SIGNATURE_FORMAT_DECIMALS = 4
-const MIN_DRIVEN_WHEEL_RAD_S = 5
-const MIN_ENGINE_RPM = 1200
-const MAX_CLUTCH = 0.05
-const MAX_BRAKE = 0.02
-const MAX_HANDBRAKE = 0.02
-const MAX_DRIVEN_COMBINED_SLIP = 0.2
-const MIN_RATIO_DROP = 0.45
-const MAX_RATIO_DROP = 0.95
-const MIN_TARGET_RPM_FRACTION = 0.65
-const MAX_TARGET_RPM_FRACTION = 0.99
-const CURVE_COVERAGE_FRACTION = 0.90
-const LIMITER_TARGET_FRACTION = 0.98
-const LIMITER_SAFETY_RPM = 100
-const MAX_INTERPOLATION_GAP_RPM = POWER_BIN_RPM * 2
-const TARGET_STEP_RPM = 25
-const CROSSOVER_CONFIRM_STEPS = 3
-const RATIO_OUTLIER_FRACTION = 0.08
-const RATIO_REACQUIRE_SAMPLES = 3
-const LIMITER_STABILITY_RPM = 120
-const LIMITER_REACQUIRE_SAMPLES = 2
+const MAX_SHIFT_EVIDENCE_PER_GEAR = 32
+const MAX_CONFIRMATIONS = 3
+const CONFIRMATION_STABILITY_RPM = 100
+const MIN_SPEED_KMH = 1
 
 function isForwardGear(gear: number): boolean {
-  return Number.isFinite(gear) && gear >= FORWARD_GEAR_MIN && gear <= FORWARD_GEAR_MAX
+  return Number.isInteger(gear) && gear >= FORWARD_GEAR_MIN && gear <= FORWARD_GEAR_MAX
 }
 
-function median(values: number[]): number | null {
-  if (values.length === 0) return null
-  const sorted = [...values].sort((left, right) => left - right)
-  const middle = Math.floor(sorted.length / 2)
-  if (sorted.length % 2 === 1) return sorted[middle]!
-  return (sorted[middle - 1]! + sorted[middle]!) / 2
+function finitePositive(value: number): boolean {
+  return Number.isFinite(value) && value > 0
 }
 
-function drivenWheelSpeed(telemetry: Telemetry): number | null {
-  const wheels = telemetry.wheelRotation
-  if (!wheels) return null
-
-  const values = telemetry.car.drivetrain === 0
-    ? [wheels.fl, wheels.fr]
-    : telemetry.car.drivetrain === 1
-      ? [wheels.rl, wheels.rr]
-      : [wheels.fl, wheels.fr, wheels.rl, wheels.rr]
-  if (values.some(value => !Number.isFinite(value))) return null
-
-  const average = values.reduce((sum, value) => sum + Math.abs(value), 0) / values.length
-  return average >= MIN_DRIVEN_WHEEL_RAD_S ? average : null
+function roundRpm(value: number): number {
+  return Math.max(0, Math.round(value))
 }
 
-function drivenWheelValues(telemetry: Telemetry, values: { fl: number, fr: number, rl: number, rr: number }): number[] {
-  return telemetry.car.drivetrain === 0
-    ? [values.fl, values.fr]
-    : telemetry.car.drivetrain === 1
-      ? [values.rl, values.rr]
-      : [values.fl, values.fr, values.rl, values.rr]
+function finiteInRange(value: unknown, minimum: number, maximum: number): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const number = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(number) && number >= minimum && number <= maximum ? number : null
 }
 
-function hasCleanDriveEvidence(telemetry: Telemetry): boolean {
-  if (Number.isFinite(telemetry.brake) && telemetry.brake > MAX_BRAKE) return false
-  if (Number.isFinite(telemetry.handBrake) && telemetry.handBrake > MAX_HANDBRAKE) return false
+function cleanPowerTelemetry(telemetry: Telemetry): boolean {
+  if (telemetry.isRaceOn === false) return false
+  if (!Number.isFinite(telemetry.throttle) || telemetry.throttle < 0.95) return false
+  if (!Number.isFinite(telemetry.clutch) || telemetry.clutch > 0.05) return false
+  if (Number.isFinite(telemetry.brake) && telemetry.brake > 0.02) return false
+  if (Number.isFinite(telemetry.handBrake) && telemetry.handBrake > 0.02) return false
+  if (!isForwardGear(telemetry.gear) || !finitePositive(telemetry.rpm)) return false
+  if (!finitePositive(telemetry.power) || !finitePositive(telemetry.speedKmh)) return false
 
   const slip = telemetry.combinedSlip
-  if (!slip) return true
-  const drivenSlip = drivenWheelValues(telemetry, slip)
-  return drivenSlip.every(value => !Number.isFinite(value) || Math.abs(value) <= MAX_DRIVEN_COMBINED_SLIP)
+  if (slip) {
+    const driven = telemetry.car.drivetrain === 0
+      ? [slip.fl, slip.fr]
+      : telemetry.car.drivetrain === 1
+        ? [slip.rl, slip.rr]
+        : [slip.fl, slip.fr, slip.rl, slip.rr]
+    if (driven.some(value => Number.isFinite(value) && Math.abs(value) > 0.2)) return false
+  }
+  return true
 }
 
+/** The same clean filter is used for power bins and completed shift evidence. */
 export function isCleanShiftEvidence(telemetry: Telemetry): boolean {
-  return telemetry.isRaceOn !== false
-    && Number.isFinite(telemetry.throttle) && telemetry.throttle >= WOT_THRESHOLD
-    && Number.isFinite(telemetry.clutch) && telemetry.clutch <= MAX_CLUTCH
-    && Number.isFinite(telemetry.rpm) && telemetry.rpm > 0
-    && hasCleanDriveEvidence(telemetry)
+  return cleanPowerTelemetry(telemetry)
 }
 
-function representativePower(bin: PowerBin): number | null {
-  return median(bin.powers)
+function emptyGear(sourceGear: number): GearLearningState {
+  return {
+    sourceGear,
+    status: 'learning',
+    targetRpm: null,
+    candidateRpm: null,
+    confirmingRpms: [],
+    confirmingCount: 0,
+    replacementCandidateRpm: null,
+    replacementConfirmingRpms: [],
+    targetContradicted: false,
+    lastReason: null,
+    powerBins: [],
+    evidence: []
+  }
+}
+
+function cloneGear(state: GearLearningState): GearLearningState {
+  return {
+    sourceGear: state.sourceGear,
+    status: state.status,
+    targetRpm: state.targetRpm,
+    candidateRpm: state.candidateRpm,
+    confirmingRpms: [...state.confirmingRpms],
+    confirmingCount: state.confirmingCount,
+    replacementCandidateRpm: state.replacementCandidateRpm,
+    replacementConfirmingRpms: [...state.replacementConfirmingRpms],
+    targetContradicted: state.targetContradicted,
+    lastReason: state.lastReason,
+    powerBins: state.powerBins.map(bin => ({ ...bin })),
+    evidence: state.evidence.map(item => ({ ...item }))
+  }
+}
+
+function normalizePowerBin(value: unknown): PowerBinState | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const rpmBucket = finiteInRange(raw.rpmBucket, 0, 100_000)
+  const sampleCount = finiteInRange(raw.sampleCount, 0, MAX_POWER_SAMPLES_PER_BIN)
+  const powerSum = finiteInRange(raw.powerSum, 0, Number.MAX_SAFE_INTEGER)
+  const torqueSum = finiteInRange(raw.torqueSum, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)
+  const torqueSampleCount = finiteInRange(raw.torqueSampleCount, 0, MAX_POWER_SAMPLES_PER_BIN)
+  const speedSum = finiteInRange(raw.speedSum, 0, Number.MAX_SAFE_INTEGER)
+  const speedSampleCount = finiteInRange(raw.speedSampleCount, 0, MAX_POWER_SAMPLES_PER_BIN)
+  if (rpmBucket === null || sampleCount === null || powerSum === null || torqueSum === null
+    || torqueSampleCount === null || speedSum === null || speedSampleCount === null) return null
+  return {
+    rpmBucket: roundRpm(rpmBucket),
+    sampleCount: Math.round(sampleCount),
+    medianPower: sampleCount > 0 ? powerSum / sampleCount : 0,
+    medianTorque: torqueSampleCount > 0 ? torqueSum / torqueSampleCount : null,
+    medianSpeed: speedSampleCount > 0 ? speedSum / speedSampleCount : null,
+    powerSum,
+    torqueSum,
+    torqueSampleCount: Math.round(torqueSampleCount),
+    speedSum,
+    speedSampleCount: Math.round(speedSampleCount)
+  }
+}
+
+function normalizeEvidence(value: unknown, sourceGear: number): ShiftEvidenceState | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const destinationGear = finiteInRange(raw.destinationGear, sourceGear + 1, FORWARD_GEAR_MAX)
+  const beforeTimestampMs = finiteInRange(raw.beforeTimestampMs, 0, Number.MAX_SAFE_INTEGER)
+  const afterTimestampMs = finiteInRange(raw.afterTimestampMs, 0, Number.MAX_SAFE_INTEGER)
+  const beforeRpm = finiteInRange(raw.beforeRpm, 0, 100_000)
+  const afterRpm = finiteInRange(raw.afterRpm, 0, 100_000)
+  const beforePower = finiteInRange(raw.beforePower, 0, Number.MAX_SAFE_INTEGER)
+  const afterPower = finiteInRange(raw.afterPower, 0, Number.MAX_SAFE_INTEGER)
+  const beforeSpeedKmh = finiteInRange(raw.beforeSpeedKmh, MIN_SPEED_KMH, 2_000)
+  const afterSpeedKmh = finiteInRange(raw.afterSpeedKmh, MIN_SPEED_KMH, 2_000)
+  if (destinationGear === null || beforeTimestampMs === null || afterTimestampMs === null
+    || beforeRpm === null || afterRpm === null || beforePower === null || afterPower === null
+    || beforeSpeedKmh === null || afterSpeedKmh === null) return null
+  const outcome = raw.outcome
+  if (outcome !== 'better' && outcome !== 'too_early' && outcome !== 'invalid') return null
+  const beforeTorque = raw.beforeTorque === null ? null : finiteInRange(raw.beforeTorque, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)
+  const afterTorque = raw.afterTorque === null ? null : finiteInRange(raw.afterTorque, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)
+  return {
+    sourceGear,
+    destinationGear: Math.round(destinationGear),
+    beforeTimestampMs,
+    afterTimestampMs,
+    beforeRpm,
+    afterRpm,
+    beforePower,
+    afterPower,
+    beforeTorque,
+    afterTorque,
+    beforeSpeedKmh,
+    afterSpeedKmh,
+    beforeSpeed: beforeSpeedKmh,
+    afterSpeed: afterSpeedKmh,
+    outcome
+  }
 }
 
 /**
- * Builds the two facts required for an acceleration-optimal upshift:
- *
- * 1. the WOT engine-power curve;
- * 2. the RPM drop between adjacent gears, measured from engine RPM divided by
- *    driven-wheel angular speed.
- *
- * At one road speed, comparing engine power in the current gear with engine
- * power at the post-shift RPM is equivalent to comparing wheel force. This
- * avoids guessing final drive, tyre radius, or drivetrain efficiency.
+ * Accumulates bounded, per-source-gear facts and derives a target only from
+ * completed clean real upshifts. It has no ratio/limiter/rpmMax dependency.
  */
 export class OptimalShiftEstimator {
-  private readonly powerBins = new Map<number, PowerBin>()
-  private readonly ratioSamples = new Map<number, number[]>()
-  private readonly directRatioDrops = new Map<number, number[]>()
-  private readonly limiterSamples: number[] = []
-  private readonly ratioAlternates = new Map<string, { value: number, count: number }>()
-  private limiterAlternate: { value: number, count: number } | null = null
-  private lastLimiterEvidenceKey: number | null = null
-  private rpmMax = 0
+  private readonly gears = new Map<number, GearLearningState>()
 
   ingest(telemetry: Telemetry): void {
-    if (Number.isFinite(telemetry.rpmMax) && telemetry.rpmMax > this.rpmMax) {
-      this.rpmMax = telemetry.rpmMax
+    if (!cleanPowerTelemetry(telemetry)) return
+    const state = this.getOrCreate(telemetry.gear)
+    const rpmBucket = Math.round(telemetry.rpm / POWER_BIN_RPM) * POWER_BIN_RPM
+    let bin = state.powerBins.find(candidate => candidate.rpmBucket === rpmBucket)
+    if (!bin) {
+      if (state.powerBins.length >= MAX_POWER_BINS_PER_GEAR) {
+        state.powerBins.sort((left, right) => left.rpmBucket - right.rpmBucket)
+        state.powerBins.shift()
+      }
+      bin = {
+        rpmBucket,
+        sampleCount: 0,
+        medianPower: 0,
+        medianTorque: null,
+        medianSpeed: null,
+        powerSum: 0,
+        torqueSum: 0,
+        torqueSampleCount: 0,
+        speedSum: 0,
+        speedSampleCount: 0
+      }
+      state.powerBins.push(bin)
     }
-
-    this.ingestRatio(telemetry)
-    this.ingestPower(telemetry)
+    if (bin.sampleCount >= MAX_POWER_SAMPLES_PER_BIN) return
+    bin.sampleCount += 1
+    bin.powerSum += telemetry.power
+    bin.speedSum += telemetry.speedKmh
+    bin.speedSampleCount += 1
+    if (Number.isFinite(telemetry.torque)) {
+      bin.torqueSum += telemetry.torque!
+      bin.torqueSampleCount += 1
+    }
+    bin.medianPower = bin.powerSum / bin.sampleCount
+    bin.medianTorque = bin.torqueSampleCount > 0 ? bin.torqueSum / bin.torqueSampleCount : null
+    bin.medianSpeed = bin.speedSampleCount > 0 ? bin.speedSum / bin.speedSampleCount : null
   }
 
-  reset(): void {
-    this.powerBins.clear()
-    this.ratioSamples.clear()
-    this.directRatioDrops.clear()
-    this.limiterSamples.length = 0
-    this.ratioAlternates.clear()
-    this.limiterAlternate = null
-    this.lastLimiterEvidenceKey = null
-    this.rpmMax = 0
+  /** Record a completed Gx→Gx+1 observation, including rejected observations. */
+  observeTransition(observation: ShiftTransitionObservation): ShiftEvidenceState | null {
+    const { sourceGear, destinationGear, before, after } = observation
+    if (!isForwardGear(sourceGear) || destinationGear !== sourceGear + 1) return null
+    const valid = cleanPowerTelemetry(before) && cleanPowerTelemetry(after)
+      && before.timestampMs <= after.timestampMs
+    const outcome: ShiftLearningOutcome = !valid
+      ? 'invalid'
+      : after.power / after.speedKmh > before.power / before.speedKmh ? 'better' : 'too_early'
+    const evidence: ShiftEvidenceState = {
+      sourceGear,
+      destinationGear,
+      beforeTimestampMs: before.timestampMs,
+      afterTimestampMs: after.timestampMs,
+      beforeRpm: roundRpm(before.rpm),
+      afterRpm: roundRpm(after.rpm),
+      beforePower: before.power,
+      afterPower: after.power,
+      beforeTorque: Number.isFinite(before.torque) ? before.torque : null,
+      afterTorque: Number.isFinite(after.torque) ? after.torque : null,
+      beforeSpeedKmh: before.speedKmh,
+      afterSpeedKmh: after.speedKmh,
+      beforeSpeed: before.speedKmh,
+      afterSpeed: after.speedKmh,
+      outcome
+    }
+    const state = this.getOrCreate(sourceGear)
+    state.evidence.push(evidence)
+    if (state.evidence.length > MAX_SHIFT_EVIDENCE_PER_GEAR) state.evidence.shift()
+    this.applyOutcome(state, evidence)
+    return { ...evidence }
+  }
+
+  getState(gear: number): GearLearningState | null {
+    const state = this.gears.get(gear)
+    return state ? cloneGear(state) : null
+  }
+
+  getStates(): GearLearningState[] {
+    return [...this.gears.values()].sort((left, right) => left.sourceGear - right.sourceGear).map(cloneGear)
+  }
+
+  serializeLearningState(key: string): ShiftLightLearningState {
+    return {
+      modelVersion: SHIFT_LIGHT_LEARNING_VERSION,
+      version: SHIFT_LIGHT_LEARNING_VERSION,
+      key,
+      gears: this.getStates()
+    }
+  }
+
+  importLearningState(state: unknown, key: string): boolean {
+    if (!state || typeof state !== 'object') return false
+    const raw = state as Record<string, unknown>
+    const modelVersion = raw.modelVersion ?? raw.version
+    if (modelVersion !== SHIFT_LIGHT_LEARNING_VERSION || raw.key !== key || !Array.isArray(raw.gears)) return false
+    const restored = new Map<number, GearLearningState>()
+    for (const candidate of raw.gears.slice(0, FORWARD_GEAR_MAX)) {
+      if (!candidate || typeof candidate !== 'object') continue
+      const value = candidate as Record<string, unknown>
+      const sourceGear = finiteInRange(value.sourceGear, FORWARD_GEAR_MIN, FORWARD_GEAR_MAX)
+      if (sourceGear === null) continue
+      const stateValue = emptyGear(Math.round(sourceGear))
+      if (value.status === 'learning' || value.status === 'confirming' || value.status === 'optimal') stateValue.status = value.status
+      stateValue.targetRpm = finiteInRange(value.targetRpm, 0, 100_000)
+      stateValue.candidateRpm = finiteInRange(value.candidateRpm, 0, 100_000)
+      stateValue.replacementCandidateRpm = finiteInRange(value.replacementCandidateRpm, 0, 100_000)
+      stateValue.targetContradicted = value.targetContradicted === true
+      stateValue.confirmingRpms = this.normalizeConfirmations(value.confirmingRpms)
+      stateValue.confirmingCount = Math.min(MAX_CONFIRMATIONS, Math.max(0, Math.round(Number(value.confirmingCount ?? stateValue.confirmingRpms.length))))
+      stateValue.replacementConfirmingRpms = this.normalizeConfirmations(value.replacementConfirmingRpms)
+      stateValue.lastReason = typeof value.lastReason === 'string' ? value.lastReason.slice(0, 160) : null
+      if (Array.isArray(value.powerBins)) {
+        stateValue.powerBins = value.powerBins.map(normalizePowerBin).filter((bin): bin is PowerBinState => bin !== null).slice(0, MAX_POWER_BINS_PER_GEAR)
+      }
+      if (Array.isArray(value.evidence)) {
+        stateValue.evidence = value.evidence.map(item => normalizeEvidence(item, stateValue.sourceGear)).filter((item): item is ShiftEvidenceState => item !== null).slice(-MAX_SHIFT_EVIDENCE_PER_GEAR)
+      }
+      restored.set(stateValue.sourceGear, stateValue)
+    }
+    this.gears.clear()
+    for (const [gear, value] of restored) this.gears.set(gear, value)
+    return true
   }
 
   /**
-   * A ratio measured across a completed upshift does not depend on tyre size,
-   * driven-wheel selection, or wheelspin during the pull. It is preferred once
-   * repeated clean shifts agree, while wheel-derived ratios remain a fallback.
+   * Combines persisted completed facts with facts collected while persistence
+   * was resolving. Pull state is intentionally absent from both inputs.
    */
-  observeUpshiftRatio(gear: number, ratioDrop: number): void {
-    if (!isForwardGear(gear) || !Number.isFinite(ratioDrop)) return
-    if (ratioDrop < MIN_RATIO_DROP || ratioDrop > MAX_RATIO_DROP) return
-    const samples = this.directRatioDrops.get(gear) ?? []
-    this.pushStableRatio(samples, ratioDrop, MAX_DIRECT_RATIO_SAMPLES, `direct:${gear}`)
-    this.directRatioDrops.set(gear, samples)
-  }
-
-  observeLimiter(rpm: number, evidenceKey?: number): void {
-    if (!Number.isFinite(rpm) || rpm <= 0) return
-    if (evidenceKey !== undefined) {
-      if (!Number.isInteger(evidenceKey) || evidenceKey === this.lastLimiterEvidenceKey) return
-      this.lastLimiterEvidenceKey = evidenceKey
-    }
-
-    const baseline = this.limiterSamples.length >= 2 ? median(this.limiterSamples) : null
-    if (baseline !== null && Math.abs(rpm - baseline) > LIMITER_STABILITY_RPM) {
-      if (
-        this.limiterAlternate !== null
-        && Math.abs(rpm - this.limiterAlternate.value) <= LIMITER_STABILITY_RPM
-      ) {
-        this.limiterAlternate = {
-          value: (this.limiterAlternate.value * this.limiterAlternate.count + rpm)
-            / (this.limiterAlternate.count + 1),
-          count: this.limiterAlternate.count + 1
-        }
-      } else {
-        this.limiterAlternate = { value: rpm, count: 1 }
-      }
-      if (this.limiterAlternate.count >= LIMITER_REACQUIRE_SAMPLES) {
-        this.limiterSamples.length = 0
-        this.limiterSamples.push(this.limiterAlternate.value)
-        this.limiterAlternate = null
-      }
-      return
-    }
-
-    this.limiterAlternate = null
-    this.limiterSamples.push(rpm)
-    if (this.limiterSamples.length > 5) this.limiterSamples.shift()
-  }
-
-  /** The measured limiter, once two clean independent pulls agree. */
-  getEffectiveRpmMax(): number | null {
-    if (this.limiterSamples.length < 2) return null
-    if (Math.max(...this.limiterSamples) - Math.min(...this.limiterSamples) > LIMITER_STABILITY_RPM) return null
-    return median(this.limiterSamples)
-  }
-
-  resetTransient(): void {
-    this.ratioAlternates.clear()
-    this.limiterAlternate = null
-  }
-
-  getShiftCeiling(): number {
-    return this.getLimiterCap()
-  }
-
-  getRatioDrop(gear: number): { ratioDrop: number, evidence: number } | null {
-    const directSamples = this.directRatioDrops.get(gear) ?? []
-    if (directSamples.length >= MIN_DIRECT_RATIO_SAMPLES && this.ratiosAreConsistent(directSamples)) {
-      const directRatioDrop = median(directSamples)
-      if (directRatioDrop !== null && directRatioDrop >= MIN_RATIO_DROP && directRatioDrop <= MAX_RATIO_DROP) {
-        return { ratioDrop: directRatioDrop, evidence: directSamples.length }
-      }
-    }
-
-    const currentSamples = this.ratioSamples.get(gear) ?? []
-    const nextSamples = this.ratioSamples.get(gear + 1) ?? []
-    if (currentSamples.length < MIN_RATIO_SAMPLES || nextSamples.length < MIN_RATIO_SAMPLES) return null
-
-    const currentRatio = median(currentSamples)
-    const nextRatio = median(nextSamples)
-    if (currentRatio === null || nextRatio === null || currentRatio <= 0) return null
-
-    const ratioDrop = nextRatio / currentRatio
-    if (ratioDrop < MIN_RATIO_DROP || ratioDrop > MAX_RATIO_DROP) return null
-    return {
-      ratioDrop,
-      evidence: Math.min(currentSamples.length, nextSamples.length)
-    }
-  }
-
-  /**
-   * Returns a bounded, stable fingerprint once enough adjacent gear ratios
-   * have been observed. The learner uses this for every profile method, not
-   * only optimal targets, so partial observed evidence cannot cross gearbox
-   * variants with the same car identity.
-   */
-  getGearboxSignature(): string | null {
-    const drops: string[] = []
-    for (let gear = FORWARD_GEAR_MIN; gear < FORWARD_GEAR_MAX; gear += 1) {
-      const ratio = this.getRatioDrop(gear)
-      if (!ratio) continue
-      const canonicalDrop = Math.round(ratio.ratioDrop * GEARBOX_SIGNATURE_SCALE) / GEARBOX_SIGNATURE_SCALE
-      drops.push(`${gear}:${canonicalDrop.toFixed(GEARBOX_SIGNATURE_FORMAT_DECIMALS)}`)
-      if (drops.length >= MAX_GEARBOX_SIGNATURE_DROPS) break
-    }
-    return drops.length >= MIN_GEARBOX_SIGNATURE_DROPS ? drops.join('|') : null
-  }
-
-  diagnose(gear: number): OptimalShiftDiagnostics {
-    const currentSamples = this.ratioSamples.get(gear) ?? []
-    const nextSamples = this.ratioSamples.get(gear + 1) ?? []
-    const currentRatio = median(currentSamples)
-    const nextRatio = median(nextSamples)
-    const rawRatioDrop = currentRatio !== null && nextRatio !== null && currentRatio > 0
-      ? nextRatio / currentRatio
-      : null
-    const ratioDrop = rawRatioDrop !== null && rawRatioDrop >= MIN_RATIO_DROP && rawRatioDrop <= MAX_RATIO_DROP
-      ? rawRatioDrop
-      : null
-    const reliableBins = this.getReliablePowerBins()
-    const effectiveRpmMax = this.getEffectiveRpmMax() ?? this.rpmMax
-    const highestReliableRpm = reliableBins.at(-1)?.[0] ?? 0
-    const peakPower = reliableBins.reduce<[number, PowerBin] | null>((best, candidate) => {
-      const candidatePower = representativePower(candidate[1])
-      const bestPower = best ? representativePower(best[1]) : null
-      return candidatePower !== null && (bestPower === null || candidatePower > bestPower) ? candidate : best
-    }, null)
-    const estimate = this.estimate(gear)
-    const targetRpm = estimate?.shiftRpm ?? null
-    const postShiftRpm = targetRpm !== null && ratioDrop !== null
-      ? targetRpm * ratioDrop
-      : null
-
-    return {
-      gear,
-      powerCurveCoverage: effectiveRpmMax > 0 ? Math.min(1, highestReliableRpm / effectiveRpmMax) : 0,
-      powerBinCount: reliableBins.length,
-      peakPowerRpm: peakPower?.[0] ?? null,
-      currentRatio,
-      nextRatio,
-      ratioDrop,
-      currentRatioSamples: currentSamples.length,
-      nextRatioSamples: nextSamples.length,
-      targetRpm,
-      postShiftRpm,
-      powerAtTarget: targetRpm === null ? null : this.powerAt(targetRpm, reliableBins),
-      powerAfterShift: postShiftRpm === null ? null : this.powerAt(postShiftRpm, reliableBins),
-      estimateEvidence: estimate?.evidence ?? 0
-    }
-  }
-
-  estimate(gear: number): OptimalShiftEstimate | null {
-    const effectiveRpmMax = this.getEffectiveRpmMax() ?? this.rpmMax
-    if (!isForwardGear(gear) || gear >= FORWARD_GEAR_MAX || effectiveRpmMax <= 0) return null
-    const ratio = this.getRatioDrop(gear)
-    if (!ratio) return null
-
-    const reliableBins = this.getReliablePowerBins()
-    if (reliableBins.length < 8) return null
-
-    const highestReliableRpm = reliableBins.at(-1)![0]
-    if (highestReliableRpm < effectiveRpmMax * CURVE_COVERAGE_FRACTION) return null
-
-    // Scan the usable upper band instead of assuming that an optimal shift can
-    // never precede the absolute power peak. Unusual multi-peak curves are
-    // still decided by the same-power-at-the-same-road-speed comparison.
-    const firstCandidate = Math.round(effectiveRpmMax * MIN_TARGET_RPM_FRACTION / TARGET_STEP_RPM) * TARGET_STEP_RPM
-    const limiterCap = this.getLimiterCap()
-    const lastCandidate = Math.min(
-      highestReliableRpm,
-      Math.floor(Math.min(effectiveRpmMax * MAX_TARGET_RPM_FRACTION, limiterCap) / TARGET_STEP_RPM) * TARGET_STEP_RPM
-    )
-    let confirmedSteps = 0
-    let firstCrossingRpm: number | null = null
-
-    for (let rpm = firstCandidate; rpm <= lastCandidate; rpm += TARGET_STEP_RPM) {
-      const currentPower = this.powerAt(rpm, reliableBins)
-      const nextPower = this.powerAt(rpm * ratio.ratioDrop, reliableBins)
-      if (currentPower === null || nextPower === null || nextPower < currentPower) {
-        confirmedSteps = 0
-        firstCrossingRpm = null
+  mergeLearningState(state: unknown, key: string): boolean {
+    const persisted = new OptimalShiftEstimator()
+    if (!persisted.importLearningState(state, key)) return false
+    for (const incoming of persisted.getStates()) {
+      const current = this.gears.get(incoming.sourceGear)
+      if (!current) {
+        this.gears.set(incoming.sourceGear, incoming)
         continue
       }
-
-      if (confirmedSteps === 0) firstCrossingRpm = rpm
-      confirmedSteps += 1
-      if (confirmedSteps >= CROSSOVER_CONFIRM_STEPS && firstCrossingRpm !== null) {
-        return {
-          gear,
-          shiftRpm: firstCrossingRpm,
-          ratioDrop: ratio.ratioDrop,
-          evidence: Math.min(999, ratio.evidence + reliableBins.length)
-        }
-      }
+      const preferred = this.statusRank(incoming.status) > this.statusRank(current.status)
+        ? incoming : current
+      const merged = cloneGear(preferred)
+      merged.powerBins = this.mergePowerBins(current.powerBins, incoming.powerBins)
+      merged.evidence = this.mergeEvidence(current.evidence, incoming.evidence)
+      if (!merged.lastReason) merged.lastReason = current.lastReason ?? incoming.lastReason
+      this.gears.set(merged.sourceGear, merged)
     }
-
-    const limiterTarget = Math.round(limiterCap / TARGET_STEP_RPM) * TARGET_STEP_RPM
-    if (
-      highestReliableRpm >= limiterTarget
-      && this.powerAt(limiterTarget, reliableBins) !== null
-      && this.powerAt(limiterTarget * ratio.ratioDrop, reliableBins) !== null
-    ) {
-      return {
-        gear,
-        shiftRpm: limiterTarget,
-        ratioDrop: ratio.ratioDrop,
-        evidence: Math.min(999, ratio.evidence + reliableBins.length)
-      }
-    }
-
-    return null
+    return true
   }
 
-  private ingestRatio(telemetry: Telemetry): void {
-    if (!isCleanShiftEvidence(telemetry)) return
-    if (!isForwardGear(telemetry.gear)) return
-    if (!Number.isFinite(telemetry.throttle) || telemetry.throttle < WOT_THRESHOLD) return
-    if (!Number.isFinite(telemetry.rpm) || telemetry.rpm < MIN_ENGINE_RPM) return
-    if (!Number.isFinite(telemetry.clutch) || telemetry.clutch > MAX_CLUTCH) return
-    if (!hasCleanDriveEvidence(telemetry)) return
+  /** Compatibility aliases for callers that prefer shorter names. */
+  exportState(key: string): ShiftLightLearningState { return this.serializeLearningState(key) }
+  importState(state: unknown, key: string): boolean { return this.importLearningState(state, key) }
 
-    const wheelSpeed = drivenWheelSpeed(telemetry)
-    if (wheelSpeed === null) return
-    const ratio = telemetry.rpm / wheelSpeed
-    if (!Number.isFinite(ratio) || ratio <= 0) return
-
-    const samples = this.ratioSamples.get(telemetry.gear) ?? []
-    this.pushStableRatio(samples, ratio, MAX_RATIO_SAMPLES, `wheel:${telemetry.gear}`)
-    this.ratioSamples.set(telemetry.gear, samples)
-  }
-
-  private ingestPower(telemetry: Telemetry): void {
-    if (!isCleanShiftEvidence(telemetry)) return
-    if (!isForwardGear(telemetry.gear)) return
-    if (!Number.isFinite(telemetry.throttle) || telemetry.throttle < WOT_THRESHOLD) return
-    if (!Number.isFinite(telemetry.clutch) || telemetry.clutch > MAX_CLUTCH) return
-    if (!Number.isFinite(telemetry.rpm) || telemetry.rpm <= 0) return
-    if (!Number.isFinite(telemetry.rpmMax) || telemetry.rpmMax <= 0 || telemetry.rpm > telemetry.rpmMax * 1.05) return
-    if (!Number.isFinite(telemetry.power) || telemetry.power <= 0) return
-    if (!hasCleanDriveEvidence(telemetry)) return
-
-    const rpmBin = Math.round(telemetry.rpm / POWER_BIN_RPM) * POWER_BIN_RPM
-    const existing = this.powerBins.get(rpmBin)
-    if (existing) {
-      existing.powers.push(telemetry.power)
-      if (existing.powers.length > MAX_POWER_SAMPLES_PER_BIN) existing.powers.shift()
-    } else {
-      this.powerBins.set(rpmBin, { powers: [telemetry.power] })
+  diagnose(gear: number): OptimalShiftDiagnostics {
+    const state = this.gears.get(gear)
+    const bins = state?.powerBins ?? []
+    const reliable = bins.filter(bin => bin.sampleCount > 0).sort((left, right) => left.rpmBucket - right.rpmBucket)
+    const peak = reliable.reduce<PowerBinState | null>((best, bin) => {
+      const power = bin.powerSum / bin.sampleCount
+      const bestPower = best ? best.powerSum / best.sampleCount : -Infinity
+      return power > bestPower ? bin : best
+    }, null)
+    const candidate = state?.candidateRpm ?? state?.targetRpm ?? null
+    return {
+      gear,
+      powerCurveCoverage: reliable.length > 0 ? 1 : 0,
+      powerBinCount: reliable.length,
+      peakPowerRpm: peak?.rpmBucket ?? null,
+      currentRatio: null,
+      nextRatio: null,
+      ratioDrop: null,
+      currentRatioSamples: 0,
+      nextRatioSamples: 0,
+      targetRpm: state?.targetRpm ?? candidate,
+      postShiftRpm: null,
+      powerAtTarget: candidate === null ? null : this.powerAt(state, candidate),
+      powerAfterShift: null,
+      estimateEvidence: state?.evidence.filter(item => item.outcome === 'better').length ?? 0,
+      status: state?.status ?? 'learning',
+      confirmingCount: state?.confirmingRpms.length ?? 0,
+      lastReason: state?.lastReason ?? null,
+      evidenceCount: state?.evidence.length ?? 0
     }
   }
 
-  private getReliablePowerBins(): [number, PowerBin][] {
-    return [...this.powerBins.entries()]
-      .filter(([, bin]) => bin.powers.length >= MIN_POWER_SAMPLES && (representativePower(bin) ?? 0) > 0)
-      .sort(([left], [right]) => left - right)
+  reset(): void { this.gears.clear() }
+  resetTransient(): void { /* no transient state is stored here */ }
+
+  private getOrCreate(gear: number): GearLearningState {
+    let state = this.gears.get(gear)
+    if (!state) {
+      state = emptyGear(gear)
+      this.gears.set(gear, state)
+    }
+    return state
   }
 
-  private getLimiterCap(): number {
-    const effectiveRpmMax = this.getEffectiveRpmMax()
-    const fallback = this.rpmMax * LIMITER_TARGET_FRACTION
-    if (effectiveRpmMax === null) return fallback
-    return Math.max(0, Math.min(fallback, effectiveRpmMax - LIMITER_SAFETY_RPM))
-  }
-
-  private pushStableRatio(samples: number[], ratio: number, maximum: number, key = 'ratio'): void {
-    const baseline = samples.length >= 5 ? median(samples) : null
-    if (baseline !== null && Math.abs(ratio - baseline) / baseline > RATIO_OUTLIER_FRACTION) {
-      const alternate = this.ratioAlternates.get(key)
-      if (alternate && Math.abs(ratio - alternate.value) / alternate.value <= RATIO_OUTLIER_FRACTION) {
-        alternate.value = (alternate.value * alternate.count + ratio) / (alternate.count + 1)
-        alternate.count += 1
-      } else {
-        this.ratioAlternates.set(key, { value: ratio, count: 1 })
-      }
-      const next = this.ratioAlternates.get(key)
-      const required = key.startsWith('wheel:') ? MIN_RATIO_SAMPLES : RATIO_REACQUIRE_SAMPLES
-      if (next && next.count >= required) {
-        samples.length = 0
-        samples.push(next.value)
-        this.ratioAlternates.delete(key)
+  private applyOutcome(state: GearLearningState, evidence: ShiftEvidenceState): void {
+    if (evidence.outcome === 'invalid') {
+      state.lastReason = 'Last shift was not usable: throttle, controls, speed or wheel slip was invalid.'
+      return
+    }
+    if (evidence.outcome === 'too_early') {
+      state.lastReason = 'Last clean shift was too early: the next gear produced less wheel force.'
+      if (state.status === 'optimal' && state.targetRpm !== null
+        && Math.abs(evidence.beforeRpm - state.targetRpm) <= CONFIRMATION_STABILITY_RPM) {
+        // A single contradictory pull must never blank a working target. It
+        // only arms replacement learning; the current target remains active.
+        state.targetContradicted = true
+        state.replacementCandidateRpm = null
+        state.replacementConfirmingRpms = []
       }
       return
     }
-    this.ratioAlternates.delete(key)
-    samples.push(ratio)
-    if (samples.length > maximum) samples.shift()
-  }
 
-  private ratiosAreConsistent(samples: number[]): boolean {
-    const baseline = median(samples)
-    return baseline !== null
-      && samples.every(sample => Math.abs(sample - baseline) / baseline <= RATIO_OUTLIER_FRACTION)
-  }
-
-  private powerAt(rpm: number, bins: [number, PowerBin][]): number | null {
-    let lower: [number, PowerBin] | null = null
-    let upper: [number, PowerBin] | null = null
-    for (const bin of bins) {
-      if (bin[0] <= rpm) lower = bin
-      if (bin[0] >= rpm) {
-        upper = bin
-        break
+    state.lastReason = null
+    if (state.status === 'optimal') {
+      if (!state.targetContradicted || state.targetRpm === null || evidence.beforeRpm <= state.targetRpm) return
+      if (state.replacementCandidateRpm === null) {
+        state.replacementCandidateRpm = evidence.beforeRpm
+        state.replacementConfirmingRpms = [evidence.beforeRpm]
+        return
       }
+      const replacementValues = [...state.replacementConfirmingRpms, evidence.beforeRpm]
+      if (Math.max(...replacementValues) - Math.min(...replacementValues) > CONFIRMATION_STABILITY_RPM) {
+        state.replacementCandidateRpm = evidence.beforeRpm
+        state.replacementConfirmingRpms = [evidence.beforeRpm]
+        return
+      }
+      state.replacementConfirmingRpms = replacementValues.slice(-MAX_CONFIRMATIONS)
+      if (state.replacementConfirmingRpms.length >= MAX_CONFIRMATIONS) {
+        state.targetRpm = Math.min(...state.replacementConfirmingRpms)
+        state.candidateRpm = state.targetRpm
+        state.confirmingRpms = [...state.replacementConfirmingRpms]
+        state.confirmingCount = MAX_CONFIRMATIONS
+        state.replacementCandidateRpm = null
+        state.replacementConfirmingRpms = []
+        state.targetContradicted = false
+      }
+      return
     }
-    if (!lower || !upper || upper[0] - lower[0] > MAX_INTERPOLATION_GAP_RPM) return null
-    const lowerPower = representativePower(lower[1])
-    const upperPower = representativePower(upper[1])
-    if (lowerPower === null || upperPower === null) return null
-    if (lower[0] === upper[0]) return lowerPower
+    if (state.candidateRpm === null) {
+      state.candidateRpm = evidence.beforeRpm
+      state.confirmingRpms = [evidence.beforeRpm]
+      state.confirmingCount = 1
+      state.status = 'confirming'
+      return
+    }
+    const values = [...state.confirmingRpms, evidence.beforeRpm]
+    if (Math.max(...values) - Math.min(...values) > CONFIRMATION_STABILITY_RPM) {
+      state.candidateRpm = evidence.beforeRpm
+      state.confirmingRpms = [evidence.beforeRpm]
+      state.confirmingCount = 1
+      state.status = 'confirming'
+      return
+    }
+    state.confirmingRpms = values.slice(-MAX_CONFIRMATIONS)
+    state.confirmingCount = state.confirmingRpms.length
+    if (state.confirmingRpms.length >= MAX_CONFIRMATIONS) {
+      state.targetRpm = Math.min(...state.confirmingRpms)
+      state.candidateRpm = state.targetRpm
+      state.status = 'optimal'
+    } else {
+      state.status = 'confirming'
+    }
+  }
 
-    const fraction = (rpm - lower[0]) / (upper[0] - lower[0])
-    return lowerPower + (upperPower - lowerPower) * fraction
+  private statusRank(status: ShiftLearningStatus): number {
+    return status === 'optimal' ? 3 : status === 'confirming' ? 2 : 1
+  }
+
+  private mergePowerBins(current: PowerBinState[], incoming: PowerBinState[]): PowerBinState[] {
+    const bins = new Map<number, PowerBinState>()
+    for (const item of [...incoming, ...current]) {
+      const existing = bins.get(item.rpmBucket)
+      if (!existing) {
+        bins.set(item.rpmBucket, { ...item })
+        continue
+      }
+      const count = Math.min(MAX_POWER_SAMPLES_PER_BIN, existing.sampleCount + item.sampleCount)
+      const averagePower = (existing.powerSum + item.powerSum) / Math.max(1, existing.sampleCount + item.sampleCount)
+      const torqueCount = Math.min(MAX_POWER_SAMPLES_PER_BIN, existing.torqueSampleCount + item.torqueSampleCount)
+      const averageTorque = (existing.torqueSum + item.torqueSum) / Math.max(1, existing.torqueSampleCount + item.torqueSampleCount)
+      const speedCount = Math.min(MAX_POWER_SAMPLES_PER_BIN, existing.speedSampleCount + item.speedSampleCount)
+      const averageSpeed = (existing.speedSum + item.speedSum) / Math.max(1, existing.speedSampleCount + item.speedSampleCount)
+      existing.sampleCount = count
+      existing.powerSum = averagePower * count
+      existing.medianPower = averagePower
+      existing.torqueSampleCount = torqueCount
+      existing.torqueSum = averageTorque * torqueCount
+      existing.medianTorque = torqueCount > 0 ? averageTorque : null
+      existing.speedSampleCount = speedCount
+      existing.speedSum = averageSpeed * speedCount
+      existing.medianSpeed = speedCount > 0 ? averageSpeed : null
+    }
+    return [...bins.values()].sort((left, right) => left.rpmBucket - right.rpmBucket).slice(-MAX_POWER_BINS_PER_GEAR)
+  }
+
+  private mergeEvidence(current: ShiftEvidenceState[], incoming: ShiftEvidenceState[]): ShiftEvidenceState[] {
+    const facts = new Map<string, ShiftEvidenceState>()
+    for (const item of [...incoming, ...current]) {
+      const key = `${item.sourceGear}:${item.destinationGear}:${item.beforeTimestampMs}:${item.afterTimestampMs}:${item.beforeRpm}`
+      facts.set(key, { ...item })
+    }
+    return [...facts.values()]
+      .sort((left, right) => left.afterTimestampMs - right.afterTimestampMs)
+      .slice(-MAX_SHIFT_EVIDENCE_PER_GEAR)
+  }
+
+  private normalizeConfirmations(value: unknown): number[] {
+    if (!Array.isArray(value)) return []
+    return value.map(item => finiteInRange(item, 0, 100_000)).filter((item): item is number => item !== null).map(roundRpm).slice(-MAX_CONFIRMATIONS)
+  }
+
+  private powerAt(state: GearLearningState | undefined, rpm: number): number | null {
+    if (!state) return null
+    const bin = state.powerBins.find(item => item.rpmBucket === Math.round(rpm / POWER_BIN_RPM) * POWER_BIN_RPM)
+    return bin && bin.sampleCount > 0 ? bin.powerSum / bin.sampleCount : null
   }
 }

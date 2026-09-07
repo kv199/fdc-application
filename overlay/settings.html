@@ -433,12 +433,11 @@
       <div id="shift-light-help-panel" class="calibration-help" hidden>
         <div class="calibration-help__title">HOW TO READ DIAGNOSTICS</div>
         <dl>
-          <div><dt>OBSERVED</dt><dd>Fallback target learned from your real upshifts.</dd></div>
-          <div><dt>OPTIMAL</dt><dd>Power crossover is stable and the gearbox ratio is validated.</dd></div>
-          <div><dt>LEARNING</dt><dd>The car or gear has not collected enough usable evidence yet. Details may say whether it needs full-throttle power coverage or current/next-gear ratio samples.</dd></div>
-          <div><dt>NEW GEARBOX · LEARNING</dt><dd>The measured gear ratios changed for this configuration. FDC clears its old targets and learns this configuration again.</dd></div>
+          <div><dt>LEARNING</dt><dd>FDC is collecting clean full-throttle power data. Redline comes from the game; no purple cue is shown yet.</dd></div>
+          <div><dt>CONFIRMING</dt><dd>A clean shift made the next gear pull harder. Two more clean shifts within 100 RPM confirm the candidate.</dd></div>
+          <div><dt>OPTIMAL</dt><dd>Three clean shifts confirmed the earliest good RPM. FDC flashes purple at that point.</dd></div>
         </dl>
-        <p>Power is measured at the target RPM before the shift and at the predicted RPM after the shift. The target is not simply the engine's peak-power RPM.</p>
+        <p>FDC compares wheel force as power divided by speed across each real upshift. The game-reported RPM limit drives the red redline only; you do not need to hit the limiter to learn a shift point.</p>
       </div>
 
       <div id="shift-light-empty" class="calibration-empty">
@@ -474,9 +473,9 @@
               <thead>
               <tr>
                 <th scope="col">GEAR</th>
-                <th scope="col">TARGET / AFTER</th>
-                <th scope="col">POWER NOW / NEXT</th>
-                <th scope="col">DATA</th>
+                <th scope="col">SHIFT POINT</th>
+                <th scope="col">POWER DATA</th>
+                <th scope="col">LAST CLEAN SHIFT</th>
                 <th scope="col">STATE</th>
               </tr>
             </thead>

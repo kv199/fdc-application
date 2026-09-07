@@ -1941,14 +1941,6 @@
     return Number.isFinite(value) ? `${Math.round(value)} RPM` : '—'
   }
 
-  function formatPower(value) {
-    return Number.isFinite(value) ? `${Math.round(value / 1000)} kW` : '—'
-  }
-
-  function formatDiagnosticStatus(status) {
-    return String(status || 'learning').replaceAll('-', ' ').toUpperCase()
-  }
-
   function appendCellText(cell, primary, secondary = '') {
     cell.textContent = primary
     if (secondary) {
@@ -1975,19 +1967,15 @@
       : '—'
     shiftLightCarPi.textContent = state.pi ? `PI ${state.pi}` : '—'
     shiftLightCarRpmMax.textContent = state.rpmMax ? `${state.rpmMax} RPM` : '—'
-    const fallbackShiftRpm = state.fallbackShiftRpm ?? (state.rpmMax ? Math.round(state.rpmMax * 0.98) : null)
-    shiftLightCurrentTarget.textContent = state.shiftRpm
-      ? `${state.status === 'learning' ? 'PROVISIONAL · ' : ''}${state.shiftRpm} RPM`
-      : fallbackShiftRpm ? `FALLBACK · SHIFT AT ${fallbackShiftRpm} RPM` : 'FALLBACK'
-    const activeState = state.method === 'optimal' && state.gearboxValidation === 'validating'
-      ? 'OPTIMAL · VALIDATING'
-      : state.method === 'optimal' && state.gearboxValidation === 'checking'
-        ? 'OPTIMAL · GEARBOX CHECK'
-        : state.gearboxChanged
-          ? 'NEW GEARBOX · LEARNING'
-          : state.status === 'learning' && state.shiftRpm
-            ? `LEARNING · ${Math.min(5, state.sampleCount)}/5`
-            : state.method?.toUpperCase() || state.status.toUpperCase()
+    const activeGear = state.gears.find(gear => gear.gear === state.currentGear)
+    const activeStatus = activeGear?.status || 'learning'
+    const activeTarget = activeGear?.shiftRpm ?? state.shiftRpm
+    shiftLightCurrentTarget.textContent = activeTarget
+      ? `${activeStatus === 'optimal' ? 'OPTIMAL' : 'CANDIDATE'} · ${activeTarget} RPM`
+      : state.rpmMax ? `REDLINE · ${state.rpmMax} RPM` : 'WAITING FOR RPM LIMIT'
+    const activeState = activeStatus === 'confirming'
+      ? `CONFIRMING ${Math.max(1, activeGear?.confirmingCount || 1)}/3`
+      : activeStatus.toUpperCase()
     shiftLightState.textContent = `${activeState}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
     shiftLightGearRows.replaceChildren()
 
@@ -1995,10 +1983,7 @@
 
     for (const gear of state.gears) {
       const diagnostic = diagnosticsByGear.get(gear.gear)
-      const method = diagnostic?.method || gear.method
-      const diagnosticStatus = diagnostic?.status === 'gearbox-mismatch'
-        ? 'learning'
-        : diagnostic?.status || method || gear.status
+      const diagnosticStatus = diagnostic?.status || gear.status
       const row = document.createElement('tr')
       row.dataset.state = diagnosticStatus
 
@@ -2007,40 +1992,42 @@
       row.append(gearCell)
 
       const targetCell = document.createElement('td')
-      const provisional = gear.status === 'learning' && gear.shiftRpm !== null
       appendCellText(
         targetCell,
-        formatRpm(provisional ? gear.shiftRpm : diagnostic?.targetRpm ?? gear.shiftRpm),
-        provisional
-          ? `PROVISIONAL · ${Math.min(5, gear.sampleCount)}/5`
-          : `AFTER ${formatRpm(diagnostic?.postShiftRpm)}`
+        formatRpm(diagnostic?.targetRpm ?? gear.shiftRpm),
+        gear.status === 'confirming'
+          ? `CANDIDATE · ${Math.max(1, diagnostic?.confirmingCount ?? gear.confirmingCount)}/3`
+          : gear.status === 'optimal'
+            ? 'PURPLE CUE ACTIVE'
+            : 'NO PURPLE CUE'
       )
       row.append(targetCell)
 
       const powerCell = document.createElement('td')
       appendCellText(
         powerCell,
-        `${formatPower(diagnostic?.powerAtTarget)} / ${formatPower(diagnostic?.powerAfterShift)}`,
-        'CURRENT / NEXT'
+        `${diagnostic?.powerBinCount ?? 0} RPM BINS`,
+        diagnostic?.peakPowerRpm ? `PEAK ${formatRpm(diagnostic.peakPowerRpm)}` : 'CLEAN WOT DATA'
       )
       row.append(powerCell)
 
       const dataCell = document.createElement('td')
-      const coverage = diagnostic ? `${Math.round(diagnostic.powerCurveCoverage * 100)}%` : '—'
-      const ratio = diagnostic
-        ? `${diagnostic.currentRatioSamples}/${diagnostic.nextRatioSamples}`
-        : '—'
-      const peakPower = diagnostic ? formatRpm(diagnostic.peakPowerRpm) : '—'
-      appendCellText(dataCell, `CURVE ${coverage}`, `PEAK ${peakPower} · RATIO ${ratio} · EVIDENCE ${diagnostic?.estimateEvidence || gear.sampleCount}`)
+      appendCellText(
+        dataCell,
+        `${diagnostic?.evidenceCount ?? gear.sampleCount} ANALYSED`,
+        diagnostic?.lastReason || gear.lastReason || 'WAITING FOR A CLEAN UPSHIFT'
+      )
       row.append(dataCell)
 
       const stateCell = document.createElement('td')
       appendCellText(
         stateCell,
-        provisional
-          ? 'LEARNING'
-          : diagnosticStatus === 'learning' ? 'LEARNING' : method?.toUpperCase() || gear.status.toUpperCase(),
-        formatDiagnosticStatus(diagnosticStatus)
+        diagnosticStatus === 'confirming'
+          ? `CONFIRMING ${Math.max(1, diagnostic?.confirmingCount ?? gear.confirmingCount)}/3`
+          : diagnosticStatus.toUpperCase(),
+        diagnosticStatus === 'learning' && (diagnostic?.lastReason || gear.lastReason)
+          ? 'CHECK LAST SHIFT'
+          : ''
       )
       row.append(stateCell)
       shiftLightGearRows.append(row)
@@ -2053,6 +2040,10 @@
       cell.textContent = 'NO GEAR SAMPLES YET'
       row.append(cell)
       shiftLightGearRows.append(row)
+    }
+
+    if (state.persistenceError) {
+      setStatus(`SHIFT LIGHT SAVE ERROR · ${state.persistenceError}`, true)
     }
   }
 

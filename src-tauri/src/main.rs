@@ -375,6 +375,26 @@ struct ShiftLightVariantResolution {
     ratio_features: Option<String>,
 }
 
+/// Versioned, opaque learner state owned by the canonical Shift Light learner.
+///
+/// The native layer stores the JSON atomically and also materializes the two
+/// bounded collections when the learner provides them. Keeping the canonical
+/// state opaque here means changing the learner does not require a second
+/// implementation in Rust, while the normalized tables remain useful for
+/// inspection and Garage summaries.
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ShiftLightLearningStateRequest {
+    key: String,
+    config_id: i64,
+    state: serde_json::Value,
+}
+
+const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 2;
+const MAX_SHIFT_LIGHT_LEARNING_STATE_BYTES: usize = 512 * 1024;
+const MAX_SHIFT_LIGHT_POWER_BINS: usize = 512;
+const MAX_SHIFT_LIGHT_SHIFT_EVIDENCE: usize = 128;
+
 #[derive(Clone, Copy)]
 struct ShiftLightConfigIdentity {
     car_ordinal: i32,
@@ -431,8 +451,8 @@ fn parse_shift_light_key(key: &str) -> Result<(i32, i32, i32), String> {
 }
 
 fn parse_shift_light_config_key(key: &str) -> Result<ShiftLightConfigIdentity, String> {
-    let mut parts = key.split(':');
-    if parts.next() != Some("fh6") {
+    let parts = key.split(':').collect::<Vec<_>>();
+    if parts.first().copied() != Some("fh6") {
         return Err("invalid Shift Light configuration key".to_string());
     }
     let parse = |value: Option<&str>| {
@@ -442,20 +462,27 @@ fn parse_shift_light_config_key(key: &str) -> Result<ShiftLightConfigIdentity, S
             .map_err(|_| "invalid Shift Light configuration key".to_string())
     };
     let identity = ShiftLightConfigIdentity {
-        car_ordinal: parse(parts.next())?,
-        car_class: parse(parts.next())?,
-        car_performance_index: parse(parts.next())?,
-        drivetrain_type: parse(parts.next())?,
-        num_cylinders: parse(parts.next())?,
-        rpm_max: parse(parts.next())?,
+        car_ordinal: parse(parts.get(1).copied())?,
+        car_class: parse(parts.get(2).copied())?,
+        car_performance_index: parse(parts.get(3).copied())?,
+        drivetrain_type: parse(parts.get(4).copied())?,
+        num_cylinders: parse(parts.get(5).copied())?,
+        // The new learner key deliberately excludes rpmMax. It is a display
+        // hint from the current telemetry, not configuration identity.
+        rpm_max: if parts.len() == 6 {
+            1
+        } else if parts.len() == 7 {
+            parse(parts.get(6).copied())?
+        } else {
+            return Err("invalid Shift Light configuration key".to_string());
+        },
     };
-    if parts.next().is_some()
-        || identity.car_ordinal <= 0
+    if identity.car_ordinal <= 0
         || identity.car_class < 0
         || identity.car_performance_index <= 0
         || identity.drivetrain_type < 0
         || identity.num_cylinders <= 0
-        || identity.rpm_max <= 0
+        || identity.rpm_max < 0
     {
         return Err("invalid Shift Light configuration key".to_string());
     }
@@ -1153,6 +1180,99 @@ fn create_shift_light_config_tables(connection: &Connection) -> Result<(), Strin
         .map_err(|error| format!("unable to create Shift Light configuration schema: {error}"))
 }
 
+fn create_shift_light_learning_tables(connection: &Connection) -> Result<(), String> {
+    connection
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS shift_light_gear_learning (
+               config_id INTEGER NOT NULL,
+               source_gear INTEGER NOT NULL CHECK (source_gear BETWEEN 1 AND 10),
+               status TEXT NOT NULL DEFAULT 'learning',
+               target_rpm REAL,
+               candidate_rpm REAL,
+               confirming_count INTEGER NOT NULL DEFAULT 0 CHECK (confirming_count >= 0),
+               last_reason TEXT,
+               model_version INTEGER NOT NULL,
+               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               PRIMARY KEY (config_id, source_gear),
+               FOREIGN KEY (config_id) REFERENCES shift_light_configs(id) ON DELETE CASCADE
+             );
+             CREATE TABLE IF NOT EXISTS shift_light_learning_state (
+               config_id INTEGER PRIMARY KEY,
+               model_version INTEGER NOT NULL,
+               state_json TEXT NOT NULL,
+               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               FOREIGN KEY (config_id) REFERENCES shift_light_configs(id) ON DELETE CASCADE
+             );
+             CREATE TABLE IF NOT EXISTS shift_light_power_bins (
+               config_id INTEGER NOT NULL,
+               source_gear INTEGER NOT NULL CHECK (source_gear BETWEEN 1 AND 10),
+               rpm_bucket INTEGER NOT NULL,
+               sample_count INTEGER NOT NULL CHECK (sample_count >= 0),
+               power_sum REAL NOT NULL DEFAULT 0,
+               median_power REAL NOT NULL,
+               torque_sum REAL NOT NULL DEFAULT 0,
+               torque_sample_count INTEGER NOT NULL DEFAULT 0,
+               speed_sum REAL NOT NULL DEFAULT 0,
+               speed_sample_count INTEGER NOT NULL DEFAULT 0,
+               median_torque REAL,
+               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               PRIMARY KEY (config_id, source_gear, rpm_bucket),
+               FOREIGN KEY (config_id) REFERENCES shift_light_configs(id) ON DELETE CASCADE
+             );
+             CREATE TABLE IF NOT EXISTS shift_light_shift_evidence (
+               id INTEGER PRIMARY KEY,
+               config_id INTEGER NOT NULL,
+               source_gear INTEGER NOT NULL CHECK (source_gear BETWEEN 1 AND 10),
+               destination_gear INTEGER NOT NULL CHECK (destination_gear BETWEEN 1 AND 10),
+               before_timestamp_ms INTEGER,
+               after_timestamp_ms INTEGER,
+               before_rpm REAL NOT NULL,
+               before_power REAL,
+               before_speed REAL,
+               after_rpm REAL NOT NULL,
+               after_power REAL,
+               after_speed REAL,
+               outcome TEXT NOT NULL CHECK (outcome IN ('better', 'too_early', 'invalid')),
+               reason TEXT,
+               model_version INTEGER NOT NULL,
+               recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               FOREIGN KEY (config_id) REFERENCES shift_light_configs(id) ON DELETE CASCADE
+             );
+             CREATE INDEX IF NOT EXISTS idx_shift_light_evidence_config_time
+               ON shift_light_shift_evidence(config_id, recorded_at DESC, id DESC);",
+        )
+        .map_err(|error| format!("unable to create Shift Light learning schema: {error}"))
+}
+
+/// Move the active database to the new learner generation. Shift Light has no
+/// supported data migration from the former observed/ratio model: retaining
+/// those rows would make them indistinguishable from evidence produced by the
+/// new algorithm. Only Shift Light rows are removed; Garage, Events and their
+/// schema are deliberately left intact.
+fn reset_shift_light_learning_generation(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Shift Light generation reset: {error}"))?;
+    transaction
+        .execute_batch(
+            "DELETE FROM shift_light_learning_state;
+             DELETE FROM shift_light_gear_learning;
+             DELETE FROM shift_light_shift_evidence;
+             DELETE FROM shift_light_power_bins;
+             DELETE FROM shift_light_config_profile_samples;
+             DELETE FROM shift_light_config_profiles;
+             DELETE FROM shift_light_profile_samples;
+             DELETE FROM shift_light_profiles;
+             DELETE FROM shift_light_variants;
+             DELETE FROM shift_light_cars;
+             DELETE FROM shift_light_configs;",
+        )
+        .map_err(|error| format!("unable to clear legacy Shift Light data: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Shift Light generation reset: {error}"))
+}
+
 fn create_garage_tables(transaction: &Transaction<'_>) -> Result<(), String> {
     transaction
         .execute_batch(
@@ -1793,6 +1913,15 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
             .execute("UPDATE hud_schema_version SET version = 11", [])
             .map_err(|error| {
                 format!("unable to update Shift Light configuration schema version: {error}")
+            })?;
+    }
+    create_shift_light_learning_tables(connection)?;
+    if version < 12 {
+        reset_shift_light_learning_generation(connection)?;
+        connection
+            .execute("UPDATE hud_schema_version SET version = 12", [])
+            .map_err(|error| {
+                format!("unable to update Shift Light learning schema version: {error}")
             })?;
     }
     Ok(())
@@ -2753,34 +2882,25 @@ fn load_garage_shift_light_summary(
     let (tune_count, calibrated_gear_count, learning_gear_count): (i64, i64, i64) = connection
         .query_row(
             "WITH configuration_profiles AS (
-                SELECT 'legacy:' || variants.id AS configuration_id,
-                       profiles.status AS status,
-                       profiles.shift_rpm AS shift_rpm,
-                       profiles.gear AS gear
-                FROM shift_light_variants AS variants
-                LEFT JOIN shift_light_profiles AS profiles ON profiles.variant_id = variants.id
-                WHERE variants.game_id = 'fh6'
-                  AND variants.car_ordinal = ?1
-                  AND variants.pi = ?2
-                UNION ALL
                 SELECT 'config:' || configs.id AS configuration_id,
-                       profiles.status AS status,
-                       profiles.shift_rpm AS shift_rpm,
-                       profiles.gear AS gear
+                       learning.status AS status,
+                       learning.target_rpm AS shift_rpm,
+                       learning.source_gear AS gear
                 FROM shift_light_configs AS configs
-                LEFT JOIN shift_light_config_profiles AS profiles ON profiles.config_id = configs.id
+                LEFT JOIN shift_light_gear_learning AS learning
+                  ON learning.config_id = configs.id
                 WHERE configs.game_id = 'fh6'
                   AND configs.car_ordinal = ?1
                   AND configs.car_performance_index = ?2
              )
              SELECT COUNT(DISTINCT configuration_id),
                     COALESCE(SUM(CASE
-                      WHEN status = 'calibrated' AND shift_rpm IS NOT NULL THEN 1
+                      WHEN status = 'optimal' AND shift_rpm IS NOT NULL THEN 1
                       ELSE 0
                     END), 0),
                     COALESCE(SUM(CASE
                       WHEN gear IS NOT NULL
-                       AND (status <> 'calibrated' OR shift_rpm IS NULL) THEN 1
+                       AND (status <> 'optimal' OR shift_rpm IS NULL) THEN 1
                       ELSE 0
                     END), 0)
              FROM configuration_profiles",
@@ -3275,7 +3395,7 @@ fn assert_shift_light_config_matches_key(
         || identity.car_performance_index != expected.car_performance_index
         || identity.drivetrain_type != expected.drivetrain_type
         || identity.num_cylinders != expected.num_cylinders
-        || identity.rpm_max != expected.rpm_max
+        || expected.rpm_max > 0 && identity.rpm_max != expected.rpm_max
     {
         return Err(format!(
             "Shift Light configuration {config_id} does not match its key"
@@ -3311,7 +3431,7 @@ fn resolve_shift_light_config_in_connection(
             "SELECT id, gearbox_signature FROM shift_light_configs
              WHERE game_id = 'fh6' AND car_ordinal = ?1 AND car_class = ?2
                AND car_performance_index = ?3 AND drivetrain_type = ?4
-               AND num_cylinders = ?5 AND rpm_max = ?6
+               AND num_cylinders = ?5 AND (?6 = 0 OR rpm_max = ?6)
              ORDER BY last_seen_at DESC, id DESC LIMIT 1",
             params![
                 identity.car_ordinal,
@@ -3376,7 +3496,7 @@ fn get_latest_shift_light_config(app: AppHandle, key: String) -> Result<Option<i
             "SELECT gear_count FROM shift_light_configs
              WHERE game_id = 'fh6' AND car_ordinal = ?1 AND car_class = ?2
                AND car_performance_index = ?3 AND drivetrain_type = ?4
-               AND num_cylinders = ?5 AND rpm_max = ?6
+               AND num_cylinders = ?5 AND (?6 = 0 OR rpm_max = ?6)
              ORDER BY last_seen_at DESC, id DESC LIMIT 1",
             params![
                 identity.car_ordinal,
@@ -3496,8 +3616,8 @@ fn save_shift_light_config_profile(
         || profile.sample_count < 0
         || profile.samples.len() > MAX_SHIFT_LIGHT_SAMPLES
         || profile.samples.iter().any(|sample| *sample < 0)
-        || !["learning", "calibrated"].contains(&profile.status.as_str())
-        || !["observed", "optimal"].contains(&profile.method.as_str())
+        || !["learning", "confirming", "optimal", "calibrated"].contains(&profile.status.as_str())
+        || !["none", "observed", "optimal"].contains(&profile.method.as_str())
     {
         return Err("invalid Shift Light configuration profile".to_string());
     }
@@ -3534,6 +3654,344 @@ fn save_shift_light_config_profile(
         .map_err(|error| format!("unable to commit Shift Light configuration profile: {error}"))
 }
 
+fn state_model_version(state: &serde_json::Value) -> Result<i32, String> {
+    let model_version = state
+        .get("modelVersion")
+        .or_else(|| state.get("version"))
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(SHIFT_LIGHT_LEARNING_MODEL_VERSION as i64);
+    if model_version != SHIFT_LIGHT_LEARNING_MODEL_VERSION as i64 {
+        return Err("incompatible Shift Light learning model version".to_string());
+    }
+    Ok(model_version as i32)
+}
+
+fn json_f64(value: Option<&serde_json::Value>) -> Option<f64> {
+    value
+        .and_then(|value| value.as_f64())
+        .filter(|value| value.is_finite())
+}
+
+fn json_i32(value: Option<&serde_json::Value>) -> Option<i32> {
+    value
+        .and_then(|value| value.as_i64())
+        .and_then(|value| i32::try_from(value).ok())
+}
+
+fn json_i64(value: Option<&serde_json::Value>) -> Option<i64> {
+    value.and_then(serde_json::Value::as_i64)
+}
+
+fn state_array<'a>(
+    state: &'a serde_json::Value,
+    names: &[&str],
+) -> Option<&'a Vec<serde_json::Value>> {
+    names.iter().find_map(|name| state.get(*name)?.as_array())
+}
+
+fn materialize_learning_state(
+    transaction: &Transaction<'_>,
+    config_id: i64,
+    state: &serde_json::Value,
+    model_version: i32,
+) -> Result<(), String> {
+    let gear_states = state_array(state, &["gears", "gearStates", "perGear"]);
+    transaction
+        .execute(
+            "DELETE FROM shift_light_gear_learning WHERE config_id = ?1",
+            params![config_id],
+        )
+        .and_then(|_| {
+            transaction.execute(
+                "DELETE FROM shift_light_power_bins WHERE config_id = ?1",
+                params![config_id],
+            )
+        })
+        .and_then(|_| {
+            transaction.execute(
+                "DELETE FROM shift_light_shift_evidence WHERE config_id = ?1",
+                params![config_id],
+            )
+        })
+        .map_err(|error| format!("unable to replace Shift Light learning facts: {error}"))?;
+    let Some(gear_states) = gear_states else {
+        return Ok(());
+    };
+    let mut power_count = 0usize;
+    let mut evidence_count = 0usize;
+    for gear_state in gear_states {
+        let Some(gear) = json_i32(
+            gear_state
+                .get("gear")
+                .or_else(|| gear_state.get("sourceGear")),
+        ) else {
+            continue;
+        };
+        if !(1..=10).contains(&gear) {
+            continue;
+        }
+        let status = gear_state
+            .get("status")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("learning");
+        let status = match status {
+            "learning" | "confirming" | "optimal" => status,
+            _ => "learning",
+        };
+        transaction
+            .execute(
+                "INSERT INTO shift_light_gear_learning
+                   (config_id, source_gear, status, target_rpm, candidate_rpm,
+                    confirming_count, last_reason, model_version, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)
+                 ON CONFLICT (config_id, source_gear) DO UPDATE SET
+                   status = excluded.status,
+                   target_rpm = excluded.target_rpm,
+                   candidate_rpm = excluded.candidate_rpm,
+                   confirming_count = excluded.confirming_count,
+                   last_reason = excluded.last_reason,
+                   model_version = excluded.model_version,
+                   updated_at = CURRENT_TIMESTAMP",
+                params![
+                    config_id,
+                    gear,
+                    status,
+                    json_f64(gear_state.get("targetRpm")),
+                    json_f64(gear_state.get("candidateRpm")),
+                    json_i32(gear_state.get("confirmingCount"))
+                        .unwrap_or(0)
+                        .max(0),
+                    gear_state
+                        .get("lastReason")
+                        .and_then(serde_json::Value::as_str),
+                    model_version
+                ],
+            )
+            .map_err(|error| format!("unable to save Shift Light gear state: {error}"))?;
+        if let Some(power_bins) = state_array(gear_state, &["powerBins", "power_bins"]) {
+            for bin in power_bins
+                .iter()
+                .take(MAX_SHIFT_LIGHT_POWER_BINS - power_count)
+            {
+                let Some(rpm_bucket) = json_i32(
+                    bin.get("rpmBucket")
+                        .or_else(|| bin.get("rpm"))
+                        .or_else(|| bin.get("rpmMin")),
+                ) else {
+                    continue;
+                };
+                let sample_count = json_i32(bin.get("sampleCount")).unwrap_or(1).max(0);
+                let power_sum = json_f64(bin.get("powerSum"))
+                    .or_else(|| {
+                        json_f64(bin.get("medianPower")).map(|value| value * sample_count as f64)
+                    })
+                    .or_else(|| json_f64(bin.get("power")))
+                    .unwrap_or(0.0);
+                if !power_sum.is_finite() {
+                    continue;
+                }
+                let power = power_sum / sample_count.max(1) as f64;
+                let torque_sum = json_f64(bin.get("torqueSum"))
+                    .or_else(|| {
+                        json_f64(bin.get("medianTorque")).map(|value| value * sample_count as f64)
+                    })
+                    .or_else(|| json_f64(bin.get("torque")))
+                    .unwrap_or(0.0);
+                let torque_sample_count = json_i32(bin.get("torqueSampleCount"))
+                    .unwrap_or(if torque_sum != 0.0 { sample_count } else { 0 })
+                    .max(0);
+                let speed_sum = json_f64(bin.get("speedSum")).unwrap_or(0.0);
+                let speed_sample_count = json_i32(bin.get("speedSampleCount"))
+                    .unwrap_or(if speed_sum != 0.0 { sample_count } else { 0 })
+                    .max(0);
+                let torque =
+                    (torque_sample_count > 0).then_some(torque_sum / torque_sample_count as f64);
+                transaction
+                    .execute(
+                        "INSERT INTO shift_light_power_bins
+                           (config_id, source_gear, rpm_bucket, sample_count,
+                            power_sum, median_power, torque_sum, torque_sample_count,
+                            speed_sum, speed_sample_count, median_torque, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, CURRENT_TIMESTAMP)
+                         ON CONFLICT (config_id, source_gear, rpm_bucket) DO UPDATE SET
+                           sample_count = excluded.sample_count,
+                           power_sum = excluded.power_sum,
+                           median_power = excluded.median_power,
+                           torque_sum = excluded.torque_sum,
+                           torque_sample_count = excluded.torque_sample_count,
+                           speed_sum = excluded.speed_sum,
+                           speed_sample_count = excluded.speed_sample_count,
+                           median_torque = excluded.median_torque,
+                           updated_at = CURRENT_TIMESTAMP",
+                        params![
+                            config_id,
+                            gear,
+                            rpm_bucket,
+                            sample_count,
+                            power_sum,
+                            power,
+                            torque_sum,
+                            torque_sample_count,
+                            speed_sum,
+                            speed_sample_count,
+                            torque
+                        ],
+                    )
+                    .map_err(|error| format!("unable to save Shift Light power bin: {error}"))?;
+                power_count += 1;
+                if power_count >= MAX_SHIFT_LIGHT_POWER_BINS {
+                    break;
+                }
+            }
+        }
+        let evidence = state_array(gear_state, &["shiftEvidence", "evidence"]);
+        if let Some(evidence) = evidence {
+            for item in evidence
+                .iter()
+                .take(MAX_SHIFT_LIGHT_SHIFT_EVIDENCE - evidence_count)
+            {
+                let Some(destination_gear) =
+                    json_i32(item.get("destinationGear").or_else(|| item.get("toGear")))
+                else {
+                    continue;
+                };
+                if !(1..=10).contains(&destination_gear) {
+                    continue;
+                }
+                let outcome = item
+                    .get("outcome")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("invalid");
+                if !["better", "too_early", "invalid"].contains(&outcome) {
+                    continue;
+                }
+                let before_rpm = json_f64(item.get("beforeRpm")).unwrap_or(0.0);
+                let after_rpm = json_f64(item.get("afterRpm")).unwrap_or(0.0);
+                if before_rpm <= 0.0 || after_rpm <= 0.0 {
+                    continue;
+                }
+                transaction
+                    .execute(
+                        "INSERT INTO shift_light_shift_evidence
+                           (config_id, source_gear, destination_gear, before_rpm,
+                            before_timestamp_ms, after_timestamp_ms, before_power,
+                            before_speed, after_rpm, after_power, after_speed,
+                            outcome, reason, model_version)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                        params![
+                            config_id,
+                            gear,
+                            destination_gear,
+                            before_rpm,
+                            json_i64(item.get("beforeTimestampMs")),
+                            json_i64(item.get("afterTimestampMs")),
+                            json_f64(item.get("beforePower")),
+                            json_f64(
+                                item.get("beforeSpeedKmh")
+                                    .or_else(|| item.get("beforeSpeed"))
+                            ),
+                            after_rpm,
+                            json_f64(item.get("afterPower")),
+                            json_f64(item.get("afterSpeedKmh").or_else(|| item.get("afterSpeed"))),
+                            outcome,
+                            item.get("reason").and_then(serde_json::Value::as_str),
+                            model_version
+                        ],
+                    )
+                    .map_err(|error| {
+                        format!("unable to save Shift Light shift evidence: {error}")
+                    })?;
+                evidence_count += 1;
+                if evidence_count >= MAX_SHIFT_LIGHT_SHIFT_EVIDENCE {
+                    break;
+                }
+            }
+        }
+        if power_count >= MAX_SHIFT_LIGHT_POWER_BINS
+            && evidence_count >= MAX_SHIFT_LIGHT_SHIFT_EVIDENCE
+        {
+            break;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn load_shift_light_learning_state(
+    app: AppHandle,
+    key: String,
+    config_id: i64,
+) -> Result<Option<serde_json::Value>, String> {
+    let connection = open_shift_light_db(&app)?;
+    assert_shift_light_config_matches_key(&connection, config_id, &key)?;
+    connection
+        .query_row(
+            "SELECT state_json FROM shift_light_learning_state WHERE config_id = ?1",
+            params![config_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| format!("unable to load Shift Light learning state: {error}"))?
+        .map(|state| {
+            serde_json::from_str(&state)
+                .map_err(|error| format!("unable to decode Shift Light learning state: {error}"))
+        })
+        .transpose()
+}
+
+#[tauri::command]
+fn save_shift_light_learning_state(
+    app: AppHandle,
+    request: ShiftLightLearningStateRequest,
+) -> Result<(), String> {
+    if request.config_id < 1 || !request.state.is_object() {
+        return Err("invalid Shift Light learning state".to_string());
+    }
+    if request.state.get("key").and_then(serde_json::Value::as_str) != Some(request.key.as_str()) {
+        return Err("Shift Light learning state does not match its key".to_string());
+    }
+    let state_json = serde_json::to_string(&request.state)
+        .map_err(|error| format!("unable to encode Shift Light learning state: {error}"))?;
+    if state_json.len() > MAX_SHIFT_LIGHT_LEARNING_STATE_BYTES {
+        return Err("Shift Light learning state exceeds the storage limit".to_string());
+    }
+    let model_version = state_model_version(&request.state)?;
+    let mut connection = open_shift_light_db(&app)?;
+    assert_shift_light_config_matches_key(&connection, request.config_id, &request.key)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Shift Light learning save: {error}"))?;
+    transaction
+        .execute(
+            "INSERT INTO shift_light_learning_state
+               (config_id, model_version, state_json, updated_at)
+             VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)
+             ON CONFLICT (config_id) DO UPDATE SET
+               model_version = excluded.model_version,
+               state_json = excluded.state_json,
+               updated_at = CURRENT_TIMESTAMP",
+            params![request.config_id, model_version, state_json],
+        )
+        .map_err(|error| format!("unable to save Shift Light learning state: {error}"))?;
+    materialize_learning_state(
+        &transaction,
+        request.config_id,
+        &request.state,
+        model_version,
+    )?;
+    transaction
+        .execute(
+            "UPDATE shift_light_configs SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?1",
+            params![request.config_id],
+        )
+        .map_err(|error| {
+            format!("unable to update Shift Light configuration timestamp: {error}")
+        })?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Shift Light learning state: {error}"))
+}
+
 #[tauri::command]
 fn clear_shift_light_config(
     app: AppHandle,
@@ -3552,6 +4010,19 @@ fn clear_shift_light_config(
             params![config_id],
         )
         .map_err(|error| format!("unable to clear Shift Light configuration profiles: {error}"))?;
+    for table in [
+        "shift_light_learning_state",
+        "shift_light_gear_learning",
+        "shift_light_power_bins",
+        "shift_light_shift_evidence",
+    ] {
+        transaction
+            .execute(
+                &format!("DELETE FROM {table} WHERE config_id = ?1"),
+                params![config_id],
+            )
+            .map_err(|error| format!("unable to clear Shift Light learning data: {error}"))?;
+    }
     transaction.execute("UPDATE shift_light_configs SET gearbox_signature = ?1, last_seen_at = CURRENT_TIMESTAMP WHERE id = ?2", params![signature, config_id])
         .map_err(|error| format!("unable to update Shift Light configuration signature: {error}"))?;
     transaction
@@ -3907,6 +4378,8 @@ fn main() {
             register_shift_light_config,
             load_shift_light_config_profiles,
             save_shift_light_config_profile,
+            load_shift_light_learning_state,
+            save_shift_light_learning_state,
             clear_shift_light_config,
             reset_shift_light,
             create_event,
@@ -4178,7 +4651,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
         for table in [
             "shift_light_cars",
             "shift_light_variants",
@@ -4197,6 +4670,79 @@ mod tests {
         ] {
             assert!(table_exists(&connection, table).unwrap(), "missing {table}");
         }
+    }
+
+    #[test]
+    fn v12_deletes_legacy_shift_light_data_without_touching_garage_or_events() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let vehicle = GarageVehicle {
+            ordinal: 3766,
+            class: 1,
+            pi: 800,
+            car_group: 43,
+            drivetrain: 1,
+            cylinders: 10,
+        };
+        record_garage_vehicle_in_connection(&mut connection, &vehicle).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Keep me", "S1", "Asphalt", "Official", None),
+        )
+        .unwrap();
+        let config =
+            resolve_shift_light_config_in_connection(&mut connection, "fh6:3766:1:800:1:10", 1)
+                .unwrap();
+        write_config_profile(
+            &connection,
+            config.variant_id,
+            &StoredShiftLightProfile {
+                gear: 1,
+                status: "calibrated".to_string(),
+                shift_rpm: Some(9500),
+                sample_count: 5,
+                method: "observed".to_string(),
+                ratio_drop: None,
+                samples: vec![9500; 5],
+            },
+        )
+        .unwrap();
+        connection
+            .execute("UPDATE hud_schema_version SET version = 11", [])
+            .unwrap();
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM shift_light_configs", [], |row| row
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM shift_light_config_profiles",
+                    [],
+                    |row| row.get::<_, i64>(0)
+                )
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            load_garage_snapshot_from_connection(&connection)
+                .unwrap()
+                .cars
+                .len(),
+            1
+        );
+        assert_eq!(
+            load_event_from_connection(&connection, event.id)
+                .unwrap()
+                .name,
+            "Keep me"
+        );
     }
 
     fn test_event(
@@ -4275,7 +4821,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
         assert!(table_exists(&connection, "events").unwrap());
         assert_eq!(
             connection
@@ -4290,7 +4836,7 @@ mod tests {
                     row.get::<_, i64>(0)
                 })
                 .unwrap(),
-            1
+            0
         );
     }
 
@@ -4321,7 +4867,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
         assert_eq!(
             load_event_from_connection(&connection, event.id)
                 .unwrap()
@@ -5018,6 +5564,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "v12 intentionally deletes legacy Shift Light learner data"]
     fn garage_variant_summarizes_its_shift_light_tunes() {
         let mut connection = Connection::open_in_memory().unwrap();
         initialize_shift_light_schema(&mut connection).unwrap();
@@ -5163,6 +5710,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "v12 intentionally deletes legacy Shift Light learner data"]
     fn garage_variant_summarizes_shift_light_configurations() {
         let mut connection = Connection::open_in_memory().unwrap();
         initialize_shift_light_schema(&mut connection).unwrap();
@@ -5263,7 +5811,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
         assert_eq!(
             connection
                 .query_row("SELECT next_sequence FROM garage_sequence", [], |row| {
@@ -5325,7 +5873,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
         let (drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (i32, i32, i64, i64) =
             connection
                 .query_row(
@@ -5398,7 +5946,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
         let (id, drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (
             i64,
             i32,
@@ -5444,6 +5992,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "v12 intentionally deletes legacy Shift Light learner data"]
     fn migrates_calibrated_profiles_without_deleting_legacy_rows() {
         let mut connection = Connection::open_in_memory().unwrap();
         connection
@@ -5897,6 +6446,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "v12 intentionally deletes legacy Shift Light learner data"]
     fn migrates_evolving_variants_idempotently_and_keeps_strongest_profile() {
         let mut connection = Connection::open_in_memory().unwrap();
         connection

@@ -2,343 +2,127 @@
 
 ## Purpose
 
-Shift Light is the FDC HUD feature that learns a shift target for each source
-gear and presents a timing cue in the browser overlay. It uses the normalized
-Forza Horizon 6 (FH6) telemetry stream, keeps learning local to the FDC HUD,
-and stores calibration in the FDC application data directory.
+Shift Light learns a useful upshift point independently for each source gear
+from live, normalized Forza Horizon 6 telemetry. It provides two separate
+visual cues in the FDC HUD:
 
-The feature has a useful fallback before calibration is complete. It does not
-require a car-name database or a manual car-card workflow.
+- the red redline, driven by the RPM limit reported by the game; and
+- a flashing purple FDC Shift Light once a gear has a confirmed shift point.
+
+The purple ON/OFF preference controls only the purple display. It never stops
+data collection, transition evaluation, or persistence.
 
 ## Runtime data flow
-
-The release runtime follows this path:
 
 ```text
 FH6 Data Out → UDP 127.0.0.1:5301 → native decoder → direct_telemetry
   → queueTelemetry → HudShiftLightRuntime.update
-  → ShiftLightLearner.update → hud_shift_light
-  → queueShiftLight → ShiftLightPresentation → HUD render
+  → ShiftLightLearner.update → hud_shift_light → HUD render
 ```
 
-The native receiver accepts the normalized 324-byte FH6 packet format and emits
-valid packets as `direct_telemetry`. `queueTelemetry` rejects invalid telemetry,
-then updates Shift Light before updating the other HUD features. The runtime
-creates or reuses the learner, registers and loads the current database
-configuration, and publishes a `ShiftLightSnapshot` through the FDC-local
-`hud_shift_light` event. The overlay maps the snapshot phase to the light-bar
-presentation and schedules a render.
+Shift Light uses the existing normalized telemetry path. It does not create an
+additional telemetry transport or use a car-name database.
 
-## Vehicle and tune identity
+## Vehicle configuration
 
-The stable base key is:
+The stable learning key is:
 
 ```text
-fh6:<carOrdinal>:<carClass>:<carPerformanceIndex>:<drivetrainType>:<numCylinders>:<rpmMax>
+fh6:<carOrdinal>:<carClass>:<carPerformanceIndex>:<drivetrainType>:<numCylinders>
 ```
 
-`gameId` is currently `fh6`. All fields come directly from normalized FH6 Data
-Out. `carOrdinal` identifies a car model rather than a Garage instance, so
-class, performance index, drivetrain, cylinder count, and RPM limit keep
-distinct builds apart. The base key is stable across runs.
+The key identifies a car build from FH6 data. `rpmMax` is intentionally not a
+learning-key field: it is a current game-reported redline value, not evidence
+that a different Shift Light calibration is needed. A PI or other key-field
+change selects a separate saved configuration.
 
-A different PI selects a separate configuration profile, even for the same
-car ordinal. The previous profile is retained; returning to its full base
-identity loads that identity's most recently used configuration again.
+FH6 reports the current gear, not a gearbox's total number of gears. FDC does
+not infer or require that total. A final gear without a following gear can
+still collect its power data, but cannot form an upshift target until a real
+next-gear transition exists.
 
-The UI exposes the current FH6 car ordinal, PI, and RPM limit. It does not
-depend on a localized or user-maintained vehicle name.
+## What is collected
 
-## Garage association
+For every clean full-throttle sample in a forward gear, FDC retains bounded
+power data for that source gear: RPM buckets, power, torque when available,
+and speed. This collection is continuous; it is not restricted to candidate
+or Optimal learning.
 
-Shift Light profiles remain owned by their full game-data key and numeric
-configuration ID. Garage presents them as part of the matching local
-car. This uses the same `fdc.sqlite` database and does not copy calibration
-data.
+A clean sample requires:
 
-Garage does not render a second Shift Light control or status. Detailed
-diagnostics and reset stay in the Shift Light tab for the live vehicle.
+- an active race when FH6 explicitly reports race state;
+- throttle of at least `0.95`;
+- clutch at most `0.05`, brake and handbrake released;
+- valid positive RPM, power, and vehicle speed; and
+- no excessive driven-wheel combined slip.
 
-## Configuration selection
+On a completed clean real `Gx → Gx+1` shift, FDC records bounded evidence with
+the source and destination RPM, power, torque, speed, timestamps, and outcome.
+The decision compares a traction proxy, `power / speed`, before and after the
+shift. The next gear is `better` only when its proxy is higher; otherwise the
+clean shift is recorded as `too_early`. Invalid transitions are retained only
+as bounded internal evidence and never become a separate UI status.
 
-FH6 sends the current gear, not the transmission maximum. Neither an observed
-gear nor repeated limiter observations prove how many gears the gearbox has.
-The runtime does not use the learner's legacy `gearCount` estimate to select,
-reset, or save a configuration.
+`rpmMax` drives the red redline and is a telemetry sanity value. FDC never
+requires a limiter hit, a limiter observation, a ratio estimate, a predicted
+post-shift RPM, or a power-curve coverage percentage to learn a purple target.
 
-On the first forward-gear sample, `resolve_shift_light_config` selects the
-most recently used configuration for the full base identity, breaking timestamp
-ties by numeric ID. If none exists, it creates one immediately. The learner and
-configuration ID remain stable when a higher gear is observed. Qualifying
-learning progress is saved without requiring top-gear or limiter evidence.
+## Learning states and target selection
 
-Existing configurations and profiles retain their immutable numeric SQLite IDs.
-No profiles are merged across historical configurations. The legacy `gear_count`
-column and older registration commands remain for storage compatibility; new
-configurations record the first observed gear there as creation metadata, not
-as a transmission maximum. The live runtime does not route by that column.
+Each source gear has exactly these visible states:
 
-The existing learner validates targets using adjacent-gear ratio evidence.
-Compatible signature growth extends evidence; a contradictory live signature
-sets diagnostic state without deleting persisted calibration. Stored optimal
-targets remain available while being validated, and incompatible observed
-targets are hidden by the learner's compatibility checks.
+- `LEARNING` — collecting clean power data or waiting for a clean shift where
+  the next gear pulls harder. No purple cue is displayed. A clean early shift
+  remains `LEARNING` and states that the next gear produced less wheel force.
+- `CONFIRMING 1/3` or `CONFIRMING 2/3` — the first clean `better` shift created
+  a candidate. Purple is displayed at the candidate RPM while it is being
+  confirmed.
+- `OPTIMAL` — three clean `better` shifts within a `100 RPM` range confirmed
+  the target. The target is the earliest RPM in that confirmation range, and
+  purple flashes at that RPM so the driver can shift as soon as it appears.
 
-Resolution and loading are serialized with profile writes. Progress collected
-before loading completes is buffered. If configuration resolution or profile
-loading fails, the runtime retries on subsequent telemetry after at least one
-second, without recreating the learner or discarding its accumulated live
-evidence. Responses from a previous car cannot replace the current car's state.
-Individual profile writes have their own retry queue, described below. Stored
-observations and pulls collected during loading are joined once, so a delayed
-load does not discard the first live pull or count the restored evidence twice.
+Later engine power by itself does not displace an earlier target. For example,
+if two shifts improve by the same amount, a later RPM only confirms the first
+candidate when they are within the confirmation range. An existing Optimal
+point stays active if it is contradicted by a clean shift at that point; FDC
+then requires a separate three-shift later candidate before it replaces the
+confirmed point. This avoids changing a proven cue because of one run.
 
-## Learning evidence
+There is no `OBSERVED` state and no five-shift average-minus-75-RPM rule.
 
-The learner keeps independent evidence for source gears 1 through 10. A pull
-is considered only while throttle is at least `0.95`, clutch is at most `0.05`,
-the race is not explicitly inactive, RPM is valid, and brake, handbrake, and
-driven-wheel slip pass the clean-evidence filters. An observed upshift peak
-must reach at least `82%` of the measured limiter, or reported `rpmMax` while
-the measured limiter is unavailable.
+## Persistence and reset
 
-For observed learning, the learner records the peak RPM from a qualifying
-upshift. FH6 may report an upshift through neutral gear `11`; the learner holds
-the source-gear pull and accepts the transition only when it completes within
-both `200 ms` and `64` telemetry frames. Limiter evidence requires a clean
-same-gear RPM dip followed by recovery near the peak, with at least three
-fresh positive-power frames and a rise of at least `200 RPM` during the pull.
-The candidate peak must reach `65%` of the current RPM ceiling. A sustained
-RPM fall alone does not count. Two independent pulls with peaks within
-`120 RPM` establish the measured limiter; repeated bounces in one pull do not
-provide independent confirmations. The in-progress pull is
-reset for an invalid pull, gear change, or telemetry gap that exceeds `1000 ms`;
-stored profile evidence is not erased by these boundaries.
+Shift Light stores its structured learning state in FDC-local `fdc.sqlite` in
+the application-data directory. It persists only bounded normalized facts:
+per-gear state and candidates, RPM power bins, and completed shift evidence.
+The current in-progress pull is deliberately transient. All completed power
+data, candidate counts, and confirmed targets survive application restart and
+switching away from and back to a car.
 
-Five observed samples complete a gear profile. The target is the rounded
-average of those peak RPM samples minus `75 RPM`. Before that point the gear
-remains in `learning`, but its available samples provide a provisional timing
-cue using the same average-minus-offset calculation. Partial persisted records
-keep a null calibrated target. Later clean observations refresh the rolling
-five-sample target; an existing optimal profile is not downgraded to observed.
+The state carries an internal learning-model version. FDC loads only a
+compatible version, preventing a later learner from silently interpreting old
+facts under changed rules. Database writes are transactional and retry after a
+failure; a save failure is surfaced in the Shift Light settings status rather
+than being silently ignored.
 
-Evidence is deliberately bounded. Observed profiles retain at most five RPM
-samples per gear. Ratio learning retains at most 240 samples per gear, and
-optimal-profile evidence is capped at a sample count of 999.
+This learner generation is a breaking persistence migration. On first launch,
+it removes only legacy Shift Light rows from `fdc.sqlite` and starts fresh with
+the structured state. Garage and Events data are not changed. Old Shift Light
+records are not used or shown as current calibration.
 
-## Shift target calculation
+`RESET CURRENT CALIBRATION` removes the active configuration's Shift Light
+learning facts and restarts that configuration at `LEARNING`. Other cars and
+configurations remain intact.
 
-FDC supports two profile methods:
+## Settings and presentation
 
-- `observed` is the five-sample target learned from real full-throttle
-  upshifts or limiter evidence. It is the fallback calibration method.
-- `optimal` compares engine power before the shift with power at the predicted
-  post-shift RPM. It uses WOT power bins and the ratio between engine RPM and
-  driven-wheel angular speed, so it does not assume a final drive, tire radius,
-  or drivetrain-efficiency value.
+The Shift Light settings tab shows the current FH6 car ordinal, PI, and
+game-reported RPM limit. Its table lists each source gear's shift point, number
+of RPM power bins, completed-shift count and last clean-shift reason, and its
+visible state. It intentionally omits legacy ratio, predicted-after-shift,
+coverage, and Observed fields.
 
-The optimal estimator accepts clean power and wheel-ratio evidence only at
-full throttle (`≥ 0.95`), with clutch `≤ 0.05`, brake and handbrake released,
-positive power, valid RPM, and no excessive driven-wheel combined slip. Power
-is retained in bounded `200 RPM` bins; a bin needs two samples and uses its
-median instead of a single peak. Wheel-ratio evidence uses forward gears,
-engine RPM at least `1200`, and driven-wheel speed of at least `5 rad/s`.
-After five samples, ratio outliers more than `8%` from the running median are
-excluded from the established estimate. A coherent alternate cluster can
-replace a bad initial ratio: wheel-derived candidates need 20 observations,
-and direct-drop candidates need three. Replacement starts a new sample window
-that must meet the normal evidence threshold before use. Both the current and
-next gear need at least 20 wheel-ratio samples for the wheel-derived estimate.
-
-Completed clean upshifts also contribute the direct post-shift/source-peak RPM
-drop for their source gear. Three agreeing direct drops are preferred over the
-wheel-derived fallback, avoiding a persistent wheel-speed dependency during a
-pull. Valid ratio drops are bounded to `0.45` through `0.95`.
-
-An optimal target requires at least eight reliable power bins and reliable
-coverage through at least `90%` of the measured limiter, falling back to reported
-`rpmMax` until limiter evidence is ready. Candidate targets are scanned in
-`25 RPM` steps from `65%` to `99%` of that ceiling; the first crossover is accepted
-after three consecutive confirming steps. If no crossover is found, a
-limiter-capped target can be used when power and ratio evidence qualify. The
-cap is `98%` of reported `rpmMax`, lowered to measured limiter minus `100 RPM`
-when necessary. The measured limiter is kept in memory only and never changes
-the vehicle key or persistence format. Three similar estimates, within
-`100 RPM`, confirm an optimal profile. Each confirmation requires a completed
-clean sweep spanning at least `1000 RPM` with eight fresh positive-power
-frames; repeated frames cannot confirm a profile. Transient resets clear
-pending optimal confirmations and alternate ratio candidates. The optimal
-profile's evidence value is bounded to 999.
-
-Stored optimal profiles are cache-first: the target is published immediately
-after loading and remains available while fresh telemetry validates it. Until a
-ratio for the active gear is available the state is `OPTIMAL · VALIDATING`.
-When that ratio differs from the stored ratio by more than `2.5%`, the state is
-`OPTIMAL · GEARBOX CHECK`; this is non-destructive and does not erase the saved
-target. A profile learned before the first live gearbox signature is bound to
-that first signature rather than being invalidated. `observed` profiles remain
-strict: confirmed incompatible gearbox evidence hides their target and returns
-the gear to learning.
-
-## Visual behavior
-
-The learner publishes one of three phases: `normal`, `approach`, or `shift`.
-With no usable target, the fallback phase is based on RPM fraction: approach
-starts at approximately `85%` of `rpmMax`, and the shift phase starts at
-`98%`. With a measured limiter, approach uses `85%` of that limiter and shift
-uses the limiter cap. The snapshot exposes this fallback as `fallbackShiftRpm`.
-
-With a calibrated or provisional target, the phase is based on that gear's target RPM. When a
-positive RPM rate is available for the same forward gear under WOT, FDC leads
-the cue predictively:
-
-- shift lead: up to `180 ms`, capped at `1200 RPM`;
-- approach lead: up to `380 ms`, capped at `1800 RPM`, while preserving a
-  minimum approach window of `max(250 RPM, 4% of target RPM)`.
-
-The `shift` phase is rendered as a flashing purple light bar. The `approach`
-phase uses the redline presentation. The shift presentation has a minimum
-`250 ms` latch, so a single short telemetry update cannot hide the cue
-immediately.
-
-The FDC Shift Light ON/OFF control affects only presentation of the purple
-shift cue. It does not alter learner logic or persistence.
-
-## Configuration and reset
-
-The `SHIFT LIGHT` settings tab shows the current car identity, PI, RPM limit,
-current target, overall state, per-gear targets, and diagnostics. Its primary
-states are `LEARNING`, `OBSERVED`, `OPTIMAL`, and `NEW GEARBOX · LEARNING`.
-Power-curve and ratio collection reasons remain row-level detail instead of
-being the primary state.
-
-A partial target is labelled `PROVISIONAL`, with `LEARNING` and its sample
-count out of five. Showing a usable early cue does not mark the gear calibrated.
-
-Redline brightness and FDC Shift Light brightness are configurable separately
-from `0%` to `100%` in the UI. Redline brightness defaults to `60%`; FDC Shift
-Light brightness retains its existing `80%` default. The two preferences are
-stored in the browser preference record `fdc.display-preferences.v1`.
-Brightness filters the light-bar background; it does not dim the gear, speed, or
-RPM text.
-
-`RESET CURRENT CALIBRATION` clears profiles for the active numeric
-configuration while retaining its game-data identity. The result is reported
-only after the SQLite operation completes. The in-memory learner is then
-cleared and the HUD returns to its normal phase.
-
-After replacing a gearbox, the user must reset the current calibration if all
-base-identity fields remain unchanged. For example, replacing a six-speed
-gearbox with a ten-speed gearbox at the same PI, class, drivetrain, cylinder
-count, and RPM limit reuses the same active profile. Existing targets can be
-unsuitable for the replacement gearbox; ratio diagnostics do not create a
-separate saved gearbox configuration automatically.
-
-Reset removes the old targets and partial learning for that active numeric
-configuration only. Other cars and separate configuration profiles are retained.
-The removed six-speed targets are not archived for automatic restoration if
-the user later reinstalls that gearbox. If the replacement changes PI or
-another base-identity field, it selects a separate configuration instead and
-does not require clearing the previous configuration's calibration.
-
-Pause, disconnect, and transient resets clear the in-progress pull and pending
-optimal confirmations and alternate-ratio candidates.
-They do not discard the current car identity, loaded targets, or persisted
-learning evidence.
-
-## Local persistence
-
-Shift Light profiles are stored in the FDC-local `fdc.sqlite` under the native
-application data directory.
-
-The versioned schema contains:
-
-- `shift_light_cars` for `game_id` and `car_ordinal`;
-- `shift_light_configs` for the full game-data identity, legacy gear-count metadata,
-  gearbox signature, and immutable numeric IDs;
-- `shift_light_config_profiles` for one method/target record per configuration
-  and gear;
-- `shift_light_config_profile_samples` for bounded observed evidence.
-
-Active profile writes are transactional snapshots. Equal RPM observations from
-separate pulls remain separate samples; retries do not append or deduplicate
-them. A newer calibrated target of the same method replaces the old target even
-if its RPM or evidence count is lower. Optimal calibration takes precedence
-over observed calibration, and partial learning does not replace a calibrated
-record. The selected calibrated snapshot keeps its own samples and count.
-For partial cumulative evidence, an older shorter prefix cannot replace its
-longer stored prefix. The learner completes observed calibration; storage does
-not promote partial records independently. Legacy migration merge rules remain
-unchanged. Foreign keys keep profiles and samples attached to their configuration.
-
-Failed profile writes remain queued in memory and retry with exponential
-backoff from `250 ms` to `4 s`. New revisions preserve the retry delay and
-supersede stale writes, including writes from a previous learner for the same
-key. A successful reset invalidates queued writes for that key so they cannot
-restore cleared calibration. This is not a durable outbox: closing the
-application before a successful write can still lose pending progress.
-
-## Source and build boundary
-
-The canonical TypeScript source is:
-
-- `src/shift-light/shift-light.ts` — learner, identity, phases, and profile
-  methods;
-- `src/shift-light/optimal-shift.ts` — power and gearbox-ratio estimator;
-- `src/shift-light/telemetry.ts` — the local normalized telemetry type.
-
-`tools/build-shift-light.mjs` bundles the learner into the checked-in browser
-module `overlay/shift-light-engine.js`. The bundle exposes `HudShiftLight` and
-is loaded by the overlay. The release executable consumes this generated
-bundle; it does not run TypeScript or require Node.js or esbuild at runtime.
-
-## Compatibility constraints
-
-The following are runtime and persistence contracts:
-
-- the base key format
-  `fh6:<carOrdinal>:<carClass>:<carPerformanceIndex>:<drivetrainType>:<numCylinders>:<rpmMax>`;
-- the learner exports used by `HudShiftLight`;
-- normalized telemetry fields consumed by the learner;
-- the `overlay/shift-light-engine.js` browser bundle path;
-- FDC-local `hud_shift_light` and reset-result events;
-- the HUD-local SQLite schema and migration behavior;
-- immutable numeric configuration IDs and full base-identity isolation.
-
-Source relocation must not change learner behavior, profile identity,
-serialized profile fields, native/browser event names, or the database schema.
-
-## Verification
-
-When Shift Light source or build tooling changes, rebuild the generated bundle
-from the repository root:
-
-```powershell
-npm run build:shift-light
-```
-
-Run the full Node.js test suite once after the final Shift Light changes and
-verify `overlay/shift-light-engine.js`. The generated bundle must use the
-canonical `src/shift-light/` source labels and contain no obsolete source path.
-Runtime behavior and compatibility contracts must remain unchanged.
-
-For a completed runtime code task, use the release verification cycle described
-in [README.md](../README.md#build-and-verify). Do not repeat checks that
-already passed for the same final state. Run `npm ci` only when dependencies
-are not installed or dependency manifests have changed.
-
-## Current limitations
-
-- The implementation is for FH6 normalized Direct Data Out telemetry only.
-- Valid car ordinal, class, performance index, drivetrain, cylinder count, and
-  RPM limit are required to establish a persisted base identity.
-- The total gear count is unknown. A gearbox change that preserves the full
-  base identity is assessed through the existing ratio diagnostics; automatic
-  archival and selection of separate gearbox generations is not implemented.
-- Learning is per source gear and requires driving the gear. It does not
-  pre-populate targets for unseen gears.
-- Optimal targets are unavailable until enough WOT power and adjacent-gear
-  ratio evidence has been collected; the feature then remains on observed or
-  fallback behavior while candidates are being confirmed.
-- There is no manual target-entry workflow or car-name database. Calibration
-  comes from live telemetry and the local FDC database.
+Redline brightness and FDC Shift Light brightness are separate preferences.
+Redline defaults to `60%`; FDC Shift Light defaults to `80%`. Both are visual
+only. The FDC Shift Light toggle defaults to ON and affects only purple cue
+visibility; the learner remains active while it is off.

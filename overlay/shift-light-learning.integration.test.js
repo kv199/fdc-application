@@ -1,64 +1,41 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
-const engine = require('./shift-light-engine.js')
-const { normalizeShiftLightState } = require('./shift-light-settings.js')
+const { ShiftLightLearner } = require('./shift-light-engine.js')
 
-const key = 'fh6:342:3:678:1:12:9500'
-function frame(gear, rpm, timestampMs) {
-  return {
-    car: { ordinal: 342, class: 3, pi: 678, drivetrain: 1, cylinders: 12 },
-    isRaceOn: true, gear, rpm, timestampMs, rpmMax: 9500,
-    throttle: 1, brake: 0, handBrake: 0, clutch: 0, power: 0,
-    combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 }
-  }
+const key = 'fh6:3766:1:800:1:10'
+const car = { ordinal: 3766, class: 1, pi: 800, drivetrain: 1, cylinders: 10 }
+const frame = overrides => ({
+  isRaceOn: true, timestampMs: 0, car, gear: 1, rpm: 9500, rpmMax: 11000,
+  throttle: 1, brake: 0, handBrake: 0, clutch: 0, power: 405, speedKmh: 100,
+  combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 }, ...overrides
+})
+
+function shift(learner, timestampMs, rpm) {
+  learner.update(frame({ timestampMs, rpm: rpm - 50 }))
+  learner.update(frame({ timestampMs: timestampMs + 16, rpm }))
+  learner.update(frame({ timestampMs: timestampMs + 32, gear: 2, rpm: 6500, power: 420 }))
 }
 
-test('a first clean upshift drives a provisional cue while persistence stays partial', () => {
-  const writes = []
-  const learner = new engine.ShiftLightLearner(key, { onProgress: profile => writes.push(profile) })
-  learner.update(frame(2, 8000, 0))
-  learner.update(frame(3, 6000, 16))
-  const state = normalizeShiftLightState(learner.update(frame(2, 7950, 32)))
-  assert.equal(state.status, 'learning')
-  assert.equal(state.shiftRpm, 7925)
-  assert.equal(state.phase, 'shift')
-  assert.equal(writes[0].status, 'learning')
-  assert.equal(writes[0].shiftRpm, null)
-  assert.deepEqual(writes[0].samples, [8000])
+test('merges persisted completed facts with samples collected while storage loads', () => {
+  const saved = new ShiftLightLearner(key)
+  shift(saved, 0, 9500)
+  const live = new ShiftLightLearner(key)
+  live.update(frame({ timestampMs: 1000, rpm: 7600, power: 350 }))
+  live.mergeLearningState(saved.serializeLearningState())
+  const state = live.serializeLearningState().gears.find(item => item.sourceGear === 1)
+  assert.equal(state.evidence.length, 1)
+  assert.ok(state.powerBins.some(item => item.rpmBucket === 7600))
+  assert.equal(state.status, 'confirming')
 })
 
-test('four equal persisted pulls plus one new pull complete car 342 without losing duplicates', () => {
-  const writes = []
-  const learner = new engine.ShiftLightLearner(key, { onProgress: profile => writes.push(profile) })
-  learner.setProfiles([{
-    key, gear: 2, status: 'learning', method: 'observed', shiftRpm: null,
-    sampleCount: 4, samples: [8500, 8500, 8500, 8500]
-  }])
-  learner.update(frame(2, 8500, 0))
-  learner.update(frame(3, 6000, 16))
-  const state = normalizeShiftLightState(learner.snapshot(frame(2, 8400, 32)))
-  assert.equal(state.status, 'calibrated')
-  assert.equal(state.shiftRpm, 8425)
-  assert.equal(state.sampleCount, 5)
-  const saved = writes.at(-1)
-  assert.deepEqual(saved.samples, [8500, 8500, 8500, 8500, 8500])
-  assert.equal(saved.shiftRpm, 8425)
-})
-
-test('a pull collected during database loading joins persisted evidence exactly once', () => {
-  const writes = []
-  const learner = new engine.ShiftLightLearner(key, { onProgress: profile => writes.push(profile) })
-  learner.update(frame(2, 8500, 0))
-  learner.update(frame(3, 6000, 16))
-  const profiles = [{
-    key, gear: 2, status: 'learning', method: 'observed', shiftRpm: null,
-    sampleCount: 4, samples: [8500, 8500, 8500, 8500]
-  }]
-  learner.setProfiles(profiles)
-  learner.setProfiles(profiles)
-  const state = learner.snapshot(frame(2, 8400, 32))
-  assert.equal(state.status, 'calibrated')
-  assert.equal(state.shiftRpm, 8425)
-  assert.equal(writes.length, 2)
-  assert.deepEqual(writes.at(-1).samples, [8500, 8500, 8500, 8500, 8500])
+test('completed facts restore after a new learner is created', () => {
+  const first = new ShiftLightLearner(key)
+  shift(first, 0, 9500)
+  shift(first, 1000, 9550)
+  const restored = new ShiftLightLearner(key)
+  restored.importLearningState(JSON.parse(JSON.stringify(first.serializeLearningState())))
+  shift(restored, 2000, 9600)
+  const state = restored.snapshot(frame()).gears.find(item => item.gear === 1)
+  assert.equal(state.status, 'optimal')
+  assert.equal(state.shiftRpm, 9500)
 })

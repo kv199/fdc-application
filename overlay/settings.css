@@ -2047,18 +2047,12 @@ h1 {
   color: #a1a1aa;
 }
 
-.calibration-table tr[data-state='observed'] td:last-child {
-  color: #38bdf8;
-}
-
-.calibration-table tr[data-state='waiting-for-wot'] td:last-child,
-.calibration-table tr[data-state='waiting-for-ratio'] td:last-child,
 .calibration-table tr[data-state='confirming'] td:last-child {
   color: #fbbf24;
 }
 
-.calibration-table tr[data-state='gearbox-mismatch'] td:last-child {
-  color: #ff827d;
+.calibration-table tr[data-state='optimal'] td:last-child {
+  color: #c084fc;
 }
 
 .calibration-cell__sub {
