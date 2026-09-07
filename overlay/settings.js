@@ -1942,9 +1942,9 @@
       : '—'
     shiftLightCarPi.textContent = state.pi ? `PI ${state.pi}` : '—'
     shiftLightCarRpmMax.textContent = state.rpmMax ? `${state.rpmMax} RPM` : '—'
-    const fallbackShiftRpm = state.rpmMax ? Math.round(state.rpmMax * 0.98) : null
+    const fallbackShiftRpm = state.fallbackShiftRpm ?? (state.rpmMax ? Math.round(state.rpmMax * 0.98) : null)
     shiftLightCurrentTarget.textContent = state.shiftRpm
-      ? `${state.shiftRpm} RPM`
+      ? `${state.status === 'learning' ? 'PROVISIONAL · ' : ''}${state.shiftRpm} RPM`
       : fallbackShiftRpm ? `FALLBACK · SHIFT AT ${fallbackShiftRpm} RPM` : 'FALLBACK'
     const activeState = state.method === 'optimal' && state.gearboxValidation === 'validating'
       ? 'OPTIMAL · VALIDATING'
@@ -1952,7 +1952,9 @@
         ? 'OPTIMAL · GEARBOX CHECK'
         : state.gearboxChanged
           ? 'NEW GEARBOX · LEARNING'
-          : state.method?.toUpperCase() || state.status.toUpperCase()
+          : state.status === 'learning' && state.shiftRpm
+            ? `LEARNING · ${Math.min(5, state.sampleCount)}/5`
+            : state.method?.toUpperCase() || state.status.toUpperCase()
     shiftLightState.textContent = `${activeState}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
     shiftLightGearRows.replaceChildren()
 
@@ -1972,10 +1974,13 @@
       row.append(gearCell)
 
       const targetCell = document.createElement('td')
+      const provisional = gear.status === 'learning' && gear.shiftRpm !== null
       appendCellText(
         targetCell,
-        formatRpm(diagnostic?.targetRpm ?? gear.shiftRpm),
-        `AFTER ${formatRpm(diagnostic?.postShiftRpm)}`
+        formatRpm(provisional ? gear.shiftRpm : diagnostic?.targetRpm ?? gear.shiftRpm),
+        provisional
+          ? `PROVISIONAL · ${Math.min(5, gear.sampleCount)}/5`
+          : `AFTER ${formatRpm(diagnostic?.postShiftRpm)}`
       )
       row.append(targetCell)
 
@@ -1999,7 +2004,9 @@
       const stateCell = document.createElement('td')
       appendCellText(
         stateCell,
-        diagnosticStatus === 'learning' ? 'LEARNING' : method?.toUpperCase() || gear.status.toUpperCase(),
+        provisional
+          ? 'LEARNING'
+          : diagnosticStatus === 'learning' ? 'LEARNING' : method?.toUpperCase() || gear.status.toUpperCase(),
         formatDiagnosticStatus(diagnosticStatus)
       )
       row.append(stateCell)

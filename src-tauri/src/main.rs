@@ -613,6 +613,52 @@ fn merge_stored_profiles(
     merged
 }
 
+fn active_profile_method_rank(method: &str) -> i32 {
+    if method == "optimal" { 1 } else { 0 }
+}
+
+fn active_profile_is_calibrated(profile: &StoredShiftLightProfile) -> bool {
+    profile.status == "calibrated" && profile.shift_rpm.is_some()
+}
+
+fn active_profile_has_stronger_partial_prefix(
+    existing: &StoredShiftLightProfile,
+    incoming: &StoredShiftLightProfile,
+) -> bool {
+    existing.status == "learning"
+        && incoming.status == "learning"
+        && existing.samples.len() > incoming.samples.len()
+        && existing.samples.starts_with(&incoming.samples)
+        && existing.sample_count >= incoming.sample_count
+}
+
+fn merge_active_config_profiles(
+    existing: &StoredShiftLightProfile,
+    incoming: &StoredShiftLightProfile,
+) -> StoredShiftLightProfile {
+    let existing_calibrated = active_profile_is_calibrated(existing);
+    let incoming_calibrated = active_profile_is_calibrated(incoming);
+    let existing_method_rank = active_profile_method_rank(&existing.method);
+    let incoming_method_rank = active_profile_method_rank(&incoming.method);
+
+    let selected = if incoming_calibrated
+        && (!existing_calibrated
+            || incoming_method_rank > existing_method_rank
+            || (incoming_method_rank == existing_method_rank && incoming.method == existing.method))
+    {
+        incoming
+    } else if existing_calibrated || active_profile_has_stronger_partial_prefix(existing, incoming)
+    {
+        existing
+    } else {
+        incoming
+    };
+
+    let mut merged = selected.clone();
+    merged.sample_count = selected.sample_count.max(selected.samples.len() as i32);
+    merged
+}
+
 fn read_stored_profiles(
     connection: &Connection,
     variant_id: i64,
@@ -761,9 +807,6 @@ fn read_config_profiles(
             profile.samples.push(rpm);
         }
     }
-    for profile in &mut profiles {
-        complete_observed_profile(profile);
-    }
     Ok(profiles)
 }
 
@@ -772,8 +815,7 @@ fn write_config_profile(
     config_id: i64,
     profile: &StoredShiftLightProfile,
 ) -> Result<(), String> {
-    let mut profile = profile.clone();
-    complete_observed_profile(&mut profile);
+    let profile = profile.clone();
     connection
         .execute(
             "INSERT INTO shift_light_config_profiles
@@ -3478,7 +3520,7 @@ fn save_shift_light_config_profile(
         .find(|stored| stored.gear == incoming.gear);
     let merged = existing
         .as_ref()
-        .map(|stored| merge_stored_profiles(stored, &incoming))
+        .map(|stored| merge_active_config_profiles(stored, &incoming))
         .unwrap_or(incoming);
     write_config_profile(&transaction, config_id, &merged)?;
     transaction
@@ -5608,6 +5650,172 @@ mod tests {
         assert_eq!(left.shift_rpm, Some(7900));
         assert_eq!(left.shift_rpm, right.shift_rpm);
         assert_eq!(left.samples, right.samples);
+    }
+
+    #[test]
+    fn active_config_merge_keeps_duplicate_cumulative_observations() {
+        let existing = StoredShiftLightProfile {
+            gear: 2,
+            status: "learning".to_string(),
+            shift_rpm: None,
+            sample_count: 1,
+            method: "observed".to_string(),
+            ratio_drop: None,
+            samples: vec![8000],
+        };
+        let incoming = StoredShiftLightProfile {
+            gear: 2,
+            status: "learning".to_string(),
+            shift_rpm: None,
+            sample_count: 2,
+            method: "observed".to_string(),
+            ratio_drop: None,
+            samples: vec![8000, 8000],
+        };
+
+        let merged = merge_active_config_profiles(&existing, &incoming);
+
+        assert_eq!(merged.shift_rpm, None);
+        assert_eq!(merged.sample_count, 2);
+        assert_eq!(merged.samples, vec![8000, 8000]);
+    }
+
+    #[test]
+    fn active_config_merge_accepts_newer_valid_same_method_target() {
+        let existing = StoredShiftLightProfile {
+            gear: 2,
+            status: "calibrated".to_string(),
+            shift_rpm: Some(8200),
+            sample_count: 5,
+            method: "observed".to_string(),
+            ratio_drop: None,
+            samples: vec![8275, 8275, 8275, 8275, 8275],
+        };
+        let incoming = StoredShiftLightProfile {
+            gear: 2,
+            status: "calibrated".to_string(),
+            shift_rpm: Some(7600),
+            sample_count: 1,
+            method: "observed".to_string(),
+            ratio_drop: None,
+            samples: vec![7675],
+        };
+
+        let merged = merge_active_config_profiles(&existing, &incoming);
+
+        assert_eq!(merged.shift_rpm, Some(7600));
+        assert_eq!(merged.samples, vec![7675]);
+        assert_eq!(merged.sample_count, 1);
+    }
+
+    #[test]
+    fn active_config_merge_preserves_optimal_target_over_observed_downgrade() {
+        let existing = StoredShiftLightProfile {
+            gear: 2,
+            status: "calibrated".to_string(),
+            shift_rpm: Some(7800),
+            sample_count: 40,
+            method: "optimal".to_string(),
+            ratio_drop: Some(0.8),
+            samples: Vec::new(),
+        };
+        let incoming = StoredShiftLightProfile {
+            gear: 2,
+            status: "calibrated".to_string(),
+            shift_rpm: Some(7400),
+            sample_count: 1,
+            method: "observed".to_string(),
+            ratio_drop: None,
+            samples: vec![7475],
+        };
+
+        let merged = merge_active_config_profiles(&existing, &incoming);
+
+        assert_eq!(merged.method, "optimal");
+        assert_eq!(merged.shift_rpm, Some(7800));
+        assert!(merged.samples.is_empty());
+    }
+
+    #[test]
+    fn active_config_merge_accepts_newer_optimal_target_without_old_evidence_count() {
+        let existing = StoredShiftLightProfile {
+            gear: 2,
+            status: "calibrated".to_string(),
+            shift_rpm: Some(7800),
+            sample_count: 40,
+            method: "optimal".to_string(),
+            ratio_drop: Some(0.8),
+            samples: Vec::new(),
+        };
+        let incoming = StoredShiftLightProfile {
+            gear: 2,
+            status: "calibrated".to_string(),
+            shift_rpm: Some(7400),
+            sample_count: 1,
+            method: "optimal".to_string(),
+            ratio_drop: Some(0.7),
+            samples: vec![7475],
+        };
+
+        let merged = merge_active_config_profiles(&existing, &incoming);
+
+        assert_eq!(merged.shift_rpm, Some(7400));
+        assert_eq!(merged.sample_count, 1);
+        assert_eq!(merged.samples, vec![7475]);
+    }
+
+    #[test]
+    fn active_config_merge_keeps_stronger_partial_prefix_when_retry_is_older() {
+        let existing = StoredShiftLightProfile {
+            gear: 2,
+            status: "learning".to_string(),
+            shift_rpm: None,
+            sample_count: 2,
+            method: "observed".to_string(),
+            ratio_drop: None,
+            samples: vec![8000, 8000],
+        };
+        let incoming = StoredShiftLightProfile {
+            gear: 2,
+            status: "learning".to_string(),
+            shift_rpm: None,
+            sample_count: 1,
+            method: "observed".to_string(),
+            ratio_drop: None,
+            samples: vec![8000],
+        };
+
+        let merged = merge_active_config_profiles(&existing, &incoming);
+
+        assert_eq!(merged.sample_count, 2);
+        assert_eq!(merged.samples, vec![8000, 8000]);
+    }
+
+    #[test]
+    fn active_config_round_trip_preserves_partial_profile_and_duplicate_samples() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let config_id =
+            resolve_shift_light_config_in_connection(&mut connection, "fh6:260:4:800:1:8:8000", 2)
+                .unwrap()
+                .variant_id;
+        let profile = StoredShiftLightProfile {
+            gear: 2,
+            status: "learning".to_string(),
+            shift_rpm: None,
+            sample_count: 2,
+            method: "observed".to_string(),
+            ratio_drop: None,
+            samples: vec![8000, 8000],
+        };
+
+        write_config_profile(&connection, config_id, &profile).unwrap();
+        let loaded = read_config_profiles(&connection, config_id).unwrap();
+
+        assert_eq!(loaded[0].status, "learning");
+        assert_eq!(loaded[0].shift_rpm, None);
+        assert_eq!(loaded[0].sample_count, 2);
+        assert_eq!(loaded[0].samples, vec![8000, 8000]);
     }
 
     #[test]

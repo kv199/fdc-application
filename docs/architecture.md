@@ -169,7 +169,10 @@ repository. Its current schema contains the Garage car registry and
 class/PI/drivetrain configuration registry alongside the Shift Light car registry, gearbox variant
 registry, per-gear profiles, bounded profile samples, the Events table, and
 schema version metadata. Transactional native commands enforce Garage identity
-and recency as well as Shift Light identity and monotonic merge rules.
+and recency as well as Shift Light identity and profile-method precedence.
+Active Shift Light writes preserve repeated observations and accept newer
+calibrated targets of the same method, including lower RPM targets. Failed
+writes retry in memory with bounded backoff; reset invalidates stale writers.
 
 The Coach calibration envelope, active findings, lap timing state, telemetry
 history, and visual presentation state remain in memory for the running HUD.

@@ -190,6 +190,129 @@ test('storage failure retries without discarding live upshift evidence', async t
   assert.equal(saved?.args.profile.sampleCount, 1)
 })
 
+test('failed profile writes retain the latest evidence and retry with backoff', async t => {
+  let now = 1000
+  t.mock.method(Date, 'now', () => now)
+  let saveAttempts = 0
+  const { calls, runtime } = createRuntime({ invoke: command => {
+    if (command === 'save_shift_light_config_profile' && saveAttempts++ === 0) {
+      return Promise.reject(new Error('busy'))
+    }
+  } })
+
+  runtime.update(frame({ rpm: 8000, timestampMs: 0 }))
+  runtime.update(frame({ gear: 4, rpm: 6000, timestampMs: 16 }))
+  await flushPromises()
+  await flushPromises()
+  assert.equal(calls.filter(call => call.command === 'save_shift_light_config_profile').length, 1)
+
+  now += 250
+  runtime.update(frame({ gear: 4, rpm: 6500, timestampMs: 32 }))
+  await flushPromises()
+  await flushPromises()
+
+  const saves = calls.filter(call => call.command === 'save_shift_light_config_profile')
+  assert.equal(saves.length, 2)
+  assert.equal(saves[1].args.profile.gear, 3)
+  assert.equal(saves[1].args.profile.sampleCount, 1)
+})
+
+test('newer profile revisions keep the existing write backoff', async t => {
+  let now = 1000
+  t.mock.method(Date, 'now', () => now)
+  let saveAttempts = 0
+  const { calls, runtime } = createRuntime({ invoke: command => {
+    if (command === 'save_shift_light_config_profile' && saveAttempts++ === 0) {
+      return Promise.reject(new Error('busy'))
+    }
+  } })
+
+  runtime.update(frame({ rpm: 8000, timestampMs: 0 }))
+  runtime.update(frame({ gear: 4, rpm: 6000, timestampMs: 16 }))
+  await flushPromises()
+  await flushPromises()
+  assert.equal(calls.filter(call => call.command === 'save_shift_light_config_profile').length, 1)
+
+  runtime.update(frame({ gear: 3, rpm: 8000, timestampMs: 32 }))
+  runtime.update(frame({ gear: 4, rpm: 6000, timestampMs: 48 }))
+  await flushPromises()
+  await flushPromises()
+  assert.equal(calls.filter(call => call.command === 'save_shift_light_config_profile').length, 1)
+
+  now += 250
+  runtime.update(frame({ gear: 4, rpm: 6500, timestampMs: 64 }))
+  await flushPromises()
+  await flushPromises()
+  const saves = calls.filter(call => call.command === 'save_shift_light_config_profile')
+  assert.equal(saves.length, 2)
+  assert.equal(saves[1].args.profile.sampleCount, 2)
+})
+
+test('a successful same-key learner revision supersedes a failed old writer', async t => {
+  let now = 1000
+  t.mock.method(Date, 'now', () => now)
+  let saveAttempts = 0
+  const { calls, runtime } = createRuntime({ invoke: command => {
+    if (command === 'save_shift_light_config_profile' && saveAttempts++ === 0) {
+      return Promise.reject(new Error('busy'))
+    }
+  } })
+
+  runtime.update(frame({ rpm: 8000, timestampMs: 0 }))
+  runtime.update(frame({ gear: 4, rpm: 6000, timestampMs: 16 }))
+  await flushPromises()
+  await flushPromises()
+  assert.equal(calls.filter(call => call.command === 'save_shift_light_config_profile').length, 1)
+
+  const otherCar = { ordinal: 342, class: 3, pi: 678, drivetrain: 1, cylinders: 12 }
+  runtime.update(frame({ car: otherCar, timestampMs: 32 }))
+  await flushPromises()
+  runtime.update(frame({ rpm: 8000, timestampMs: 48 }))
+  await flushPromises()
+
+  runtime.update(frame({ gear: 4, rpm: 6000, timestampMs: 64 }))
+  runtime.update(frame({ gear: 3, rpm: 8000, timestampMs: 80 }))
+  runtime.update(frame({ gear: 4, rpm: 6000, timestampMs: 96 }))
+  await flushPromises()
+  await flushPromises()
+
+  let saves = calls.filter(call => call.command === 'save_shift_light_config_profile')
+  assert.equal(saves.length, 2)
+  assert.equal(saves[1].args.profile.sampleCount, 2)
+
+  now += 250
+  runtime.update(frame({ gear: 4, rpm: 6500, timestampMs: 112 }))
+  await flushPromises()
+  await flushPromises()
+  saves = calls.filter(call => call.command === 'save_shift_light_config_profile')
+  assert.equal(saves.length, 2)
+})
+
+test('reset invalidates retry writers from an older learner with the same key', async () => {
+  let saveAttempts = 0
+  const { calls, runtime } = createRuntime({ invoke: command => {
+    if (command === 'save_shift_light_config_profile' && saveAttempts++ === 0) {
+      return Promise.reject(new Error('busy'))
+    }
+  } })
+
+  runtime.update(frame({ rpm: 8000, timestampMs: 0 }))
+  runtime.update(frame({ gear: 4, rpm: 6000, timestampMs: 16 }))
+  await flushPromises()
+  await flushPromises()
+  assert.equal(calls.filter(call => call.command === 'save_shift_light_config_profile').length, 1)
+
+  const otherCar = { ordinal: 342, class: 3, pi: 678, drivetrain: 1, cylinders: 12 }
+  runtime.update(frame({ car: otherCar, timestampMs: 32 }))
+  await flushPromises()
+  runtime.update(frame({ timestampMs: 48 }))
+  await flushPromises()
+  assert.equal(await runtime.reset(), true)
+
+  await new Promise(resolve => setTimeout(resolve, 300))
+  assert.equal(calls.filter(call => call.command === 'save_shift_light_config_profile').length, 1)
+})
+
 test('reset during profile loading cannot restore cleared targets and retains the configuration ID', async () => {
   let finishLoad
   const pendingLoad = new Promise(resolve => { finishLoad = resolve })

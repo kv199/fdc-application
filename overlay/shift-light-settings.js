@@ -89,6 +89,8 @@
       carOrdinal: Number.isFinite(state.carOrdinal) && state.carOrdinal > 0 ? Math.round(state.carOrdinal) : null,
       pi: Number.isFinite(state.pi) && state.pi > 0 ? Math.round(state.pi) : null,
       rpmMax: Number.isFinite(state.rpmMax) && state.rpmMax > 0 ? Math.round(state.rpmMax) : null,
+      fallbackShiftRpm: Number.isFinite(state.fallbackShiftRpm) && state.fallbackShiftRpm > 0
+        ? Math.round(state.fallbackShiftRpm) : null,
       currentGear: Number.isInteger(state.currentGear) && state.currentGear >= 1 && state.currentGear <= 10
         ? state.currentGear
         : null,

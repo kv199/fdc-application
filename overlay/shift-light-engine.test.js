@@ -47,6 +47,25 @@ function syntheticPower(rpm) {
   return 300000 - 50 * Math.abs(rpm - 6000)
 }
 
+test('recovers from a bad initial wheel ratio while rejecting an isolated outlier', () => {
+  const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
+  let timestamp = 0
+  const feed = (gear, ratio, count) => {
+    for (let i = 0; i < count; i += 1) {
+      learner.update(ratioFrame(gear, ratio, 4500, timestamp))
+      timestamp += 16
+    }
+  }
+  const ratio = () => learner.snapshot(frame({ gear: 2 })).diagnostics.find(item => item.gear === 2).ratioDrop
+  feed(2, 60, 20)
+  feed(3, 48, 20)
+  assert.equal(ratio(), 0.8)
+  feed(2, 90, 1)
+  assert.equal(ratio(), 0.8)
+  feed(2, 90, 45)
+  assert.ok(Math.abs(ratio() - 48 / 90) < 0.001)
+})
+
 function feedSyntheticPowerCurve(learner, { polluted = false } = {}) {
   for (let sample = 0; sample < 20; sample += 1) {
     const timestampMs = 1000 + sample * 32
@@ -171,9 +190,9 @@ test('restores bounded partial evidence without marking it calibrated', () => {
   assert.deepEqual(learner.snapshot(frame({ gear: 2 })).gears.find(gear => gear.gear === 2), {
     gear: 2,
     status: 'learning',
-    shiftRpm: null,
+    shiftRpm: 7835,
     sampleCount: 3,
-    method: null,
+    method: 'observed',
     ratioDrop: null
   })
 })
@@ -489,6 +508,15 @@ test('ignores brake and wheel-slip pollution when learning the power curve', () 
 test('confirms a stable synthetic power crossover', () => {
   const learner = new ShiftLightLearner('fh6:123:4:800:1:8:8000')
   feedSyntheticPowerCurve(learner)
+
+  for (let pull = 0; pull < 3; pull += 1) {
+    let timestampMs = 4000 + pull * 800
+    for (let rpm = 4000; rpm <= 8000; rpm += 100) {
+      learner.update({ ...ratioFrame(2, 60, rpm, timestampMs), power: syntheticPower(rpm) })
+      timestampMs += 16
+    }
+    learner.update(frame({ gear: 2, rpm: 8000, throttle: 0, timestampMs }))
+  }
 
   const snapshot = learner.snapshot(frame({ gear: 2, rpm: 6000 }))
   const gear = snapshot.gears.find(row => row.gear === 2)

@@ -60,6 +60,9 @@ const MAX_INTERPOLATION_GAP_RPM = POWER_BIN_RPM * 2
 const TARGET_STEP_RPM = 25
 const CROSSOVER_CONFIRM_STEPS = 3
 const RATIO_OUTLIER_FRACTION = 0.08
+const RATIO_REACQUIRE_SAMPLES = 3
+const LIMITER_STABILITY_RPM = 120
+const LIMITER_REACQUIRE_SAMPLES = 2
 
 function isForwardGear(gear: number): boolean {
   return Number.isFinite(gear) && gear >= FORWARD_GEAR_MIN && gear <= FORWARD_GEAR_MAX
@@ -106,6 +109,14 @@ function hasCleanDriveEvidence(telemetry: Telemetry): boolean {
   return drivenSlip.every(value => !Number.isFinite(value) || Math.abs(value) <= MAX_DRIVEN_COMBINED_SLIP)
 }
 
+export function isCleanShiftEvidence(telemetry: Telemetry): boolean {
+  return telemetry.isRaceOn !== false
+    && Number.isFinite(telemetry.throttle) && telemetry.throttle >= WOT_THRESHOLD
+    && Number.isFinite(telemetry.clutch) && telemetry.clutch <= MAX_CLUTCH
+    && Number.isFinite(telemetry.rpm) && telemetry.rpm > 0
+    && hasCleanDriveEvidence(telemetry)
+}
+
 function representativePower(bin: PowerBin): number | null {
   return median(bin.powers)
 }
@@ -126,6 +137,9 @@ export class OptimalShiftEstimator {
   private readonly ratioSamples = new Map<number, number[]>()
   private readonly directRatioDrops = new Map<number, number[]>()
   private readonly limiterSamples: number[] = []
+  private readonly ratioAlternates = new Map<string, { value: number, count: number }>()
+  private limiterAlternate: { value: number, count: number } | null = null
+  private lastLimiterEvidenceKey: number | null = null
   private rpmMax = 0
 
   ingest(telemetry: Telemetry): void {
@@ -142,6 +156,9 @@ export class OptimalShiftEstimator {
     this.ratioSamples.clear()
     this.directRatioDrops.clear()
     this.limiterSamples.length = 0
+    this.ratioAlternates.clear()
+    this.limiterAlternate = null
+    this.lastLimiterEvidenceKey = null
     this.rpmMax = 0
   }
 
@@ -154,14 +171,58 @@ export class OptimalShiftEstimator {
     if (!isForwardGear(gear) || !Number.isFinite(ratioDrop)) return
     if (ratioDrop < MIN_RATIO_DROP || ratioDrop > MAX_RATIO_DROP) return
     const samples = this.directRatioDrops.get(gear) ?? []
-    this.pushStableRatio(samples, ratioDrop, MAX_DIRECT_RATIO_SAMPLES)
+    this.pushStableRatio(samples, ratioDrop, MAX_DIRECT_RATIO_SAMPLES, `direct:${gear}`)
     this.directRatioDrops.set(gear, samples)
   }
 
-  observeLimiter(rpm: number): void {
+  observeLimiter(rpm: number, evidenceKey?: number): void {
     if (!Number.isFinite(rpm) || rpm <= 0) return
+    if (evidenceKey !== undefined) {
+      if (!Number.isInteger(evidenceKey) || evidenceKey === this.lastLimiterEvidenceKey) return
+      this.lastLimiterEvidenceKey = evidenceKey
+    }
+
+    const baseline = this.limiterSamples.length >= 2 ? median(this.limiterSamples) : null
+    if (baseline !== null && Math.abs(rpm - baseline) > LIMITER_STABILITY_RPM) {
+      if (
+        this.limiterAlternate !== null
+        && Math.abs(rpm - this.limiterAlternate.value) <= LIMITER_STABILITY_RPM
+      ) {
+        this.limiterAlternate = {
+          value: (this.limiterAlternate.value * this.limiterAlternate.count + rpm)
+            / (this.limiterAlternate.count + 1),
+          count: this.limiterAlternate.count + 1
+        }
+      } else {
+        this.limiterAlternate = { value: rpm, count: 1 }
+      }
+      if (this.limiterAlternate.count >= LIMITER_REACQUIRE_SAMPLES) {
+        this.limiterSamples.length = 0
+        this.limiterSamples.push(this.limiterAlternate.value)
+        this.limiterAlternate = null
+      }
+      return
+    }
+
+    this.limiterAlternate = null
     this.limiterSamples.push(rpm)
     if (this.limiterSamples.length > 5) this.limiterSamples.shift()
+  }
+
+  /** The measured limiter, once two clean independent pulls agree. */
+  getEffectiveRpmMax(): number | null {
+    if (this.limiterSamples.length < 2) return null
+    if (Math.max(...this.limiterSamples) - Math.min(...this.limiterSamples) > LIMITER_STABILITY_RPM) return null
+    return median(this.limiterSamples)
+  }
+
+  resetTransient(): void {
+    this.ratioAlternates.clear()
+    this.limiterAlternate = null
+  }
+
+  getShiftCeiling(): number {
+    return this.getLimiterCap()
   }
 
   getRatioDrop(gear: number): { ratioDrop: number, evidence: number } | null {
@@ -219,6 +280,7 @@ export class OptimalShiftEstimator {
       ? rawRatioDrop
       : null
     const reliableBins = this.getReliablePowerBins()
+    const effectiveRpmMax = this.getEffectiveRpmMax() ?? this.rpmMax
     const highestReliableRpm = reliableBins.at(-1)?.[0] ?? 0
     const peakPower = reliableBins.reduce<[number, PowerBin] | null>((best, candidate) => {
       const candidatePower = representativePower(candidate[1])
@@ -233,7 +295,7 @@ export class OptimalShiftEstimator {
 
     return {
       gear,
-      powerCurveCoverage: this.rpmMax > 0 ? Math.min(1, highestReliableRpm / this.rpmMax) : 0,
+      powerCurveCoverage: effectiveRpmMax > 0 ? Math.min(1, highestReliableRpm / effectiveRpmMax) : 0,
       powerBinCount: reliableBins.length,
       peakPowerRpm: peakPower?.[0] ?? null,
       currentRatio,
@@ -250,7 +312,8 @@ export class OptimalShiftEstimator {
   }
 
   estimate(gear: number): OptimalShiftEstimate | null {
-    if (!isForwardGear(gear) || gear >= FORWARD_GEAR_MAX || this.rpmMax <= 0) return null
+    const effectiveRpmMax = this.getEffectiveRpmMax() ?? this.rpmMax
+    if (!isForwardGear(gear) || gear >= FORWARD_GEAR_MAX || effectiveRpmMax <= 0) return null
     const ratio = this.getRatioDrop(gear)
     if (!ratio) return null
 
@@ -258,16 +321,16 @@ export class OptimalShiftEstimator {
     if (reliableBins.length < 8) return null
 
     const highestReliableRpm = reliableBins.at(-1)![0]
-    if (highestReliableRpm < this.rpmMax * CURVE_COVERAGE_FRACTION) return null
+    if (highestReliableRpm < effectiveRpmMax * CURVE_COVERAGE_FRACTION) return null
 
     // Scan the usable upper band instead of assuming that an optimal shift can
     // never precede the absolute power peak. Unusual multi-peak curves are
     // still decided by the same-power-at-the-same-road-speed comparison.
-    const firstCandidate = Math.round(this.rpmMax * MIN_TARGET_RPM_FRACTION / TARGET_STEP_RPM) * TARGET_STEP_RPM
+    const firstCandidate = Math.round(effectiveRpmMax * MIN_TARGET_RPM_FRACTION / TARGET_STEP_RPM) * TARGET_STEP_RPM
     const limiterCap = this.getLimiterCap()
     const lastCandidate = Math.min(
       highestReliableRpm,
-      Math.floor(Math.min(this.rpmMax * MAX_TARGET_RPM_FRACTION, limiterCap) / TARGET_STEP_RPM) * TARGET_STEP_RPM
+      Math.floor(Math.min(effectiveRpmMax * MAX_TARGET_RPM_FRACTION, limiterCap) / TARGET_STEP_RPM) * TARGET_STEP_RPM
     )
     let confirmedSteps = 0
     let firstCrossingRpm: number | null = null
@@ -311,6 +374,7 @@ export class OptimalShiftEstimator {
   }
 
   private ingestRatio(telemetry: Telemetry): void {
+    if (!isCleanShiftEvidence(telemetry)) return
     if (!isForwardGear(telemetry.gear)) return
     if (!Number.isFinite(telemetry.throttle) || telemetry.throttle < WOT_THRESHOLD) return
     if (!Number.isFinite(telemetry.rpm) || telemetry.rpm < MIN_ENGINE_RPM) return
@@ -323,11 +387,12 @@ export class OptimalShiftEstimator {
     if (!Number.isFinite(ratio) || ratio <= 0) return
 
     const samples = this.ratioSamples.get(telemetry.gear) ?? []
-    this.pushStableRatio(samples, ratio, MAX_RATIO_SAMPLES)
+    this.pushStableRatio(samples, ratio, MAX_RATIO_SAMPLES, `wheel:${telemetry.gear}`)
     this.ratioSamples.set(telemetry.gear, samples)
   }
 
   private ingestPower(telemetry: Telemetry): void {
+    if (!isCleanShiftEvidence(telemetry)) return
     if (!isForwardGear(telemetry.gear)) return
     if (!Number.isFinite(telemetry.throttle) || telemetry.throttle < WOT_THRESHOLD) return
     if (!Number.isFinite(telemetry.clutch) || telemetry.clutch > MAX_CLUTCH) return
@@ -353,15 +418,32 @@ export class OptimalShiftEstimator {
   }
 
   private getLimiterCap(): number {
+    const effectiveRpmMax = this.getEffectiveRpmMax()
     const fallback = this.rpmMax * LIMITER_TARGET_FRACTION
-    const observedLimiter = median(this.limiterSamples)
-    if (observedLimiter === null) return fallback
-    return Math.max(0, Math.min(fallback, observedLimiter - LIMITER_SAFETY_RPM))
+    if (effectiveRpmMax === null) return fallback
+    return Math.max(0, Math.min(fallback, effectiveRpmMax - LIMITER_SAFETY_RPM))
   }
 
-  private pushStableRatio(samples: number[], ratio: number, maximum: number): void {
+  private pushStableRatio(samples: number[], ratio: number, maximum: number, key = 'ratio'): void {
     const baseline = samples.length >= 5 ? median(samples) : null
-    if (baseline !== null && Math.abs(ratio - baseline) / baseline > RATIO_OUTLIER_FRACTION) return
+    if (baseline !== null && Math.abs(ratio - baseline) / baseline > RATIO_OUTLIER_FRACTION) {
+      const alternate = this.ratioAlternates.get(key)
+      if (alternate && Math.abs(ratio - alternate.value) / alternate.value <= RATIO_OUTLIER_FRACTION) {
+        alternate.value = (alternate.value * alternate.count + ratio) / (alternate.count + 1)
+        alternate.count += 1
+      } else {
+        this.ratioAlternates.set(key, { value: ratio, count: 1 })
+      }
+      const next = this.ratioAlternates.get(key)
+      const required = key.startsWith('wheel:') ? MIN_RATIO_SAMPLES : RATIO_REACQUIRE_SAMPLES
+      if (next && next.count >= required) {
+        samples.length = 0
+        samples.push(next.value)
+        this.ratioAlternates.delete(key)
+      }
+      return
+    }
+    this.ratioAlternates.delete(key)
     samples.push(ratio)
     if (samples.length > maximum) samples.shift()
   }

@@ -3,6 +3,19 @@ const test = require('node:test')
 
 const { normalizeShiftLightState } = require('./shift-light-settings.js')
 
+test('preserves a provisional target without promoting partial evidence to calibrated', () => {
+  const state = normalizeShiftLightState({
+    status: 'learning', phase: 'approach', shiftRpm: 7725,
+    sampleCount: 2, method: 'observed', currentGear: 3,
+    gears: [{ gear: 3, status: 'learning', shiftRpm: 7725, sampleCount: 2, method: 'observed' }]
+  })
+  assert.equal(state.shiftRpm, 7725)
+  assert.equal(state.status, 'learning')
+  assert.equal(state.sampleCount, 2)
+  assert.equal(state.gears[0].status, 'learning')
+  assert.equal(state.gears[0].shiftRpm, 7725)
+})
+
 test('normalizes the per-gear shift-light diagnostic state', () => {
   assert.deepEqual(normalizeShiftLightState({
     status: 'calibrated',
@@ -52,6 +65,7 @@ test('normalizes the per-gear shift-light diagnostic state', () => {
     carOrdinal: 123,
     pi: 800,
     rpmMax: 8000,
+    fallbackShiftRpm: null,
     currentGear: 3,
     gearCount: null,
     gearboxChanged: false,
@@ -93,6 +107,7 @@ test('turns an unavailable or malformed state into a safe empty state', () => {
     carOrdinal: null,
     pi: null,
     rpmMax: null,
+    fallbackShiftRpm: null,
     currentGear: null,
     gearCount: null,
     gearboxChanged: false,

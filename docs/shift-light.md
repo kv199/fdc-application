@@ -89,25 +89,38 @@ before loading completes is buffered. If configuration resolution or profile
 loading fails, the runtime retries on subsequent telemetry after at least one
 second, without recreating the learner or discarding its accumulated live
 evidence. Responses from a previous car cannot replace the current car's state.
-This retry applies to resolution and loading, not to individual profile writes.
+Individual profile writes have their own retry queue, described below. Stored
+observations and pulls collected during loading are joined once, so a delayed
+load does not discard the first live pull or count the restored evidence twice.
 
 ## Learning evidence
 
 The learner keeps independent evidence for source gears 1 through 10. A pull
-is considered only while throttle is at least `0.95`, and a useful limiter or
-upshift peak must reach at least `82%` of `rpmMax`.
+is considered only while throttle is at least `0.95`, clutch is at most `0.05`,
+the race is not explicitly inactive, RPM is valid, and brake, handbrake, and
+driven-wheel slip pass the clean-evidence filters. An observed upshift peak
+must reach at least `82%` of the measured limiter, or reported `rpmMax` while
+the measured limiter is unavailable.
 
 For observed learning, the learner records the peak RPM from a qualifying
 upshift. FH6 may report an upshift through neutral gear `11`; the learner holds
 the source-gear pull and accepts the transition only when it completes within
-both `200 ms` and `64` telemetry frames. A same-gear RPM drop can also provide
-limiter evidence after a second confirming observation. The in-progress pull is
+both `200 ms` and `64` telemetry frames. Limiter evidence requires a clean
+same-gear RPM dip followed by recovery near the peak, with at least three
+fresh positive-power frames and a rise of at least `200 RPM` during the pull.
+The candidate peak must reach `65%` of the current RPM ceiling. A sustained
+RPM fall alone does not count. Two independent pulls with peaks within
+`120 RPM` establish the measured limiter; repeated bounces in one pull do not
+provide independent confirmations. The in-progress pull is
 reset for an invalid pull, gear change, or telemetry gap that exceeds `1000 ms`;
 stored profile evidence is not erased by these boundaries.
 
 Five observed samples complete a gear profile. The target is the rounded
 average of those peak RPM samples minus `75 RPM`. Before that point the gear
-remains in `learning` and has no calibrated target.
+remains in `learning`, but its available samples provide a provisional timing
+cue using the same average-minus-offset calculation. Partial persisted records
+keep a null calibrated target. Later clean observations refresh the rolling
+five-sample target; an existing optimal profile is not downgraded to observed.
 
 Evidence is deliberately bounded. Observed profiles retain at most five RPM
 samples per gear. Ratio learning retains at most 240 samples per gear, and
@@ -131,7 +144,11 @@ is retained in bounded `200 RPM` bins; a bin needs two samples and uses its
 median instead of a single peak. Wheel-ratio evidence uses forward gears,
 engine RPM at least `1200`, and driven-wheel speed of at least `5 rad/s`.
 After five samples, ratio outliers more than `8%` from the running median are
-discarded. Both the current and next gear need at least 20 wheel-ratio samples.
+excluded from the established estimate. A coherent alternate cluster can
+replace a bad initial ratio: wheel-derived candidates need 20 observations,
+and direct-drop candidates need three. Replacement starts a new sample window
+that must meet the normal evidence threshold before use. Both the current and
+next gear need at least 20 wheel-ratio samples for the wheel-derived estimate.
 
 Completed clean upshifts also contribute the direct post-shift/source-peak RPM
 drop for their source gear. Three agreeing direct drops are preferred over the
@@ -139,14 +156,19 @@ wheel-derived fallback, avoiding a persistent wheel-speed dependency during a
 pull. Valid ratio drops are bounded to `0.45` through `0.95`.
 
 An optimal target requires at least eight reliable power bins and reliable
-coverage through at least `90%` of `rpmMax`. Candidate targets are scanned in
-`25 RPM` steps from `65%` to `99%` of `rpmMax`; the first crossover is accepted
+coverage through at least `90%` of the measured limiter, falling back to reported
+`rpmMax` until limiter evidence is ready. Candidate targets are scanned in
+`25 RPM` steps from `65%` to `99%` of that ceiling; the first crossover is accepted
 after three consecutive confirming steps. If no crossover is found, a
-validated limiter target at `98%` of `rpmMax` can be used. A confirmed live
-limiter observation lowers that fallback by `100 RPM` when necessary; it is
-kept in memory only and does not change the persistence format. Three similar
-estimates, within `100 RPM`, confirm an optimal profile. Its evidence value is
-bounded to 999.
+limiter-capped target can be used when power and ratio evidence qualify. The
+cap is `98%` of reported `rpmMax`, lowered to measured limiter minus `100 RPM`
+when necessary. The measured limiter is kept in memory only and never changes
+the vehicle key or persistence format. Three similar estimates, within
+`100 RPM`, confirm an optimal profile. Each confirmation requires a completed
+clean sweep spanning at least `1000 RPM` with eight fresh positive-power
+frames; repeated frames cannot confirm a profile. Transient resets clear
+pending optimal confirmations and alternate ratio candidates. The optimal
+profile's evidence value is bounded to 999.
 
 Stored optimal profiles are cache-first: the target is published immediately
 after loading and remains available while fresh telemetry validates it. Until a
@@ -163,9 +185,10 @@ the gear to learning.
 The learner publishes one of three phases: `normal`, `approach`, or `shift`.
 With no usable target, the fallback phase is based on RPM fraction: approach
 starts at approximately `85%` of `rpmMax`, and the shift phase starts at
-`98%`.
+`98%`. With a measured limiter, approach uses `85%` of that limiter and shift
+uses the limiter cap. The snapshot exposes this fallback as `fallbackShiftRpm`.
 
-With a calibrated target, the phase is based on that gear's target RPM. When a
+With a calibrated or provisional target, the phase is based on that gear's target RPM. When a
 positive RPM rate is available for the same forward gear under WOT, FDC leads
 the cue predictively:
 
@@ -185,6 +208,9 @@ current target, overall state, per-gear targets, and diagnostics. Its primary
 states are `LEARNING`, `OBSERVED`, `OPTIMAL`, and `NEW GEARBOX · LEARNING`.
 Power-curve and ratio collection reasons remain row-level detail instead of
 being the primary state.
+
+A partial target is labelled `PROVISIONAL`, with `LEARNING` and its sample
+count out of five. Showing a usable early cue does not mark the gear calibrated.
 
 Light-bar brightness is configurable from `0%` to `100%` in the UI and defaults
 to `80%`. The preference is stored separately in the browser preference key
@@ -210,7 +236,8 @@ the user later reinstalls that gearbox. If the replacement changes PI or
 another base-identity field, it selects a separate configuration instead and
 does not require clearing the previous configuration's calibration.
 
-Pause, disconnect, and short telemetry gaps clear only the in-progress pull.
+Pause, disconnect, and transient resets clear the in-progress pull and pending
+optimal confirmations and alternate-ratio candidates.
 They do not discard the current car identity, loaded targets, or persisted
 learning evidence.
 
@@ -228,18 +255,23 @@ The versioned schema contains:
   and gear;
 - `shift_light_config_profile_samples` for bounded observed evidence.
 
-Profile writes are transactional and monotonic. Existing and incoming records
-are merged rather than blindly replaced: calibrated status and stronger
-evidence are preferred, samples are unioned and deduplicated up to the five
-sample limit, and five observed samples can complete a stored profile. Foreign
-keys keep profiles and samples attached to their configuration.
+Active profile writes are transactional snapshots. Equal RPM observations from
+separate pulls remain separate samples; retries do not append or deduplicate
+them. A newer calibrated target of the same method replaces the old target even
+if its RPM or evidence count is lower. Optimal calibration takes precedence
+over observed calibration, and partial learning does not replace a calibrated
+record. The selected calibrated snapshot keeps its own samples and count.
+For partial cumulative evidence, an older shorter prefix cannot replace its
+longer stored prefix. The learner completes observed calibration; storage does
+not promote partial records independently. Legacy migration merge rules remain
+unchanged. Foreign keys keep profiles and samples attached to their configuration.
 
-New learning results are submitted to SQLite as progress is collected. An
-individual failed profile write has no guaranteed automatic retry. Its evidence
-can remain in the running learner, but unsaved progress can be lost when the
-application closes unless a later successful profile update saves it. The
-resolution/loading retry described above does not guarantee durable storage
-of every learning update.
+Failed profile writes remain queued in memory and retry with exponential
+backoff from `250 ms` to `4 s`. New revisions preserve the retry delay and
+supersede stale writes, including writes from a previous learner for the same
+key. A successful reset invalidates queued writes for that key so they cannot
+restore cleared calibration. This is not a durable outbox: closing the
+application before a successful write can still lose pending progress.
 
 ## Source and build boundary
 

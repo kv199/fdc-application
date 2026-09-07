@@ -2,6 +2,7 @@
 import type { Telemetry } from './telemetry'
 import {
   OptimalShiftEstimator,
+  isCleanShiftEvidence,
   type OptimalShiftDiagnostics,
   type OptimalShiftEstimate
 } from './optimal-shift'
@@ -60,6 +61,7 @@ export interface ShiftLightSnapshot {
   carOrdinal: number | null
   pi: number | null
   rpmMax: number | null
+  fallbackShiftRpm: number | null
   carClass: number | null
   drivetrain: number | null
   cylinders: number | null
@@ -272,6 +274,7 @@ interface PendingUpshift {
 interface LimiterCandidate {
   gear: number
   peakRpm: number
+  troughRpm: number
 }
 
 /**
@@ -290,6 +293,10 @@ export class ShiftLightLearner {
   private previous: Telemetry | null = null
   private pullGear: number | null = null
   private pullPeakRpm = 0
+  private pullStartRpm = 0
+  private pullPowerSamples = 0
+  private pullConfirmed = false
+  private pullId = 0
   private limiterCommitted = false
   private limiterCandidate: LimiterCandidate | null = null
   private pendingUpshift: PendingUpshift | null = null
@@ -299,6 +306,7 @@ export class ShiftLightLearner {
   private confirmedGearCount: number | null = null
   private gearboxChanged = false
   private readonly dirtyGears = new Set<number>()
+  private readonly restoredGears = new Set<number>()
 
   constructor(
     private readonly key: string,
@@ -315,8 +323,10 @@ export class ShiftLightLearner {
       if (profile.key !== this.key) continue
       if (!Number.isInteger(profile.gear) || profile.gear < 0 || profile.gear > 10) continue
       if (!Number.isFinite(profile.shiftRpm) && !Array.isArray(profile.samples)) continue
-      if (this.dirtyGears.has(profile.gear)) continue
-      const samples = this.normalizeSamples(profile.samples)
+      if (this.restoredGears.has(profile.gear)) continue
+      if (this.dirtyGears.has(profile.gear) && this.profiles.get(profile.gear)?.method === 'optimal') continue
+      const freshSamples = this.dirtyGears.has(profile.gear) ? this.samples.get(profile.gear) ?? [] : []
+      const samples = [...this.normalizeSamples(profile.samples), ...freshSamples].slice(-MAX_EVIDENCE_SAMPLES)
       const method = profile.method === 'optimal' ? 'optimal' : 'observed'
       const maxSampleCount = method === 'optimal' ? 999 : MAX_EVIDENCE_SAMPLES
       const storedSampleCount = Number.isFinite(profile.sampleCount)
@@ -332,7 +342,9 @@ export class ShiftLightLearner {
       const completedObservedShiftRpm = storedShiftRpm === null && method === 'observed'
         ? observedShiftRpm(samples)
         : null
-      const effectiveShiftRpm = storedShiftRpm ?? completedObservedShiftRpm
+      const effectiveShiftRpm = method === 'observed' && freshSamples.length > 0
+        ? observedShiftRpm(samples) ?? storedShiftRpm
+        : storedShiftRpm ?? completedObservedShiftRpm
       const calibrated = effectiveShiftRpm !== null
         && (profile.status === 'calibrated' || sampleCount >= REQUIRED_SAMPLES)
       const normalized: ShiftLightProfile = {
@@ -347,6 +359,8 @@ export class ShiftLightLearner {
         gearboxSignature: normalizeGearboxSignature(profile.gearboxSignature)
       }
       this.storedGearboxSignatures.set(normalized.gear, normalized.gearboxSignature ?? null)
+      this.restoredGears.add(normalized.gear)
+      if (freshSamples.length > 0) this.options.onProgress?.(normalized)
       if (!calibrated) {
         if (samples.length > 0) this.samples.set(normalized.gear, samples)
         this.observedGears.add(normalized.gear)
@@ -372,6 +386,7 @@ export class ShiftLightLearner {
     this.optimalCandidates.clear()
     this.storedGearboxSignatures.clear()
     this.dirtyGears.clear()
+    this.restoredGears.clear()
     this.optimalEstimator.reset()
     this.gearboxSignature = null
     this.maxObservedGear = 0
@@ -389,6 +404,8 @@ export class ShiftLightLearner {
    */
   resetTransient(): void {
     this.resetPull()
+    this.optimalCandidates.clear()
+    this.optimalEstimator.resetTransient()
     this.previous = null
     this.rpmRate = null
   }
@@ -400,6 +417,7 @@ export class ShiftLightLearner {
       previous = null
     }
     const wot = Number.isFinite(telemetry.throttle) && telemetry.throttle >= MIN_THROTTLE
+    const clean = isCleanShiftEvidence(telemetry)
     const forward = isForwardGear(telemetry.gear)
     const neutral = telemetry.gear === NEUTRAL_GEAR
 
@@ -410,17 +428,18 @@ export class ShiftLightLearner {
     this.optimalEstimator.ingest(telemetry)
     const detectedGearboxSignature = this.optimalEstimator.getGearboxSignature()
     if (detectedGearboxSignature) this.updateGearboxSignature(detectedGearboxSignature)
-    this.updateOptimalProfiles()
     this.updateRpmRate(previous, telemetry, wot, forward)
 
     if (forward) {
       const transition = this.getUpshiftTransition(previous, telemetry)
-      if (!wot) {
+      if (!clean) {
+        if (!wot && isCleanShiftEvidence({ ...telemetry, throttle: 1 })) this.confirmOptimalPull()
         this.resetPull()
         this.previous = telemetry
         return this.snapshot(telemetry)
       }
-      if (transition && transition.peakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION) {
+      const evidenceCeiling = this.optimalEstimator.getEffectiveRpmMax() ?? telemetry.rpmMax
+      if (transition && transition.peakRpm >= evidenceCeiling * MIN_RPM_FRACTION) {
         if (!this.limiterCommitted) this.recordSample(transition.sourceGear, transition.peakRpm)
         if (
           telemetry.gear === transition.sourceGear + 1
@@ -433,6 +452,7 @@ export class ShiftLightLearner {
             telemetry.rpm / transition.peakRpm
           )
         }
+        this.confirmOptimalPull()
         this.limiterCandidate = null
       }
 
@@ -440,40 +460,68 @@ export class ShiftLightLearner {
       if (this.pullGear !== telemetry.gear) {
         this.pullGear = telemetry.gear
         this.pullPeakRpm = 0
+        this.pullStartRpm = telemetry.rpm
+        this.pullPowerSamples = 0
+        this.pullConfirmed = false
+        this.pullId += 1
         this.limiterCommitted = false
         this.limiterCandidate = null
       }
 
       if (telemetry.rpm < this.pullPeakRpm * REARM_FRACTION) {
+        this.confirmOptimalPull()
         this.pullPeakRpm = 0
+        this.pullStartRpm = telemetry.rpm
+        this.pullPowerSamples = 0
+        this.pullConfirmed = false
+        this.pullId += 1
         this.limiterCommitted = false
         this.limiterCandidate = null
       }
 
-      const rpmDrop = Math.max(MIN_RPM_DROP, telemetry.rpmMax * RPM_DROP_FRACTION)
+      if (telemetry.power > 0 && (!previous || telemetry.timestampMs > previous.timestampMs)) {
+        this.pullPowerSamples += 1
+      }
+      const rpmDrop = Math.max(MIN_RPM_DROP, evidenceCeiling * RPM_DROP_FRACTION)
+      if (this.limiterCandidate && telemetry.rpm > this.limiterCandidate.peakRpm + rpmDrop) {
+        this.limiterCandidate = null
+      }
+      const candidate = this.limiterCandidate
+      if (
+        candidate && !this.limiterCommitted
+        && telemetry.rpm >= candidate.troughRpm + rpmDrop
+        && telemetry.rpm >= candidate.peakRpm * 0.98
+        && telemetry.rpm <= candidate.peakRpm + rpmDrop
+        && this.pullPowerSamples >= 3
+        && this.pullPeakRpm - this.pullStartRpm >= 200
+      ) {
+        // A clean drop followed by recovery is limiter evidence. A sustained
+        // RPM fall (braking, shifting or unloading) is not a rev limiter.
+        this.optimalEstimator.observeLimiter(candidate.peakRpm, this.pullId)
+        if (candidate.peakRpm >= evidenceCeiling * MIN_RPM_FRACTION) this.recordSample(telemetry.gear, candidate.peakRpm)
+        this.recordTerminalLimiterEvidence(telemetry.gear)
+        this.confirmOptimalPull()
+        this.limiterCandidate = null
+        this.limiterCommitted = true
+      }
       if (
         !this.limiterCommitted
-        && this.pullPeakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION
+        && this.pullPeakRpm >= Math.max(1200, evidenceCeiling * 0.65)
         && this.pullPeakRpm - telemetry.rpm >= rpmDrop
       ) {
         if (this.limiterCandidate?.gear === telemetry.gear) {
-          if (!this.hasCompatibleProfile(telemetry.gear)) {
-            this.recordSample(telemetry.gear, this.limiterCandidate.peakRpm)
-          }
-          this.optimalEstimator.observeLimiter(this.limiterCandidate.peakRpm)
-          this.recordTerminalLimiterEvidence(telemetry.gear)
-          this.limiterCandidate = null
-          this.limiterCommitted = true
+          this.limiterCandidate.troughRpm = Math.min(this.limiterCandidate.troughRpm, telemetry.rpm)
         } else {
           this.limiterCandidate = {
             gear: telemetry.gear,
-            peakRpm: this.pullPeakRpm
+            peakRpm: this.pullPeakRpm,
+            troughRpm: telemetry.rpm
           }
         }
       }
 
       this.pullPeakRpm = Math.max(this.pullPeakRpm, telemetry.rpm)
-    } else if (neutral && this.pullGear !== null && this.pullPeakRpm >= telemetry.rpmMax * MIN_RPM_FRACTION) {
+    } else if (neutral && this.pullGear !== null && this.pullPeakRpm >= (this.optimalEstimator.getEffectiveRpmMax() ?? telemetry.rpmMax) * MIN_RPM_FRACTION) {
       const firstNeutralTimestampMs = this.pendingUpshift?.sourceGear === this.pullGear
         ? this.pendingUpshift.firstNeutralTimestampMs
         : telemetry.timestampMs
@@ -511,12 +559,17 @@ export class ShiftLightLearner {
       : this.profiles.get(currentGear) ?? this.profiles.get(0)
     const activeProfile = activeStoredProfile && this.isProfileUsable(activeStoredProfile)
       ? activeStoredProfile
-      : null
+      : currentGear === null ? null : this.getProvisionalProfile(currentGear)
     const currentSamples = currentGear === null ? [] : this.samples.get(currentGear) ?? []
     const gearboxValidation = this.getGearboxValidation(currentGear, activeProfile)
-    const status: ShiftLightStatus = activeProfile ? 'calibrated' : 'learning'
+    const status: ShiftLightStatus = activeProfile && activeProfile.status !== 'learning' ? 'calibrated' : 'learning'
     const shiftRpm = activeProfile?.shiftRpm ?? null
     let phase = fallbackPhase(telemetry?.rpm ?? 0, telemetry?.rpmMax ?? 0)
+    const fallbackShiftRpm = this.optimalEstimator.getShiftCeiling() || ((telemetry?.rpmMax ?? 0) * 0.98)
+    if (this.optimalEstimator.getEffectiveRpmMax() !== null && telemetry) {
+      phase = telemetry.rpm >= fallbackShiftRpm ? 'shift'
+        : telemetry.rpm >= this.optimalEstimator.getEffectiveRpmMax()! * 0.85 ? 'approach' : 'normal'
+    }
 
     if (shiftRpm !== null && telemetry) {
       const approachWindow = Math.max(250, shiftRpm * 0.04)
@@ -545,6 +598,7 @@ export class ShiftLightLearner {
       carOrdinal: identity?.carOrdinal ?? null,
       pi: identity?.pi ?? null,
       rpmMax: identity?.rpmMax ?? null,
+      fallbackShiftRpm: fallbackShiftRpm > 0 ? roundRpm(fallbackShiftRpm) : null,
       carClass: identity?.carClass ?? null,
       drivetrain: identity?.drivetrain ?? null,
       cylinders: identity?.cylinders ?? null,
@@ -587,12 +641,13 @@ export class ShiftLightLearner {
       ...this.storedGearboxSignatures.keys()
     ])
     return [...gears].sort((left, right) => left - right).map((gear) => {
-      const profile = this.profiles.get(gear)
+      const stored = this.profiles.get(gear)
+      const profile = stored && this.isProfileUsable(stored) ? stored : this.getProvisionalProfile(gear) ?? undefined
       const profileUsable = this.isProfileUsable(profile)
       const samples = this.samples.get(gear) ?? []
       return {
         gear,
-        status: profileUsable && profile ? 'calibrated' : 'learning',
+        status: profileUsable && profile && profile.status !== 'learning' ? 'calibrated' : 'learning',
         shiftRpm: profileUsable ? profile?.shiftRpm ?? null : null,
         sampleCount: profileUsable && profile ? profile.sampleCount : samples.length,
         method: profileUsable ? profile?.method ?? null : null,
@@ -670,7 +725,26 @@ export class ShiftLightLearner {
         gearboxSignature: this.gearboxSignature
       }
       this.profiles.set(gear, profile)
+      this.dirtyGears.add(gear)
       this.options.onCalibrated?.(profile)
+    }
+  }
+
+  private confirmOptimalPull(): void {
+    if (this.pullConfirmed || this.pullPowerSamples < 8 || this.pullPeakRpm - this.pullStartRpm < 1000) return
+    this.pullConfirmed = true
+    // One confirmation per completed clean sweep, never per rendered frame.
+    this.updateOptimalProfiles()
+  }
+
+  private getProvisionalProfile(gear: number): ShiftLightProfile | null {
+    const samples = this.samples.get(gear) ?? []
+    if (!samples.length || !this.isGearboxCompatible(this.storedGearboxSignatures.get(gear))) return null
+    return {
+      key: this.key, gear, status: 'learning', method: 'observed',
+      shiftRpm: roundRpm(samples.reduce((sum, value) => sum + value, 0) / samples.length - RPM_OFFSET),
+      sampleCount: samples.length, samples: [...samples], ratioDrop: null,
+      gearboxSignature: this.storedGearboxSignatures.get(gear) ?? null
     }
   }
 
@@ -700,6 +774,9 @@ export class ShiftLightLearner {
   private resetPull(): void {
     this.pullGear = null
     this.pullPeakRpm = 0
+    this.pullStartRpm = 0
+    this.pullPowerSamples = 0
+    this.pullConfirmed = false
     this.limiterCommitted = false
     this.limiterCandidate = null
     this.pendingUpshift = null
@@ -721,10 +798,10 @@ export class ShiftLightLearner {
   }
 
   private recordSample(gear: number, observedRpm: number): void {
-    if (gear < 1 || gear > 10 || this.hasCompatibleProfile(gear) || !Number.isFinite(observedRpm)) return
+    if (gear < 1 || gear > 10 || this.profiles.get(gear)?.method === 'optimal' || !Number.isFinite(observedRpm)) return
     const gearSamples = this.samples.get(gear) ?? []
-    if (gearSamples.length >= REQUIRED_SAMPLES) return
     gearSamples.push(roundRpm(observedRpm))
+    if (gearSamples.length > REQUIRED_SAMPLES) gearSamples.shift()
     this.samples.set(gear, gearSamples)
     this.storedGearboxSignatures.set(gear, this.gearboxSignature)
     this.observedGears.add(gear)
