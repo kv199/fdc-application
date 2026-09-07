@@ -172,9 +172,11 @@
     if (!state || !configId || expectedLearner !== learner || expectedLearner === resettingLearner) return
     pendingLearningStateByLearner.delete(expectedLearner)
     enqueueProfileMutation(() => invokeCommand('save_shift_light_learning_state', {
-      key: currentKey,
-      configId,
-      state
+      request: {
+        key: currentKey,
+        configId,
+        state
+      }
     })).catch(error => {
       // Keep the last accepted state for a later retry, but expose the failure
       // to the UI instead of silently losing learning progress.

@@ -40,9 +40,9 @@ test('creates a six-field configuration and persists completed learning state', 
     key: 'fh6:3766:1:800:1:10', observedGear: 1
   })
   const save = calls.find(call => call.command === 'save_shift_light_learning_state')
-  assert.equal(save.args.configId, 42)
-  assert.equal(save.args.state.modelVersion, 2)
-  assert.equal(save.args.state.gears[0].evidence[0].outcome, 'better')
+  assert.equal(save.args.request.configId, 42)
+  assert.equal(save.args.request.state.modelVersion, 2)
+  assert.equal(save.args.request.state.gears[0].evidence[0].outcome, 'better')
 })
 
 test('surfaces a learning-state save failure without dropping live state', async () => {
