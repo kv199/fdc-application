@@ -3916,14 +3916,12 @@ fn materialize_learning_state(
     Ok(())
 }
 
-#[tauri::command]
-fn load_shift_light_learning_state(
-    app: AppHandle,
-    key: String,
+fn load_shift_light_learning_state_from_connection(
+    connection: &Connection,
+    key: &str,
     config_id: i64,
 ) -> Result<Option<serde_json::Value>, String> {
-    let connection = open_shift_light_db(&app)?;
-    assert_shift_light_config_matches_key(&connection, config_id, &key)?;
+    assert_shift_light_config_matches_key(connection, config_id, key)?;
     connection
         .query_row(
             "SELECT state_json FROM shift_light_learning_state WHERE config_id = ?1",
@@ -3939,10 +3937,9 @@ fn load_shift_light_learning_state(
         .transpose()
 }
 
-#[tauri::command]
-fn save_shift_light_learning_state(
-    app: AppHandle,
-    request: ShiftLightLearningStateRequest,
+fn save_shift_light_learning_state_in_connection(
+    connection: &mut Connection,
+    request: &ShiftLightLearningStateRequest,
 ) -> Result<(), String> {
     if request.config_id < 1 || !request.state.is_object() {
         return Err("invalid Shift Light learning state".to_string());
@@ -3956,8 +3953,7 @@ fn save_shift_light_learning_state(
         return Err("Shift Light learning state exceeds the storage limit".to_string());
     }
     let model_version = state_model_version(&request.state)?;
-    let mut connection = open_shift_light_db(&app)?;
-    assert_shift_light_config_matches_key(&connection, request.config_id, &request.key)?;
+    assert_shift_light_config_matches_key(connection, request.config_id, &request.key)?;
     let transaction = connection
         .transaction()
         .map_err(|error| format!("unable to start Shift Light learning save: {error}"))?;
@@ -3990,6 +3986,25 @@ fn save_shift_light_learning_state(
     transaction
         .commit()
         .map_err(|error| format!("unable to commit Shift Light learning state: {error}"))
+}
+
+#[tauri::command]
+fn load_shift_light_learning_state(
+    app: AppHandle,
+    key: String,
+    config_id: i64,
+) -> Result<Option<serde_json::Value>, String> {
+    let connection = open_shift_light_db(&app)?;
+    load_shift_light_learning_state_from_connection(&connection, &key, config_id)
+}
+
+#[tauri::command]
+fn save_shift_light_learning_state(
+    app: AppHandle,
+    request: ShiftLightLearningStateRequest,
+) -> Result<(), String> {
+    let mut connection = open_shift_light_db(&app)?;
+    save_shift_light_learning_state_in_connection(&mut connection, &request)
 }
 
 #[tauri::command]
@@ -5707,6 +5722,125 @@ mod tests {
         for gear in [0, 11, -1] {
             assert!(resolve_shift_light_config_in_connection(&mut connection, key, gear).is_err());
         }
+    }
+
+    #[test]
+    fn corvette_learning_survives_a_sqlite_reopen_with_partial_gears() {
+        let key = "fh6:3766:1:800:1:10";
+        let path = std::env::temp_dir().join(format!(
+            "fdc-shift-light-corvette-{}-{}.sqlite",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let state = serde_json::json!({
+            "modelVersion": 2,
+            "version": 2,
+            "key": key,
+            "gears": [
+                {
+                    "sourceGear": 1,
+                    "status": "confirming",
+                    "targetRpm": 9550,
+                    "candidateRpm": 9550,
+                    "confirmingCount": 2,
+                    "lastReason": "next gear produced more wheel force",
+                    "powerBins": [{
+                        "rpmBucket": 9400,
+                        "sampleCount": 3,
+                        "medianPower": 405,
+                        "medianTorque": 310,
+                        "medianSpeed": 160,
+                        "powerSum": 1215,
+                        "torqueSum": 930,
+                        "torqueSampleCount": 3,
+                        "speedSum": 480,
+                        "speedSampleCount": 3
+                    }],
+                    "evidence": [{
+                        "sourceGear": 1,
+                        "destinationGear": 2,
+                        "beforeTimestampMs": 1200,
+                        "afterTimestampMs": 1312,
+                        "beforeRpm": 9550,
+                        "afterRpm": 6500,
+                        "beforePower": 405,
+                        "afterPower": 420,
+                        "beforeSpeedKmh": 160,
+                        "afterSpeedKmh": 162,
+                        "outcome": "better"
+                    }]
+                },
+                { "sourceGear": 4, "status": "confirming", "targetRpm": 9200, "candidateRpm": 9200, "confirmingCount": 1, "powerBins": [], "evidence": [] },
+                { "sourceGear": 5, "status": "confirming", "targetRpm": 9000, "candidateRpm": 9000, "confirmingCount": 2, "powerBins": [], "evidence": [] },
+                { "sourceGear": 6, "status": "learning", "targetRpm": null, "candidateRpm": null, "confirmingCount": 0, "powerBins": [], "evidence": [] }
+            ]
+        });
+
+        {
+            let mut connection = Connection::open(&path).unwrap();
+            initialize_shift_light_schema(&mut connection).unwrap();
+            let config = resolve_shift_light_config_in_connection(&mut connection, key, 6).unwrap();
+            save_shift_light_learning_state_in_connection(
+                &mut connection,
+                &ShiftLightLearningStateRequest {
+                    key: key.to_string(),
+                    config_id: config.variant_id,
+                    state: state.clone(),
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                connection
+                    .query_row("SELECT count(*) FROM shift_light_configs", [], |row| row
+                        .get::<_, i64>(0))
+                    .unwrap(),
+                1
+            );
+        }
+
+        let mut reopened = Connection::open(&path).unwrap();
+        initialize_shift_light_schema(&mut reopened).unwrap();
+        let config = resolve_shift_light_config_in_connection(&mut reopened, key, 6).unwrap();
+        assert_eq!(config.variant_id, 1);
+        assert_eq!(
+            load_shift_light_learning_state_from_connection(&reopened, key, config.variant_id)
+                .unwrap(),
+            Some(state)
+        );
+        assert_eq!(
+            reopened
+                .query_row(
+                    "SELECT count(*) FROM shift_light_gear_learning",
+                    [],
+                    |row| row.get::<_, i64>(0)
+                )
+                .unwrap(),
+            4
+        );
+        assert_eq!(
+            reopened
+                .query_row("SELECT count(*) FROM shift_light_power_bins", [], |row| row
+                    .get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            reopened
+                .query_row(
+                    "SELECT count(*) FROM shift_light_shift_evidence",
+                    [],
+                    |row| row.get::<_, i64>(0)
+                )
+                .unwrap(),
+            1
+        );
+        drop(reopened);
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(format!("{}-wal", path.display()));
+        let _ = std::fs::remove_file(format!("{}-shm", path.display()));
     }
 
     #[test]
