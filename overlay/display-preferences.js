@@ -7,7 +7,10 @@
   const STORAGE_KEY = 'fdc.display-preferences.v1'
   const DEFAULTS = Object.freeze({
     speedUnit: 'kmh',
+    redlineBrightness: 60,
     shiftLightBrightness: 80,
+    fdcShiftLightEnabled: true,
+    showHudWithTelemetry: true,
     hudOpacity: 80,
     configurationAlwaysOnTop: true
   })
@@ -15,6 +18,8 @@
 
   function normalize(preferences) {
     const candidate = preferences && typeof preferences === 'object' ? preferences : {}
+    // The v1 record used shiftLightBrightness for the FDC signal. Keep that
+    // value as the migration fallback when the new split fields are absent.
     const brightnessCandidate = candidate.shiftLightBrightness
     const rawBrightness = brightnessCandidate === null || brightnessCandidate === undefined || brightnessCandidate === ''
       ? Number.NaN
@@ -22,6 +27,13 @@
     const shiftLightBrightness = Number.isFinite(rawBrightness)
       ? Math.round(Math.max(0, Math.min(100, rawBrightness)))
       : DEFAULTS.shiftLightBrightness
+    const redlineCandidate = candidate.redlineBrightness
+    const rawRedlineBrightness = redlineCandidate === null || redlineCandidate === undefined || redlineCandidate === ''
+      ? Number.NaN
+      : Number(redlineCandidate)
+    const redlineBrightness = Number.isFinite(rawRedlineBrightness)
+      ? Math.round(Math.max(0, Math.min(100, rawRedlineBrightness)))
+      : DEFAULTS.redlineBrightness
     const opacityCandidate = candidate.hudOpacity
     const rawOpacity = opacityCandidate === null || opacityCandidate === undefined || opacityCandidate === ''
       ? Number.NaN
@@ -32,7 +44,10 @@
 
     return {
       speedUnit: candidate.speedUnit === 'mph' ? 'mph' : DEFAULTS.speedUnit,
+      redlineBrightness,
       shiftLightBrightness,
+      fdcShiftLightEnabled: candidate.fdcShiftLightEnabled !== false,
+      showHudWithTelemetry: candidate.showHudWithTelemetry !== false,
       hudOpacity,
       configurationAlwaysOnTop: candidate.configurationAlwaysOnTop !== false
     }
@@ -93,6 +108,10 @@
     return normalize({ shiftLightBrightness: brightness }).shiftLightBrightness / DEFAULTS.shiftLightBrightness
   }
 
+  function redlineBrightnessScale(brightness) {
+    return normalize({ redlineBrightness: brightness }).redlineBrightness / DEFAULTS.redlineBrightness
+  }
+
   return {
     DEFAULTS,
     MPH_PER_KMH,
@@ -100,6 +119,7 @@
     convertSpeedKmh,
     formatSpeed,
     normalize,
+    redlineBrightnessScale,
     read,
     shiftLightBrightnessScale,
     speedUnitLabel,

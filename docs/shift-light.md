@@ -201,6 +201,9 @@ phase uses the redline presentation. The shift presentation has a minimum
 `250 ms` latch, so a single short telemetry update cannot hide the cue
 immediately.
 
+The FDC Shift Light ON/OFF control affects only presentation of the purple
+shift cue. It does not alter learner logic or persistence.
+
 ## Configuration and reset
 
 The `SHIFT LIGHT` settings tab shows the current car identity, PI, RPM limit,
@@ -212,10 +215,12 @@ being the primary state.
 A partial target is labelled `PROVISIONAL`, with `LEARNING` and its sample
 count out of five. Showing a usable early cue does not mark the gear calibrated.
 
-Light-bar brightness is configurable from `0%` to `100%` in the UI and defaults
-to `80%`. The preference is stored separately in the browser preference key
-`fdc.display-preferences.v1`. Brightness filters the light-bar background; it
-does not dim the gear, speed, or RPM text.
+Redline brightness and FDC Shift Light brightness are configurable separately
+from `0%` to `100%` in the UI. Redline brightness defaults to `60%`; FDC Shift
+Light brightness retains its existing `80%` default. The two preferences are
+stored in the browser preference record `fdc.display-preferences.v1`.
+Brightness filters the light-bar background; it does not dim the gear, speed, or
+RPM text.
 
 `RESET CURRENT CALIBRATION` clears profiles for the active numeric
 configuration while retaining its game-data identity. The result is reported

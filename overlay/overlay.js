@@ -41,7 +41,6 @@ const DEMO_COACH_FROM_URL = new URLSearchParams(window.location.search).get('coa
 const DEMO_SIGNALS = ['normal', 'redline', 'shift']
 const DEMO_COACHES = ['calibrating', 'ready', 'front-scrub', 'exit-wheelspin', 'brake-overload', 'abrupt-release', 'clean-exit', 'controlled-release', 'brief', 'run-check', 'focus']
 const REDLINE_RPM_FRACTION = 0.85
-const SHIFT_RPM_FRACTION = 0.98
 const ASPHALT_BRIEF_DURATION_MS = 25000
 
 let latestTelemetry = null
@@ -190,9 +189,13 @@ function invokeTauri(command, args) {
 garageRuntime = window.HudGarageRuntime?.createGarageRuntime?.({ invoke: invokeTauri }) || null
 
 function applyDisplayPreferences() {
+  const redlineBrightnessScale = window.DisplayPreferences.redlineBrightnessScale(
+    displayPreferences.redlineBrightness
+  )
   const brightnessScale = window.DisplayPreferences.shiftLightBrightnessScale(
     displayPreferences.shiftLightBrightness
   )
+  document.documentElement.style.setProperty('--redline-brightness-scale', String(redlineBrightnessScale))
   document.documentElement.style.setProperty('--shift-light-brightness-scale', String(brightnessScale))
   document.documentElement.style.setProperty('--hud-opacity', String(displayPreferences.hudOpacity / 100))
   document.documentElement.dataset.speedUnit = displayPreferences.speedUnit
@@ -200,6 +203,7 @@ function applyDisplayPreferences() {
     latestTelemetry?.speedKmh,
     displayPreferences.speedUnit
   )
+  applyTelemetryVisibility()
 }
 
 function setDisplayPreferences(preferences) {
@@ -221,6 +225,15 @@ function setRpmSignal(signal) {
   hud.dataset.signal = signal
 }
 
+function hasTelemetryPresentation() {
+  return displayPreferences.showHudWithTelemetry === false
+    || (forzaConnected && latestTelemetry !== null)
+}
+
+function applyTelemetryVisibility() {
+  window.HudPreferences?.setTelemetryVisible?.(hasTelemetryPresentation())
+}
+
 function renderCoach() {
   const hasAsphaltGuidance = latestAsphaltCoach.mode === 'cue' || latestAsphaltCoach.mode === 'brief'
   const hasAsphaltStatus = latestAsphaltCoach.mode === 'status'
@@ -230,13 +243,14 @@ function renderCoach() {
   const isDeltaEditing = window.HudLayout?.isEditing?.('delta') === true
   const isCoachVisible = window.HudPreferences?.isOverlayVisible?.('coach') !== false
   const isDeltaVisible = window.HudPreferences?.isOverlayVisible?.('delta') !== false
+  const isTelemetryVisible = hasTelemetryPresentation()
   const hasDeltaReference = Boolean(deltaRuntime?.getState?.().reference)
   coachCard.dataset.hasCoachGuidance = hasCoachGuidance || isCoachEditing ? 'true' : 'false'
   coachCard.dataset.coachMode = hasAsphaltGuidance
     ? latestAsphaltCoach.mode
     : 'status'
-  coachCard.hidden = !isCoachEditing && (!isCoachVisible || !hasCoachGuidance)
-  deltaStrip.hidden = !isDeltaEditing && (!isDeltaVisible || !hasDeltaReference)
+  coachCard.hidden = !isTelemetryVisible || (!isCoachEditing && (!isCoachVisible || !hasCoachGuidance))
+  deltaStrip.hidden = !isTelemetryVisible || (!isDeltaEditing && (!isDeltaVisible || !hasDeltaReference))
 
   if (hasAsphaltGuidance) {
     const cue = latestAsphaltCoach.cue
@@ -439,14 +453,13 @@ function getRpmSignal(rawRpm, rawRpmMax) {
   if (!Number.isFinite(rpm) || !Number.isFinite(rpmMax) || rpmMax <= 0) return 'normal'
 
   const rpmFraction = rpm / rpmMax
-  if (rpmFraction >= SHIFT_RPM_FRACTION) return 'shift'
   if (rpmFraction > REDLINE_RPM_FRACTION) return 'redline'
   return 'normal'
 }
 
 function getShiftLightSignal(telemetry) {
   const phase = shiftLightPresentation.getPhase()
-  if (phase === 'shift') return 'shift'
+  if (phase === 'shift' && displayPreferences.fdcShiftLightEnabled !== false) return 'shift'
   if (phase === 'approach') return 'redline'
   return getRpmSignal(telemetry.rpm, telemetry.rpmMax)
 }
@@ -653,6 +666,7 @@ function queueTelemetry(telemetry) {
 
   latestTelemetry = telemetry
   forzaConnected = true
+  applyTelemetryVisibility()
   if (renderScheduled) return true
   renderScheduled = true
   requestAnimationFrame(renderTelemetry)
@@ -667,6 +681,7 @@ function scheduleTelemetryRender() {
 
 function resetDirectPresentation() {
   latestTelemetry = null
+  applyTelemetryVisibility()
   deltaRuntime?.update?.(null)
   resetAsphaltCoach('direct_restart')
   lapTimingState = window.HudLapTiming.resetForRestart()
@@ -717,16 +732,19 @@ async function listenDirectEvents(generation) {
       const state = event.payload?.state
       if (state === 'is-live') {
         forzaConnected = true
+        applyTelemetryVisibility()
         setConnection('is-live')
         publishRouteStatus({ phase: 'live', message: '' })
       } else if (state === 'is-waiting') {
         forzaConnected = false
+        applyTelemetryVisibility()
         resetAsphaltCoachTransient('waiting')
         setConnection('is-waiting')
         publishRouteStatus({ phase: 'waiting', message: '' })
         scheduleTelemetryRender()
       } else if (state === 'is-stale') {
         forzaConnected = false
+        applyTelemetryVisibility()
         if (
           latestTelemetry?.isRaceOn === true
           && window.AsphaltCoachLifecycle.canSummarizeAttempt(lapTimingState)
@@ -742,6 +760,7 @@ async function listenDirectEvents(generation) {
         scheduleTelemetryRender()
       } else {
         forzaConnected = false
+        applyTelemetryVisibility()
         resetAsphaltCoachTransient('offline')
         window.HudShiftLightRuntime?.resetTransient?.()
         setConnection('is-offline')
@@ -787,6 +806,7 @@ async function connectDirect() {
   const generation = ++directGeneration
   directStartPending = true
   forzaConnected = false
+  applyTelemetryVisibility()
   setConnection('is-waiting')
   publishRouteStatus({
     phase: 'starting',

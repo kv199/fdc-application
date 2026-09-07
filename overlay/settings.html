@@ -38,9 +38,9 @@
 
     <div class="settings-tabs" role="tablist" aria-label="Settings categories">
       <button id="hud-tab" class="settings-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="hud-panel" data-settings-tab="hud">HUD</button>
+      <button id="shift-light-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="shift-light-panel" tabindex="-1" data-settings-tab="shift-light">SHIFT LIGHT</button>
       <button id="garage-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="garage-panel" tabindex="-1" data-settings-tab="garage">GARAGE</button>
       <button id="events-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="events-panel" tabindex="-1" data-settings-tab="events">EVENTS</button>
-      <button id="shift-light-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="shift-light-panel" tabindex="-1" data-settings-tab="shift-light">SHIFT LIGHT</button>
       <button id="settings-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel" tabindex="-1" data-settings-tab="settings">SETTINGS</button>
     </div>
 
@@ -381,11 +381,42 @@
         </div>
       </div>
 
-      <section class="shift-light-brightness-card" data-display-preference aria-labelledby="shift-light-brightness-title">
+      <section class="shift-light-brightness-card shift-light-brightness-card--redline" data-display-preference aria-labelledby="redline-brightness-title">
         <div class="shift-light-brightness-card__heading">
           <div>
             <span>VISUAL OUTPUT</span>
-            <h3 id="shift-light-brightness-title">LIGHT BAR BRIGHTNESS</h3>
+            <h3 id="redline-brightness-title">REDLINE BRIGHTNESS</h3>
+          </div>
+          <div class="hud-opacity-card__actions">
+            <output id="redline-brightness-value" for="redline-brightness" aria-live="polite">60%</output>
+            <button id="redline-brightness-reset" class="settings-button hud-opacity-reset" type="button" disabled>RESET</button>
+          </div>
+        </div>
+        <div class="brightness-control">
+          <input id="redline-brightness" type="range" min="0" max="100" step="5" value="60" aria-labelledby="redline-brightness-title" aria-describedby="redline-brightness-scale">
+        </div>
+        <div id="redline-brightness-scale" class="brightness-scale" aria-hidden="true">
+          <span>0 · DIM</span>
+          <span>60 · DEFAULT</span>
+          <span>100 · MAX</span>
+        </div>
+      </section>
+
+      <div class="display-setting-row shift-light-cue-toggle" data-display-preference>
+        <div class="display-setting-row__copy">
+          <strong>FDC SHIFT LIGHT</strong>
+          <small>FDC shows the optimal shift cue in purple.</small>
+        </div>
+        <button id="fdc-shift-light-enabled" class="visibility-toggle" type="button" aria-label="Show the purple FDC shift cue" aria-pressed="true">
+          <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+        </button>
+      </div>
+
+      <section class="shift-light-brightness-card" data-display-preference aria-labelledby="shift-light-brightness-title">
+        <div class="shift-light-brightness-card__heading">
+          <div>
+            <span>FDC SHIFT LIGHT</span>
+            <h3 id="shift-light-brightness-title">FDC SHIFT LIGHT BRIGHTNESS</h3>
           </div>
           <output id="shift-light-brightness-value" for="shift-light-brightness" aria-live="polite">80%</output>
         </div>
@@ -468,6 +499,15 @@
               <small>Keep Configuration above other apps and the game.</small>
             </div>
             <button id="configuration-always-on-top" class="visibility-toggle" type="button" aria-label="Keep Configuration always on top" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
+          </div>
+          <div class="display-setting-row" data-display-preference>
+            <div class="display-setting-row__copy">
+              <strong>SHOW HUD WITH TELEMETRY</strong>
+              <small>Show the HUD, Driver Coach, and Delta only while live telemetry is received.</small>
+            </div>
+            <button id="show-hud-with-telemetry" class="visibility-toggle" type="button" aria-label="Show the HUD, Driver Coach, and Delta only with live telemetry" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
           </div>

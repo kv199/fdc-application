@@ -7,6 +7,7 @@
   --brake: #ff312b;
   --rule: rgb(226 232 240 / 42%);
   --panel: rgb(8 10 12 / 56%);
+  --redline-brightness-scale: 1;
   --shift-light-brightness-scale: 1;
   --hud-opacity: 0.8;
   --hud-scale: min(2, calc((100vw - 16px) / 736px));
@@ -178,7 +179,6 @@ body {
   inset: 0;
   background: transparent;
   content: '';
-  filter: brightness(var(--shift-light-brightness-scale));
   pointer-events: none;
   transition: background-color 120ms ease, filter 120ms ease;
 }
@@ -205,6 +205,7 @@ body {
 
 .hud.is-redline .gear::before {
   background: rgb(255 49 43 / 24%);
+  filter: brightness(var(--redline-brightness-scale));
 }
 
 .hud.is-redline .gear__speed,
@@ -218,6 +219,7 @@ body {
 
 .hud.is-shift .gear::before {
   animation: shift-alert 440ms steps(2, end) infinite;
+  filter: brightness(var(--shift-light-brightness-scale));
 }
 
 .hud.is-shift .gear__speed,

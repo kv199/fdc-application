@@ -18,50 +18,80 @@ function createStorage(initialValue = null) {
   }
 }
 
-test('uses km/h, 80 percent brightness and HUD opacity, and Configuration always-on-top by default', () => {
+test('uses the split display defaults and enables the telemetry-driven displays by default', () => {
   assert.deepEqual(DisplayPreferences.read(createStorage()), {
     speedUnit: 'kmh',
+    redlineBrightness: 60,
     shiftLightBrightness: 80,
+    fdcShiftLightEnabled: true,
+    showHudWithTelemetry: true,
     hudOpacity: 80,
     configurationAlwaysOnTop: true
   })
 })
 
-test('sanitizes stored units and clamps brightness and HUD opacity', () => {
+test('migrates old records and sanitizes units, brightness, flags and HUD opacity', () => {
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'mph', shiftLightBrightness: 135 }), {
     speedUnit: 'mph',
+    redlineBrightness: 60,
     shiftLightBrightness: 100,
+    fdcShiftLightEnabled: true,
+    showHudWithTelemetry: true,
     hudOpacity: 80,
     configurationAlwaysOnTop: true
   })
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'knots', shiftLightBrightness: -4 }), {
     speedUnit: 'kmh',
+    redlineBrightness: 60,
     shiftLightBrightness: 0,
+    fdcShiftLightEnabled: true,
+    showHudWithTelemetry: true,
     hudOpacity: 80,
     configurationAlwaysOnTop: true
   })
-  assert.deepEqual(DisplayPreferences.normalize({ shiftLightBrightness: '64.6' }), {
+  assert.deepEqual(DisplayPreferences.normalize({ redlineBrightness: '64.6', shiftLightBrightness: '44.4', fdcShiftLightEnabled: false, showHudWithTelemetry: false }), {
     speedUnit: 'kmh',
-    shiftLightBrightness: 65,
+    redlineBrightness: 65,
+    shiftLightBrightness: 44,
+    fdcShiftLightEnabled: false,
+    showHudWithTelemetry: false,
     hudOpacity: 80,
     configurationAlwaysOnTop: true
   })
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'mph', shiftLightBrightness: null }), {
     speedUnit: 'mph',
+    redlineBrightness: 60,
     shiftLightBrightness: 80,
+    fdcShiftLightEnabled: true,
+    showHudWithTelemetry: true,
     hudOpacity: 80,
     configurationAlwaysOnTop: true
   })
   assert.deepEqual(DisplayPreferences.normalize({ hudOpacity: 0 }), {
     speedUnit: 'kmh',
+    redlineBrightness: 60,
     shiftLightBrightness: 80,
+    fdcShiftLightEnabled: true,
+    showHudWithTelemetry: true,
     hudOpacity: 1,
     configurationAlwaysOnTop: true
   })
   assert.deepEqual(DisplayPreferences.normalize({ hudOpacity: 101.4 }), {
     speedUnit: 'kmh',
+    redlineBrightness: 60,
     shiftLightBrightness: 80,
+    fdcShiftLightEnabled: true,
+    showHudWithTelemetry: true,
     hudOpacity: 100,
+    configurationAlwaysOnTop: true
+  })
+  assert.deepEqual(DisplayPreferences.normalize({ redlineBrightness: -1, shiftLightBrightness: 101 }), {
+    speedUnit: 'kmh',
+    redlineBrightness: 0,
+    shiftLightBrightness: 100,
+    fdcShiftLightEnabled: true,
+    showHudWithTelemetry: true,
+    hudOpacity: 80,
     configurationAlwaysOnTop: true
   })
 })
@@ -74,7 +104,7 @@ test('writes a versioned normalized preference record', () => {
   const storage = createStorage()
   const written = DisplayPreferences.write({ speedUnit: 'mph', shiftLightBrightness: 55, hudOpacity: 64, configurationAlwaysOnTop: false }, storage)
 
-  assert.deepEqual(written, { speedUnit: 'mph', shiftLightBrightness: 55, hudOpacity: 64, configurationAlwaysOnTop: false })
+  assert.deepEqual(written, { speedUnit: 'mph', redlineBrightness: 60, shiftLightBrightness: 55, fdcShiftLightEnabled: true, showHudWithTelemetry: true, hudOpacity: 64, configurationAlwaysOnTop: false })
   assert.deepEqual(JSON.parse(storage.value()), written)
 })
 
@@ -83,7 +113,10 @@ test('updates one preference without resetting the other', () => {
 
   assert.deepEqual(DisplayPreferences.update({ shiftLightBrightness: 90 }, storage), {
     speedUnit: 'mph',
+    redlineBrightness: 60,
     shiftLightBrightness: 90,
+    fdcShiftLightEnabled: true,
+    showHudWithTelemetry: true,
     hudOpacity: 42,
     configurationAlwaysOnTop: false
   })
@@ -101,4 +134,11 @@ test('maps the existing 80 percent appearance to brightness scale 1', () => {
   assert.equal(DisplayPreferences.shiftLightBrightnessScale(20), 0.25)
   assert.equal(DisplayPreferences.shiftLightBrightnessScale(80), 1)
   assert.equal(DisplayPreferences.shiftLightBrightnessScale(100), 1.25)
+})
+
+test('maps redline brightness against its 60 percent default', () => {
+  assert.equal(DisplayPreferences.redlineBrightnessScale(0), 0)
+  assert.equal(DisplayPreferences.redlineBrightnessScale(30), 0.5)
+  assert.equal(DisplayPreferences.redlineBrightnessScale(60), 1)
+  assert.equal(DisplayPreferences.redlineBrightnessScale(100), 100 / 60)
 })

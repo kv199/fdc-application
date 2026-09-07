@@ -14,7 +14,7 @@ const cargoManifest = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'C
 test('Configuration exposes HUD, Garage, Events, Shift Light and Settings tabs', () => {
   const tabs = [...settingsHtml.matchAll(/data-settings-tab="([^"]+)"/g)].map(match => match[1])
 
-  assert.deepEqual(tabs, ['hud', 'garage', 'events', 'shift-light', 'settings'])
+  assert.deepEqual(tabs, ['hud', 'shift-light', 'garage', 'events', 'settings'])
   assert.match(settingsHtml, /id="garage-panel"[^>]+data-settings-panel="garage"/)
   assert.match(settingsHtml, /id="garage-grid"[^>]+aria-live="polite"/)
   assert.match(settingsHtml, /id="garage-current-car"/)
@@ -259,7 +259,7 @@ test('Configuration window title reflects the active section and build version w
 
   assert.deepEqual(
     [...settingsHtml.matchAll(/data-settings-tab="([^"]+)"/g)].map(match => match[1]),
-    ['hud', 'garage', 'events', 'shift-light', 'settings']
+    ['hud', 'shift-light', 'garage', 'events', 'settings']
   )
   assert.deepEqual(configuredTitles, ['FDC · HUD', 'FDC · HUD'])
   assert.doesNotMatch(`${configuredTitles.join(' ')} ${overlayHtml}`, /Forza Horizon 6 HUD/u)
@@ -298,6 +298,10 @@ test('Settings exposes Configuration priority and speed unit preferences', () =>
   assert.match(settingsHtml, /name="speed-unit" value="kmh"/)
   assert.match(settingsHtml, /name="speed-unit" value="mph"/)
   assert.match(settingsHtml, /id="configuration-always-on-top" class="visibility-toggle" type="button"/)
+  assert.match(settingsHtml, /<strong>SHOW HUD WITH TELEMETRY<\/strong>/)
+  assert.match(settingsHtml, /id="show-hud-with-telemetry" class="visibility-toggle" type="button"[^>]*aria-pressed="true"/)
+  assert.ok(settingsHtml.indexOf('id="show-hud-with-telemetry"') > settingsPanelIndex)
+  assert.match(settingsJs, /showHudWithTelemetry/)
   assert.match(settingsJs, /set_configuration_always_on_top/)
   assert.match(tauriMain, /fn set_configuration_always_on_top/)
   assert.doesNotMatch(settingsPanel, /telemetry-settings|telemetry-route-card|DIRECT DATA OUT.*OFFLINE/u)
@@ -305,17 +309,31 @@ test('Settings exposes Configuration priority and speed unit preferences', () =>
   assert.ok(settingsScriptIndex > displayPreferencesScriptIndex)
 })
 
-test('Shift Light brightness lives in the Shift Light tab and uses a rectilinear meter', () => {
+test('Shift Light exposes separate redline and FDC cue controls in the Shift Light tab', () => {
   const shiftLightPanelIndex = settingsHtml.indexOf('id="shift-light-panel"')
+  const redlineIndex = settingsHtml.indexOf('id="redline-brightness"')
+  const redlineResetIndex = settingsHtml.indexOf('id="redline-brightness-reset"')
+  const cueToggleIndex = settingsHtml.indexOf('id="fdc-shift-light-enabled"')
   const brightnessIndex = settingsHtml.indexOf('id="shift-light-brightness"')
   const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
 
   assert.ok(shiftLightPanelIndex >= 0)
+  assert.ok(redlineIndex > shiftLightPanelIndex)
+  assert.ok(redlineResetIndex > shiftLightPanelIndex)
+  assert.ok(cueToggleIndex > redlineResetIndex)
   assert.ok(brightnessIndex > shiftLightPanelIndex)
+  assert.ok(brightnessIndex > cueToggleIndex)
   assert.ok(brightnessIndex < settingsPanelIndex)
+  assert.match(settingsHtml, /<h3 id="redline-brightness-title">REDLINE BRIGHTNESS<\/h3>/)
+  assert.match(settingsHtml, /id="redline-brightness" type="range" min="0" max="100" step="5" value="60"/)
+  assert.match(settingsHtml, /id="redline-brightness-reset"[^>]*type="button"[^>]*disabled>RESET<\/button>/)
+  assert.match(settingsHtml, /id="fdc-shift-light-enabled" class="visibility-toggle" type="button"[^>]*aria-pressed="true"/)
+  assert.match(settingsHtml, /<small>FDC shows the optimal shift cue in purple\.<\/small>/)
+  assert.match(settingsHtml, /<h3 id="shift-light-brightness-title">FDC SHIFT LIGHT BRIGHTNESS<\/h3>/)
   assert.match(settingsHtml, /class="shift-light-brightness-card"/)
   assert.match(settingsHtml, /id="shift-light-brightness" type="range" min="0" max="100" step="5" value="80"/)
-  assert.match(settingsJs, /--brightness-fill/)
+  assert.match(settingsJs, /redlineBrightness/)
+  assert.match(settingsJs, /fdcShiftLightEnabled/)
 })
 
 test('HUD opacity appears before HUD controls and resets to its 80 percent default', () => {
@@ -352,8 +370,11 @@ test('Configuration persists and applies display preferences through the shared 
   assert.match(settingsJs, /displayPreferencesApi\?\.read/)
   assert.match(settingsJs, /displayPreferencesApi\.normalize/)
   assert.match(settingsJs, /displayPreferencesApi\.write\(next\)/)
-  assert.match(settingsJs, /call\('set_display_preferences', \{\s*speedUnit: next\.speedUnit,\s*shiftLightBrightness: next\.shiftLightBrightness,\s*hudOpacity: next\.hudOpacity\s*\}\)/)
+  assert.match(settingsJs, /call\('set_display_preferences', \{\s*speedUnit: next\.speedUnit,\s*redlineBrightness: next\.redlineBrightness,\s*shiftLightBrightness: next\.shiftLightBrightness,\s*hudOpacity: next\.hudOpacity,\s*fdcShiftLightEnabled: next\.fdcShiftLightEnabled,\s*showHudWithTelemetry: next\.showHudWithTelemetry\s*\}\)/)
   assert.match(settingsJs, /displayPreferences = previous\s*displayPreferencesApi\.write\(previous\)\s*renderDisplayPreferences\(previous\)/)
+  assert.match(settingsJs, /redlineBrightness: DEFAULT_REDLINE_BRIGHTNESS/)
+  assert.match(settingsJs, /fdcShiftLightEnabled: true/)
+  assert.match(settingsJs, /showHudWithTelemetry: true/)
   assert.match(settingsJs, /configurationAlwaysOnTop: true/)
 })
 

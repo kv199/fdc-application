@@ -30,6 +30,7 @@
   const shiftLightHelp = document.getElementById('shift-light-help')
   const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
   const displayPreferencesApi = globalScope.DisplayPreferences
+  const DEFAULT_REDLINE_BRIGHTNESS = displayPreferencesApi?.DEFAULTS?.redlineBrightness ?? 60
   const DEFAULT_HUD_OPACITY = displayPreferencesApi?.DEFAULTS?.hudOpacity ?? 80
   const SETTINGS_WINDOW_CONTEXTS = Object.freeze({
     hud: 'HUD',
@@ -40,6 +41,11 @@
   })
   const speedUnitInputs = [...document.querySelectorAll('input[name="speed-unit"]')]
   const configurationAlwaysOnTop = document.getElementById('configuration-always-on-top')
+  const showHudWithTelemetry = document.getElementById('show-hud-with-telemetry')
+  const fdcShiftLightEnabled = document.getElementById('fdc-shift-light-enabled')
+  const redlineBrightness = document.getElementById('redline-brightness')
+  const redlineBrightnessValue = document.getElementById('redline-brightness-value')
+  const redlineBrightnessReset = document.getElementById('redline-brightness-reset')
   const shiftLightBrightness = document.getElementById('shift-light-brightness')
   const shiftLightBrightnessValue = document.getElementById('shift-light-brightness-value')
   const hudOpacity = document.getElementById('hud-opacity')
@@ -120,7 +126,10 @@
   let displayPreferencesPending = false
   let displayPreferences = displayPreferencesApi?.read?.() || {
     speedUnit: 'kmh',
+    redlineBrightness: DEFAULT_REDLINE_BRIGHTNESS,
     shiftLightBrightness: 80,
+    fdcShiftLightEnabled: true,
+    showHudWithTelemetry: true,
     hudOpacity: DEFAULT_HUD_OPACITY,
     configurationAlwaysOnTop: true
   }
@@ -1727,9 +1736,26 @@
     for (const input of speedUnitInputs) {
       input.checked = input.value === preferences.speedUnit
     }
+    renderRedlineBrightness(preferences.redlineBrightness)
     renderShiftLightBrightness(preferences.shiftLightBrightness)
     renderHudOpacity(preferences.hudOpacity)
     if (configurationAlwaysOnTop) updateOverlayToggle(configurationAlwaysOnTop, preferences.configurationAlwaysOnTop !== false)
+    if (showHudWithTelemetry) updateOverlayToggle(showHudWithTelemetry, preferences.showHudWithTelemetry !== false)
+    if (fdcShiftLightEnabled) updateOverlayToggle(fdcShiftLightEnabled, preferences.fdcShiftLightEnabled !== false)
+  }
+
+  function renderRedlineBrightness(value) {
+    const brightness = Number(value)
+    const isDefault = brightness === DEFAULT_REDLINE_BRIGHTNESS
+    const minimum = Number(redlineBrightness.min)
+    const maximum = Number(redlineBrightness.max)
+    const progress = ((brightness - minimum) / (maximum - minimum)) * 100
+    redlineBrightness.value = String(brightness)
+    redlineBrightness.style.setProperty('--brightness-fill', `${Math.max(0, Math.min(100, progress))}%`)
+    redlineBrightness.setAttribute('aria-valuetext', `${brightness}% brightness`)
+    redlineBrightnessValue.textContent = `${brightness}%`
+    redlineBrightnessReset.disabled = displayPreferencesPending || isDefault
+    redlineBrightnessReset.classList.toggle('is-dirty', !isDefault)
   }
 
   function renderShiftLightBrightness(value) {
@@ -1761,6 +1787,10 @@
     displayPreferencesPending = pending
     for (const input of speedUnitInputs) input.disabled = pending
     if (configurationAlwaysOnTop) configurationAlwaysOnTop.disabled = pending
+    if (showHudWithTelemetry) showHudWithTelemetry.disabled = pending
+    if (fdcShiftLightEnabled) fdcShiftLightEnabled.disabled = pending
+    redlineBrightness.disabled = pending
+    redlineBrightnessReset.disabled = pending || displayPreferences.redlineBrightness === DEFAULT_REDLINE_BRIGHTNESS
     shiftLightBrightness.disabled = pending
     hudOpacity.disabled = pending
     hudOpacityReset.disabled = pending || displayPreferences.hudOpacity === DEFAULT_HUD_OPACITY
@@ -1787,8 +1817,11 @@
     try {
       await call('set_display_preferences', {
         speedUnit: next.speedUnit,
+        redlineBrightness: next.redlineBrightness,
         shiftLightBrightness: next.shiftLightBrightness,
-        hudOpacity: next.hudOpacity
+        hudOpacity: next.hudOpacity,
+        fdcShiftLightEnabled: next.fdcShiftLightEnabled,
+        showHudWithTelemetry: next.showHudWithTelemetry
       })
       setStatus(successMessage(next))
     } catch (error) {
@@ -2243,6 +2276,35 @@
 
   shiftLightReset.addEventListener('click', () => {
     requestShiftLightReset()
+  })
+  redlineBrightness.addEventListener('input', () => {
+    renderRedlineBrightness(redlineBrightness.value)
+  })
+  redlineBrightness.addEventListener('change', () => {
+    void updateDisplayPreferences(
+      { redlineBrightness: Number(redlineBrightness.value) },
+      next => `REDLINE BRIGHTNESS SET TO ${next.redlineBrightness}%`
+    )
+  })
+  redlineBrightnessReset.addEventListener('click', () => {
+    void updateDisplayPreferences(
+      { redlineBrightness: DEFAULT_REDLINE_BRIGHTNESS },
+      next => `REDLINE BRIGHTNESS RESET TO ${next.redlineBrightness}%`
+    )
+  })
+  fdcShiftLightEnabled?.addEventListener('click', () => {
+    const enabled = displayPreferences.fdcShiftLightEnabled === false
+    void updateDisplayPreferences(
+      { fdcShiftLightEnabled: enabled },
+      next => `FDC SHIFT LIGHT ${next.fdcShiftLightEnabled ? 'ENABLED' : 'HIDDEN'}`
+    )
+  })
+  showHudWithTelemetry?.addEventListener('click', () => {
+    const enabled = displayPreferences.showHudWithTelemetry === false
+    void updateDisplayPreferences(
+      { showHudWithTelemetry: enabled },
+      next => `HUD TELEMETRY VISIBILITY ${next.showHudWithTelemetry ? 'ENABLED' : 'DISABLED'}`
+    )
   })
   hudOpacity.addEventListener('input', () => {
     renderHudOpacity(hudOpacity.value)

@@ -146,8 +146,10 @@ telemetry path. It provides:
   and HUD can be resized proportionally from any corner. Reset returns each to
   its responsive default size and position, while Coach resets only its
   position;
-- visibility controls for the top-level overlay and HUD components;
-- speed-unit selection and Shift Light brightness;
+- visibility controls for the top-level overlay and HUD components, plus a
+  `SHOW HUD WITH TELEMETRY` preference that defaults to enabled and hides the
+  HUD, Coach, and Delta until a live telemetry sample is received;
+- speed-unit selection and separate Redline and FDC Shift Light brightness;
 - standard minimize and maximize controls, a persisted Configuration
   always-on-top preference that defaults to enabled, and a persisted window
   size (default `820 × 620` logical pixels) and last valid on-screen position;

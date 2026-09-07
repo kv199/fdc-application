@@ -85,6 +85,7 @@
 
     let state = readState()
     let overlayState = readOverlayState()
+    let telemetryVisible = true
 
     function apply(nextState = state) {
       state = COMPONENTS.reduce((result, name) => {
@@ -99,7 +100,7 @@
         .map(name => COLUMN_WIDTHS[name])
       const hasVisibleContent = visibleColumns.length > 0
       hud.hidden = !hasVisibleContent
-      hudFrame.hidden = !overlayState.hud || !hasVisibleContent
+      hudFrame.hidden = !telemetryVisible || !overlayState.hud || !hasVisibleContent
       if (hasVisibleContent) {
         hud.style.gridTemplateColumns = visibleColumns.join(' ')
         hud.style.width = `${visibleColumns.reduce((total, column) => total + Number.parseFloat(column), 0)}px`
@@ -123,6 +124,10 @@
       getState: () => ({ ...state }),
       getOverlayState: () => ({ ...overlayState }),
       isOverlayVisible: name => overlayState[name] !== false,
+      setTelemetryVisible: visible => {
+        telemetryVisible = visible !== false
+        apply(state)
+      },
       setVisibility: (name, visible) => {
         if (!COMPONENTS.includes(name)) return
         apply({ ...state, [name]: visible === true })

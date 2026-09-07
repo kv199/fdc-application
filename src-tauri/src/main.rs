@@ -3809,23 +3809,34 @@ fn set_overlay_visibility(app: AppHandle, component: String, visible: bool) -> R
 fn set_display_preferences(
     app: AppHandle,
     speed_unit: String,
+    redline_brightness: u8,
     shift_light_brightness: u8,
+    fdc_shift_light_enabled: bool,
+    show_hud_with_telemetry: bool,
     hud_opacity: u8,
 ) -> Result<(), String> {
     let safe_speed_unit = match speed_unit.as_str() {
         "kmh" | "mph" => speed_unit,
         _ => return Err("unknown speed unit".to_string()),
     };
+    if redline_brightness > 100 {
+        return Err("Redline brightness must be between 0 and 100".to_string());
+    }
     if shift_light_brightness > 100 {
-        return Err("Shift Light brightness must be between 0 and 100".to_string());
+        return Err("FDC Shift Light brightness must be between 0 and 100".to_string());
     }
     if !(1..=100).contains(&hud_opacity) {
         return Err("HUD opacity must be between 1 and 100".to_string());
     }
 
     let script = format!(
-        "window.HudOverlay?.setDisplayPreferences?.({{ speedUnit: '{}', shiftLightBrightness: {}, hudOpacity: {} }})",
-        safe_speed_unit, shift_light_brightness, hud_opacity
+        "window.HudOverlay?.setDisplayPreferences?.({{ speedUnit: '{}', redlineBrightness: {}, shiftLightBrightness: {}, fdcShiftLightEnabled: {}, showHudWithTelemetry: {}, hudOpacity: {} }})",
+        safe_speed_unit,
+        redline_brightness,
+        shift_light_brightness,
+        fdc_shift_light_enabled,
+        show_hud_with_telemetry,
+        hud_opacity
     );
     eval_main(&app, &script)
 }
