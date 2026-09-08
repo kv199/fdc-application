@@ -433,11 +433,11 @@
       <div id="shift-light-help-panel" class="calibration-help" hidden>
         <div class="calibration-help__title">HOW TO READ DIAGNOSTICS</div>
         <dl>
-          <div><dt>LEARNING</dt><dd>FDC is collecting clean full-throttle power data. Redline comes from the game; no purple cue is shown yet.</dd></div>
-          <div><dt>CONFIRMING</dt><dd>A clean shift found a better next gear or reached a learned engine ceiling. Two more clean shifts within 100 RPM confirm the candidate.</dd></div>
-          <div><dt>OPTIMAL</dt><dd>Three clean shifts confirmed the earliest good RPM. FDC flashes purple at that point.</dd></div>
+          <div><dt>LEARNING</dt><dd>The usable redline is the safe shift target. FDC lights the purple cue early enough to reach it while it watches normal full-throttle upshifts.</dd></div>
+          <div><dt>POTENTIAL</dt><dd>A comparable shift showed that the next gear was at least as powerful. Two more accepted shifts within 100 RPM confirm the candidate.</dd></div>
+          <div><dt>OPTIMAL</dt><dd>Three comparable shifts confirmed an earlier target. FDC uses their median RPM.</dd></div>
         </dl>
-        <p>FDC compares wheel force as power divided by speed across each real upshift. Most cars learn without touching the limiter. If no wheel-force crossover exists, three clean limiter pulls establish the real engine ceiling and allow a near-ceiling shift point.</p>
+        <p>FDC compares engine power immediately before and after each usable next-gear shift. A negative result simply leaves the safe redline target in place. Incomplete, partial-throttle, or torque-cut captures are ignored without judging the shift.</p>
       </div>
 
       <div id="shift-light-empty" class="calibration-empty">
@@ -478,8 +478,8 @@
               <tr>
                 <th scope="col">GEAR</th>
                 <th scope="col">SHIFT POINT</th>
-                <th scope="col">POWER DATA</th>
-                <th scope="col">LAST CLEAN SHIFT</th>
+                <th scope="col">ACCEPTED SHIFTS</th>
+                <th scope="col">LAST COMPARISON</th>
                 <th scope="col">STATE</th>
               </tr>
             </thead>

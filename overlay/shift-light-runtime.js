@@ -11,13 +11,16 @@
     carOrdinal: null,
     pi: null,
     rpmMax: null,
+    reportedRedlineRpm: null,
     usableCeiling: null,
     ceilingSampleCount: 0,
-    gearboxSignature: null,
     currentGear: null,
     method: null,
     gears: [],
-    diagnostics: []
+    diagnostics: [],
+    acceptedShiftCount: 0,
+    lastAcceptedShift: null,
+    persistenceError: null
   }
 
   const invoke = globalScope.__TAURI_INTERNALS__?.invoke
@@ -29,8 +32,10 @@
   let profileMutationQueue = Promise.resolve()
   let resettingLearner = null
   const variantIdsByLearner = new WeakMap()
-  const pendingLearningStateByLearner = new WeakMap()
-  const learningStateRetryByLearner = new WeakMap()
+  const pendingCalibrationByLearner = new WeakMap()
+  const calibrationRetryByLearner = new WeakMap()
+  const calibrationFlushInFlight = new WeakSet()
+  const calibrationFingerprintByLearner = new WeakMap()
   const resolvingLearners = new WeakSet()
   const retryAfterByLearner = new WeakMap()
 
@@ -64,57 +69,173 @@
   }
 
   function publishPersistenceError(error) {
-    const message = error?.message || String(error || 'Unable to persist Shift Light learning state')
+    const message = error?.message || String(error || 'Unable to persist Shift Light calibration')
     latestState = { ...latestState, persistenceError: message }
     emit('hud_shift_light', latestState)
   }
 
-  function flushLearningState(expectedLearner) {
-    const state = pendingLearningStateByLearner.get(expectedLearner)
+  function compactCalibration(state, key, telemetry) {
+    if (!state || typeof state !== 'object') return null
+    const gears = Array.isArray(state.gearTargets)
+      ? state.gearTargets
+      : Array.isArray(state.gears) ? state.gears : []
+    const shiftSamples = Array.isArray(state.shiftSamples)
+      ? state.shiftSamples
+      : Array.isArray(state.acceptedShifts) ? state.acceptedShifts : []
+    return {
+      reportedRedlineRpm: finiteRpm(state.reportedRedlineRpm ?? state.rpmMax ?? telemetry?.rpmMax),
+      usableCeiling: finiteRpm(state.usableCeiling),
+      ceilingSamples: compactRpmArray(state.ceilingSamples),
+      gearTargets: gears.map(compactGearTarget).filter(Boolean),
+      shiftSamples: shiftSamples.map(compactShiftSample).filter(Boolean)
+    }
+  }
+
+  function finiteRpm(value) {
+    return Number.isFinite(value) && value > 0 ? Math.round(value) : null
+  }
+
+  function compactRpmArray(value) {
+    return Array.isArray(value) ? value.map(finiteRpm).filter(value => value !== null).slice(-3) : []
+  }
+
+  function compactGearTarget(value) {
+    if (!value || typeof value !== 'object') return null
+    const sourceGear = Number.isInteger(value.sourceGear) ? value.sourceGear : value.gear
+    if (!Number.isInteger(sourceGear) || sourceGear < 1 || sourceGear > 10) return null
+    const destinationGear = Number.isInteger(value.destinationGear) ? value.destinationGear : sourceGear + 1
+    if (destinationGear !== sourceGear + 1 || destinationGear > 10) return null
+    const status = value.status
+    return {
+      sourceGear,
+      destinationGear,
+      status: ['learning', 'potential', 'optimal'].includes(status) ? status : 'learning',
+      candidateRpm: finiteRpm(value.candidateRpm),
+      optimalRpm: finiteRpm(value.optimalRpm ?? value.targetRpm ?? value.shiftRpm),
+      confirmationCount: Number.isFinite(value.confirmationCount)
+        ? Math.max(0, Math.round(value.confirmationCount))
+        : 0,
+      acceptedShiftCount: Number.isFinite(value.acceptedShiftCount)
+        ? Math.max(0, Math.round(value.acceptedShiftCount))
+        : Number.isFinite(value.sampleCount) ? Math.max(0, Math.round(value.sampleCount)) : 0,
+      lastDeltaPct: Number.isFinite(value.lastDeltaPct) ? value.lastDeltaPct : null,
+      lastAcceptedAt: Number.isFinite(value.lastAcceptedAt) ? Math.round(value.lastAcceptedAt) : null
+    }
+  }
+
+  function compactShiftSample(value) {
+    if (!value || typeof value !== 'object') return null
+    const sourceGear = Number.isInteger(value.sourceGear) ? value.sourceGear : value.gear
+    const destinationGear = Number.isInteger(value.destinationGear) ? value.destinationGear : sourceGear + 1
+    const beforeRpm = finiteRpm(value.beforeRpm)
+    const afterRpm = finiteRpm(value.afterRpm)
+    const beforePower = value.beforePower
+    const afterPower = value.afterPower
+    const deltaPercent = value.deltaPercent ?? value.powerDeltaPct
+    const beforeTimestampMs = Number.isFinite(value.beforeTimestampMs) ? Math.round(value.beforeTimestampMs) : 0
+    const afterTimestampMs = Number.isFinite(value.afterTimestampMs) ? Math.round(value.afterTimestampMs) : 0
+    if (!Number.isInteger(sourceGear) || sourceGear < 1 || sourceGear > 10
+      || destinationGear !== sourceGear + 1 || beforeRpm === null || afterRpm === null
+      || !Number.isFinite(beforePower) || beforePower <= 0
+      || !Number.isFinite(afterPower) || afterPower <= 0
+      || beforeTimestampMs < 0 || afterTimestampMs < beforeTimestampMs
+      || !Number.isFinite(deltaPercent)) return null
+    return {
+      sourceGear,
+      destinationGear,
+      beforeTimestampMs,
+      afterTimestampMs,
+      beforeRpm,
+      afterRpm,
+      beforePower,
+      afterPower,
+      deltaPercent,
+      classification: deltaPercent >= 0 ? 'crossover' : 'not_better'
+    }
+  }
+
+  // The database deliberately exposes SQL-shaped names (optimalRpm and
+  // deltaPercent). Adapt only those names at the learner boundary; the
+  // persisted request remains the compact native contract.
+  function adaptCalibrationForLearner(value, key) {
+    if (!value || typeof value !== 'object') return value
+    return {
+      ...value,
+      key: value.key ?? key,
+      gearTargets: Array.isArray(value.gearTargets)
+        ? value.gearTargets.map(target => ({
+          ...target,
+          status: target.status,
+          targetRpm: target.targetRpm ?? target.optimalRpm
+        })) : [],
+      shiftSamples: Array.isArray(value.shiftSamples)
+        ? value.shiftSamples.map(sample => ({
+          ...sample,
+          powerDeltaPct: sample.powerDeltaPct ?? sample.deltaPercent,
+          outcome: sample.outcome ?? (sample.classification === 'crossover' ? 'better' : 'not_better'),
+          reason: sample.reason ?? (sample.classification === 'crossover' ? 'POWER_CROSSOVER' : 'NO_CROSSOVER')
+        })) : []
+    }
+  }
+
+  function flushCalibration(expectedLearner) {
+    const state = pendingCalibrationByLearner.get(expectedLearner)
     const configId = variantIdsByLearner.get(expectedLearner)
-    if (!state || !configId || expectedLearner !== learner || expectedLearner === resettingLearner) return
-    pendingLearningStateByLearner.delete(expectedLearner)
-    enqueueProfileMutation(() => invokeCommand('save_shift_light_learning_state', {
+    if (!state || !configId || expectedLearner !== learner || expectedLearner === resettingLearner
+      || calibrationFlushInFlight.has(expectedLearner)) return
+    pendingCalibrationByLearner.delete(expectedLearner)
+    calibrationFlushInFlight.add(expectedLearner)
+    enqueueProfileMutation(() => invokeCommand('save_shift_light_calibration', {
       request: {
         key: currentKey,
         configId,
-        state
+        reportedRedlineRpm: state.reportedRedlineRpm,
+        usableCeiling: state.usableCeiling,
+        ceilingSamples: state.ceilingSamples,
+        gearTargets: state.gearTargets,
+        shiftSamples: state.shiftSamples
       }
-    })).catch(error => {
-      // Keep the last accepted state for a later retry, but expose the failure
-      // to the UI instead of silently losing learning progress.
-      pendingLearningStateByLearner.set(expectedLearner, state)
+    })).then(() => {
+      calibrationFlushInFlight.delete(expectedLearner)
+      calibrationRetryByLearner.delete(expectedLearner)
+      // A telemetry frame may have produced a newer compact snapshot while
+      // the previous write was in flight. Persist only that latest snapshot.
+      flushCalibration(expectedLearner)
+    }, error => {
+      calibrationFingerprintByLearner.delete(expectedLearner)
+      pendingCalibrationByLearner.set(expectedLearner, state)
+      calibrationFlushInFlight.delete(expectedLearner)
       publishPersistenceError(error)
-      const retry = learningStateRetryByLearner.get(expectedLearner) || { attempts: 0 }
+      const retry = calibrationRetryByLearner.get(expectedLearner) || { attempts: 0 }
       retry.attempts += 1
-      learningStateRetryByLearner.set(expectedLearner, retry)
+      calibrationRetryByLearner.set(expectedLearner, retry)
       const delay = Math.min(4000, 250 * (2 ** Math.min(retry.attempts - 1, 4)))
-      const timer = setTimeout(() => flushLearningState(expectedLearner), delay)
+      const timer = setTimeout(() => flushCalibration(expectedLearner), delay)
       timer.unref?.()
-    }).then(() => {
-      learningStateRetryByLearner.delete(expectedLearner)
     })
   }
 
-  function persistLearningState(state, expectedLearner) {
+  function persistCalibration(state, expectedLearner) {
     if (!state || typeof state !== 'object' || expectedLearner !== learner || expectedLearner === resettingLearner) return
-    pendingLearningStateByLearner.set(expectedLearner, state)
-    flushLearningState(expectedLearner)
+    const compact = compactCalibration(state, currentKey, latestTelemetry)
+    if (!compact) return
+    const fingerprint = JSON.stringify(compact)
+    if (fingerprint === calibrationFingerprintByLearner.get(expectedLearner)) return
+    calibrationFingerprintByLearner.set(expectedLearner, fingerprint)
+    pendingCalibrationByLearner.set(expectedLearner, compact)
+    flushCalibration(expectedLearner)
   }
 
   function createLearner(key) {
     const localLearner = new globalScope.HudShiftLight.ShiftLightLearner(key, {
-      // The new learner state is the only persistence contract. Legacy
-      // profile callbacks are intentionally not wired: they would recreate
-      // the removed Observed/Optimal storage alongside the new state.
-      onLearningState: state => persistLearningState(state, localLearner),
+      onLearningState: state => persistCalibration(state, localLearner),
       onGearboxChanged: signature => clearConfiguration(localLearner, signature)
     })
     learner = localLearner
     currentKey = key
     variantIdsByLearner.set(localLearner, null)
-    pendingLearningStateByLearner.set(localLearner, null)
-    learningStateRetryByLearner.set(localLearner, { attempts: 0 })
+    pendingCalibrationByLearner.set(localLearner, null)
+    calibrationRetryByLearner.set(localLearner, { attempts: 0 })
     latestState = localLearner.snapshot(latestTelemetry)
     publish(latestState)
   }
@@ -133,31 +254,42 @@
       if (expectedLearner !== learner) return
       // A higher observed gear cannot prove a different gearbox. Resolve once
       // by the full vehicle key, keeping both the learner and its numeric ID.
-      const resolution = await invokeCommand('resolve_shift_light_config', { key, observedGear })
-      if (!Number.isInteger(resolution?.variantId) || resolution.variantId < 1) {
+      const resolution = await invokeCommand('resolve_shift_light_config', {
+        key,
+        observedGear,
+        reportedRedlineRpm: finiteRpm(latestTelemetry?.rpmMax)
+      })
+      const configId = Number.isInteger(resolution?.configId) ? resolution.configId : resolution?.variantId
+      if (!Number.isInteger(configId) || configId < 1) {
         throw new Error('Invalid Shift Light configuration')
       }
-      const learningState = await invokeCommand('load_shift_light_learning_state', {
-        key, configId: resolution.variantId
+      const learningStateResult = await invokeCommand('load_shift_light_calibration', {
+        key, configId
       })
+      const learningState = learningStateResult?.calibration ?? learningStateResult
       if (expectedLearner !== learner || key !== currentKey) return
       if (learningState !== null && (typeof learningState !== 'object' || Array.isArray(learningState))) {
-        throw new Error('Invalid Shift Light learning state')
+        throw new Error('Invalid Shift Light calibration')
       }
-      variantIdsByLearner.set(expectedLearner, resolution.variantId)
+      variantIdsByLearner.set(expectedLearner, configId)
       if (requestedLoadGeneration !== loadGeneration || expectedLearner === resettingLearner) return
       if (learningState) {
         // Telemetry may arrive while the async configuration lookup is in
         // flight. Join those completed facts rather than replacing either
         // the live start of the pull or the persisted calibration.
-        if (typeof expectedLearner.mergeLearningState === 'function') {
-          expectedLearner.mergeLearningState(learningState)
+        const calibration = adaptCalibrationForLearner(learningState, key)
+        if (typeof expectedLearner.mergeCalibration === 'function') {
+          expectedLearner.mergeCalibration(calibration)
+        } else if (typeof expectedLearner.mergeLearningState === 'function') {
+          expectedLearner.mergeLearningState(calibration, key)
+        } else if (typeof expectedLearner.importCalibration === 'function') {
+          expectedLearner.importCalibration(calibration)
         } else if (typeof expectedLearner.importLearningState === 'function') {
-          expectedLearner.importLearningState(learningState)
+          expectedLearner.importLearningState(calibration, key)
         }
       }
       publish(expectedLearner.snapshot(latestTelemetry))
-      flushLearningState(expectedLearner)
+      flushCalibration(expectedLearner)
     })
       .catch(() => {
         // Keep live evidence and retry storage without recreating the learner.
@@ -167,12 +299,11 @@
       .finally(() => resolvingLearners.delete(expectedLearner))
   }
 
-  function clearConfiguration(expectedLearner, signature) {
+  function clearConfiguration(expectedLearner) {
     const configId = variantIdsByLearner.get(expectedLearner)
     if (!configId) return
     enqueueProfileMutation(() => invokeCommand('clear_shift_light_config', {
-      configId,
-      gearboxSignature: signature
+      configId
     })).catch(error => publishPersistenceError(error))
   }
 
@@ -187,8 +318,15 @@
     latestTelemetry = telemetry
     if (key !== currentKey || !learner) createLearner(key)
     const state = learner.update(telemetry)
+    // Some learner revisions emit their persistence callback only when a
+    // completed shift changes a target. Snapshot on the update boundary as
+    // well so reported redline/ceiling facts are not lost before that event.
+    const serialized = typeof learner.serializeLearningState === 'function'
+      ? learner.serializeLearningState()
+      : typeof learner.exportLearningState === 'function' ? learner.exportLearningState() : null
+    persistCalibration(serialized, learner)
     resolveConfiguration(key, learner, state.observedGearCount)
-    flushLearningState(learner)
+    flushCalibration(learner)
     return publish(state)
   }
 
@@ -238,7 +376,8 @@
 
     loadGeneration += 1
     currentLearner.reset()
-    pendingLearningStateByLearner.delete(currentLearner)
+    pendingCalibrationByLearner.delete(currentLearner)
+    calibrationFingerprintByLearner.delete(currentLearner)
     publish({ ...currentLearner.snapshot(latestTelemetry), phase: 'normal' })
     if (resettingLearner === currentLearner) resettingLearner = null
     return publishResetResult({ ok: true, carKey: key })

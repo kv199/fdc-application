@@ -96,19 +96,19 @@ being guessed.
 
 Garage and Shift Light use the same local `fdc.sqlite` file. They retain their
 separate tables and responsibilities, but a Garage configuration and Shift
-Light profiles are associated by `game_id`, `car_ordinal`, and `PI`.
+Light calibration are associated by game ID, car ordinal, class, PI,
+drivetrain, and cylinder count.
 
 A Garage car may have multiple class/PI/drivetrain configurations. Each
-matching configuration summarizes every persisted Shift Light tune for that car
-and PI, including its
-distinct RPM limits and gearbox signatures. The snapshot reports:
+matching configuration summarizes its persisted per-pair Shift Light targets.
+The snapshot reports:
 
 - `READY` when at least one calibrated per-gear target exists;
 - `LEARNING` when a Shift Light tune exists without a calibrated target;
 - `NOT CALIBRATED` when no Shift Light tune exists.
 
 Shift Light remains visible only in the Shift Light tab, which provides the
-live diagnostics and reset for the active numeric gearbox variant. Garage does
+live diagnostics and reset for the active numeric configuration. Garage does
 not render a second Shift Light status or profile control.
 
 ## Local SQLite state
@@ -143,10 +143,10 @@ configuration are the current Garage state while FDC receives live telemetry;
 after a restart, the saved snapshot displays the last observed state until a new
 sample arrives.
 
-The migration creates these tables transactionally and leaves current Shift
-Light configurations and learning facts intact.
+The migration creates these tables transactionally and does not make Garage
+data depend on Shift Light learning facts.
 
-Garage snapshots query `shift_light_configs` and `shift_light_gear_learning`
+Garage snapshots query `shift_light_configs` and `shift_light_gear_targets`
 to attach the Shift Light summary by car ordinal, PI, drivetrain, and cylinder
 count. Retired Shift Light variant/profile tables are not part of the Garage
 contract.

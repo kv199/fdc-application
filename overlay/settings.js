@@ -1942,6 +1942,10 @@
     return Number.isFinite(value) ? `${Math.round(value)} RPM` : '—'
   }
 
+  function formatDelta(value) {
+    return Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${value.toFixed(1)}%` : '—'
+  }
+
   function appendCellText(cell, primary, secondary = '') {
     cell.textContent = primary
     if (secondary) {
@@ -1973,12 +1977,17 @@
       : state.ceilingSampleCount > 0 ? `LEARNING · ${state.ceilingSampleCount}/3` : 'NOT OBSERVED'
     const activeGear = state.gears.find(gear => gear.gear === state.currentGear)
     const activeStatus = activeGear?.status || 'learning'
-    const activeTarget = activeGear?.shiftRpm ?? state.shiftRpm
+    const fallbackTarget = state.usableCeiling || state.fallbackShiftRpm || state.reportedRedlineRpm || state.rpmMax
+    const activeTarget = activeStatus === 'learning'
+      ? fallbackTarget
+      : activeGear?.shiftRpm ?? state.shiftRpm
     shiftLightCurrentTarget.textContent = activeTarget
-      ? `${activeStatus === 'optimal' ? 'OPTIMAL' : 'CANDIDATE'} · ${activeTarget} RPM`
-      : state.rpmMax ? `REDLINE · ${state.rpmMax} RPM` : 'WAITING FOR RPM LIMIT'
-    const activeState = activeStatus === 'confirming'
-      ? `CONFIRMING ${Math.max(1, activeGear?.confirmingCount || 1)}/3`
+      ? `${activeStatus === 'optimal' ? 'OPTIMAL' : activeStatus === 'potential' ? 'POTENTIAL' : 'LEARNING'} · ${activeTarget} RPM`
+      : fallbackTarget
+        ? `LEARNING · ${fallbackTarget} RPM`
+        : 'WAITING FOR RPM LIMIT'
+    const activeState = activeStatus === 'potential'
+      ? `POTENTIAL ${Math.max(1, activeGear?.confirmationCount || 1)}/3`
       : activeStatus.toUpperCase()
     shiftLightState.textContent = `${activeState}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
     shiftLightGearRows.replaceChildren()
@@ -1998,40 +2007,41 @@
       const targetCell = document.createElement('td')
       appendCellText(
         targetCell,
-        formatRpm(diagnostic?.targetRpm ?? gear.shiftRpm),
-        gear.status === 'confirming'
-          ? `CANDIDATE · ${Math.max(1, diagnostic?.confirmingCount ?? gear.confirmingCount)}/3`
+        formatRpm(diagnostic?.targetRpm ?? gear.shiftRpm ?? (gear.status === 'learning' ? fallbackTarget : null)),
+        gear.status === 'potential'
+          ? `POTENTIAL · ${Math.max(1, diagnostic?.confirmationCount ?? gear.confirmationCount)}/3`
           : gear.status === 'optimal'
             ? 'PURPLE CUE ACTIVE'
-            : 'NO PURPLE CUE'
+            : 'REDLINE FALLBACK'
       )
       row.append(targetCell)
 
       const powerCell = document.createElement('td')
       appendCellText(
         powerCell,
-        `${diagnostic?.powerBinCount ?? 0} RPM BINS`,
-        diagnostic?.peakPowerRpm ? `PEAK ${formatRpm(diagnostic.peakPowerRpm)}` : 'CLEAN WOT DATA'
+        `${diagnostic?.acceptedShiftCount ?? gear.acceptedShiftCount ?? gear.sampleCount} ACCEPTED`,
+        Number.isFinite(diagnostic?.lastDeltaPct ?? gear.lastDeltaPct)
+          ? `LAST Δ ${formatDelta(diagnostic?.lastDeltaPct ?? gear.lastDeltaPct)}`
+          : 'WAITING FOR AN ACCEPTED SHIFT'
       )
       row.append(powerCell)
 
       const dataCell = document.createElement('td')
+      const lastRpm = gear.lastRpmBefore ?? null
       appendCellText(
         dataCell,
-        `${diagnostic?.evidenceCount ?? gear.sampleCount} ANALYSED`,
-        diagnostic?.lastReason || gear.lastReason || 'WAITING FOR A CLEAN UPSHIFT'
+        Number.isFinite(gear.lastDeltaPct) ? `${formatDelta(gear.lastDeltaPct)} POWER DELTA` : 'NO LAST SHIFT',
+        Number.isFinite(lastRpm) ? `RECORDED ${formatRpm(lastRpm)}` : 'WAITING FOR A COMPARABLE UPSHIFT'
       )
       row.append(dataCell)
 
       const stateCell = document.createElement('td')
       appendCellText(
         stateCell,
-        diagnosticStatus === 'confirming'
-          ? `CONFIRMING ${Math.max(1, diagnostic?.confirmingCount ?? gear.confirmingCount)}/3`
+        diagnosticStatus === 'potential'
+          ? `POTENTIAL ${Math.max(1, diagnostic?.confirmationCount ?? gear.confirmationCount)}/3`
           : diagnosticStatus.toUpperCase(),
-        diagnosticStatus === 'learning' && (diagnostic?.lastReason || gear.lastReason)
-          ? 'CHECK LAST SHIFT'
-          : ''
+        diagnosticStatus === 'learning' ? 'REDLINE FALLBACK ACTIVE' : ''
       )
       row.append(stateCell)
       shiftLightGearRows.append(row)

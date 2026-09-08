@@ -2047,7 +2047,7 @@ h1 {
   color: #a1a1aa;
 }
 
-.calibration-table tr[data-state='confirming'] td:last-child {
+.calibration-table tr[data-state='potential'] td:last-child {
   color: #fbbf24;
 }
 

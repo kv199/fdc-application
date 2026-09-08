@@ -28,24 +28,18 @@ var HudShiftLight = (() => {
   });
 
   // src/shift-light/optimal-shift.ts
-  var SHIFT_LIGHT_LEARNING_VERSION = 3;
+  var SHIFT_LIGHT_LEARNING_VERSION = 4;
   var FORWARD_GEAR_MIN = 1;
   var FORWARD_GEAR_MAX = 10;
-  var POWER_BIN_RPM = 200;
-  var MAX_POWER_BINS_PER_GEAR = 64;
-  var MAX_POWER_SAMPLES_PER_BIN = 24;
-  var MAX_SHIFT_EVIDENCE_PER_GEAR = 32;
+  var MAX_SHIFT_SAMPLES = 64;
   var MAX_CONFIRMATIONS = 3;
   var CONFIRMATION_STABILITY_RPM = 100;
-  var MIN_SPEED_KMH = 1;
-  var RPM_CEILING_MARGIN_RPM = 100;
-  var RPM_CEILING_MAX_OVERSHOOT_RPM = 100;
-  var MIN_LIMITER_RISE_RPM = 100;
-  var MIN_LIMITER_DROP_RPM = 40;
-  var LIMITER_RECOVERY_TOLERANCE_RPM = 60;
   var MAX_CEILING_SAMPLES = 3;
   var MIN_TRUSTED_CEILING_SAMPLES = 3;
   var CEILING_SAMPLE_STABILITY_RPM = 100;
+  var MIN_LIMITER_RISE_RPM = 100;
+  var MIN_LIMITER_DROP_RPM = 40;
+  var LIMITER_RECOVERY_TOLERANCE_RPM = 60;
   var MAX_CLEAN_TIMESTAMP_GAP_MS = 1e3;
   function isForwardGear(gear) {
     return Number.isInteger(gear) && gear >= FORWARD_GEAR_MIN && gear <= FORWARD_GEAR_MAX;
@@ -69,11 +63,6 @@ var HudShiftLight = (() => {
     if (Number.isFinite(telemetry.handBrake) && telemetry.handBrake > 0.02) return false;
     if (!isForwardGear(telemetry.gear) || !finitePositive(telemetry.rpm)) return false;
     if (!finitePositive(telemetry.speedKmh)) return false;
-    const slip = telemetry.combinedSlip;
-    if (slip) {
-      const driven = telemetry.car.drivetrain === 0 ? [slip.fl, slip.fr] : telemetry.car.drivetrain === 1 ? [slip.rl, slip.rr] : [slip.fl, slip.fr, slip.rl, slip.rr];
-      if (driven.some((value) => Number.isFinite(value) && Math.abs(value) > 0.2)) return false;
-    }
     return true;
   }
   function cleanPowerTelemetry(telemetry) {
@@ -82,155 +71,91 @@ var HudShiftLight = (() => {
   function isCleanShiftEvidence(telemetry) {
     return cleanPowerTelemetry(telemetry);
   }
-  function emptyGear(sourceGear) {
+  function emptyGear(sourceGear, destinationGear = sourceGear + 1) {
     return {
       sourceGear,
+      destinationGear,
       status: "learning",
       targetRpm: null,
       candidateRpm: null,
-      confirmingRpms: [],
-      confirmingCount: 0,
-      replacementCandidateRpm: null,
-      replacementConfirmingRpms: [],
-      targetContradicted: false,
+      confirmationRpms: [],
+      confirmationCount: 0,
       lastReason: null,
-      powerBins: [],
       evidence: []
     };
   }
+  function cloneEvidence(item) {
+    return { ...item };
+  }
   function cloneGear(state) {
-    return {
-      sourceGear: state.sourceGear,
-      status: state.status,
-      targetRpm: state.targetRpm,
-      candidateRpm: state.candidateRpm,
-      confirmingRpms: [...state.confirmingRpms],
-      confirmingCount: state.confirmingCount,
-      replacementCandidateRpm: state.replacementCandidateRpm,
-      replacementConfirmingRpms: [...state.replacementConfirmingRpms],
-      targetContradicted: state.targetContradicted,
-      lastReason: state.lastReason,
-      powerBins: state.powerBins.map((bin) => ({ ...bin })),
-      evidence: state.evidence.map((item) => ({ ...item }))
-    };
+    return { ...state, confirmationRpms: [...state.confirmationRpms], evidence: state.evidence.map(cloneEvidence) };
   }
-  function normalizePowerBin(value) {
+  function normalizeEvidence(value) {
     if (!value || typeof value !== "object") return null;
     const raw = value;
-    const rpmBucket = finiteInRange(raw.rpmBucket, 0, 1e5);
-    const sampleCount = finiteInRange(raw.sampleCount, 0, MAX_POWER_SAMPLES_PER_BIN);
-    const powerSum = finiteInRange(raw.powerSum, 0, Number.MAX_SAFE_INTEGER);
-    const torqueSum = finiteInRange(raw.torqueSum, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
-    const torqueSampleCount = finiteInRange(raw.torqueSampleCount, 0, MAX_POWER_SAMPLES_PER_BIN);
-    const speedSum = finiteInRange(raw.speedSum, 0, Number.MAX_SAFE_INTEGER);
-    const speedSampleCount = finiteInRange(raw.speedSampleCount, 0, MAX_POWER_SAMPLES_PER_BIN);
-    if (rpmBucket === null || sampleCount === null || powerSum === null || torqueSum === null || torqueSampleCount === null || speedSum === null || speedSampleCount === null) return null;
-    return {
-      rpmBucket: roundRpm(rpmBucket),
-      sampleCount: Math.round(sampleCount),
-      medianPower: sampleCount > 0 ? powerSum / sampleCount : 0,
-      medianTorque: torqueSampleCount > 0 ? torqueSum / torqueSampleCount : null,
-      medianSpeed: speedSampleCount > 0 ? speedSum / speedSampleCount : null,
-      powerSum,
-      torqueSum,
-      torqueSampleCount: Math.round(torqueSampleCount),
-      speedSum,
-      speedSampleCount: Math.round(speedSampleCount)
-    };
-  }
-  function normalizeEvidence(value, sourceGear) {
-    if (!value || typeof value !== "object") return null;
-    const raw = value;
-    const destinationGear = finiteInRange(raw.destinationGear, sourceGear + 1, FORWARD_GEAR_MAX);
+    const sourceGear = finiteInRange(raw.sourceGear, FORWARD_GEAR_MIN, FORWARD_GEAR_MAX);
+    const destinationGear = finiteInRange(raw.destinationGear, FORWARD_GEAR_MIN, FORWARD_GEAR_MAX);
     const beforeTimestampMs = finiteInRange(raw.beforeTimestampMs, 0, Number.MAX_SAFE_INTEGER);
     const afterTimestampMs = finiteInRange(raw.afterTimestampMs, 0, Number.MAX_SAFE_INTEGER);
     const beforeRpm = finiteInRange(raw.beforeRpm, 0, 1e5);
     const afterRpm = finiteInRange(raw.afterRpm, 0, 1e5);
     const beforePower = finiteInRange(raw.beforePower, 0, Number.MAX_SAFE_INTEGER);
     const afterPower = finiteInRange(raw.afterPower, 0, Number.MAX_SAFE_INTEGER);
-    const beforeSpeedKmh = finiteInRange(raw.beforeSpeedKmh, MIN_SPEED_KMH, 2e3);
-    const afterSpeedKmh = finiteInRange(raw.afterSpeedKmh, MIN_SPEED_KMH, 2e3);
-    if (destinationGear === null || beforeTimestampMs === null || afterTimestampMs === null || beforeRpm === null || afterRpm === null || beforePower === null || afterPower === null || beforeSpeedKmh === null || afterSpeedKmh === null) return null;
-    const outcome = raw.outcome;
-    if (outcome !== "better" && outcome !== "rpm_ceiling" && outcome !== "too_early" && outcome !== "invalid") return null;
-    const beforeTorque = raw.beforeTorque === null ? null : finiteInRange(raw.beforeTorque, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
-    const afterTorque = raw.afterTorque === null ? null : finiteInRange(raw.afterTorque, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
-    return {
+    const delta = finiteInRange(raw.powerDeltaPct, -100, Number.MAX_SAFE_INTEGER);
+    if ([
       sourceGear,
-      destinationGear: Math.round(destinationGear),
+      destinationGear,
       beforeTimestampMs,
       afterTimestampMs,
       beforeRpm,
       afterRpm,
       beforePower,
       afterPower,
-      beforeTorque,
-      afterTorque,
-      beforeSpeedKmh,
-      afterSpeedKmh,
-      beforeSpeed: beforeSpeedKmh,
-      afterSpeed: afterSpeedKmh,
-      outcome,
-      reason: normalizeReason(raw.reason, outcome)
+      delta
+    ].some((item) => item === null)) return null;
+    if (beforePower <= 0 || afterPower <= 0) return null;
+    if (Math.round(destinationGear) !== Math.round(sourceGear) + 1) return null;
+    return {
+      sourceGear: Math.round(sourceGear),
+      destinationGear: Math.round(destinationGear),
+      beforeTimestampMs,
+      afterTimestampMs,
+      beforeRpm: roundRpm(beforeRpm),
+      afterRpm: roundRpm(afterRpm),
+      beforePower,
+      afterPower,
+      powerDeltaPct: delta,
+      outcome: raw.outcome === "not_better" || delta < 0 ? "not_better" : "better",
+      reason: raw.reason === "NO_CROSSOVER" || delta < 0 ? "NO_CROSSOVER" : "POWER_CROSSOVER"
     };
   }
-  function normalizeReason(value, outcome) {
-    if (outcome === "better" && value === "POWER_CROSSOVER" || outcome === "rpm_ceiling" && value === "RPM_CEILING" || outcome === "too_early" && value === "TOO_EARLY" || outcome === "invalid" && value === "INVALID") return value;
-    return outcome === "better" ? "POWER_CROSSOVER" : outcome === "rpm_ceiling" ? "RPM_CEILING" : outcome === "too_early" ? "TOO_EARLY" : "INVALID";
+  function normalizeRpmList(value) {
+    return Array.isArray(value) ? value.map((item) => finiteInRange(item, 0, 1e5)).filter((item) => item !== null).map(roundRpm).slice(-MAX_CONFIRMATIONS) : [];
+  }
+  function normalizeCeilingSamples(value) {
+    return Array.isArray(value) ? value.map((item) => finiteInRange(item, 0, 1e5)).filter((item) => item !== null).map(roundRpm).slice(-MAX_CEILING_SAMPLES) : [];
   }
   var OptimalShiftEstimator = class _OptimalShiftEstimator {
     gears = /* @__PURE__ */ new Map();
+    shiftSamples = [];
     ceilingSamples = [];
     usableCeiling = null;
+    reportedRedlineRpm = null;
     limiterTracker = null;
     lastCleanTelemetry = null;
     limiterRearmed = true;
     ingest(telemetry) {
+      if (Number.isFinite(telemetry.rpmMax) && telemetry.rpmMax > 0) this.reportedRedlineRpm = roundRpm(telemetry.rpmMax);
+      if (cleanWotMotionTelemetry(telemetry) && telemetry.gear < FORWARD_GEAR_MAX) this.getOrCreate(telemetry.gear);
       this.observeLimiter(telemetry);
-      if (!cleanPowerTelemetry(telemetry)) return;
-      const state = this.getOrCreate(telemetry.gear);
-      const rpmBucket = Math.round(telemetry.rpm / POWER_BIN_RPM) * POWER_BIN_RPM;
-      let bin = state.powerBins.find((candidate) => candidate.rpmBucket === rpmBucket);
-      if (!bin) {
-        if (state.powerBins.length >= MAX_POWER_BINS_PER_GEAR) {
-          state.powerBins.sort((left, right) => left.rpmBucket - right.rpmBucket);
-          state.powerBins.shift();
-        }
-        bin = {
-          rpmBucket,
-          sampleCount: 0,
-          medianPower: 0,
-          medianTorque: null,
-          medianSpeed: null,
-          powerSum: 0,
-          torqueSum: 0,
-          torqueSampleCount: 0,
-          speedSum: 0,
-          speedSampleCount: 0
-        };
-        state.powerBins.push(bin);
-      }
-      if (bin.sampleCount >= MAX_POWER_SAMPLES_PER_BIN) return;
-      bin.sampleCount += 1;
-      bin.powerSum += telemetry.power;
-      bin.speedSum += telemetry.speedKmh;
-      bin.speedSampleCount += 1;
-      if (Number.isFinite(telemetry.torque)) {
-        bin.torqueSum += telemetry.torque;
-        bin.torqueSampleCount += 1;
-      }
-      bin.medianPower = bin.powerSum / bin.sampleCount;
-      bin.medianTorque = bin.torqueSampleCount > 0 ? bin.torqueSum / bin.torqueSampleCount : null;
-      bin.medianSpeed = bin.speedSampleCount > 0 ? bin.speedSum / bin.speedSampleCount : null;
     }
-    /** Record a completed Gx→Gx+1 observation, including rejected observations. */
+    /** Only completed clean windows are stored; a negative delta is observation, not driver failure. */
     observeTransition(observation) {
       const { sourceGear, destinationGear, before, after } = observation;
       if (!isForwardGear(sourceGear) || destinationGear !== sourceGear + 1) return null;
-      const valid = cleanPowerTelemetry(before) && cleanPowerTelemetry(after) && before.timestampMs <= after.timestampMs;
-      const forceImproved = after.power / after.speedKmh > before.power / before.speedKmh;
-      const outcome = !valid ? "invalid" : forceImproved ? "better" : this.isAtUsableCeiling(before.rpm) ? "rpm_ceiling" : "too_early";
-      const reason = !valid ? "INVALID" : forceImproved ? "POWER_CROSSOVER" : this.isAtUsableCeiling(before.rpm) ? "RPM_CEILING" : "TOO_EARLY";
+      if (!cleanPowerTelemetry(before) || !cleanPowerTelemetry(after) || before.timestampMs > after.timestampMs) return null;
+      const powerDeltaPct = (after.power - before.power) / before.power * 100;
+      if (!Number.isFinite(powerDeltaPct)) return null;
       const evidence = {
         sourceGear,
         destinationGear,
@@ -240,103 +165,93 @@ var HudShiftLight = (() => {
         afterRpm: roundRpm(after.rpm),
         beforePower: before.power,
         afterPower: after.power,
-        beforeTorque: Number.isFinite(before.torque) ? before.torque : null,
-        afterTorque: Number.isFinite(after.torque) ? after.torque : null,
-        beforeSpeedKmh: before.speedKmh,
-        afterSpeedKmh: after.speedKmh,
-        beforeSpeed: before.speedKmh,
-        afterSpeed: after.speedKmh,
-        outcome,
-        reason
+        powerDeltaPct,
+        outcome: powerDeltaPct >= 0 ? "better" : "not_better",
+        reason: powerDeltaPct >= 0 ? "POWER_CROSSOVER" : "NO_CROSSOVER"
       };
-      const state = this.getOrCreate(sourceGear);
-      state.evidence.push(evidence);
-      if (state.evidence.length > MAX_SHIFT_EVIDENCE_PER_GEAR) state.evidence.shift();
-      this.applyOutcome(state, evidence);
-      return { ...evidence };
+      this.shiftSamples = [...this.shiftSamples, evidence].slice(-MAX_SHIFT_SAMPLES);
+      const state = this.getOrCreate(sourceGear, destinationGear);
+      state.evidence = [...state.evidence, evidence].slice(-MAX_SHIFT_SAMPLES);
+      const baseline = this.usableCeiling ?? this.reportedRedlineRpm;
+      if (evidence.outcome === "better" && baseline !== null && evidence.beforeRpm < baseline) this.applyBetterOutcome(state, evidence.beforeRpm);
+      return cloneEvidence(evidence);
     }
     getState(gear) {
       const state = this.gears.get(gear);
       return state ? cloneGear(state) : null;
     }
     getStates() {
-      return [...this.gears.values()].sort((left, right) => left.sourceGear - right.sourceGear).map(cloneGear);
+      return [...this.gears.values()].sort((a, b) => a.sourceGear - b.sourceGear).map(cloneGear);
     }
     serializeLearningState(key) {
       return {
         modelVersion: SHIFT_LIGHT_LEARNING_VERSION,
         version: SHIFT_LIGHT_LEARNING_VERSION,
         key,
+        reportedRedlineRpm: this.reportedRedlineRpm,
         ceilingSamples: [...this.ceilingSamples],
         usableCeiling: this.usableCeiling,
-        gears: this.getStates()
+        gearTargets: this.getStates(),
+        shiftSamples: this.shiftSamples.map(cloneEvidence)
       };
     }
     importLearningState(state, key) {
       if (!state || typeof state !== "object") return false;
       const raw = state;
-      const modelVersion = raw.modelVersion ?? raw.version;
-      if (modelVersion !== SHIFT_LIGHT_LEARNING_VERSION || raw.key !== key || !Array.isArray(raw.gears)) return false;
+      const version = raw.modelVersion ?? raw.version;
+      if (version !== SHIFT_LIGHT_LEARNING_VERSION || raw.key !== key) return false;
+      const samples = Array.isArray(raw.shiftSamples) ? raw.shiftSamples.map(normalizeEvidence).filter((x) => x !== null) : [];
       const restored = /* @__PURE__ */ new Map();
-      const ceilingSamples = this.normalizeCeilingSamples(raw.ceilingSamples);
-      for (const candidate of raw.gears.slice(0, FORWARD_GEAR_MAX)) {
-        if (!candidate || typeof candidate !== "object") continue;
-        const value = candidate;
-        const sourceGear = finiteInRange(value.sourceGear, FORWARD_GEAR_MIN, FORWARD_GEAR_MAX);
-        if (sourceGear === null) continue;
-        const stateValue = emptyGear(Math.round(sourceGear));
-        if (value.status === "learning" || value.status === "confirming" || value.status === "optimal") stateValue.status = value.status;
-        stateValue.targetRpm = finiteInRange(value.targetRpm, 0, 1e5);
-        stateValue.candidateRpm = finiteInRange(value.candidateRpm, 0, 1e5);
-        stateValue.replacementCandidateRpm = finiteInRange(value.replacementCandidateRpm, 0, 1e5);
-        stateValue.targetContradicted = value.targetContradicted === true;
-        stateValue.confirmingRpms = this.normalizeConfirmations(value.confirmingRpms);
-        stateValue.confirmingCount = Math.min(MAX_CONFIRMATIONS, Math.max(0, Math.round(Number(value.confirmingCount ?? stateValue.confirmingRpms.length))));
-        stateValue.replacementConfirmingRpms = this.normalizeConfirmations(value.replacementConfirmingRpms);
-        stateValue.lastReason = typeof value.lastReason === "string" ? value.lastReason.slice(0, 160) : null;
-        if (Array.isArray(value.powerBins)) {
-          stateValue.powerBins = value.powerBins.map(normalizePowerBin).filter((bin) => bin !== null).slice(0, MAX_POWER_BINS_PER_GEAR);
-        }
-        if (Array.isArray(value.evidence)) {
-          stateValue.evidence = value.evidence.map((item) => normalizeEvidence(item, stateValue.sourceGear)).filter((item) => item !== null).slice(-MAX_SHIFT_EVIDENCE_PER_GEAR);
-        }
-        restored.set(stateValue.sourceGear, stateValue);
+      const rawTargets = Array.isArray(raw.gearTargets) ? raw.gearTargets : [];
+      for (const rawTarget of rawTargets) {
+        if (!rawTarget || typeof rawTarget !== "object") continue;
+        const item = rawTarget;
+        const sourceGear = finiteInRange(item.sourceGear, FORWARD_GEAR_MIN, FORWARD_GEAR_MAX);
+        const destinationGear = finiteInRange(item.destinationGear, FORWARD_GEAR_MIN, FORWARD_GEAR_MAX);
+        if (sourceGear === null || destinationGear !== sourceGear + 1) continue;
+        const target = emptyGear(Math.round(sourceGear), Math.round(destinationGear));
+        if (item.status === "potential" || item.status === "optimal") target.status = item.status;
+        target.targetRpm = finiteInRange(item.targetRpm, 0, 1e5);
+        target.candidateRpm = finiteInRange(item.candidateRpm, 0, 1e5);
+        const rawCount = Number(item.confirmationCount ?? 0);
+        const persistedCount = Number.isFinite(rawCount) ? Math.min(MAX_CONFIRMATIONS, Math.max(0, Math.round(rawCount))) : 0;
+        const targetSamples = samples.filter((sample) => sample.sourceGear === target.sourceGear && sample.destinationGear === target.destinationGear && sample.outcome === "better");
+        const explicitRpms = normalizeRpmList(item.confirmationRpms);
+        const seed = finiteInRange(item.candidateRpm ?? item.targetRpm, 0, 1e5);
+        const candidateRpm = seed ?? targetSamples[targetSamples.length - 1]?.beforeRpm ?? null;
+        const derivedRpms = candidateRpm === null ? [] : targetSamples.map((sample) => sample.beforeRpm).filter((rpm) => Math.abs(rpm - candidateRpm) <= CONFIRMATION_STABILITY_RPM).slice(-MAX_CONFIRMATIONS);
+        target.confirmationRpms = (explicitRpms.length > 0 ? explicitRpms : derivedRpms).slice(-MAX_CONFIRMATIONS);
+        target.confirmationCount = Math.min(MAX_CONFIRMATIONS, Math.max(persistedCount, target.confirmationRpms.length));
+        target.lastReason = typeof item.lastReason === "string" ? item.lastReason.slice(0, 160) : null;
+        target.evidence = samples.filter((sample) => sample.sourceGear === target.sourceGear && sample.destinationGear === target.destinationGear);
+        restored.set(target.sourceGear, target);
       }
       this.gears.clear();
-      for (const [gear, value] of restored) this.gears.set(gear, value);
-      this.ceilingSamples = ceilingSamples;
-      this.usableCeiling = this.deriveUsableCeiling(ceilingSamples);
+      restored.forEach((value, gear) => this.gears.set(gear, value));
+      this.shiftSamples = samples.slice(-MAX_SHIFT_SAMPLES);
+      this.ceilingSamples = normalizeCeilingSamples(raw.ceilingSamples);
+      this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples);
+      this.reportedRedlineRpm = finiteInRange(raw.reportedRedlineRpm, 0, 1e5);
       return true;
     }
-    /**
-     * Combines persisted completed facts with facts collected while persistence
-     * was resolving. Pull state is intentionally absent from both inputs.
-     */
     mergeLearningState(state, key) {
-      const persisted = new _OptimalShiftEstimator();
-      if (!persisted.importLearningState(state, key)) return false;
-      for (const incoming of persisted.getStates()) {
-        const current = this.gears.get(incoming.sourceGear);
-        if (!current) {
-          this.gears.set(incoming.sourceGear, incoming);
-          continue;
-        }
-        const preferred = this.statusRank(incoming.status) > this.statusRank(current.status) ? incoming : current;
-        const merged = cloneGear(preferred);
-        merged.powerBins = this.mergePowerBins(current.powerBins, incoming.powerBins);
-        merged.evidence = this.mergeEvidence(current.evidence, incoming.evidence);
-        if (!merged.lastReason) merged.lastReason = current.lastReason ?? incoming.lastReason;
-        this.gears.set(merged.sourceGear, merged);
+      const incoming = new _OptimalShiftEstimator();
+      if (!incoming.importLearningState(state, key)) return false;
+      for (const target of incoming.getStates()) {
+        const current = this.gears.get(target.sourceGear);
+        if (!current) this.gears.set(target.sourceGear, target);
+        else if (this.statusRank(target.status) > this.statusRank(current.status)) {
+          this.mergeSameRank(target, current);
+          this.gears.set(target.sourceGear, target);
+        } else this.mergeSameRank(current, target);
       }
-      const mergedCeilingSamples = this.normalizeCeilingSamples([
-        ...persisted.ceilingSamples,
-        ...this.ceilingSamples
-      ]);
-      this.ceilingSamples = mergedCeilingSamples;
-      this.usableCeiling = this.deriveUsableCeiling(mergedCeilingSamples);
+      const seen = new Set(this.shiftSamples.map((item) => `${item.beforeTimestampMs}:${item.afterTimestampMs}`));
+      this.shiftSamples = [...this.shiftSamples, ...incoming.shiftSamples.filter((item) => !seen.has(`${item.beforeTimestampMs}:${item.afterTimestampMs}`))].slice(-MAX_SHIFT_SAMPLES);
+      this.ceilingSamples = normalizeCeilingSamples([...this.ceilingSamples, ...incoming.ceilingSamples]);
+      this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples);
+      this.reportedRedlineRpm = incoming.reportedRedlineRpm ?? this.reportedRedlineRpm;
       return true;
     }
-    /** Compatibility aliases for callers that prefer shorter names. */
     exportState(key) {
       return this.serializeLearningState(key);
     }
@@ -345,39 +260,33 @@ var HudShiftLight = (() => {
     }
     diagnose(gear) {
       const state = this.gears.get(gear);
-      const bins = state?.powerBins ?? [];
-      const reliable = bins.filter((bin) => bin.sampleCount > 0).sort((left, right) => left.rpmBucket - right.rpmBucket);
-      const peak = reliable.reduce((best, bin) => {
-        const power = bin.powerSum / bin.sampleCount;
-        const bestPower = best ? best.powerSum / best.sampleCount : -Infinity;
-        return power > bestPower ? bin : best;
-      }, null);
-      const candidate = state?.candidateRpm ?? state?.targetRpm ?? null;
       return {
         gear,
-        powerCurveCoverage: reliable.length > 0 ? 1 : 0,
-        powerBinCount: reliable.length,
-        peakPowerRpm: peak?.rpmBucket ?? null,
+        powerCurveCoverage: 0,
+        powerBinCount: 0,
+        peakPowerRpm: null,
         currentRatio: null,
         nextRatio: null,
         ratioDrop: null,
         currentRatioSamples: 0,
         nextRatioSamples: 0,
-        targetRpm: state?.targetRpm ?? candidate,
+        targetRpm: state?.targetRpm ?? state?.candidateRpm ?? null,
         postShiftRpm: null,
-        powerAtTarget: candidate === null ? null : this.powerAt(state, candidate),
+        powerAtTarget: null,
         powerAfterShift: null,
-        estimateEvidence: state?.evidence.filter((item) => item.outcome === "better" || item.outcome === "rpm_ceiling").length ?? 0,
+        estimateEvidence: state?.evidence.length ?? 0,
         status: state?.status ?? "learning",
-        confirmingCount: state?.confirmingRpms.length ?? 0,
+        confirmationCount: state?.confirmationCount ?? 0,
         lastReason: state?.lastReason ?? null,
         evidenceCount: state?.evidence.length ?? 0
       };
     }
     reset() {
       this.gears.clear();
+      this.shiftSamples = [];
       this.ceilingSamples = [];
       this.usableCeiling = null;
+      this.reportedRedlineRpm = null;
       this.resetTransient();
     }
     resetTransient() {
@@ -391,139 +300,63 @@ var HudShiftLight = (() => {
     getCeilingSampleCount() {
       return this.ceilingSamples.length;
     }
-    getOrCreate(gear) {
-      let state = this.gears.get(gear);
+    getReportedRedlineRpm() {
+      return this.reportedRedlineRpm;
+    }
+    getOrCreate(sourceGear, destinationGear = sourceGear + 1) {
+      let state = this.gears.get(sourceGear);
       if (!state) {
-        state = emptyGear(gear);
-        this.gears.set(gear, state);
+        state = emptyGear(sourceGear, destinationGear);
+        this.gears.set(sourceGear, state);
       }
       return state;
     }
-    applyOutcome(state, evidence) {
-      if (evidence.outcome === "invalid") {
-        state.lastReason = "Last shift was not usable: throttle, controls, speed or wheel slip was invalid.";
-        return;
-      }
-      if (evidence.outcome === "too_early") {
-        state.lastReason = "Last clean shift was too early: the next gear produced less wheel force.";
-        if (state.status === "optimal" && state.targetRpm !== null && Math.abs(evidence.beforeRpm - state.targetRpm) <= CONFIRMATION_STABILITY_RPM) {
-          state.targetContradicted = true;
-          state.replacementCandidateRpm = null;
-          state.replacementConfirmingRpms = [];
-        }
-        return;
-      }
-      state.lastReason = evidence.outcome === "rpm_ceiling" ? "Engine RPM ceiling reached; no stronger next-gear crossover was found." : null;
-      if (state.status === "optimal") {
-        if (!state.targetContradicted || state.targetRpm === null || evidence.beforeRpm <= state.targetRpm) return;
-        if (state.replacementCandidateRpm === null) {
-          state.replacementCandidateRpm = evidence.beforeRpm;
-          state.replacementConfirmingRpms = [evidence.beforeRpm];
-          return;
-        }
-        const replacementValues = [...state.replacementConfirmingRpms, evidence.beforeRpm];
-        if (Math.max(...replacementValues) - Math.min(...replacementValues) > CONFIRMATION_STABILITY_RPM) {
-          state.replacementCandidateRpm = evidence.beforeRpm;
-          state.replacementConfirmingRpms = [evidence.beforeRpm];
-          return;
-        }
-        state.replacementConfirmingRpms = replacementValues.slice(-MAX_CONFIRMATIONS);
-        if (state.replacementConfirmingRpms.length >= MAX_CONFIRMATIONS) {
-          state.targetRpm = Math.min(...state.replacementConfirmingRpms);
-          state.candidateRpm = state.targetRpm;
-          state.confirmingRpms = [...state.replacementConfirmingRpms];
-          state.confirmingCount = MAX_CONFIRMATIONS;
-          state.replacementCandidateRpm = null;
-          state.replacementConfirmingRpms = [];
-          state.targetContradicted = false;
-        }
-        return;
-      }
-      if (state.candidateRpm === null) {
-        state.candidateRpm = evidence.beforeRpm;
-        state.confirmingRpms = [evidence.beforeRpm];
-        state.confirmingCount = 1;
-        state.status = "confirming";
-        return;
-      }
-      const values = [...state.confirmingRpms, evidence.beforeRpm];
-      if (Math.max(...values) - Math.min(...values) > CONFIRMATION_STABILITY_RPM) {
-        state.candidateRpm = evidence.beforeRpm;
-        state.confirmingRpms = [evidence.beforeRpm];
-        state.confirmingCount = 1;
-        state.status = "confirming";
-        return;
-      }
-      state.confirmingRpms = values.slice(-MAX_CONFIRMATIONS);
-      state.confirmingCount = state.confirmingRpms.length;
-      if (state.confirmingRpms.length >= MAX_CONFIRMATIONS) {
-        state.targetRpm = Math.min(...state.confirmingRpms);
-        state.candidateRpm = state.targetRpm;
-        state.status = "optimal";
+    applyBetterOutcome(state, rpm) {
+      if (state.status === "optimal") return;
+      if (state.candidateRpm === null || Math.abs(rpm - state.candidateRpm) > CONFIRMATION_STABILITY_RPM) {
+        state.candidateRpm = rpm;
+        state.confirmationRpms = [rpm];
+        state.confirmationCount = 1;
+        state.status = "potential";
       } else {
-        state.status = "confirming";
+        state.confirmationRpms = [...state.confirmationRpms, rpm].slice(-MAX_CONFIRMATIONS);
+        state.confirmationCount = state.confirmationRpms.length;
       }
+      if (state.confirmationCount >= MAX_CONFIRMATIONS) {
+        state.status = "optimal";
+        state.targetRpm = this.median(state.confirmationRpms);
+        state.candidateRpm = state.targetRpm;
+      }
+      state.lastReason = null;
     }
     statusRank(status) {
-      return status === "optimal" ? 3 : status === "confirming" ? 2 : 1;
+      return status === "optimal" ? 3 : status === "potential" ? 2 : 1;
     }
-    mergePowerBins(current, incoming) {
-      const bins = /* @__PURE__ */ new Map();
-      for (const item of [...incoming, ...current]) {
-        const existing = bins.get(item.rpmBucket);
-        if (!existing) {
-          bins.set(item.rpmBucket, { ...item });
-          continue;
-        }
-        const count = Math.min(MAX_POWER_SAMPLES_PER_BIN, existing.sampleCount + item.sampleCount);
-        const averagePower = (existing.powerSum + item.powerSum) / Math.max(1, existing.sampleCount + item.sampleCount);
-        const torqueCount = Math.min(MAX_POWER_SAMPLES_PER_BIN, existing.torqueSampleCount + item.torqueSampleCount);
-        const averageTorque = (existing.torqueSum + item.torqueSum) / Math.max(1, existing.torqueSampleCount + item.torqueSampleCount);
-        const speedCount = Math.min(MAX_POWER_SAMPLES_PER_BIN, existing.speedSampleCount + item.speedSampleCount);
-        const averageSpeed = (existing.speedSum + item.speedSum) / Math.max(1, existing.speedSampleCount + item.speedSampleCount);
-        existing.sampleCount = count;
-        existing.powerSum = averagePower * count;
-        existing.medianPower = averagePower;
-        existing.torqueSampleCount = torqueCount;
-        existing.torqueSum = averageTorque * torqueCount;
-        existing.medianTorque = torqueCount > 0 ? averageTorque : null;
-        existing.speedSampleCount = speedCount;
-        existing.speedSum = averageSpeed * speedCount;
-        existing.medianSpeed = speedCount > 0 ? averageSpeed : null;
-      }
-      return [...bins.values()].sort((left, right) => left.rpmBucket - right.rpmBucket).slice(-MAX_POWER_BINS_PER_GEAR);
-    }
-    mergeEvidence(current, incoming) {
-      const facts = /* @__PURE__ */ new Map();
-      for (const item of [...incoming, ...current]) {
-        const key = `${item.sourceGear}:${item.destinationGear}:${item.beforeTimestampMs}:${item.afterTimestampMs}:${item.beforeRpm}`;
-        facts.set(key, { ...item });
-      }
-      return [...facts.values()].sort((left, right) => left.afterTimestampMs - right.afterTimestampMs).slice(-MAX_SHIFT_EVIDENCE_PER_GEAR);
-    }
-    normalizeConfirmations(value) {
-      if (!Array.isArray(value)) return [];
-      return value.map((item) => finiteInRange(item, 0, 1e5)).filter((item) => item !== null).map(roundRpm).slice(-MAX_CONFIRMATIONS);
-    }
-    normalizeCeilingSamples(value) {
-      if (!Array.isArray(value)) return [];
-      return value.map((item) => finiteInRange(item, 0, 1e5)).filter((item) => item !== null).map(roundRpm).slice(-MAX_CEILING_SAMPLES);
-    }
-    deriveUsableCeiling(samples) {
-      if (samples.length < MIN_TRUSTED_CEILING_SAMPLES) return null;
-      const sorted = [...samples].sort((left, right) => left - right);
-      if (sorted[sorted.length - 1] - sorted[0] > CEILING_SAMPLE_STABILITY_RPM) return null;
+    median(values) {
+      const sorted = [...values].sort((a, b) => a - b);
       const middle = Math.floor(sorted.length / 2);
       return sorted.length % 2 === 1 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
     }
-    isAtUsableCeiling(rpm) {
-      return this.usableCeiling !== null && rpm >= this.usableCeiling - RPM_CEILING_MARGIN_RPM && rpm <= this.usableCeiling + RPM_CEILING_MAX_OVERSHOOT_RPM;
+    mergeSameRank(current, incoming) {
+      const seen = new Set(current.evidence.map((item) => `${item.beforeTimestampMs}:${item.afterTimestampMs}`));
+      current.evidence = [...current.evidence, ...incoming.evidence.filter((item) => !seen.has(`${item.beforeTimestampMs}:${item.afterTimestampMs}`))].slice(-MAX_SHIFT_SAMPLES);
+      const anchor = current.targetRpm ?? current.candidateRpm ?? incoming.targetRpm ?? incoming.candidateRpm;
+      const confirmations = anchor === null ? [] : current.evidence.filter((item) => item.outcome === "better" && Math.abs(item.beforeRpm - anchor) <= CONFIRMATION_STABILITY_RPM).map((item) => item.beforeRpm).slice(-MAX_CONFIRMATIONS);
+      current.confirmationRpms = confirmations;
+      current.confirmationCount = Math.max(current.confirmationCount, incoming.confirmationCount, confirmations.length);
+      if (current.confirmationCount >= MAX_CONFIRMATIONS && current.status !== "learning") {
+        current.status = "optimal";
+        current.targetRpm = this.median(confirmations);
+      }
+      current.candidateRpm = current.targetRpm ?? incoming.candidateRpm ?? current.candidateRpm;
+      current.lastReason = current.lastReason ?? incoming.lastReason;
     }
-    /**
-     * A ceiling sample requires a clean same-gear WOT pull that rises, drops
-     * materially, and recovers near its prior peak. A plain max/plateau is not
-     * enough because it can be caused by top speed or a driver lift.
-     */
+    deriveUsableCeiling(samples) {
+      if (samples.length < MIN_TRUSTED_CEILING_SAMPLES) return null;
+      const sorted = [...samples].sort((a, b) => a - b);
+      if (sorted[sorted.length - 1] - sorted[0] > CEILING_SAMPLE_STABILITY_RPM) return null;
+      return sorted[Math.floor(sorted.length / 2)];
+    }
     observeLimiter(telemetry) {
       if (!cleanWotMotionTelemetry(telemetry)) {
         this.resetTransient();
@@ -547,9 +380,7 @@ var HudShiftLight = (() => {
           tracker.peakRpm = telemetry.rpm;
           return;
         }
-        if (tracker.peakRpm - telemetry.rpm >= MIN_LIMITER_DROP_RPM && tracker.peakRpm - tracker.startRpm >= MIN_LIMITER_RISE_RPM) {
-          tracker.phase = "falling";
-        }
+        if (tracker.peakRpm - telemetry.rpm >= MIN_LIMITER_DROP_RPM && tracker.peakRpm - tracker.startRpm >= MIN_LIMITER_RISE_RPM) tracker.phase = "falling";
         return;
       }
       if (telemetry.rpm >= tracker.peakRpm - LIMITER_RECOVERY_TOLERANCE_RPM) {
@@ -559,26 +390,25 @@ var HudShiftLight = (() => {
       }
     }
     recordCeilingSample(sample) {
-      const rounded = roundRpm(sample);
-      if (this.ceilingSamples.some((existing) => Math.abs(existing - rounded) <= RPM_CEILING_MARGIN_RPM)) {
-        this.ceilingSamples = [...this.ceilingSamples.filter((existing) => Math.abs(existing - rounded) <= RPM_CEILING_MARGIN_RPM), rounded].slice(-MAX_CEILING_SAMPLES);
-      } else {
-        this.ceilingSamples = [...this.ceilingSamples, rounded].slice(-MAX_CEILING_SAMPLES);
-      }
+      this.ceilingSamples = [...this.ceilingSamples, roundRpm(sample)].slice(-MAX_CEILING_SAMPLES);
       this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples);
-    }
-    powerAt(state, rpm) {
-      if (!state) return null;
-      const bin = state.powerBins.find((item) => item.rpmBucket === Math.round(rpm / POWER_BIN_RPM) * POWER_BIN_RPM);
-      return bin && bin.sampleCount > 0 ? bin.powerSum / bin.sampleCount : null;
     }
   };
 
   // src/shift-light/shift-light.ts
   var NEUTRAL_GEAR = 11;
   var MAX_TIMESTAMP_GAP_MS = 1e3;
-  var MAX_NEUTRAL_MS = 200;
-  var MAX_NEUTRAL_FRAMES = 64;
+  var PRE_SHIFT_WINDOW_MS = 200;
+  var MAX_PRE_SHIFT_FRAMES = 5;
+  var POST_SHIFT_DELAY_MS = 80;
+  var POST_SHIFT_WINDOW_MS = 600;
+  var MAX_NEUTRAL_WINDOW_MS = 400;
+  var MIN_POST_SHIFT_FRAMES = 3;
+  var MAX_POST_SHIFT_FRAMES = 5;
+  var REACTION_TIME_S = 0.15;
+  var DEFAULT_LEAD_RPM = 200;
+  var MIN_LEAD_RPM = 100;
+  var MAX_LEAD_RPM = 500;
   var MAX_RPM_RATE = 5e4;
   var RPM_RATE_ALPHA = 0.25;
   function isForwardGear2(gear) {
@@ -589,43 +419,22 @@ var HudShiftLight = (() => {
   }
   function fallbackPhase(rpm, rpmMax) {
     if (!Number.isFinite(rpm) || !Number.isFinite(rpmMax) || rpmMax <= 0) return "normal";
-    if (rpm >= rpmMax) return "approach";
-    if (rpm >= rpmMax * 0.85) return "approach";
-    return "normal";
+    return rpm >= rpmMax * 0.85 ? "approach" : "normal";
   }
   function normalizeIdentityKey(key) {
     return typeof key === "string" && key.startsWith("fh6:") ? key : null;
   }
   function getShiftLightCarKey(telemetry) {
-    const ordinal = telemetry.car?.ordinal;
-    const carClass = telemetry.car?.class;
-    const pi = telemetry.car?.pi;
-    const drivetrain = telemetry.car?.drivetrain;
-    const cylinders = telemetry.car?.cylinders;
+    const ordinal = telemetry.car?.ordinal, carClass = telemetry.car?.class, pi = telemetry.car?.pi;
+    const drivetrain = telemetry.car?.drivetrain, cylinders = telemetry.car?.cylinders;
     if (!Number.isFinite(ordinal) || ordinal <= 0 || !Number.isFinite(carClass) || carClass < 0 || !Number.isFinite(pi) || pi <= 0 || !Number.isFinite(drivetrain) || drivetrain < 0 || !Number.isFinite(cylinders) || cylinders <= 0) return null;
-    return [
-      "fh6",
-      Math.round(ordinal),
-      Math.round(carClass),
-      Math.round(pi),
-      Math.round(drivetrain),
-      Math.round(cylinders)
-    ].join(":");
+    return ["fh6", Math.round(ordinal), Math.round(carClass), Math.round(pi), Math.round(drivetrain), Math.round(cylinders)].join(":");
   }
   function getShiftLightIdentity(telemetry) {
     const key = getShiftLightCarKey(telemetry);
     if (!key) return null;
     const parts = key.split(":");
-    return {
-      gameId: "fh6",
-      carOrdinal: Number(parts[1]),
-      carClass: Number(parts[2]),
-      pi: Number(parts[3]),
-      drivetrain: Number(parts[4]),
-      cylinders: Number(parts[5]),
-      rpmMax: Number.isFinite(telemetry.rpmMax) ? telemetry.rpmMax : 0,
-      key
-    };
+    return { gameId: "fh6", carOrdinal: Number(parts[1]), carClass: Number(parts[2]), pi: Number(parts[3]), drivetrain: Number(parts[4]), cylinders: Number(parts[5]), rpmMax: Number.isFinite(telemetry.rpmMax) ? telemetry.rpmMax : 0, key };
   }
   var ShiftLightLearner = class {
     constructor(key, options = {}) {
@@ -636,26 +445,17 @@ var HudShiftLight = (() => {
     options;
     estimator = new OptimalShiftEstimator();
     previous = null;
-    pullGear = null;
-    pullPeak = null;
+    preShiftFrames = [];
     pendingUpshift = null;
     rpmRate = null;
     maxObservedGear = 0;
     latestRpmMax = 0;
-    /** Old profile loading is intentionally ignored; use importLearningState. */
     setProfile(_profile) {
     }
     setProfiles(_profiles) {
     }
     getProfiles() {
-      return this.estimator.getStates().filter((state) => state.status === "optimal").map((state) => ({
-        key: this.key,
-        gear: state.sourceGear,
-        shiftRpm: state.targetRpm,
-        sampleCount: state.evidence.length,
-        status: "optimal",
-        method: "optimal"
-      }));
+      return this.estimator.getStates().filter((state) => state.status === "optimal").map((state) => ({ key: this.key, gear: state.sourceGear, shiftRpm: state.targetRpm, sampleCount: state.evidence.length, status: "optimal", method: "optimal" }));
     }
     serializeLearningState() {
       return this.estimator.serializeLearningState(this.key);
@@ -664,11 +464,9 @@ var HudShiftLight = (() => {
       this.estimator.importLearningState(state, this.key);
       this.publishLearningState();
     }
-    /** Join persisted completed facts with samples collected before async load. */
     mergeLearningState(state) {
       if (this.estimator.mergeLearningState(state, this.key)) this.publishLearningState();
     }
-    /** Short aliases for integrations that already use the estimator naming. */
     exportLearningState() {
       return this.serializeLearningState();
     }
@@ -684,8 +482,7 @@ var HudShiftLight = (() => {
     reset() {
       this.estimator.reset();
       this.previous = null;
-      this.pullGear = null;
-      this.pullPeak = null;
+      this.preShiftFrames = [];
       this.pendingUpshift = null;
       this.rpmRate = null;
       this.maxObservedGear = 0;
@@ -695,8 +492,7 @@ var HudShiftLight = (() => {
     resetTransient() {
       this.estimator.resetTransient();
       this.previous = null;
-      this.pullGear = null;
-      this.pullPeak = null;
+      this.preShiftFrames = [];
       this.pendingUpshift = null;
       this.rpmRate = null;
     }
@@ -710,81 +506,42 @@ var HudShiftLight = (() => {
       const forward = isForwardGear2(telemetry.gear);
       if (forward) this.maxObservedGear = Math.max(this.maxObservedGear, telemetry.gear);
       this.estimator.ingest(telemetry);
-      if (isCleanShiftEvidence(telemetry)) this.publishLearningState();
-      if (forward) {
-        const transition = this.getUpshiftTransition(previous, telemetry);
-        if (transition) {
-          const evidence = this.estimator.observeTransition({
-            sourceGear: transition.sourceGear,
-            destinationGear: telemetry.gear,
-            before: transition.before,
-            after: telemetry
-          });
-          if (evidence) {
-            this.publishLearningState();
-            this.options.onProgress?.({
-              key: this.key,
-              gear: transition.sourceGear,
-              shiftRpm: this.estimator.getState(transition.sourceGear)?.targetRpm ?? null,
-              sampleCount: this.estimator.getState(transition.sourceGear)?.evidence.length ?? 0,
-              status: this.estimator.getState(transition.sourceGear)?.status ?? "learning",
-              method: "optimal"
-            });
-            if ((evidence.outcome === "better" || evidence.outcome === "rpm_ceiling") && this.estimator.getState(transition.sourceGear)?.status === "optimal") {
-              this.options.onCalibrated?.({
-                key: this.key,
-                gear: transition.sourceGear,
-                shiftRpm: this.estimator.getState(transition.sourceGear)?.targetRpm ?? null,
-                sampleCount: this.estimator.getState(transition.sourceGear)?.evidence.length ?? 0,
-                status: "optimal",
-                method: "optimal"
-              });
-            }
-          }
-        }
-        this.pendingUpshift = null;
-        if (this.pullGear !== telemetry.gear) {
-          this.pullGear = telemetry.gear;
-          this.pullPeak = null;
-        }
-        if (isCleanShiftEvidence(telemetry)) {
-          if (!this.pullPeak || telemetry.rpm >= this.pullPeak.rpm) this.pullPeak = telemetry;
-        }
-      } else if (telemetry.gear === NEUTRAL_GEAR && this.pullGear !== null && this.pullPeak) {
-        const pending = this.pendingUpshift?.sourceGear === this.pullGear ? this.pendingUpshift : { sourceGear: this.pullGear, before: this.pullPeak, firstNeutralTimestampMs: telemetry.timestampMs, neutralFrames: 0 };
-        const elapsed = telemetry.timestampMs - pending.firstNeutralTimestampMs;
-        pending.neutralFrames += 1;
-        if (elapsed <= MAX_NEUTRAL_MS && pending.neutralFrames <= MAX_NEUTRAL_FRAMES) this.pendingUpshift = pending;
-        else this.resetTransient();
-      } else if (!forward) {
-        this.resetTransient();
-      }
+      this.captureShift(previous, telemetry, forward);
       this.updateRpmRate(previous, telemetry);
       this.previous = telemetry;
       return this.snapshot(telemetry);
     }
     snapshot(telemetry = this.previous) {
-      const identity = this.parseIdentity();
-      const currentGear = telemetry && isForwardGear2(telemetry.gear) ? telemetry.gear : null;
+      const identity = this.parseIdentity(), currentGear = telemetry && isForwardGear2(telemetry.gear) ? telemetry.gear : null;
       const current = currentGear === null ? null : this.estimator.getState(currentGear);
-      const shiftRpm = current?.targetRpm ?? current?.candidateRpm ?? null;
       const rpmMax = telemetry?.rpmMax ?? this.latestRpmMax;
+      const fallbackShiftRpm = this.estimator.getUsableCeiling() ?? (rpmMax > 0 ? roundRpm2(rpmMax) : null);
+      const effectiveTargetRpm = current?.targetRpm ?? current?.candidateRpm ?? fallbackShiftRpm;
+      const leadRpm = this.getLeadRpm(), lightOnRpm = effectiveTargetRpm === null ? null : Math.max(0, roundRpm2(effectiveTargetRpm - leadRpm));
       let phase = fallbackPhase(telemetry?.rpm ?? 0, rpmMax);
-      if (shiftRpm !== null && telemetry) phase = telemetry.rpm >= shiftRpm ? "shift" : fallbackPhase(telemetry.rpm, rpmMax);
-      const status = current?.status === "optimal" || current?.status === "confirming" ? "calibrated" : "learning";
+      if (lightOnRpm !== null && telemetry) phase = telemetry.rpm >= lightOnRpm ? "shift" : phase;
+      const status = current?.status === "optimal" || current?.status === "potential" ? "calibrated" : current ? "learning" : "fallback";
+      const lastEvidence = current?.evidence[current.evidence.length - 1] ?? null;
       return {
         status,
         phase,
-        shiftRpm,
+        shiftRpm: effectiveTargetRpm,
+        effectiveTargetRpm,
+        lightOnRpm,
+        leadRpm,
+        acceptedShiftCount: current?.evidence.length ?? 0,
+        lastRpmBefore: lastEvidence?.beforeRpm ?? null,
+        lastDeltaPct: lastEvidence?.powerDeltaPct ?? null,
         sampleCount: current?.evidence.length ?? 0,
         carKey: normalizeIdentityKey(this.key),
         gameId: identity?.gameId ?? null,
         carOrdinal: identity?.carOrdinal ?? null,
         pi: identity?.pi ?? null,
         rpmMax: rpmMax > 0 ? rpmMax : null,
+        reportedRedlineRpm: this.estimator.getReportedRedlineRpm(),
         usableCeiling: this.estimator.getUsableCeiling(),
         ceilingSampleCount: this.estimator.getCeilingSampleCount(),
-        fallbackShiftRpm: rpmMax > 0 ? roundRpm2(rpmMax) : null,
+        fallbackShiftRpm,
         carClass: identity?.carClass ?? null,
         drivetrain: identity?.drivetrain ?? null,
         cylinders: identity?.cylinders ?? null,
@@ -794,7 +551,7 @@ var HudShiftLight = (() => {
         gearboxValidation: null,
         gearboxSignature: null,
         currentGear,
-        method: current?.status === "optimal" ? "optimal" : current?.status === "confirming" ? "optimal" : null,
+        method: current?.status === "optimal" || current?.status === "potential" ? "optimal" : null,
         gears: this.getGearStates(),
         diagnostics: this.getGearDiagnostics()
       };
@@ -805,23 +562,76 @@ var HudShiftLight = (() => {
     publishLearningState() {
       this.options.onLearningState?.(this.serializeLearningState());
     }
-    getUpshiftTransition(previous, telemetry) {
-      if (this.pendingUpshift && telemetry.gear === this.pendingUpshift.sourceGear + 1 && telemetry.timestampMs - this.pendingUpshift.firstNeutralTimestampMs <= MAX_NEUTRAL_MS) return this.pendingUpshift;
-      if (previous && isForwardGear2(previous.gear) && telemetry.gear === previous.gear + 1 && this.pullGear === previous.gear && this.pullPeak) return { sourceGear: previous.gear, before: this.pullPeak };
-      return null;
+    captureShift(previous, telemetry, forward) {
+      const clean = isCleanShiftEvidence(telemetry);
+      const pending = this.pendingUpshift;
+      if (pending) {
+        if (pending.transitionTimestampMs === null) {
+          if (pending.firstNeutralTimestampMs !== null && telemetry.timestampMs - pending.firstNeutralTimestampMs > MAX_NEUTRAL_WINDOW_MS) this.pendingUpshift = null;
+          else if (forward && telemetry.gear === pending.destinationGear) {
+            const fresh = pending.beforeFrames.filter((item) => telemetry.timestampMs - item.timestampMs >= 0 && telemetry.timestampMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS);
+            if (fresh.length === 0) this.pendingUpshift = null;
+            else {
+              pending.beforeFrames = fresh;
+              pending.transitionTimestampMs = telemetry.timestampMs;
+            }
+          } else if (telemetry.gear !== NEUTRAL_GEAR) this.pendingUpshift = null;
+        }
+        if (this.pendingUpshift && pending.transitionTimestampMs !== null) {
+          const elapsed = telemetry.timestampMs - pending.transitionTimestampMs;
+          if (elapsed > POST_SHIFT_WINDOW_MS || forward && telemetry.gear !== pending.destinationGear) this.pendingUpshift = null;
+          else if (forward && telemetry.gear === pending.destinationGear && elapsed >= POST_SHIFT_DELAY_MS && clean) {
+            pending.postFrames.push(telemetry);
+            if (pending.postFrames.length >= MIN_POST_SHIFT_FRAMES) this.finishShift(pending);
+          }
+        }
+      }
+      if (forward) {
+        if (previous && isForwardGear2(previous.gear) && telemetry.gear === previous.gear + 1) this.startPostShift(previous.gear, telemetry.gear, telemetry.timestampMs, this.preShiftFrames);
+      }
+      if (forward && clean) {
+        if (!this.pendingUpshift || this.pendingUpshift.sourceGear !== telemetry.gear) this.preShiftFrames = [...this.preShiftFrames.filter((item) => telemetry.timestampMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS), telemetry].slice(-MAX_PRE_SHIFT_FRAMES);
+      } else if (telemetry.gear === NEUTRAL_GEAR && this.preShiftFrames.length > 0) {
+        const sourceGear = this.preShiftFrames[this.preShiftFrames.length - 1].gear;
+        if (sourceGear >= 1 && sourceGear < 10) this.pendingUpshift = { sourceGear, destinationGear: sourceGear + 1, beforeFrames: [...this.preShiftFrames], transitionTimestampMs: null, firstNeutralTimestampMs: telemetry.timestampMs, postFrames: [] };
+      } else if (!forward && telemetry.gear !== NEUTRAL_GEAR) {
+        this.preShiftFrames = [];
+        this.pendingUpshift = null;
+      }
+    }
+    startPostShift(sourceGear, destinationGear, timestampMs, beforeFrames) {
+      const fresh = beforeFrames.filter((item) => timestampMs - item.timestampMs >= 0 && timestampMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS);
+      if (fresh.length > 0) this.pendingUpshift = { sourceGear, destinationGear, beforeFrames: fresh, transitionTimestampMs: timestampMs, firstNeutralTimestampMs: null, postFrames: [] };
+    }
+    finishShift(pending) {
+      const before = this.medianTelemetry(pending.beforeFrames), after = this.medianTelemetry(pending.postFrames.slice(0, MAX_POST_SHIFT_FRAMES));
+      this.pendingUpshift = null;
+      if (!before || !after) return;
+      const evidence = this.estimator.observeTransition({ sourceGear: pending.sourceGear, destinationGear: pending.destinationGear, before, after });
+      if (!evidence) return;
+      this.publishLearningState();
+      const state = this.estimator.getState(pending.sourceGear);
+      this.options.onProgress?.({ key: this.key, gear: pending.sourceGear, shiftRpm: state?.targetRpm ?? null, sampleCount: state?.evidence.length ?? 0, status: state?.status ?? "learning", method: "optimal" });
+      if (state?.status === "optimal") this.options.onCalibrated?.({ key: this.key, gear: pending.sourceGear, shiftRpm: state.targetRpm, sampleCount: state.evidence.length, status: "optimal", method: "optimal" });
+    }
+    medianTelemetry(frames) {
+      if (frames.length === 0) return null;
+      const median = (values) => {
+        const sorted = [...values].sort((a, b) => a - b);
+        return sorted[Math.floor(sorted.length / 2)];
+      };
+      const pivot = frames[Math.floor(frames.length / 2)];
+      return { ...pivot, timestampMs: median(frames.map((item) => item.timestampMs)), rpm: median(frames.map((item) => item.rpm)), power: median(frames.map((item) => item.power)) };
+    }
+    getLeadRpm() {
+      const raw = (this.rpmRate ?? 0) * REACTION_TIME_S;
+      return Math.round(Math.max(MIN_LEAD_RPM, Math.min(MAX_LEAD_RPM, Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_LEAD_RPM)));
     }
     getGearStates() {
-      return this.estimator.getStates().map((state) => ({
-        gear: state.sourceGear,
-        status: state.status,
-        shiftRpm: state.targetRpm ?? state.candidateRpm,
-        sampleCount: state.evidence.length,
-        method: state.status === "learning" ? null : "optimal",
-        ratioDrop: null,
-        candidateRpm: state.candidateRpm,
-        confirmingCount: state.confirmingRpms.length,
-        lastReason: state.lastReason
-      }));
+      return this.estimator.getStates().map((state) => {
+        const last = state.evidence[state.evidence.length - 1] ?? null;
+        return { gear: state.sourceGear, status: state.status, shiftRpm: state.targetRpm ?? state.candidateRpm, sampleCount: state.evidence.length, method: state.status === "learning" ? null : "optimal", ratioDrop: null, candidateRpm: state.candidateRpm, confirmationCount: state.confirmationCount, confirmationRpms: [...state.confirmationRpms], lastReason: state.lastReason, acceptedShiftCount: state.evidence.length, lastRpmBefore: last?.beforeRpm ?? null, lastDeltaPct: last?.powerDeltaPct ?? null };
+      });
     }
     getGearDiagnostics() {
       return this.estimator.getStates().map((state) => this.estimator.diagnose(state.sourceGear));
@@ -831,8 +641,7 @@ var HudShiftLight = (() => {
         this.rpmRate = null;
         return;
       }
-      const dt = (telemetry.timestampMs - previous.timestampMs) / 1e3;
-      const rate = (telemetry.rpm - previous.rpm) / dt;
+      const dt = (telemetry.timestampMs - previous.timestampMs) / 1e3, rate = (telemetry.rpm - previous.rpm) / dt;
       if (dt < 5e-3 || dt > 0.1 || !Number.isFinite(rate) || rate <= 0 || rate > MAX_RPM_RATE) {
         this.rpmRate = null;
         return;

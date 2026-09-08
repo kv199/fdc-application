@@ -21,8 +21,8 @@ function createRuntime({ stored = null, failSave = false } = {}) {
   global.__TAURI_INTERNALS__ = { invoke: (command, args) => {
     calls.push({ command, args })
     if (command === 'resolve_shift_light_config') return Promise.resolve({ variantId: 42, status: 'ready' })
-    if (command === 'load_shift_light_learning_state') return Promise.resolve(stored)
-    if (command === 'save_shift_light_learning_state') return failSave ? Promise.reject(new Error('disk unavailable')) : Promise.resolve()
+    if (command === 'load_shift_light_calibration') return Promise.resolve(stored)
+    if (command === 'save_shift_light_calibration') return failSave ? Promise.reject(new Error('disk unavailable')) : Promise.resolve()
     if (command === 'clear_shift_light_config') return Promise.resolve()
     return Promise.resolve(null)
   } }
@@ -30,22 +30,36 @@ function createRuntime({ stored = null, failSave = false } = {}) {
   return { calls, runtime: global.HudShiftLightRuntime }
 }
 
-test('creates a six-field configuration and persists completed learning state', async () => {
+test('resolves a six-field configuration and persists compact calibration', async () => {
   const { calls, runtime } = createRuntime()
   runtime.update(frame({ timestampMs: 0, rpm: 9400 }))
   runtime.update(frame({ timestampMs: 16, rpm: 9500 }))
-  runtime.update(frame({ timestampMs: 32, gear: 2, rpm: 6500, power: 420 }))
-  await flush(); await flush()
+  runtime.update(frame({ timestampMs: 32, gear: 2, rpm: 6500, power: -50 }))
+  runtime.update(frame({ timestampMs: 48, gear: 2, rpm: 6600, power: -20 }))
+  runtime.update(frame({ timestampMs: 112, gear: 2, rpm: 7000, power: 420 }))
+  runtime.update(frame({ timestampMs: 128, gear: 2, rpm: 7100, power: 420 }))
+  runtime.update(frame({ timestampMs: 144, gear: 2, rpm: 7200, power: 420 }))
+  await flush(); await flush(); await flush(); await flush(); await flush()
   assert.deepEqual(calls.find(call => call.command === 'resolve_shift_light_config').args, {
-    key: 'fh6:3766:1:800:1:10', observedGear: 1
+    key: 'fh6:3766:1:800:1:10', observedGear: 1, reportedRedlineRpm: 11000
   })
-  const save = calls.find(call => call.command === 'save_shift_light_learning_state')
+  const saves = calls.filter(call => call.command === 'save_shift_light_calibration')
+  const save = saves[saves.length - 1]
   assert.equal(save.args.request.configId, 42)
-  assert.equal(save.args.request.state.modelVersion, 3)
-  assert.equal(save.args.request.state.gears[0].evidence[0].outcome, 'better')
+  assert.equal(save.args.request.reportedRedlineRpm, 11000)
+  assert.ok(['learning', 'potential', 'optimal'].includes(save.args.request.gearTargets[0].status))
+  assert.equal('modelVersion' in save.args.request, false)
+  assert.equal('optimalRpm' in save.args.request.gearTargets[0], true)
+  assert.equal('targetRpm' in save.args.request.gearTargets[0], false)
+  assert.equal('powerBins' in save.args.request.gearTargets[0], false)
+  assert.equal(save.args.request.gearTargets[0].confirmationCount, 1)
+  assert.equal(save.args.request.shiftSamples.length, 1)
+  assert.equal(save.args.request.shiftSamples[0].classification, 'crossover')
+  assert.ok(save.args.request.shiftSamples[0].beforePower > 0)
+  assert.ok(save.args.request.shiftSamples[0].afterPower > 0)
 })
 
-test('surfaces a learning-state save failure without dropping live state', async () => {
+test('surfaces a calibration save failure without dropping live state', async () => {
   const { runtime } = createRuntime({ failSave: true })
   runtime.update(frame({ timestampMs: 0 }))
   await flush(); await flush()

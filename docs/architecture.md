@@ -130,8 +130,8 @@ Shift Light spans both layers:
    in `src/shift-light/`.
 2. The browser runtime in `overlay/` adapts telemetry to the learner and
    presents the light-bar signal.
-3. Tauri commands persist bounded profiles and gearbox variants in the local
-   `fdc.sqlite` database.
+3. Tauri commands persist a compact vehicle configuration, limiter samples,
+   per-pair targets, and accepted shift comparisons in local `fdc.sqlite`.
 
 The full identity, variant resolution, learning evidence, target calculation,
 visual timing, persistence rules, compatibility constraints, and verification
@@ -167,14 +167,13 @@ affect the native window or Shift Light database cross the Tauri IPC boundary.
 ## Local persistence
 
 `fdc.sqlite` is created in the FDC application-data directory, outside the
-repository. Its current schema contains the Garage car registry and
-class/PI/drivetrain configuration registry alongside the Shift Light car registry, gearbox variant
-registry, per-gear profiles, bounded profile samples, the Events table, and
-schema version metadata. Transactional native commands enforce Garage identity
-and recency as well as Shift Light identity and profile-method precedence.
-Active Shift Light writes preserve repeated observations and accept newer
-calibrated targets of the same method, including lower RPM targets. Failed
-writes retry in memory with bounded backoff; reset invalidates stale writers.
+repository. Its current schema contains the Garage car and configuration
+registries; four Shift Light tables for configuration identity, limiter
+samples, per-pair targets, and accepted comparisons; Events tables; and schema
+version metadata. Transactional native commands enforce Garage recency and
+Shift Light identity. Shift Light replaces one bounded compact calibration per
+configuration, skips writes for unchanged snapshots, and retries failed writes
+in memory with bounded backoff. Reset invalidates stale writers.
 
 The Coach calibration envelope, active findings, lap timing state, telemetry
 history, and visual presentation state remain in memory for the running HUD.

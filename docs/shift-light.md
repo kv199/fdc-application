@@ -2,15 +2,14 @@
 
 ## Purpose
 
-Shift Light learns a useful upshift point independently for each source gear
-from live, normalized Forza Horizon 6 telemetry. It provides two separate
-visual cues in the FDC HUD:
+Shift Light learns a practical full-throttle upshift point independently for
+each real next-gear pair (`1 → 2`, `2 → 3`, and so on). It deliberately does
+not attempt to reconstruct a complete engine or gearbox model.
 
-- the red redline, driven by the RPM limit reported by the game; and
-- a flashing purple FDC Shift Light once a gear has a confirmed shift point.
-
-The purple ON/OFF preference controls only the purple display. It never stops
-data collection, transition evaluation, or persistence.
+The red game redline and the purple FDC cue are separate displays. The purple
+cue is timed before the desired shift RPM so the driver reaches the target
+instead of reacting after it. Disabling the purple display does not stop
+learning or persistence.
 
 ## Runtime data flow
 
@@ -20,8 +19,8 @@ FH6 Data Out → UDP 127.0.0.1:5301 → native decoder → direct_telemetry
   → ShiftLightLearner.update → hud_shift_light → HUD render
 ```
 
-Shift Light uses the existing normalized telemetry path. It does not create an
-additional telemetry transport or use a car-name database.
+Shift Light uses the existing normalized telemetry path and local
+`fdc.sqlite`. It does not add another transport or external dependency.
 
 ## Vehicle configuration
 
@@ -31,133 +30,121 @@ The stable learning key is:
 fh6:<carOrdinal>:<carClass>:<carPerformanceIndex>:<drivetrainType>:<numCylinders>
 ```
 
-The key identifies a car build from FH6 data. `rpmMax` is intentionally not a
-learning-key field: it is a current game-reported redline value, not evidence
-that a different Shift Light calibration is needed. A PI or other key-field
-change selects a separate saved configuration.
+The game-reported redline is not part of this key. A PI or other key-field
+change selects a separate configuration. FH6 does not report the total number
+of gearbox ratios, so FDC creates a pair only after observing a real `G → G+1`
+transition.
 
-FH6 reports the current gear, not a gearbox's total number of gears. FDC does
-not infer or require that total. A final gear without a following gear can
-still collect its power data, but cannot form an upshift target until a real
-next-gear transition exists.
+## Safe baseline and usable ceiling
 
-## What is collected
+The usable engine ceiling is the safe baseline target for every unlearned gear
+pair. Until the limiter has been measured reliably, the current positive
+game-reported redline is used instead. This means `LEARNING` still has a usable
+purple cue; it does not mean "no guidance".
 
-For every clean full-throttle sample in a forward gear, FDC retains bounded
-power data for that source gear: RPM buckets, power, torque when available,
-and speed. This collection is continuous; it is not restricted to candidate
-or Optimal learning.
+A learned ceiling requires three stable limiter observations. An observation
+comes from a continuous same-gear full-throttle pull with a meaningful rise,
+a local peak, a limiter drop, and recovery near that peak. The median of three
+observations whose total spread is no more than `100 RPM` becomes the usable
+ceiling. A single maximum or flat RPM value is not sufficient limiter evidence.
 
-A clean sample requires:
+If the next gear remains less powerful all the way to the ceiling, no special
+fallback learner is started. The baseline simply remains the answer: keep
+revving to the usable ceiling.
 
-- an active race when FH6 explicitly reports race state;
-- throttle of at least `0.95`;
-- clutch at most `0.05`, brake and handbrake released;
-- valid positive RPM, power, and vehicle speed; and
-- no excessive driven-wheel combined slip.
+## Comparable shift capture
 
-On a completed clean real `Gx → Gx+1` shift, FDC records bounded evidence with
-the source and destination RPM, power, torque, speed, timestamps, and outcome.
-The decision compares a traction proxy, `power / speed`, before and after the
-shift. The evidence outcome is:
+For a real `G → G+1` upshift, FDC keeps a short window of clean telemetry before
+the transition, waits past the immediate torque cut, and then collects clean
+positive-power frames in the destination gear. Median values from the two
+windows provide:
 
-- `better` with reason `POWER_CROSSOVER` when the next gear's proxy is higher;
-- `rpm_ceiling` with reason `RPM_CEILING` when the next gear is weaker but the
-  shift occurred within `100 RPM` of a trusted learned engine ceiling;
-- `too_early` when the next gear is weaker and more usable RPM remained; or
-- `invalid` when the transition failed the clean-data requirements.
+```text
+RPM before
+RPM after
+power before
+power after
+source gear
+destination gear
+```
 
-The ceiling is global to the active vehicle configuration, while shift targets
-remain per source gear. A ceiling sample is accepted only from a continuous
-clean same-gear WOT pull that rises to a local peak, drops by at least `40 RPM`,
-and recovers to within `60 RPM` of that peak. A plain WOT maximum or plateau is
-not limiter evidence. The limiter's power-cut frame may report zero or negative
-engine power; it remains usable for the RPM pattern but is never added to power
-bins or shift-force evidence. Only one ceiling sample is accepted from a
-continuous pull.
-Three independent samples with a total spread no greater than `100 RPM`
-produce the median `usableCeiling`. Three consistent observations at a
-materially different limiter replace a stale ceiling after a tune change.
+The comparison is direct engine power:
 
-`rpmMax` remains the game-reported redline and a telemetry sanity value. Most
-cars learn through a power crossover without touching the limiter. Limiter
-learning is used only for the no-crossover fallback and never reintroduces a
-ratio estimate, predicted post-shift RPM, or power-curve coverage requirement.
+```text
+PowerDeltaPercent = (powerAfter - powerBefore) / powerBefore × 100
+```
 
-## Learning states and target selection
+A comparable sample requires full throttle, released clutch, brake and
+handbrake, positive RPM, positive power and positive vehicle speed. The
+temporary shift interval itself may contain zero or negative power; those
+torque-cut frames are skipped rather than treated as the destination gear's
+power. Partial-throttle, incomplete, stale or otherwise uncapturable shifts are
+ignored silently. They are not labelled bad or too early.
 
-Each source gear has exactly these visible states:
+Torque, wheel speed, slip and a reconstructed `power / speed` force proxy are
+not inputs to this decision.
 
-- `LEARNING` — collecting clean power data, learning the limiter ceiling when
-  necessary, or waiting for a clean accepted shift. No purple cue is displayed.
-  A clean early shift remains `LEARNING` and states that the next gear produced
-  less wheel force.
-- `CONFIRMING 1/3` or `CONFIRMING 2/3` — the first clean power-crossover or
-  RPM-ceiling shift created a candidate. Purple is displayed at the candidate
-  RPM while it is being confirmed.
-- `OPTIMAL` — three accepted clean shifts within a `100 RPM` total range
-  confirmed the target. The target is the earliest RPM in that confirmation
-  range, and purple flashes at that RPM so the driver can shift as soon as it
-  appears.
+## Per-pair learning states
 
-Later engine power by itself does not displace an earlier target. For example,
-if two shifts improve by the same amount, a later RPM only confirms the first
-candidate when they are within the confirmation range. An existing Optimal
-point stays active if it is contradicted by a clean shift at that point; FDC
-then requires a separate three-shift later candidate before it replaces the
-confirmed point. This avoids changing a proven cue because of one run.
+Each observed source/destination pair has one of three states:
 
-There is no `OBSERVED` state and no five-shift average-minus-75-RPM rule.
+- `LEARNING` — no earlier crossover has been demonstrated. The effective target
+  is the learned usable ceiling or, until then, the reported redline.
+- `POTENTIAL` — a comparable shift produced `PowerDeltaPercent >= 0` and created
+  an earlier candidate.
+- `OPTIMAL` — three non-negative candidates fit within a `100 RPM` range. Their
+  median is the confirmed target.
 
-## Persistence and reset
+A negative comparison is retained as bounded diagnostic evidence but does not
+create a candidate and does not replace the redline baseline. A later
+non-negative observation outside the current candidate's `100 RPM` range starts
+a new potential sequence. Confirmed targets remain per gear pair.
 
-Shift Light stores its structured learning state in FDC-local `fdc.sqlite` in
-the application-data directory. It persists only bounded normalized facts:
-per-gear state and candidates, RPM power bins, completed shift evidence, and
-the configuration-level limiter samples and usable ceiling. The current
-in-progress pull is deliberately transient. All completed power data, candidate
-counts, confirmed targets, and ceiling samples survive application restart and
-switching away from and back to a car.
+## Cue timing
 
-The current persistence contract contains exactly five Shift Light tables:
+The desired shift RPM and cue-on RPM are different values:
 
-- `shift_light_configs` owns stable vehicle/configuration identities;
-- `shift_light_learning_state` is the canonical versioned learner JSON;
-- `shift_light_gear_learning` materializes per-gear state;
-- `shift_light_power_bins` materializes bounded WOT power bins;
-- `shift_light_shift_evidence` materializes completed shift decisions.
+```text
+leadRPM = currentPositiveRpmRate × 0.15 seconds
+cueOnRPM = effectiveTargetRPM - leadRPM
+```
 
-Schema version 14 removes the retired car/variant/profile tables and their
-obsolete Tauri commands. The migration preserves all five current Shift Light
-tables and their rows, together with Garage and Events data. A newly created
-database never creates the retired tables.
+The lead is clamped to `100–500 RPM`; when a reliable acceleration rate is not
+available it defaults to `200 RPM`. The effective target is the pair's
+confirmed/potential target when one exists, otherwise the usable ceiling or
+reported redline.
 
-The state carries an internal learning-model version. FDC loads only a
-compatible version, preventing a later learner from silently interpreting old
-facts under changed rules. Database writes are transactional and retry after a
-failure; a save failure is surfaced in the Shift Light settings status rather
-than being silently ignored.
+## Persistence
 
-This learned-ceiling generation is a breaking Shift Light model migration. On
-first launch it clears the previous generation's Shift Light learning facts
-because former `too_early` evidence cannot be reinterpreted safely without a
-trusted historical ceiling. Stable vehicle configuration rows remain available;
-Garage and Events data are not changed. Old Shift Light records are not used or
-shown as current calibration.
+Schema version 15 contains exactly four Shift Light tables:
 
-`RESET CURRENT CALIBRATION` removes the active configuration's Shift Light
-learning facts and restarts that configuration at `LEARNING`. Other cars and
-configurations remain intact.
+- `shift_light_configs` — stable configuration identity, reported redline,
+  learned usable ceiling, model version, and first/last-seen timestamps;
+- `shift_light_ceiling_samples` — up to three positive limiter RPM samples for
+  a configuration;
+- `shift_light_gear_targets` — one row per real `G → G+1` pair with state,
+  candidate RPM, confirmed RPM, and confirmation count;
+- `shift_light_shift_samples` — a bounded journal of accepted before/after RPM,
+  positive before/after power, delta percent, timestamps and classification.
 
-## Settings and presentation
+There is no learner JSON blob, RPM power-bin table, materialized legacy state,
+gear-ratio signature, torque/speed history, or separate no-crossover table.
+Writes replace the compact state transactionally, and unchanged snapshots are
+not written repeatedly.
 
-The Shift Light settings tab shows the current FH6 car ordinal, PI,
-game-reported RPM limit, and learned ceiling progress. Its table lists each
-source gear's shift point, number of RPM power bins, completed-shift count and
-last clean-shift reason, and its visible state. It intentionally omits legacy
-ratio, predicted-after-shift, coverage, and Observed fields.
+This is learning model version 4 and a breaking persistence migration. Upgrading
+to schema 15 preserves stable configuration identities where possible but
+discards older Shift Light learning facts whose meanings are incompatible.
+Garage and Events data are not changed. Reset removes learning rows only for
+the active configuration.
 
-Redline brightness and FDC Shift Light brightness are separate preferences.
-Redline defaults to `60%`; FDC Shift Light defaults to `80%`. Both are visual
-only. The FDC Shift Light toggle defaults to ON and affects only purple cue
-visibility; the learner remains active while it is off.
+## Settings
+
+The settings page shows the active configuration, reported redline, learned
+ceiling progress, effective target, state, accepted sample count and last power
+comparison for each observed pair. It does not diagnose the driver's shift as
+"bad" or "too early" when the capture was unusable or the next gear was weaker.
+
+Redline brightness and FDC Shift Light brightness remain independent visual
+preferences. The FDC Shift Light toggle defaults to ON and affects only cue
+visibility.
