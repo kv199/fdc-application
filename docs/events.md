@@ -209,8 +209,10 @@ lap and is deleted with that lap or its Event. Trace points are omitted from
 run-list reads and loaded only for the selected run detail.
 A run snapshots the vehicle ordinal, class, PI, drivetrain, start time, run
 type, and confirmed result. Run reads resolve the current Garage display name
-for the ordinal, so renaming a Garage car updates existing Event rows. Existing
-Garage and Shift Light data is retained during migration.
+for the ordinal, so renaming a Garage car updates existing Event rows. Event
+schema migrations do not modify Garage or Shift Light tables. The separate
+Shift Light v15 migration preserves compatible configuration identity and
+reported-redline data but intentionally discards obsolete learning facts.
 
 Deleting an Event permanently removes it and its runs. FDC trims names and
 notes before storing them; empty notes are stored as absent.

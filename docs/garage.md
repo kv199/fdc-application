@@ -95,17 +95,19 @@ being guessed.
 ## Shift Light association
 
 Garage and Shift Light use the same local `fdc.sqlite` file. They retain their
-separate tables and responsibilities, but a Garage configuration and Shift
-Light calibration are associated by game ID, car ordinal, class, PI,
-drivetrain, and cylinder count.
+separate tables and responsibilities. The Shift Light learner itself uses its
+full six-field configuration identity, while the Garage summary intentionally
+aggregates all Shift Light configurations with the same FH6 car ordinal and PI.
 
-A Garage car may have multiple class/PI/drivetrain configurations. Each
-matching configuration summarizes its persisted per-pair Shift Light targets.
-The snapshot reports:
+A Garage car may have multiple class/PI/drivetrain configurations. Variants
+with the same ordinal and PI therefore display the same aggregate Shift Light
+summary even when their class, drivetrain, or cylinder count differs. The
+snapshot reports:
 
-- `READY` when at least one calibrated per-gear target exists;
-- `LEARNING` when a Shift Light tune exists without a calibrated target;
-- `NOT CALIBRATED` when no Shift Light tune exists.
+- `READY` when at least one `OPTIMAL` per-pair target exists;
+- `LEARNING` when a Shift Light configuration exists without an `OPTIMAL`
+  target;
+- `NOT CALIBRATED` when no Shift Light configuration exists.
 
 Shift Light remains visible only in the Shift Light tab, which provides the
 live diagnostics and reset for the active numeric configuration. Garage does
@@ -113,8 +115,9 @@ not render a second Shift Light status or profile control.
 
 ## Local SQLite state
 
-Garage uses the existing FDC application-data database, `fdc.sqlite`, and
-schema version 6.
+Garage uses the existing FDC application-data database, `fdc.sqlite`. Its table
+shape was introduced through schema versions 4–6; the current shared database
+schema is version 15.
 
 ```text
 garage_cars
@@ -146,10 +149,9 @@ sample arrives.
 The migration creates these tables transactionally and does not make Garage
 data depend on Shift Light learning facts.
 
-Garage snapshots query `shift_light_configs` and `shift_light_gear_targets`
-to attach the Shift Light summary by car ordinal, PI, drivetrain, and cylinder
-count. Retired Shift Light variant/profile tables are not part of the Garage
-contract.
+Garage snapshots query `shift_light_configs` and `shift_light_gear_targets` to
+attach the aggregate Shift Light summary by car ordinal and PI. Retired Shift
+Light variant/profile tables are not part of the Garage contract.
 
 ## Native commands
 
