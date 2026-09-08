@@ -11,6 +11,8 @@
     carOrdinal: null,
     pi: null,
     rpmMax: null,
+    usableCeiling: null,
+    ceilingSampleCount: 0,
     gearboxSignature: null,
     currentGear: null,
     method: null,

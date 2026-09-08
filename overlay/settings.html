@@ -434,10 +434,10 @@
         <div class="calibration-help__title">HOW TO READ DIAGNOSTICS</div>
         <dl>
           <div><dt>LEARNING</dt><dd>FDC is collecting clean full-throttle power data. Redline comes from the game; no purple cue is shown yet.</dd></div>
-          <div><dt>CONFIRMING</dt><dd>A clean shift made the next gear pull harder. Two more clean shifts within 100 RPM confirm the candidate.</dd></div>
+          <div><dt>CONFIRMING</dt><dd>A clean shift found a better next gear or reached a learned engine ceiling. Two more clean shifts within 100 RPM confirm the candidate.</dd></div>
           <div><dt>OPTIMAL</dt><dd>Three clean shifts confirmed the earliest good RPM. FDC flashes purple at that point.</dd></div>
         </dl>
-        <p>FDC compares wheel force as power divided by speed across each real upshift. The game-reported RPM limit drives the red redline only; you do not need to hit the limiter to learn a shift point.</p>
+        <p>FDC compares wheel force as power divided by speed across each real upshift. Most cars learn without touching the limiter. If no wheel-force crossover exists, three clean limiter pulls establish the real engine ceiling and allow a near-ceiling shift point.</p>
       </div>
 
       <div id="shift-light-empty" class="calibration-empty">
@@ -457,6 +457,10 @@
           <div>
             <span class="calibration-label">RPM LIMIT</span>
             <output id="shift-light-car-rpm-max">—</output>
+          </div>
+          <div>
+            <span class="calibration-label">LEARNED CEILING</span>
+            <output id="shift-light-usable-ceiling">—</output>
           </div>
           <div>
             <span class="calibration-label">CURRENT TARGET</span>

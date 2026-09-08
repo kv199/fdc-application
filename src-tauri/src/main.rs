@@ -390,7 +390,7 @@ struct ShiftLightLearningStateRequest {
     state: serde_json::Value,
 }
 
-const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 2;
+const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 3;
 const MAX_SHIFT_LIGHT_LEARNING_STATE_BYTES: usize = 512 * 1024;
 const MAX_SHIFT_LIGHT_POWER_BINS: usize = 512;
 const MAX_SHIFT_LIGHT_SHIFT_EVIDENCE: usize = 128;
@@ -1232,7 +1232,7 @@ fn create_shift_light_learning_tables(connection: &Connection) -> Result<(), Str
                after_rpm REAL NOT NULL,
                after_power REAL,
                after_speed REAL,
-               outcome TEXT NOT NULL CHECK (outcome IN ('better', 'too_early', 'invalid')),
+               outcome TEXT NOT NULL CHECK (outcome IN ('better', 'rpm_ceiling', 'too_early', 'invalid')),
                reason TEXT,
                model_version INTEGER NOT NULL,
                recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1271,6 +1271,50 @@ fn reset_shift_light_learning_generation(connection: &mut Connection) -> Result<
     transaction
         .commit()
         .map_err(|error| format!("unable to commit Shift Light generation reset: {error}"))
+}
+
+/// Move model-v2 Shift Light facts to the learned-ceiling generation. Existing
+/// outcomes cannot be reinterpreted safely because a former `too_early` shift
+/// may now be valid RPM-ceiling evidence. Vehicle configurations remain so the
+/// active build keeps its stable numeric identity; only learner-owned facts are
+/// cleared. Recreate the evidence table to extend its CHECK constraint.
+fn migrate_shift_light_ceiling_generation(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Shift Light ceiling migration: {error}"))?;
+    transaction
+        .execute_batch(
+            "DELETE FROM shift_light_learning_state;
+             DELETE FROM shift_light_gear_learning;
+             DELETE FROM shift_light_power_bins;
+             DROP TABLE shift_light_shift_evidence;
+             CREATE TABLE shift_light_shift_evidence (
+               id INTEGER PRIMARY KEY,
+               config_id INTEGER NOT NULL,
+               source_gear INTEGER NOT NULL CHECK (source_gear BETWEEN 1 AND 10),
+               destination_gear INTEGER NOT NULL CHECK (destination_gear BETWEEN 1 AND 10),
+               before_timestamp_ms INTEGER,
+               after_timestamp_ms INTEGER,
+               before_rpm REAL NOT NULL,
+               before_power REAL,
+               before_speed REAL,
+               after_rpm REAL NOT NULL,
+               after_power REAL,
+               after_speed REAL,
+               outcome TEXT NOT NULL CHECK (outcome IN ('better', 'rpm_ceiling', 'too_early', 'invalid')),
+               reason TEXT,
+               model_version INTEGER NOT NULL,
+               recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               FOREIGN KEY (config_id) REFERENCES shift_light_configs(id) ON DELETE CASCADE
+             );
+             CREATE INDEX idx_shift_light_evidence_config_time
+               ON shift_light_shift_evidence(config_id, recorded_at DESC, id DESC);
+             UPDATE hud_schema_version SET version = 13;",
+        )
+        .map_err(|error| format!("unable to migrate Shift Light ceiling schema: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Shift Light ceiling migration: {error}"))
 }
 
 fn create_garage_tables(transaction: &Transaction<'_>) -> Result<(), String> {
@@ -1923,6 +1967,9 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
             .map_err(|error| {
                 format!("unable to update Shift Light learning schema version: {error}")
             })?;
+    }
+    if version < 13 {
+        migrate_shift_light_ceiling_generation(connection)?;
     }
     Ok(())
 }
@@ -3862,7 +3909,7 @@ fn materialize_learning_state(
                     .get("outcome")
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or("invalid");
-                if !["better", "too_early", "invalid"].contains(&outcome) {
+                if !["better", "rpm_ceiling", "too_early", "invalid"].contains(&outcome) {
                     continue;
                 }
                 let before_rpm = json_f64(item.get("beforeRpm")).unwrap_or(0.0);
@@ -4666,7 +4713,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
         for table in [
             "shift_light_cars",
             "shift_light_variants",
@@ -4760,6 +4807,116 @@ mod tests {
         );
     }
 
+    #[test]
+    fn v13_resets_only_learning_facts_and_accepts_rpm_ceiling_evidence() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let vehicle = GarageVehicle {
+            ordinal: 3766,
+            class: 1,
+            pi: 800,
+            car_group: 43,
+            drivetrain: 1,
+            cylinders: 10,
+        };
+        record_garage_vehicle_in_connection(&mut connection, &vehicle).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Keep v13 data", "S1", "Asphalt", "Official", None),
+        )
+        .unwrap();
+        let config =
+            resolve_shift_light_config_in_connection(&mut connection, "fh6:3766:1:800:1:10", 1)
+                .unwrap();
+        connection
+            .execute(
+                "INSERT INTO shift_light_learning_state (config_id, model_version, state_json)
+                 VALUES (?1, 2, '{}')",
+                params![config.variant_id],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO shift_light_gear_learning
+                   (config_id, source_gear, status, confirming_count, model_version)
+                 VALUES (?1, 1, 'learning', 0, 2)",
+                params![config.variant_id],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO shift_light_power_bins
+                   (config_id, source_gear, rpm_bucket, sample_count, median_power)
+                 VALUES (?1, 1, 10000, 1, 500)",
+                params![config.variant_id],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO shift_light_shift_evidence
+                   (config_id, source_gear, destination_gear, before_rpm, after_rpm,
+                    outcome, model_version)
+                 VALUES (?1, 1, 2, 10150, 7000, 'too_early', 2)",
+                params![config.variant_id],
+            )
+            .unwrap();
+        connection
+            .execute("UPDATE hud_schema_version SET version = 12", [])
+            .unwrap();
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        assert_eq!(
+            connection
+                .query_row("SELECT version FROM hud_schema_version", [], |row| row
+                    .get::<_, i32>(0))
+                .unwrap(),
+            13
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM shift_light_configs", [], |row| row
+                    .get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        for table in [
+            "shift_light_learning_state",
+            "shift_light_gear_learning",
+            "shift_light_power_bins",
+            "shift_light_shift_evidence",
+        ] {
+            let count: i64 = connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(count, 0, "{table} was not reset");
+        }
+        assert_eq!(
+            load_garage_snapshot_from_connection(&connection)
+                .unwrap()
+                .cars
+                .len(),
+            1
+        );
+        assert_eq!(
+            load_event_from_connection(&connection, event.id)
+                .unwrap()
+                .name,
+            "Keep v13 data"
+        );
+        connection
+            .execute(
+                "INSERT INTO shift_light_shift_evidence
+                   (config_id, source_gear, destination_gear, before_rpm, after_rpm,
+                    outcome, reason, model_version)
+                 VALUES (?1, 1, 2, 10170, 7000, 'rpm_ceiling', 'RPM_CEILING', 3)",
+                params![config.variant_id],
+            )
+            .unwrap();
+    }
+
     fn test_event(
         name: &str,
         class: &str,
@@ -4836,7 +4993,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
         assert!(table_exists(&connection, "events").unwrap());
         assert_eq!(
             connection
@@ -4882,7 +5039,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
         assert_eq!(
             load_event_from_connection(&connection, event.id)
                 .unwrap()
@@ -5736,17 +5893,19 @@ mod tests {
                 .as_nanos()
         ));
         let state = serde_json::json!({
-            "modelVersion": 2,
-            "version": 2,
+            "modelVersion": 3,
+            "version": 3,
             "key": key,
+            "ceilingSamples": [10220, 10235, 10218],
+            "usableCeiling": 10220,
             "gears": [
                 {
                     "sourceGear": 1,
                     "status": "confirming",
-                    "targetRpm": 9550,
-                    "candidateRpm": 9550,
+                    "targetRpm": 10170,
+                    "candidateRpm": 10170,
                     "confirmingCount": 2,
-                    "lastReason": "next gear produced more wheel force",
+                    "lastReason": "engine RPM ceiling reached",
                     "powerBins": [{
                         "rpmBucket": 9400,
                         "sampleCount": 3,
@@ -5764,13 +5923,14 @@ mod tests {
                         "destinationGear": 2,
                         "beforeTimestampMs": 1200,
                         "afterTimestampMs": 1312,
-                        "beforeRpm": 9550,
+                        "beforeRpm": 10170,
                         "afterRpm": 6500,
                         "beforePower": 405,
-                        "afterPower": 420,
+                        "afterPower": 300,
                         "beforeSpeedKmh": 160,
                         "afterSpeedKmh": 162,
-                        "outcome": "better"
+                        "outcome": "rpm_ceiling",
+                        "reason": "RPM_CEILING"
                     }]
                 },
                 { "sourceGear": 4, "status": "confirming", "targetRpm": 9200, "candidateRpm": 9200, "confirmingCount": 1, "powerBins": [], "evidence": [] },
@@ -5826,6 +5986,16 @@ mod tests {
                     .get::<_, i64>(0))
                 .unwrap(),
             1
+        );
+        assert_eq!(
+            reopened
+                .query_row(
+                    "SELECT outcome || ':' || reason FROM shift_light_shift_evidence",
+                    [],
+                    |row| row.get::<_, String>(0)
+                )
+                .unwrap(),
+            "rpm_ceiling:RPM_CEILING"
         );
         assert_eq!(
             reopened
@@ -5945,7 +6115,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
         assert_eq!(
             connection
                 .query_row("SELECT next_sequence FROM garage_sequence", [], |row| {
@@ -6007,7 +6177,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
         let (drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (i32, i32, i64, i64) =
             connection
                 .query_row(
@@ -6080,7 +6250,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
         let (id, drivetrain, cylinders, first_seen_sequence, last_seen_sequence): (
             i64,
             i32,

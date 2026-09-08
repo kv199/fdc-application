@@ -50,6 +50,8 @@ export interface ShiftLightSnapshot {
   carOrdinal: number | null
   pi: number | null
   rpmMax: number | null
+  usableCeiling: number | null
+  ceilingSampleCount: number
   fallbackShiftRpm: number | null
   carClass: number | null
   drivetrain: number | null
@@ -152,7 +154,8 @@ interface PendingUpshift {
 /**
  * Learns independently for each observed source gear. The only decision input
  * is a completed clean real Gx→Gx+1 transition; rpmMax is used exclusively by
- * the redline fallback display.
+ * the redline display, while the learner's physical ceiling comes from clean
+ * limiter telemetry.
  */
 export class ShiftLightLearner {
   private readonly estimator = new OptimalShiftEstimator()
@@ -218,6 +221,7 @@ export class ShiftLightLearner {
   }
 
   resetTransient(): void {
+    this.estimator.resetTransient()
     this.previous = null
     this.pullGear = null
     this.pullPeak = null
@@ -257,7 +261,8 @@ export class ShiftLightLearner {
             status: this.estimator.getState(transition.sourceGear)?.status ?? 'learning',
             method: 'optimal'
           })
-          if (evidence.outcome === 'better' && this.estimator.getState(transition.sourceGear)?.status === 'optimal') {
+          if ((evidence.outcome === 'better' || evidence.outcome === 'rpm_ceiling')
+            && this.estimator.getState(transition.sourceGear)?.status === 'optimal') {
             this.options.onCalibrated?.({
               key: this.key,
               gear: transition.sourceGear,
@@ -301,7 +306,7 @@ export class ShiftLightLearner {
     const shiftRpm = current?.targetRpm ?? current?.candidateRpm ?? null
     const rpmMax = telemetry?.rpmMax ?? this.latestRpmMax
     let phase = fallbackPhase(telemetry?.rpm ?? 0, rpmMax)
-    if (shiftRpm !== null && telemetry) phase = telemetry.rpm >= shiftRpm ? 'shift' : 'normal'
+    if (shiftRpm !== null && telemetry) phase = telemetry.rpm >= shiftRpm ? 'shift' : fallbackPhase(telemetry.rpm, rpmMax)
     const status: ShiftLightStatus = current?.status === 'optimal' || current?.status === 'confirming' ? 'calibrated' : 'learning'
     return {
       status,
@@ -313,6 +318,8 @@ export class ShiftLightLearner {
       carOrdinal: identity?.carOrdinal ?? null,
       pi: identity?.pi ?? null,
       rpmMax: rpmMax > 0 ? rpmMax : null,
+      usableCeiling: this.estimator.getUsableCeiling(),
+      ceilingSampleCount: this.estimator.getCeilingSampleCount(),
       fallbackShiftRpm: rpmMax > 0 ? roundRpm(rpmMax) : null,
       carClass: identity?.carClass ?? null,
       drivetrain: identity?.drivetrain ?? null,

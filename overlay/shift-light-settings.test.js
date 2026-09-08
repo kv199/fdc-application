@@ -14,6 +14,8 @@ test('normalizes the current per-gear learning state without legacy ratio fields
     carOrdinal: 3766,
     pi: 800,
     rpmMax: 8300,
+    usableCeiling: 10220.4,
+    ceilingSampleCount: 3,
     currentGear: 5,
     persistenceError: 'database locked',
     diagnostics: [{
@@ -41,6 +43,8 @@ test('normalizes the current per-gear learning state without legacy ratio fields
     carOrdinal: 3766,
     pi: 800,
     rpmMax: 8300,
+    usableCeiling: 10220,
+    ceilingSampleCount: 3,
     fallbackShiftRpm: null,
     currentGear: 5,
     gears: [{
@@ -77,6 +81,8 @@ test('turns an unavailable or malformed state into a safe empty state', () => {
     carOrdinal: null,
     pi: null,
     rpmMax: null,
+    usableCeiling: null,
+    ceilingSampleCount: 0,
     fallbackShiftRpm: null,
     currentGear: null,
     gears: [],

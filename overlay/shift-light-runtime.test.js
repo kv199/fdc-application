@@ -41,7 +41,7 @@ test('creates a six-field configuration and persists completed learning state', 
   })
   const save = calls.find(call => call.command === 'save_shift_light_learning_state')
   assert.equal(save.args.request.configId, 42)
-  assert.equal(save.args.request.state.modelVersion, 2)
+  assert.equal(save.args.request.state.modelVersion, 3)
   assert.equal(save.args.request.state.gears[0].evidence[0].outcome, 'better')
 })
 

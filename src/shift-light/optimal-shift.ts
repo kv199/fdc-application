@@ -1,9 +1,10 @@
 import type { Telemetry } from './telemetry'
 
 /** Bump when persisted learning facts become semantically incompatible. */
-export const SHIFT_LIGHT_LEARNING_VERSION = 2
+export const SHIFT_LIGHT_LEARNING_VERSION = 3
 
-export type ShiftLearningOutcome = 'better' | 'too_early' | 'invalid'
+export type ShiftLearningOutcome = 'better' | 'rpm_ceiling' | 'too_early' | 'invalid'
+export type ShiftLearningReason = 'POWER_CROSSOVER' | 'RPM_CEILING' | 'TOO_EARLY' | 'INVALID'
 export type ShiftLearningStatus = 'learning' | 'confirming' | 'optimal'
 
 export interface PowerBinState {
@@ -36,6 +37,7 @@ export interface ShiftEvidenceState {
   beforeSpeed: number
   afterSpeed: number
   outcome: ShiftLearningOutcome
+  reason: ShiftLearningReason
 }
 
 export interface GearLearningState {
@@ -58,6 +60,10 @@ export interface ShiftLightLearningState {
   modelVersion: number
   version: number
   key: string
+  /** Clean limiter peaks learned for this vehicle/configuration. */
+  ceilingSamples: number[]
+  /** Median of the trusted limiter peaks, or null until enough agree. */
+  usableCeiling: number | null
   gears: GearLearningState[]
 }
 
@@ -104,6 +110,22 @@ const MAX_SHIFT_EVIDENCE_PER_GEAR = 32
 const MAX_CONFIRMATIONS = 3
 const CONFIRMATION_STABILITY_RPM = 100
 const MIN_SPEED_KMH = 1
+const RPM_CEILING_MARGIN_RPM = 100
+const RPM_CEILING_MAX_OVERSHOOT_RPM = 100
+const MIN_LIMITER_RISE_RPM = 100
+const MIN_LIMITER_DROP_RPM = 40
+const LIMITER_RECOVERY_TOLERANCE_RPM = 60
+const MAX_CEILING_SAMPLES = 3
+const MIN_TRUSTED_CEILING_SAMPLES = 3
+const CEILING_SAMPLE_STABILITY_RPM = 100
+const MAX_CLEAN_TIMESTAMP_GAP_MS = 1000
+
+interface LimiterTracker {
+  gear: number
+  startRpm: number
+  peakRpm: number
+  phase: 'rising' | 'falling'
+}
 
 function isForwardGear(gear: number): boolean {
   return Number.isInteger(gear) && gear >= FORWARD_GEAR_MIN && gear <= FORWARD_GEAR_MAX
@@ -123,14 +145,14 @@ function finiteInRange(value: unknown, minimum: number, maximum: number): number
   return Number.isFinite(number) && number >= minimum && number <= maximum ? number : null
 }
 
-function cleanPowerTelemetry(telemetry: Telemetry): boolean {
+function cleanWotMotionTelemetry(telemetry: Telemetry): boolean {
   if (telemetry.isRaceOn === false) return false
   if (!Number.isFinite(telemetry.throttle) || telemetry.throttle < 0.95) return false
   if (!Number.isFinite(telemetry.clutch) || telemetry.clutch > 0.05) return false
   if (Number.isFinite(telemetry.brake) && telemetry.brake > 0.02) return false
   if (Number.isFinite(telemetry.handBrake) && telemetry.handBrake > 0.02) return false
   if (!isForwardGear(telemetry.gear) || !finitePositive(telemetry.rpm)) return false
-  if (!finitePositive(telemetry.power) || !finitePositive(telemetry.speedKmh)) return false
+  if (!finitePositive(telemetry.speedKmh)) return false
 
   const slip = telemetry.combinedSlip
   if (slip) {
@@ -142,6 +164,10 @@ function cleanPowerTelemetry(telemetry: Telemetry): boolean {
     if (driven.some(value => Number.isFinite(value) && Math.abs(value) > 0.2)) return false
   }
   return true
+}
+
+function cleanPowerTelemetry(telemetry: Telemetry): boolean {
+  return cleanWotMotionTelemetry(telemetry) && finitePositive(telemetry.power)
 }
 
 /** The same clean filter is used for power bins and completed shift evidence. */
@@ -225,7 +251,7 @@ function normalizeEvidence(value: unknown, sourceGear: number): ShiftEvidenceSta
     || beforeRpm === null || afterRpm === null || beforePower === null || afterPower === null
     || beforeSpeedKmh === null || afterSpeedKmh === null) return null
   const outcome = raw.outcome
-  if (outcome !== 'better' && outcome !== 'too_early' && outcome !== 'invalid') return null
+  if (outcome !== 'better' && outcome !== 'rpm_ceiling' && outcome !== 'too_early' && outcome !== 'invalid') return null
   const beforeTorque = raw.beforeTorque === null ? null : finiteInRange(raw.beforeTorque, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)
   const afterTorque = raw.afterTorque === null ? null : finiteInRange(raw.afterTorque, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)
   return {
@@ -243,18 +269,36 @@ function normalizeEvidence(value: unknown, sourceGear: number): ShiftEvidenceSta
     afterSpeedKmh,
     beforeSpeed: beforeSpeedKmh,
     afterSpeed: afterSpeedKmh,
-    outcome
+    outcome,
+    reason: normalizeReason(raw.reason, outcome)
   }
+}
+
+function normalizeReason(value: unknown, outcome: ShiftLearningOutcome): ShiftLearningReason {
+  if ((outcome === 'better' && value === 'POWER_CROSSOVER')
+    || (outcome === 'rpm_ceiling' && value === 'RPM_CEILING')
+    || (outcome === 'too_early' && value === 'TOO_EARLY')
+    || (outcome === 'invalid' && value === 'INVALID')) return value
+  return outcome === 'better' ? 'POWER_CROSSOVER'
+    : outcome === 'rpm_ceiling' ? 'RPM_CEILING'
+      : outcome === 'too_early' ? 'TOO_EARLY' : 'INVALID'
 }
 
 /**
  * Accumulates bounded, per-source-gear facts and derives a target only from
- * completed clean real upshifts. It has no ratio/limiter/rpmMax dependency.
+ * completed clean real upshifts. The only redline-related learning is a
+ * separately confirmed physical limiter ceiling; rpmMax is never consulted.
  */
 export class OptimalShiftEstimator {
   private readonly gears = new Map<number, GearLearningState>()
+  private ceilingSamples: number[] = []
+  private usableCeiling: number | null = null
+  private limiterTracker: LimiterTracker | null = null
+  private lastCleanTelemetry: Telemetry | null = null
+  private limiterRearmed = true
 
   ingest(telemetry: Telemetry): void {
+    this.observeLimiter(telemetry)
     if (!cleanPowerTelemetry(telemetry)) return
     const state = this.getOrCreate(telemetry.gear)
     const rpmBucket = Math.round(telemetry.rpm / POWER_BIN_RPM) * POWER_BIN_RPM
@@ -298,9 +342,15 @@ export class OptimalShiftEstimator {
     if (!isForwardGear(sourceGear) || destinationGear !== sourceGear + 1) return null
     const valid = cleanPowerTelemetry(before) && cleanPowerTelemetry(after)
       && before.timestampMs <= after.timestampMs
+    const forceImproved = after.power / after.speedKmh > before.power / before.speedKmh
     const outcome: ShiftLearningOutcome = !valid
       ? 'invalid'
-      : after.power / after.speedKmh > before.power / before.speedKmh ? 'better' : 'too_early'
+      : forceImproved ? 'better'
+        : this.isAtUsableCeiling(before.rpm) ? 'rpm_ceiling' : 'too_early'
+    const reason: ShiftLearningReason = !valid
+      ? 'INVALID'
+      : forceImproved ? 'POWER_CROSSOVER'
+        : this.isAtUsableCeiling(before.rpm) ? 'RPM_CEILING' : 'TOO_EARLY'
     const evidence: ShiftEvidenceState = {
       sourceGear,
       destinationGear,
@@ -316,7 +366,8 @@ export class OptimalShiftEstimator {
       afterSpeedKmh: after.speedKmh,
       beforeSpeed: before.speedKmh,
       afterSpeed: after.speedKmh,
-      outcome
+      outcome,
+      reason
     }
     const state = this.getOrCreate(sourceGear)
     state.evidence.push(evidence)
@@ -339,6 +390,8 @@ export class OptimalShiftEstimator {
       modelVersion: SHIFT_LIGHT_LEARNING_VERSION,
       version: SHIFT_LIGHT_LEARNING_VERSION,
       key,
+      ceilingSamples: [...this.ceilingSamples],
+      usableCeiling: this.usableCeiling,
       gears: this.getStates()
     }
   }
@@ -349,6 +402,7 @@ export class OptimalShiftEstimator {
     const modelVersion = raw.modelVersion ?? raw.version
     if (modelVersion !== SHIFT_LIGHT_LEARNING_VERSION || raw.key !== key || !Array.isArray(raw.gears)) return false
     const restored = new Map<number, GearLearningState>()
+    const ceilingSamples = this.normalizeCeilingSamples(raw.ceilingSamples)
     for (const candidate of raw.gears.slice(0, FORWARD_GEAR_MAX)) {
       if (!candidate || typeof candidate !== 'object') continue
       const value = candidate as Record<string, unknown>
@@ -374,6 +428,8 @@ export class OptimalShiftEstimator {
     }
     this.gears.clear()
     for (const [gear, value] of restored) this.gears.set(gear, value)
+    this.ceilingSamples = ceilingSamples
+    this.usableCeiling = this.deriveUsableCeiling(ceilingSamples)
     return true
   }
 
@@ -398,6 +454,12 @@ export class OptimalShiftEstimator {
       if (!merged.lastReason) merged.lastReason = current.lastReason ?? incoming.lastReason
       this.gears.set(merged.sourceGear, merged)
     }
+    const mergedCeilingSamples = this.normalizeCeilingSamples([
+      ...persisted.ceilingSamples,
+      ...this.ceilingSamples
+    ])
+    this.ceilingSamples = mergedCeilingSamples
+    this.usableCeiling = this.deriveUsableCeiling(mergedCeilingSamples)
     return true
   }
 
@@ -429,7 +491,7 @@ export class OptimalShiftEstimator {
       postShiftRpm: null,
       powerAtTarget: candidate === null ? null : this.powerAt(state, candidate),
       powerAfterShift: null,
-      estimateEvidence: state?.evidence.filter(item => item.outcome === 'better').length ?? 0,
+      estimateEvidence: state?.evidence.filter(item => item.outcome === 'better' || item.outcome === 'rpm_ceiling').length ?? 0,
       status: state?.status ?? 'learning',
       confirmingCount: state?.confirmingRpms.length ?? 0,
       lastReason: state?.lastReason ?? null,
@@ -437,8 +499,20 @@ export class OptimalShiftEstimator {
     }
   }
 
-  reset(): void { this.gears.clear() }
-  resetTransient(): void { /* no transient state is stored here */ }
+  reset(): void {
+    this.gears.clear()
+    this.ceilingSamples = []
+    this.usableCeiling = null
+    this.resetTransient()
+  }
+  resetTransient(): void {
+    this.limiterTracker = null
+    this.lastCleanTelemetry = null
+    this.limiterRearmed = true
+  }
+
+  getUsableCeiling(): number | null { return this.usableCeiling }
+  getCeilingSampleCount(): number { return this.ceilingSamples.length }
 
   private getOrCreate(gear: number): GearLearningState {
     let state = this.gears.get(gear)
@@ -467,7 +541,9 @@ export class OptimalShiftEstimator {
       return
     }
 
-    state.lastReason = null
+    state.lastReason = evidence.outcome === 'rpm_ceiling'
+      ? 'Engine RPM ceiling reached; no stronger next-gear crossover was found.'
+      : null
     if (state.status === 'optimal') {
       if (!state.targetContradicted || state.targetRpm === null || evidence.beforeRpm <= state.targetRpm) return
       if (state.replacementCandidateRpm === null) {
@@ -564,6 +640,91 @@ export class OptimalShiftEstimator {
   private normalizeConfirmations(value: unknown): number[] {
     if (!Array.isArray(value)) return []
     return value.map(item => finiteInRange(item, 0, 100_000)).filter((item): item is number => item !== null).map(roundRpm).slice(-MAX_CONFIRMATIONS)
+  }
+
+  private normalizeCeilingSamples(value: unknown): number[] {
+    if (!Array.isArray(value)) return []
+    return value
+      .map(item => finiteInRange(item, 0, 100_000))
+      .filter((item): item is number => item !== null)
+      .map(roundRpm)
+      .slice(-MAX_CEILING_SAMPLES)
+  }
+
+  private deriveUsableCeiling(samples: number[]): number | null {
+    if (samples.length < MIN_TRUSTED_CEILING_SAMPLES) return null
+    const sorted = [...samples].sort((left, right) => left - right)
+    if (sorted[sorted.length - 1]! - sorted[0]! > CEILING_SAMPLE_STABILITY_RPM) return null
+    const middle = Math.floor(sorted.length / 2)
+    return sorted.length % 2 === 1
+      ? sorted[middle]!
+      : Math.round((sorted[middle - 1]! + sorted[middle]!) / 2)
+  }
+
+  private isAtUsableCeiling(rpm: number): boolean {
+    return this.usableCeiling !== null
+      && rpm >= this.usableCeiling - RPM_CEILING_MARGIN_RPM
+      && rpm <= this.usableCeiling + RPM_CEILING_MAX_OVERSHOOT_RPM
+  }
+
+  /**
+   * A ceiling sample requires a clean same-gear WOT pull that rises, drops
+   * materially, and recovers near its prior peak. A plain max/plateau is not
+   * enough because it can be caused by top speed or a driver lift.
+   */
+  private observeLimiter(telemetry: Telemetry): void {
+    // A real limiter can momentarily cut engine power to zero or below, so the
+    // ceiling detector applies the same clean WOT/motion controls without the
+    // positive-power requirement used by power bins and shift comparison.
+    if (!cleanWotMotionTelemetry(telemetry)) {
+      this.resetTransient()
+      return
+    }
+    const previous = this.lastCleanTelemetry
+    this.lastCleanTelemetry = telemetry
+    if (!previous || previous.gear !== telemetry.gear
+      || telemetry.timestampMs < previous.timestampMs
+      || telemetry.timestampMs - previous.timestampMs > MAX_CLEAN_TIMESTAMP_GAP_MS) {
+      this.limiterRearmed = true
+      this.limiterTracker = { gear: telemetry.gear, startRpm: telemetry.rpm, peakRpm: telemetry.rpm, phase: 'rising' }
+      return
+    }
+    // A continuous clean WOT segment is one pull, even if the limiter cuts
+    // deeply enough to produce another rise/drop/recovery cycle. Rearm only
+    // after a dirty boundary, gear change, or telemetry discontinuity.
+    if (!this.limiterRearmed) return
+    const tracker = this.limiterTracker
+    if (!tracker || tracker.gear !== telemetry.gear) {
+      this.limiterTracker = { gear: telemetry.gear, startRpm: previous.rpm, peakRpm: Math.max(previous.rpm, telemetry.rpm), phase: 'rising' }
+      return
+    }
+    if (tracker.phase === 'rising') {
+      if (telemetry.rpm >= tracker.peakRpm) {
+        tracker.peakRpm = telemetry.rpm
+        return
+      }
+      if (tracker.peakRpm - telemetry.rpm >= MIN_LIMITER_DROP_RPM
+        && tracker.peakRpm - tracker.startRpm >= MIN_LIMITER_RISE_RPM) {
+        tracker.phase = 'falling'
+      }
+      return
+    }
+    if (telemetry.rpm >= tracker.peakRpm - LIMITER_RECOVERY_TOLERANCE_RPM) {
+      this.recordCeilingSample(tracker.peakRpm)
+      this.limiterRearmed = false
+      this.limiterTracker = null
+    }
+  }
+
+  private recordCeilingSample(sample: number): void {
+    const rounded = roundRpm(sample)
+    if (this.ceilingSamples.some(existing => Math.abs(existing - rounded) <= RPM_CEILING_MARGIN_RPM)) {
+      this.ceilingSamples = [...this.ceilingSamples.filter(existing => Math.abs(existing - rounded) <= RPM_CEILING_MARGIN_RPM), rounded]
+        .slice(-MAX_CEILING_SAMPLES)
+    } else {
+      this.ceilingSamples = [...this.ceilingSamples, rounded].slice(-MAX_CEILING_SAMPLES)
+    }
+    this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples)
   }
 
   private powerAt(state: GearLearningState | undefined, rpm: number): number | null {

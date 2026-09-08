@@ -23,6 +23,7 @@
   const shiftLightCarKey = document.getElementById('shift-light-car-key')
   const shiftLightCarPi = document.getElementById('shift-light-car-pi')
   const shiftLightCarRpmMax = document.getElementById('shift-light-car-rpm-max')
+  const shiftLightUsableCeiling = document.getElementById('shift-light-usable-ceiling')
   const shiftLightCurrentTarget = document.getElementById('shift-light-current-target')
   const shiftLightState = document.getElementById('shift-light-state')
   const shiftLightGearRows = document.getElementById('shift-light-gear-rows')
@@ -1967,6 +1968,9 @@
       : '—'
     shiftLightCarPi.textContent = state.pi ? `PI ${state.pi}` : '—'
     shiftLightCarRpmMax.textContent = state.rpmMax ? `${state.rpmMax} RPM` : '—'
+    shiftLightUsableCeiling.textContent = state.usableCeiling
+      ? `${state.usableCeiling} RPM · ${state.ceilingSampleCount}/3`
+      : state.ceilingSampleCount > 0 ? `LEARNING · ${state.ceilingSampleCount}/3` : 'NOT OBSERVED'
     const activeGear = state.gears.find(gear => gear.gear === state.currentGear)
     const activeStatus = activeGear?.status || 'learning'
     const activeTarget = activeGear?.shiftRpm ?? state.shiftRpm

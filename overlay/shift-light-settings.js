@@ -8,6 +8,8 @@
     sampleCount: 0,
     carKey: null,
     currentGear: null,
+    usableCeiling: null,
+    ceilingSampleCount: 0,
     gears: [],
     diagnostics: [],
     persistenceError: null
@@ -67,6 +69,9 @@
       carOrdinal: Number.isFinite(state.carOrdinal) && state.carOrdinal > 0 ? Math.round(state.carOrdinal) : null,
       pi: Number.isFinite(state.pi) && state.pi > 0 ? Math.round(state.pi) : null,
       rpmMax: Number.isFinite(state.rpmMax) && state.rpmMax > 0 ? Math.round(state.rpmMax) : null,
+      usableCeiling: Number.isFinite(state.usableCeiling) && state.usableCeiling > 0
+        ? Math.round(state.usableCeiling) : null,
+      ceilingSampleCount: Math.min(3, nonNegativeInteger(state.ceilingSampleCount)),
       fallbackShiftRpm: finiteOrNull(state.fallbackShiftRpm),
       currentGear: Number.isInteger(state.currentGear) && state.currentGear >= 1 && state.currentGear <= 10
         ? state.currentGear : null,
