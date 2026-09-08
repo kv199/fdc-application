@@ -28,15 +28,9 @@
   let loadGeneration = 0
   let profileMutationQueue = Promise.resolve()
   let resettingLearner = null
-  const PROFILE_RETRY_BASE_MS = 250
-  const PROFILE_RETRY_MAX_MS = 4000
   const variantIdsByLearner = new WeakMap()
-  const pendingProfilesByLearner = new WeakMap()
-  const profileRetryStateByLearner = new WeakMap()
   const pendingLearningStateByLearner = new WeakMap()
   const learningStateRetryByLearner = new WeakMap()
-  const profileGenerationByLearner = new WeakMap()
-  const profileGenerationByKey = new Map()
   const resolvingLearners = new WeakSet()
   const retryAfterByLearner = new WeakMap()
 
@@ -67,99 +61,6 @@
     const operation = profileMutationQueue.then(task)
     profileMutationQueue = operation.catch(() => {})
     return operation
-  }
-
-  function flushPendingProfiles(expectedLearner, generation = profileGenerationByLearner.get(expectedLearner)) {
-    const variantId = variantIdsByLearner.get(expectedLearner)
-    const pendingProfiles = pendingProfilesByLearner.get(expectedLearner)
-    const retryStates = profileRetryStateByLearner.get(expectedLearner)
-    const currentKeyGeneration = generation?.key
-      ? profileGenerationByKey.get(generation.key)
-      : generation
-    if (
-      generation !== profileGenerationByLearner.get(expectedLearner)
-      || generation !== currentKeyGeneration
-      || !variantId
-      || !pendingProfiles
-      || expectedLearner === resettingLearner
-    ) return
-    const now = Date.now()
-    for (const [gear, profile] of pendingProfiles) {
-      if (generation.latestProfiles.get(gear) !== profile) {
-        pendingProfiles.delete(gear)
-        retryStates?.delete(gear)
-        continue
-      }
-      const retry = retryStates?.get(gear) || { attempts: 0, nextAt: 0, inFlight: false, profile }
-      if (retry.inFlight || now < retry.nextAt) continue
-      retry.inFlight = true
-      retry.profile = profile
-      retryStates?.set(gear, retry)
-      enqueueProfileMutation(async () => {
-        if (
-          expectedLearner === resettingLearner
-          || generation !== profileGenerationByLearner.get(expectedLearner)
-          || generation !== profileGenerationByKey.get(generation?.key)
-        ) return false
-        const learnerVariantId = variantIdsByLearner.get(expectedLearner)
-        if (!learnerVariantId || pendingProfiles.get(gear) !== profile
-          || generation.latestProfiles.get(gear) !== profile) return false
-        await invokeCommand('save_shift_light_config_profile', {
-          configId: learnerVariantId,
-          profile
-        })
-        return true
-      }).then(saved => {
-        const current = retryStates?.get(gear)
-        if (!current || current.profile !== profile) return
-        current.inFlight = false
-        if (saved && pendingProfiles.get(gear) === profile) {
-          pendingProfiles.delete(gear)
-          retryStates.delete(gear)
-          return
-        }
-        flushPendingProfiles(expectedLearner, generation)
-      }).catch(() => {
-        const current = retryStates?.get(gear)
-        if (!current || current.profile !== profile) return
-        current.inFlight = false
-        current.attempts += 1
-        const delay = Math.min(
-          PROFILE_RETRY_MAX_MS,
-          PROFILE_RETRY_BASE_MS * (2 ** Math.min(current.attempts - 1, 4))
-        )
-        current.nextAt = Date.now() + delay
-        publishPersistenceError(new Error('Unable to save Shift Light calibration to the database'))
-        const timer = setTimeout(() => flushPendingProfiles(expectedLearner, generation), delay)
-        timer.unref?.()
-      })
-    }
-  }
-
-  function persistProfile(profile, expectedLearner) {
-    if (!profile || expectedLearner !== learner || expectedLearner === resettingLearner) return
-    let pendingProfiles = pendingProfilesByLearner.get(expectedLearner)
-    if (!pendingProfiles) {
-      pendingProfiles = new Map()
-      pendingProfilesByLearner.set(expectedLearner, pendingProfiles)
-    }
-    let retryStates = profileRetryStateByLearner.get(expectedLearner)
-    if (!retryStates) {
-      retryStates = new Map()
-      profileRetryStateByLearner.set(expectedLearner, retryStates)
-    }
-    const retry = retryStates.get(profile.gear)
-    if (!retry) {
-      retryStates.set(profile.gear, {
-        attempts: 0,
-        nextAt: 0,
-        inFlight: false,
-        profile
-      })
-    }
-    pendingProfiles.set(profile.gear, profile)
-    profileGenerationByLearner.get(expectedLearner).latestProfiles.set(profile.gear, profile)
-    flushPendingProfiles(expectedLearner)
   }
 
   function publishPersistenceError(error) {
@@ -202,11 +103,6 @@
   }
 
   function createLearner(key) {
-    let generation = profileGenerationByKey.get(key)
-    if (!generation) {
-      generation = { key, latestProfiles: new Map() }
-      profileGenerationByKey.set(key, generation)
-    }
     const localLearner = new globalScope.HudShiftLight.ShiftLightLearner(key, {
       // The new learner state is the only persistence contract. Legacy
       // profile callbacks are intentionally not wired: they would recreate
@@ -217,11 +113,8 @@
     learner = localLearner
     currentKey = key
     variantIdsByLearner.set(localLearner, null)
-    pendingProfilesByLearner.set(localLearner, new Map())
-    profileRetryStateByLearner.set(localLearner, new Map())
     pendingLearningStateByLearner.set(localLearner, null)
     learningStateRetryByLearner.set(localLearner, { attempts: 0 })
-    profileGenerationByLearner.set(localLearner, generation)
     latestState = localLearner.snapshot(latestTelemetry)
     publish(latestState)
   }
@@ -264,7 +157,6 @@
         }
       }
       publish(expectedLearner.snapshot(latestTelemetry))
-      flushPendingProfiles(expectedLearner)
       flushLearningState(expectedLearner)
     })
       .catch(() => {
@@ -296,7 +188,6 @@
     if (key !== currentKey || !learner) createLearner(key)
     const state = learner.update(telemetry)
     resolveConfiguration(key, learner, state.observedGearCount)
-    flushPendingProfiles(learner)
     flushLearningState(learner)
     return publish(state)
   }
@@ -323,9 +214,6 @@
         const configId = variantIdsByLearner.get(currentLearner) || null
         if (!configId) throw new Error('The calibration database is not available yet')
         await invokeCommand('clear_shift_light_config', { configId })
-        const nextGeneration = { key, latestProfiles: new Map() }
-        profileGenerationByKey.set(key, nextGeneration)
-        profileGenerationByLearner.set(currentLearner, nextGeneration)
       })
     } catch (error) {
       if (resettingLearner === currentLearner) resettingLearner = null
@@ -350,10 +238,7 @@
 
     loadGeneration += 1
     currentLearner.reset()
-    const pendingProfiles = pendingProfilesByLearner.get(currentLearner)
-    pendingProfiles?.clear()
     pendingLearningStateByLearner.delete(currentLearner)
-    profileRetryStateByLearner.get(currentLearner)?.clear()
     publish({ ...currentLearner.snapshot(latestTelemetry), phase: 'normal' })
     if (resettingLearner === currentLearner) resettingLearner = null
     return publishResetResult({ ok: true, carKey: key })

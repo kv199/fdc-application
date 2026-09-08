@@ -143,12 +143,13 @@ configuration are the current Garage state while FDC receives live telemetry;
 after a restart, the saved snapshot displays the last observed state until a new
 sample arrives.
 
-The migration creates these tables transactionally and leaves existing Shift
-Light tables and profiles intact.
+The migration creates these tables transactionally and leaves current Shift
+Light configurations and learning facts intact.
 
-Garage snapshots query `shift_light_variants` and `shift_light_profiles` to
-attach the Shift Light summary by car ordinal and PI. A drivetrain change does
-not alter any Shift Light key, table, or stored calibration.
+Garage snapshots query `shift_light_configs` and `shift_light_gear_learning`
+to attach the Shift Light summary by car ordinal, PI, drivetrain, and cylinder
+count. Retired Shift Light variant/profile tables are not part of the Garage
+contract.
 
 ## Native commands
 

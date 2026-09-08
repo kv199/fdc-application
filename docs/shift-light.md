@@ -119,6 +119,19 @@ in-progress pull is deliberately transient. All completed power data, candidate
 counts, confirmed targets, and ceiling samples survive application restart and
 switching away from and back to a car.
 
+The current persistence contract contains exactly five Shift Light tables:
+
+- `shift_light_configs` owns stable vehicle/configuration identities;
+- `shift_light_learning_state` is the canonical versioned learner JSON;
+- `shift_light_gear_learning` materializes per-gear state;
+- `shift_light_power_bins` materializes bounded WOT power bins;
+- `shift_light_shift_evidence` materializes completed shift decisions.
+
+Schema version 14 removes the retired car/variant/profile tables and their
+obsolete Tauri commands. The migration preserves all five current Shift Light
+tables and their rows, together with Garage and Events data. A newly created
+database never creates the retired tables.
+
 The state carries an internal learning-model version. FDC loads only a
 compatible version, preventing a later learner from silently interpreting old
 facts under changed rules. Database writes are transactional and retry after a
