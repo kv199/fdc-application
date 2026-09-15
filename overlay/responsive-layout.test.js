@@ -25,6 +25,6 @@ test('HUD frame and Delta keep responsive width while Delta has its own scale', 
   assert.match(overlayCss, /bottom:\s*calc\(38px \+ 69px \* var\(--hud-scale\)\)/)
 
   const layoutSource = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
-  assert.match(layoutSource, /elements\.delta\.style\.setProperty\('--delta-user-scale'/)
+  assert.match(layoutSource, /if \(name === 'delta'\) elements\.delta\.style\.setProperty\('--delta-user-scale'/)
   assert.doesNotMatch(layoutSource, /elements\.delta\.style\.width =/)
 })

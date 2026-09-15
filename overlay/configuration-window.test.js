@@ -226,6 +226,23 @@ test('Engine visibility is part of the safe HUD component contract', () => {
   assert.match(tauriMain, /"tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
 })
 
+test('HUD layout exposes grouped and freeform modes with independent widget controls', () => {
+  assert.match(settingsHtml, /role="radiogroup"[^>]+aria-labelledby="hud-layout-mode-title"/)
+  assert.match(settingsHtml, /data-layout-mode="grouped" checked/)
+  assert.match(settingsHtml, /data-layout-mode="freeform"/)
+
+  for (const component of ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']) {
+    assert.match(settingsHtml, new RegExp(`data-layout-target="${component}"`, 'u'))
+    assert.match(settingsHtml, new RegExp(`data-hud-toggle="${component}"`, 'u'))
+  }
+
+  assert.match(settingsJs, /const LAYOUT_MODE_STORAGE_KEY = 'fdc\.layout-mode\.v1'/)
+  assert.match(settingsJs, /call\('set_layout_mode', \{ mode: nextMode \}\)/)
+  assert.match(settingsJs, /call\('layout_action', \{ action: 'cancel', target: editingTarget \}\)/)
+  assert.match(tauriMain, /fn set_layout_mode\(app: AppHandle, mode: String\)/)
+  assert.match(tauriMain, /"coach" \| "delta" \| "hud" \| "tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
+})
+
 test('telemetry status stays separate and right-aligned above the setup card', () => {
   const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
   const telemetryStatusIndex = settingsHtml.indexOf('id="telemetry-status"')

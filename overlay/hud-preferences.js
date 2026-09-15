@@ -101,9 +101,12 @@
       const hasVisibleContent = visibleColumns.length > 0
       hud.hidden = !hasVisibleContent
       hudFrame.hidden = !telemetryVisible || !overlayState.hud || !hasVisibleContent
-      if (hasVisibleContent) {
+      if (hasVisibleContent && globalScope.HudLayout?.getMode?.() !== 'freeform') {
         hud.style.gridTemplateColumns = visibleColumns.join(' ')
         hud.style.width = `${visibleColumns.reduce((total, column) => total + Number.parseFloat(column), 0)}px`
+      } else if (globalScope.HudLayout?.getMode?.() === 'freeform') {
+        hud.style.gridTemplateColumns = ''
+        hud.style.width = ''
       }
       saveState(state)
       saveOverlayState(overlayState)
@@ -132,6 +135,8 @@
         if (!COMPONENTS.includes(name)) return
         apply({ ...state, [name]: visible === true })
       },
+      getLayoutMode: () => globalScope.HudLayout?.getMode?.() || 'grouped',
+      setLayoutMode: mode => globalScope.HudLayout?.setMode?.(mode),
       setOverlayVisibility: (name, visible) => {
         if (!OVERLAY_COMPONENTS.includes(name)) return
         overlayState = {

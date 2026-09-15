@@ -70,6 +70,34 @@
         </div>
       </section>
 
+      <section class="hud-layout-mode" aria-labelledby="hud-layout-mode-title">
+        <div class="settings-section__heading">
+          <div>
+            <h2 id="hud-layout-mode-title">HUD LAYOUT</h2>
+            <span>TELEMETRY ARRANGEMENT</span>
+          </div>
+          <button class="visibility-toggle" type="button" data-overlay-toggle="hud" aria-label="Toggle Telemetry HUD" aria-pressed="true">
+            <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+          </button>
+        </div>
+        <div class="hud-layout-mode__options" role="radiogroup" aria-labelledby="hud-layout-mode-title">
+          <label class="hud-layout-mode__option">
+            <input type="radio" name="hud-layout-mode" value="grouped" data-layout-mode="grouped" checked>
+            <span>
+              <strong>GROUPED</strong>
+              <small>Keep telemetry blocks in one panel.</small>
+            </span>
+          </label>
+          <label class="hud-layout-mode__option">
+            <input type="radio" name="hud-layout-mode" value="freeform" data-layout-mode="freeform">
+            <span>
+              <strong>FREEFORM</strong>
+              <small>Move and resize each block independently.</small>
+            </span>
+          </label>
+        </div>
+      </section>
+
       <div class="layout-list">
         <article class="layout-row" data-layout-target="coach">
           <div class="layout-row__content">
@@ -99,7 +127,7 @@
           </div>
         </article>
 
-        <article class="layout-row layout-row--accordion" data-layout-target="hud">
+        <article class="layout-row layout-row--accordion" data-layout-target="hud" data-grouped-layout-row>
           <div class="layout-row__header">
             <button class="layout-row__expand" type="button" data-accordion-toggle="hud" aria-expanded="false" aria-controls="hud-content-panel">
               <span class="layout-row__content">
@@ -111,9 +139,6 @@
             <div class="layout-row__actions">
               <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
               <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
-              <button class="visibility-toggle" type="button" data-overlay-toggle="hud" aria-label="Toggle Telemetry HUD" aria-pressed="true">
-                <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
-              </button>
             </div>
           </div>
 
@@ -167,6 +192,87 @@
                 <input type="checkbox" data-hud-component="history">
               </label>
             </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="layout-list layout-list--freeform" data-freeform-layout-list hidden>
+        <article class="layout-row" data-layout-target="tires">
+          <div class="layout-row__content">
+            <h3>Tires</h3>
+            <p>Move and resize tire temperatures independently.</p>
+          </div>
+          <div class="layout-row__actions">
+            <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
+            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="visibility-toggle" type="button" data-hud-toggle="tires" aria-label="Toggle Tires" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
+          </div>
+        </article>
+        <article class="layout-row" data-layout-target="pedals">
+          <div class="layout-row__content">
+            <h3>Throttle &amp; Brake</h3>
+            <p>Move and resize pedal input meters independently.</p>
+          </div>
+          <div class="layout-row__actions">
+            <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
+            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="visibility-toggle" type="button" data-hud-toggle="pedals" aria-label="Toggle Throttle and Brake" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
+          </div>
+        </article>
+        <article class="layout-row" data-layout-target="steering">
+          <div class="layout-row__content">
+            <h3>Steering</h3>
+            <p>Move and resize the steering indicator independently.</p>
+          </div>
+          <div class="layout-row__actions">
+            <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
+            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="visibility-toggle" type="button" data-hud-toggle="steering" aria-label="Toggle Steering" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
+          </div>
+        </article>
+        <article class="layout-row" data-layout-target="gear">
+          <div class="layout-row__content">
+            <h3>Gear / Speed / RPM</h3>
+            <p>Move and resize drivetrain and speed data independently.</p>
+          </div>
+          <div class="layout-row__actions">
+            <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
+            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="visibility-toggle" type="button" data-hud-toggle="gear" aria-label="Toggle Gear, Speed and RPM" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
+          </div>
+        </article>
+        <article class="layout-row" data-layout-target="engine">
+          <div class="layout-row__content">
+            <h3>Engine / Boost</h3>
+            <p>Move and resize boost, power and torque data independently.</p>
+          </div>
+          <div class="layout-row__actions">
+            <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
+            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="visibility-toggle" type="button" data-hud-toggle="engine" aria-label="Toggle Engine and Boost" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
+          </div>
+        </article>
+        <article class="layout-row" data-layout-target="history">
+          <div class="layout-row__content">
+            <h3>Input Graph</h3>
+            <p>Move and resize throttle and brake history independently.</p>
+          </div>
+          <div class="layout-row__actions">
+            <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
+            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="visibility-toggle" type="button" data-hud-toggle="history" aria-label="Toggle Input Graph" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
           </div>
         </article>
       </div>

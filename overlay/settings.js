@@ -4,9 +4,21 @@
   const VISIBILITY_STORAGE_KEY = 'fdc.hud-visibility.v1'
   const OVERLAY_VISIBILITY_STORAGE_KEY = 'fdc.overlay-visibility.v1'
   const EVENTS_SORT_STORAGE_KEY = 'fdc.events-sort.v1'
+  const LAYOUT_MODE_STORAGE_KEY = 'fdc.layout-mode.v1'
   const EVENT_SORT_OPTIONS = ['id-desc', 'id-asc', 'last-recorded-desc', 'last-recorded-asc']
   const COMPONENTS = ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']
   const OVERLAY_COMPONENTS = ['coach', 'delta', 'hud']
+  const LAYOUT_TARGET_LABELS = Object.freeze({
+    coach: 'DRIVER COACH',
+    delta: 'DELTA',
+    hud: 'HUD',
+    tires: 'TIRES',
+    pedals: 'THROTTLE & BRAKE',
+    steering: 'STEERING',
+    gear: 'GEAR / SPEED / RPM',
+    engine: 'ENGINE / BOOST',
+    history: 'INPUT GRAPH'
+  })
   const DEFAULT_VISIBILITY = COMPONENTS.reduce((state, name) => {
     state[name] = true
     return state
@@ -52,6 +64,9 @@
   const hudOpacity = document.getElementById('hud-opacity')
   const hudOpacityValue = document.getElementById('hud-opacity-value')
   const hudOpacityReset = document.getElementById('hud-opacity-reset')
+  const layoutModeInputs = [...document.querySelectorAll('[data-layout-mode]')]
+  const groupedLayoutRow = document.querySelector('[data-grouped-layout-row]')
+  const freeformLayoutList = document.querySelector('[data-freeform-layout-list]')
   const displayPreferenceRows = [...document.querySelectorAll('[data-display-preference]')]
   const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
   const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
@@ -123,6 +138,7 @@
   let expandedEventRunLap = null
   let eventsSortValue = 'id-desc'
   let editingTarget = null
+  let layoutMode = 'grouped'
   let shiftLightResetPending = false
   let displayPreferencesPending = false
   let displayPreferences = displayPreferencesApi?.read?.() || {
@@ -1897,6 +1913,15 @@
     button.dataset.state = visible ? 'on' : 'off'
   }
 
+  function renderHudComponentVisibility(component, visible) {
+    for (const input of document.querySelectorAll('[data-hud-component]')) {
+      if (input.dataset.hudComponent === component) input.checked = visible
+    }
+    for (const button of document.querySelectorAll('[data-hud-toggle]')) {
+      if (button.dataset.hudToggle === component) updateOverlayToggle(button, visible)
+    }
+  }
+
   function renderRouteStatus(rawStatus) {
     const nextStatus = globalScope.HudTelemetryRoute?.normalizeRouteStatus?.(rawStatus)
     if (!nextStatus || nextStatus.revision < latestRouteRevision) return
@@ -2116,6 +2141,55 @@
     await call('sync_route_status')
   }
 
+  function normalizeLayoutMode(value) {
+    return value === 'freeform' ? 'freeform' : 'grouped'
+  }
+
+  function readLayoutMode() {
+    try {
+      return normalizeLayoutMode(localStorage.getItem(LAYOUT_MODE_STORAGE_KEY))
+    } catch {
+      return 'grouped'
+    }
+  }
+
+  function persistLayoutMode(mode) {
+    try {
+      localStorage.setItem(LAYOUT_MODE_STORAGE_KEY, mode)
+    } catch {
+      // A restricted webview may not expose persistent storage.
+    }
+  }
+
+  function renderLayoutMode(mode) {
+    layoutMode = normalizeLayoutMode(mode)
+    for (const input of layoutModeInputs) input.checked = input.value === layoutMode
+    if (groupedLayoutRow) groupedLayoutRow.hidden = layoutMode !== 'grouped'
+    if (freeformLayoutList) freeformLayoutList.hidden = layoutMode !== 'freeform'
+    updateLayoutRows()
+  }
+
+  async function selectLayoutMode(mode) {
+    const nextMode = normalizeLayoutMode(mode)
+    if (nextMode === layoutMode) return
+    const previousMode = layoutMode
+
+    try {
+      if (editingTarget) {
+        await call('layout_action', { action: 'cancel', target: editingTarget })
+        editingTarget = null
+        updateLayoutRows()
+      }
+      await call('set_layout_mode', { mode: nextMode })
+      persistLayoutMode(nextMode)
+      renderLayoutMode(nextMode)
+      setStatus(`${nextMode.toUpperCase()} HUD LAYOUT ENABLED`)
+    } catch (error) {
+      renderLayoutMode(previousMode)
+      setStatus(error.message || 'Unable to change HUD layout mode', true)
+    }
+  }
+
   function updateLayoutRows() {
     for (const row of document.querySelectorAll('[data-layout-target]')) {
       const target = row.dataset.layoutTarget
@@ -2138,7 +2212,7 @@
       updateLayoutRows()
       setStatus(target === 'hud'
         ? 'EDITING HUD — DRAG IT OR A CORNER TO RESIZE'
-        : `EDITING ${target.toUpperCase()} — DRAG IT IN THE HUD`)
+        : `EDITING ${LAYOUT_TARGET_LABELS[target] || target.toUpperCase()} — DRAG IT IN THE HUD`)
     } catch (error) {
       setStatus(error.message || 'Unable to enter edit mode', true)
     }
@@ -2163,14 +2237,14 @@
   }
 
   function setLayoutEditingState(target, isEditing) {
-    if (!['coach', 'delta', 'hud'].includes(target)) return
+    if (!Object.hasOwn(LAYOUT_TARGET_LABELS, target)) return
 
     if (isEditing) {
       editingTarget = target
       updateLayoutRows()
       setStatus(target === 'hud'
         ? 'EDITING HUD - DRAG IT OR A CORNER TO RESIZE'
-        : `EDITING ${target.toUpperCase()} - DRAG IT IN THE HUD`)
+        : `EDITING ${LAYOUT_TARGET_LABELS[target] || target.toUpperCase()} - DRAG IT IN THE HUD`)
       return
     }
 
@@ -2233,6 +2307,14 @@
       nextTab.focus()
     })
   }
+  layoutMode = readLayoutMode()
+  renderLayoutMode(layoutMode)
+  for (const input of layoutModeInputs) {
+    input.addEventListener('change', () => {
+      if (input.checked) void selectLayoutMode(input.value)
+    })
+  }
+  void call('set_layout_mode', { mode: layoutMode }).catch(() => undefined)
   selectSettingsTab('hud')
   void loadAppVersion()
 
@@ -2268,21 +2350,34 @@
   })
 
   const visibility = readVisibility()
-  for (const input of document.querySelectorAll('[data-hud-component]')) {
-    const component = input.dataset.hudComponent
-    input.checked = visibility[component] !== false
-    input.addEventListener('change', async () => {
-      visibility[component] = input.checked
+  async function setHudComponentVisibility(component, visible) {
+    const previous = visibility[component] !== false
+    visibility[component] = visible
+    renderHudComponentVisibility(component, visible)
+    saveVisibility(visibility)
+    try {
+      await call('set_hud_visibility', { component, visible })
+      setStatus(`${component.toUpperCase()} ${visible ? 'ENABLED' : 'HIDDEN'}`)
+    } catch (error) {
+      visibility[component] = previous
+      renderHudComponentVisibility(component, previous)
       saveVisibility(visibility)
-      try {
-        await call('set_hud_visibility', { component, visible: input.checked })
-        setStatus(`${component.toUpperCase()} ${input.checked ? 'ENABLED' : 'HIDDEN'}`)
-      } catch (error) {
-        input.checked = !input.checked
-        visibility[component] = input.checked
-        saveVisibility(visibility)
-        setStatus(error.message || 'Unable to update HUD visibility', true)
-      }
+      setStatus(error.message || 'Unable to update HUD visibility', true)
+    }
+  }
+
+  for (const component of COMPONENTS) {
+    renderHudComponentVisibility(component, visibility[component] !== false)
+  }
+  for (const input of document.querySelectorAll('[data-hud-component]')) {
+    input.addEventListener('change', () => {
+      void setHudComponentVisibility(input.dataset.hudComponent, input.checked)
+    })
+  }
+  for (const button of document.querySelectorAll('[data-hud-toggle]')) {
+    button.addEventListener('click', () => {
+      const component = button.dataset.hudToggle
+      void setHudComponentVisibility(component, visibility[component] === false)
     })
   }
 
@@ -2414,6 +2509,7 @@
   globalScope.SettingsController = {
     cancelEdit,
     setLayoutEditingState,
+    setLayoutMode: renderLayoutMode,
     setRouteStatus: renderRouteStatus,
     resetShiftLight: requestShiftLightReset,
     loadEvents,

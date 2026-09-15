@@ -821,8 +821,48 @@ body.is-editing .coachbar {
 }
 
 .hud-frame.is-editing .layout-resize-handle,
-.delta-strip.is-editing .layout-resize-handle {
+.delta-strip.is-editing .layout-resize-handle,
+.hud-freeform-widget.is-editing .layout-resize-handle {
   display: block;
+}
+
+/* Freeform keeps the same 69px semantic blocks and responsive HUD scale,
+   while each block becomes an independently positioned surface. */
+.hud[data-layout-mode='freeform'] {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  overflow: visible;
+  background: transparent;
+  transform: none;
+}
+
+.hud[data-layout-mode='freeform'] > section.hud-freeform-widget {
+  position: absolute;
+  width: var(--hud-widget-width, 72px);
+  height: 69px;
+  min-width: 0;
+  background: var(--panel);
+  transform: scale(calc(var(--hud-scale) * var(--hud-widget-scale, 1)));
+  transform-origin: top left;
+}
+
+.hud[data-layout-mode='freeform'] > section.hud-freeform-widget.layout-positioned {
+  transform: scale(calc(var(--hud-scale) * var(--hud-widget-scale, 1))) !important;
+}
+
+.hud[data-layout-mode='freeform'] > section.hud-freeform-widget.is-editing {
+  z-index: 7;
+  pointer-events: auto;
+  outline: 2px dashed rgb(251 191 36 / 80%);
+  outline-offset: 5px;
+  cursor: grab;
+}
+
+.hud[data-layout-mode='freeform'] > section.hud-freeform-widget.is-editing:active {
+  cursor: grabbing;
 }
 
 .layout-resize-handle--top-left {

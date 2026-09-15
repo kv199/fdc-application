@@ -11,9 +11,10 @@ const storageSources = [
   'settings.js'
 ].map(file => fs.readFileSync(path.join(__dirname, file), 'utf8')).join('\n')
 
-test('FDC uses only fresh v1 browser storage keys', () => {
+test('FDC uses only current versioned browser storage keys', () => {
   for (const key of [
-    'fdc.layout.v1',
+    'fdc.layout.v2',
+    'fdc.layout-mode.v1',
     'fdc.display-preferences.v1',
     'fdc.hud-visibility.v1',
     'fdc.overlay-visibility.v1'

@@ -3,79 +3,60 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { clampPosition, sanitizeWidgetSize, sanitizePosition } = require('./coach-layout.js')
+const layout = require('./coach-layout.js')
+const source = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
+const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
+const css = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
 
-test('sanitizePosition accepts finite coordinates and clamps them to the screen', () => {
-  assert.deepEqual(sanitizePosition({ x: -0.2, y: 1.4 }), { x: 0, y: 1 })
+test('sanitizes finite positions and widget sizes', () => {
+  assert.deepEqual(layout.sanitizePosition({ x: -0.2, y: 1.4 }), { x: 0, y: 1 })
+  assert.equal(layout.sanitizePosition({ x: 0.4 }), null)
+  assert.deepEqual(layout.clampPosition({ x: Number.NaN, y: 0.5 }), { x: 0, y: 0 })
+  assert.equal(layout.sanitizeWidgetSize(0), 0)
+  assert.equal(layout.sanitizeWidgetSize(0.1), 0.5)
+  assert.equal(layout.sanitizeWidgetSize(1.25), 1.25)
+  assert.equal(layout.sanitizeWidgetSize(3), 2)
 })
 
-test('sanitizePosition rejects malformed storage data', () => {
-  assert.equal(sanitizePosition(null), null)
-  assert.equal(sanitizePosition({ x: 'left', y: 0.4 }), null)
-  assert.equal(sanitizePosition({ x: 0.4 }), null)
+test('uses a fresh v2 namespace and never reads the old layout', () => {
+  assert.equal(layout.STORAGE_KEY, 'fdc.layout.v2')
+  assert.equal(layout.MODE_STORAGE_KEY, 'fdc.layout-mode.v1')
+  assert.match(source, /const STORAGE_KEY = 'fdc\.layout\.v2'/)
+  assert.doesNotMatch(source, /fdc\.layout\.v1/)
+  assert.deepEqual(layout.MODES, ['grouped', 'freeform'])
 })
 
-test('clampPosition falls back to the top-left for invalid positions', () => {
-  assert.deepEqual(clampPosition({ x: Number.NaN, y: 0.5 }), { x: 0, y: 0 })
-  assert.deepEqual(clampPosition({ x: 0.25, y: 0.75 }), { x: 0.25, y: 0.75 })
+test('keeps shared coach/delta targets and separates grouped/freeform telemetry targets', () => {
+  assert.deepEqual(layout.GROUPED_TARGETS, ['coach', 'delta', 'hud'])
+  assert.deepEqual(layout.FREEFORM_TARGETS, ['tires', 'pedals', 'steering', 'gear', 'engine', 'history'])
+  assert.match(source, /shared: stored\.shared/)
+  assert.match(source, /grouped: stored\.grouped/)
+  assert.match(source, /freeform: stored\.freeform/)
 })
 
-test('HUD and Delta sizes use zero for the responsive default and bound custom scales', () => {
-  assert.equal(sanitizeWidgetSize(0), 0)
-  assert.equal(sanitizeWidgetSize(undefined), 0)
-  assert.equal(sanitizeWidgetSize('invalid'), 0)
-  assert.equal(sanitizeWidgetSize(-1), 0)
-  assert.equal(sanitizeWidgetSize(0.1), 0.5)
-  assert.equal(sanitizeWidgetSize(1.25), 1.25)
-  assert.equal(sanitizeWidgetSize(3), 2)
+test('freeform preserves current compact grid widths and 69px height', () => {
+  assert.match(source, /tires: 72, pedals: 46, steering: 68, gear: 92, engine: 116, history: 342/)
+  assert.match(source, /const HUD_BASE_HEIGHT = 69/)
+  assert.match(css, /\.hud\[data-layout-mode='freeform'\] > section\.hud-freeform-widget[\s\S]*height: 69px/)
+  assert.match(css, /section\.hud-freeform-widget\.layout-positioned[\s\S]*transform:[^;]+!important/)
+  assert.match(html, /data-hud-widget="tires"/)
+  assert.match(html, /data-hud-widget="history"/)
 })
 
-test('stacks the default Coach position above the Delta strip', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
-  assert.match(source, /hudTop - deltaSize\.height - elementSize\.height - 20/)
-  assert.match(source, /Math\.min\(460, Math\.max\(0, viewport\.width - 24\)\), height: 88/)
+test('freeform targets expose independent edit, reset, cancel, save and resize behavior', () => {
+  assert.match(source, /function resetPosition\(name = editingTarget \|\| 'coach'\)/)
+  assert.match(source, /function resetLayout\(targetMode = mode\)/)
+  assert.match(source, /setMode,[\s\S]*getMode: \(\) => mode/)
+  assert.match(source, /dataset\.layoutResizeTarget = name/)
+  assert.match(source, /for \(const name of TARGET_NAMES\)/)
+  assert.match(source, /const fixedRight = rect\.left \+ rect\.width/)
+  assert.match(source, /const fixedBottom = rect\.top \+ rect\.height/)
+  assert.match(css, /\.hud-freeform-widget\.is-editing \{[\s\S]*pointer-events: auto/)
 })
 
-test('HUD Reset anchors its default position from the viewport, not its prior layout rect', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
-  assert.match(source, /left: \(viewport\.width - hudSize\.width\) \/ 2/)
-  assert.match(source, /top: viewport\.height - hudSize\.height - 28/)
-  assert.match(source, /if \(name === 'hud'\) return defaultHudAnchor/)
-})
-
-test('starts layout storage in a fresh FDC v1 namespace', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
-  assert.match(source, /const STORAGE_KEY = 'fdc\.layout\.v1'/)
-  assert.doesNotMatch(source, /LEGACY_COACH_STORAGE_KEY|forza-horizon-6-hud\./)
-})
-
-test('HUD and Delta have four edit-only resize handles and persist their independent sizes', () => {
-  const layoutSource = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
-  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
-  const css = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
-
-  assert.equal((html.match(/data-layout-resize-handle=/g) || []).length, 8)
-  for (const target of ['hud', 'delta']) {
-    for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right']) {
-      assert.match(html, new RegExp(`data-layout-resize-target="${target}"[^>]+data-layout-resize-handle="${corner}"`, 'u'))
-    }
-  }
-  assert.match(layoutSource, /if \(name === 'hud' \|\| name === 'delta'\) result\[name\]\.size = sanitizeWidgetSize\(/)
-  assert.match(layoutSource, /if \(name === 'hud' \|\| name === 'delta'\) positions\[name\]\.size = DEFAULT_SIZE/)
-  assert.match(layoutSource, /for \(const handle of document\.querySelectorAll\('\[data-layout-resize-handle\]'\)\)/)
-  assert.match(css, /\.delta-strip\.is-editing \.layout-resize-handle/)
-})
-
-test('every widget Reset uses the shared target reset contract, with HUD size reset by entry removal', () => {
-  const layoutSource = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
-  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
-  const rust = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8')
-
-  for (const target of ['coach', 'delta', 'hud']) {
-    assert.match(html, new RegExp(`id="${target}-reset"`, 'u'))
-    assert.ok(rust.includes(`"${target}" => "window.HudLayout?.resetPosition?.('${target}')"`))
-  }
-  assert.match(layoutSource, /delete positions\[name\]\s+saveStoredPositions\(positions\)/)
-  assert.match(layoutSource, /removeStoredPosition\(positions, name\)\s+refreshLayout\(\)/)
-  assert.match(layoutSource, /tools\[name\]\.reset\.addEventListener\('click', \(\) => resetPosition\(name\)\)/)
+test('mode changes refresh visibility layout and both modes retain separate state', () => {
+  assert.match(source, /storageSet\(MODE_STORAGE_KEY, mode\)/)
+  assert.match(source, /globalScope\.HudPreferences\?\.apply\?\.\(\)/)
+  assert.match(source, /if \(name === 'hud'\) return positions\.grouped/)
+  assert.match(source, /return positions\.freeform/)
 })

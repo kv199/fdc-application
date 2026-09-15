@@ -1622,6 +1622,70 @@ h1 {
   background: rgb(8 10 12 / 68%);
 }
 
+.layout-list[hidden],
+.layout-row[hidden] {
+  display: none;
+}
+
+.hud-layout-mode {
+  margin: 24px 0 16px;
+}
+
+.hud-layout-mode__options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.hud-layout-mode__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid rgb(226 232 240 / 18%);
+  border-radius: 4px;
+  background: rgb(8 10 12 / 68%);
+  cursor: pointer;
+}
+
+.hud-layout-mode__option:has(input:checked) {
+  border-color: rgb(105 232 63 / 58%);
+  background: rgb(105 232 63 / 8%);
+}
+
+.hud-layout-mode__option:focus-within {
+  outline: 1px solid rgb(105 232 63 / 70%);
+  outline-offset: 2px;
+}
+
+.hud-layout-mode__option input {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  accent-color: #69e83f;
+}
+
+.hud-layout-mode__option strong,
+.hud-layout-mode__option small {
+  display: block;
+}
+
+.hud-layout-mode__option strong {
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.hud-layout-mode__option small {
+  margin-top: 5px;
+  color: #71717a;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .layout-row,
 .visibility-row {
   display: flex;
@@ -1629,6 +1693,10 @@ h1 {
   justify-content: space-between;
   gap: 18px;
   padding: 15px 16px;
+}
+
+.layout-list--freeform {
+  margin-top: 12px;
 }
 
 .layout-row__content {

@@ -2997,9 +2997,16 @@ fn set_window_edit_mode(app: AppHandle, enabled: bool) -> tauri::Result<()> {
     set_window_interaction(&window, enabled)
 }
 
+fn is_valid_layout_target(target: &str) -> bool {
+    matches!(
+        target,
+        "coach" | "delta" | "hud" | "tires" | "pedals" | "steering" | "gear" | "engine" | "history"
+    )
+}
+
 #[tauri::command]
 fn notify_layout_state(app: AppHandle, target: String, editing: bool) -> Result<(), String> {
-    if !["coach", "delta", "hud"].contains(&target.as_str()) {
+    if !is_valid_layout_target(&target) {
         return Err("unknown layout target".to_string());
     }
 
@@ -3018,7 +3025,7 @@ fn notify_layout_state(app: AppHandle, target: String, editing: bool) -> Result<
 
 #[tauri::command]
 fn layout_action(app: AppHandle, action: String, target: String) -> Result<(), String> {
-    if !["coach", "delta", "hud"].contains(&target.as_str()) {
+    if !is_valid_layout_target(&target) {
         return Err("unknown layout target".to_string());
     }
 
@@ -3027,6 +3034,12 @@ fn layout_action(app: AppHandle, action: String, target: String) -> Result<(), S
             "coach" => "window.HudLayout?.enterEditMode?.('coach')",
             "delta" => "window.HudLayout?.enterEditMode?.('delta')",
             "hud" => "window.HudLayout?.enterEditMode?.('hud')",
+            "tires" => "window.HudLayout?.enterEditMode?.('tires')",
+            "pedals" => "window.HudLayout?.enterEditMode?.('pedals')",
+            "steering" => "window.HudLayout?.enterEditMode?.('steering')",
+            "gear" => "window.HudLayout?.enterEditMode?.('gear')",
+            "engine" => "window.HudLayout?.enterEditMode?.('engine')",
+            "history" => "window.HudLayout?.enterEditMode?.('history')",
             _ => unreachable!(),
         },
         "save" => "window.HudLayout?.savePosition?.()",
@@ -3035,12 +3048,30 @@ fn layout_action(app: AppHandle, action: String, target: String) -> Result<(), S
             "coach" => "window.HudLayout?.resetPosition?.('coach')",
             "delta" => "window.HudLayout?.resetPosition?.('delta')",
             "hud" => "window.HudLayout?.resetPosition?.('hud')",
+            "tires" => "window.HudLayout?.resetPosition?.('tires')",
+            "pedals" => "window.HudLayout?.resetPosition?.('pedals')",
+            "steering" => "window.HudLayout?.resetPosition?.('steering')",
+            "gear" => "window.HudLayout?.resetPosition?.('gear')",
+            "engine" => "window.HudLayout?.resetPosition?.('engine')",
+            "history" => "window.HudLayout?.resetPosition?.('history')",
             _ => unreachable!(),
         },
         _ => return Err("unknown layout action".to_string()),
     };
 
     eval_main(&app, script)
+}
+
+#[tauri::command]
+fn set_layout_mode(app: AppHandle, mode: String) -> Result<(), String> {
+    let safe_mode = match mode.as_str() {
+        "grouped" | "freeform" => mode,
+        _ => return Err("unknown HUD layout mode".to_string()),
+    };
+    eval_main(
+        &app,
+        &format!("window.HudLayout?.setMode?.('{}')", safe_mode),
+    )
 }
 
 #[tauri::command]
@@ -3153,6 +3184,7 @@ fn main() {
             set_window_edit_mode,
             notify_layout_state,
             layout_action,
+            set_layout_mode,
             set_hud_visibility,
             set_overlay_visibility,
             set_display_preferences,
@@ -3301,6 +3333,19 @@ mod tests {
             x: None,
             y: None,
         }));
+    }
+
+    #[test]
+    fn layout_targets_cover_grouped_and_freeform_hud_widgets() {
+        for target in [
+            "coach", "delta", "hud", "tires", "pedals", "steering", "gear", "engine", "history",
+        ] {
+            assert!(
+                is_valid_layout_target(target),
+                "missing layout target: {target}"
+            );
+        }
+        assert!(!is_valid_layout_target("telemetry"));
     }
 
     #[test]

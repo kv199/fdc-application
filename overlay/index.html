@@ -49,7 +49,7 @@
     <div id="hud-frame" class="hud-frame">
       <div class="hud-visual">
         <main id="hud" class="hud is-waiting" aria-label="Forza telemetry overlay">
-          <section id="hud-tires" class="tires" aria-label="Tire temperatures">
+          <section id="hud-tires" class="tires" data-hud-widget="tires" aria-label="Tire temperatures">
             <output id="tire-fl" class="tire__temp" aria-label="Front-left tire temperature">--&deg;</output>
             <output id="tire-fr" class="tire__temp" aria-label="Front-right tire temperature">--&deg;</output>
             <span id="tire-shape-fl" class="tire" aria-hidden="true"></span>
@@ -60,7 +60,7 @@
             <output id="tire-rr" class="tire__temp" aria-label="Rear-right tire temperature">--&deg;</output>
           </section>
 
-          <section id="hud-pedals" class="pedals" aria-label="Pedal inputs">
+          <section id="hud-pedals" class="pedals" data-hud-widget="pedals" aria-label="Pedal inputs">
             <div class="pedal pedal--brake">
               <div id="brake-track" class="pedal__track" role="meter" aria-label="Brake input" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                 <div id="brake-fill" class="pedal__fill"></div>
@@ -74,17 +74,17 @@
             </div>
           </section>
 
-          <section id="hud-steering" class="steering" aria-label="Steering input">
+          <section id="hud-steering" class="steering" data-hud-widget="steering" aria-label="Steering input">
             <canvas id="steering-canvas" class="steering__canvas" width="112" height="112" aria-hidden="true"></canvas>
           </section>
 
-          <section id="hud-gear" class="gear" aria-label="Current gear">
+          <section id="hud-gear" class="gear" data-hud-widget="gear" aria-label="Current gear">
             <output id="speed-value" class="gear__speed">-- km/h</output>
             <output id="gear-value" class="gear__value">&mdash;</output>
             <output id="rpm-value" class="gear__rpm">-- RPM</output>
           </section>
 
-          <section id="hud-engine" class="engine" aria-label="Engine telemetry">
+          <section id="hud-engine" class="engine" data-hud-widget="engine" aria-label="Engine telemetry">
             <div class="engine__row">
               <span class="engine__label">BOOST</span>
               <output id="engine-boost" class="engine__value" aria-label="Boost pressure">&mdash;</output>
@@ -99,7 +99,7 @@
             </div>
           </section>
 
-          <section id="hud-history" class="history" aria-label="Throttle and brake history">
+          <section id="hud-history" class="history" data-hud-widget="history" aria-label="Throttle and brake history">
             <canvas id="history-canvas"></canvas>
           </section>
         </main>

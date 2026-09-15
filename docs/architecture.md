@@ -142,10 +142,14 @@ verification requirements are documented in [Shift Light](shift-light.md).
 Configuration is a local Tauri settings window rather than a second runtime
 telemetry path. It provides:
 
-- overlay target editing for the Coach card, Delta, and telemetry HUD; Delta
-  and HUD can be resized proportionally from any corner. Reset returns each to
-  its responsive default size and position, while Coach resets only its
-  position;
+- overlay target editing for the Coach card, Delta, and telemetry HUD. The
+  telemetry HUD offers a default `GROUPED` mode that moves and resizes the
+  compact panel as one target, and a `FREEFORM` mode that moves and resizes
+  Tires, Throttle and Brake, Steering, Gear / Speed / RPM, Engine / Boost, and
+  Input Graph independently. Each mode keeps its own layout, while visibility
+  and opacity remain shared. Both modes start from the same compact responsive
+  arrangement. Reset returns a target to its active-mode default size and
+  position, while Coach resets only its position;
 - visibility controls for the top-level overlay and HUD components, plus a
   `SHOW HUD WITH TELEMETRY` preference that defaults to enabled and hides the
   HUD, Coach, and Delta until a live telemetry sample is received;
@@ -160,9 +164,10 @@ telemetry path. It provides:
 - current Shift Light diagnostics and reset.
 
 Layout, visibility, and display choices are kept in versioned browser storage
-keys (`fdc.layout.v1`, `fdc.hud-visibility.v1`,
-`fdc.overlay-visibility.v1`, and `fdc.display-preferences.v1`). Commands that
-affect the native window or Shift Light database cross the Tauri IPC boundary.
+keys (`fdc.layout.v2`, `fdc.layout-mode.v1`, `fdc.hud-visibility.v1`,
+`fdc.overlay-visibility.v1`, and `fdc.display-preferences.v1`). The prior
+`fdc.layout.v1` position is intentionally not migrated. Commands that affect
+the native window or Shift Light database cross the Tauri IPC boundary.
 
 ## Local persistence
 
