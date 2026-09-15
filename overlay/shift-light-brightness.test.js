@@ -6,11 +6,11 @@ const path = require('node:path')
 const overlayCss = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
 
 test('Redline and FDC Shift Light brightness affect their own alert layers only', () => {
-  assert.match(overlayCss, /:root\s*{[^}]*--redline-brightness-scale:\s*1;/s)
+  assert.match(overlayCss, /:root\s*{[^}]*--redline-brightness-alpha:\s*0\.24;/s)
   assert.match(overlayCss, /:root\s*{[^}]*--shift-light-brightness-scale:\s*1;/s)
   assert.match(
     overlayCss,
-    /\.hud\.is-redline \.gear::before\s*{[^}]*filter:\s*brightness\(var\(--redline-brightness-scale\)\);/s
+    /\.hud\.is-redline \.gear::before\s*{[^}]*background:\s*rgb\(255 49 43 \/ var\(--redline-brightness-alpha\)\);/s
   )
   assert.match(
     overlayCss,

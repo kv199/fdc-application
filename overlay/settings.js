@@ -542,6 +542,11 @@
     return String(value)
   }
 
+  function nativeEventId(value) {
+    const numericId = Number(value)
+    return Number.isSafeInteger(numericId) && numericId > 0 ? numericId : value
+  }
+
   function eventIdFrom(value) {
     if (value && typeof value === 'object') {
       return value.id ?? value.eventId ?? value.event_id ?? value.event?.id ?? value.event?.eventId ?? null
@@ -1531,7 +1536,9 @@
     if (!key) return false
     let event = eventsById.get(key) || null
     try {
-      const loaded = normalizeEvent(await call('load_event', { eventId: event?.id ?? id }))
+      const loaded = normalizeEvent(await call('load_event', {
+        eventId: nativeEventId(event?.id ?? id)
+      }))
       if (loaded) {
         event = { ...event, ...loaded }
         eventsById.set(loaded.id, event)
@@ -1656,7 +1663,7 @@
     renderEventDetail(event)
     renderEventsLibrary()
     try {
-      const result = await call('rename_event', { eventId: event.id, name })
+      const result = await call('rename_event', { eventId: nativeEventId(event.id), name })
       const returned = normalizeEvent(result)
       if (returned) eventsById.set(returned.id, { ...event, ...returned, name })
       renderEventDetail(eventsById.get(key))
@@ -1677,7 +1684,7 @@
     if (!event) return false
     if (typeof globalScope.confirm === 'function' && !globalScope.confirm(`Delete event “${event.name}”?`)) return false
     try {
-      await call('delete_event', { eventId: event.id })
+      await call('delete_event', { eventId: nativeEventId(event.id) })
       eventsById.delete(event.id)
       closeEventDetail()
       setStatus('EVENT DELETED')

@@ -99,8 +99,8 @@ available as the Events tab in Configuration, directly after Garage.
   discarded, or could not be stored. A saved circuit reports its latest stored
   completed lap as **LAST**; a saved Sprint reports its stored final result as
   **RESULT**. The feedback never uses the live clock after the game resets it.
-- **DELETE** asks for confirmation, then permanently removes the event and
-  returns to the list.
+- **DELETE** asks for confirmation, then hides the event from the active list
+  while retaining its row and saved runs in SQLite, and returns to the list.
 
 ## Telemetry recording
 
@@ -205,7 +205,7 @@ Sector 3 durations to each saved lap. Schema version 10 adds
 `event_run_lap_trace_points`, keyed by `(run_id, lap_number, sample_index)`,
 with elapsed time, distance, `position_x`, `position_y`, `position_z`,
 `throttle`, and `brake`. The table has a composite foreign key to the saved
-lap and is deleted with that lap or its Event. Trace points are omitted from
+lap and is deleted with that lap. Trace points are omitted from
 run-list reads and loaded only for the selected run detail.
 A run snapshots the vehicle ordinal, class, PI, drivetrain, start time, run
 type, and confirmed result. Run reads resolve the current Garage display name
@@ -213,8 +213,12 @@ for the ordinal, so renaming a Garage car updates existing Event rows. Event
 schema migrations do not modify Garage or Shift Light tables. The separate
 Shift Light v15 migration preserves compatible configuration identity and
 reported-redline data but intentionally discards obsolete learning facts.
+Schema version 16 adds the nullable `deleted_at` marker used for silent Event
+deletion; deleted rows and their numeric IDs remain stored and are excluded
+from the active library.
 
-Deleting an Event permanently removes it and its runs. FDC trims names and
+Deleting an Event hides it from the active library while retaining its row and
+runs in SQLite so its numeric ID is not reused. FDC trims names and
 notes before storing them; empty notes are stored as absent.
 
 ## Native commands

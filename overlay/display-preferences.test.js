@@ -142,3 +142,9 @@ test('maps redline brightness against its 60 percent default', () => {
   assert.equal(DisplayPreferences.redlineBrightnessScale(60), 1)
   assert.equal(DisplayPreferences.redlineBrightnessScale(100), 100 / 60)
 })
+
+test('maps redline brightness to visible overlay alpha without changing the default appearance', () => {
+  assert.equal(DisplayPreferences.redlineBrightnessAlpha(0), 0)
+  assert.equal(DisplayPreferences.redlineBrightnessAlpha(60), 0.24)
+  assert.equal(DisplayPreferences.redlineBrightnessAlpha(100), 0.4)
+})

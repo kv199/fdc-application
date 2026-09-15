@@ -359,7 +359,7 @@ struct ShiftLightVariantResolution {
 }
 
 const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 4;
-const HUD_SCHEMA_VERSION: i32 = 15;
+const HUD_SCHEMA_VERSION: i32 = 16;
 const MAX_SHIFT_LIGHT_CEILING_SAMPLES: usize = 3;
 const MAX_SHIFT_LIGHT_GEAR_TARGETS: usize = 9;
 const MAX_SHIFT_LIGHT_SHIFT_SAMPLES: usize = 64;
@@ -622,6 +622,7 @@ fn create_event_tables(transaction: &Transaction<'_>) -> Result<(), String> {
                route TEXT NOT NULL CHECK (route IN ('Asphalt', 'Rally', 'Offroad')),
                mode TEXT NOT NULL CHECK (mode IN ('Any', 'Rivals', 'Online', 'EventLab', 'Official', 'Blueprint')),
                notes TEXT,
+               deleted_at TEXT,
                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
              );",
@@ -779,6 +780,27 @@ fn migrate_event_trace_schema(connection: &mut Connection) -> Result<(), String>
     transaction
         .commit()
         .map_err(|error| format!("unable to commit Event trace schema migration: {error}"))
+}
+
+fn migrate_event_soft_delete_schema(connection: &mut Connection) -> Result<(), String> {
+    let has_deleted_at = table_has_column(connection, "events", "deleted_at")?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Event soft-delete schema migration: {error}"))?;
+    if !has_deleted_at {
+        transaction
+            .execute("ALTER TABLE events ADD COLUMN deleted_at TEXT", [])
+            .map_err(|error| format!("unable to add Event soft-delete data: {error}"))?;
+    }
+    transaction
+        .execute(
+            "UPDATE hud_schema_version SET version = ?1",
+            params![HUD_SCHEMA_VERSION],
+        )
+        .map_err(|error| format!("unable to update Event soft-delete schema version: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Event soft-delete schema migration: {error}"))
 }
 
 fn migrate_garage_schema(connection: &mut Connection) -> Result<(), String> {
@@ -1017,7 +1039,7 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
                version INTEGER NOT NULL
              );
              INSERT INTO hud_schema_version (version)
-             SELECT 15
+             SELECT 16
              WHERE NOT EXISTS (SELECT 1 FROM hud_schema_version);",
         )
         .map_err(|error| format!("unable to initialize HUD SQLite metadata: {error}"))?;
@@ -1099,10 +1121,13 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
             .commit()
             .map_err(|error| format!("unable to commit current schema check: {error}"))?;
     }
-    if version < HUD_SCHEMA_VERSION {
+    if version < 15 {
         migrate_shift_light_v15(connection)?;
     } else {
         create_shift_light_config_tables(connection)?;
+    }
+    if version < 16 {
+        migrate_event_soft_delete_schema(connection)?;
     }
     Ok(())
 }
@@ -1304,7 +1329,7 @@ fn load_event_from_connection(
         .query_row(
             "SELECT id, name, class, route, mode, notes,
                     created_at, updated_at
-             FROM events WHERE id = ?1",
+             FROM events WHERE id = ?1 AND deleted_at IS NULL",
             params![event_id],
             event_from_row,
         )
@@ -1320,6 +1345,7 @@ fn load_events_from_connection(connection: &Connection) -> Result<Vec<EventRecor
             "SELECT id, name, class, route, mode, notes,
                     created_at, updated_at
              FROM events
+             WHERE deleted_at IS NULL
              ORDER BY created_at DESC, id DESC",
         )
         .map_err(|error| format!("unable to prepare Event list query: {error}"))?;
@@ -1374,7 +1400,7 @@ fn rename_event_in_connection(
         .execute(
             "UPDATE events
              SET name = ?1, updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?2",
+             WHERE id = ?2 AND deleted_at IS NULL",
             params![name, event_id],
         )
         .map_err(|error| format!("unable to rename Event: {error}"))?;
@@ -1389,7 +1415,13 @@ fn delete_event_in_connection(connection: &Connection, event_id: i64) -> Result<
         return Err("Event ID must be positive".to_string());
     }
     let changed = connection
-        .execute("DELETE FROM events WHERE id = ?1", params![event_id])
+        .execute(
+            "UPDATE events
+             SET deleted_at = COALESCE(deleted_at, CURRENT_TIMESTAMP),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?1 AND deleted_at IS NULL",
+            params![event_id],
+        )
         .map_err(|error| format!("unable to delete Event: {error}"))?;
     if changed == 0 {
         return Err(format!("Event {event_id} does not exist"));
@@ -1734,7 +1766,10 @@ fn load_event_absolute_best_from_connection(
 
     let event_exists: bool = connection
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM events WHERE id = ?1)",
+            "SELECT EXISTS(
+               SELECT 1 FROM events
+               WHERE id = ?1 AND deleted_at IS NULL
+             )",
             params![event_id],
             |row| row.get(0),
         )
@@ -1819,7 +1854,10 @@ fn record_event_run_in_connection(
         .map_err(|error| format!("unable to start Event run record: {error}"))?;
     let event_exists: bool = transaction
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM events WHERE id = ?1)",
+            "SELECT EXISTS(
+               SELECT 1 FROM events
+               WHERE id = ?1 AND deleted_at IS NULL
+             )",
             params![run.event_id],
             |row| row.get(0),
         )
@@ -3525,7 +3563,7 @@ mod tests {
                 .query_row("SELECT version FROM hud_schema_version", [], |row| row
                     .get::<_, i32>(0))
                 .unwrap(),
-            15
+            HUD_SCHEMA_VERSION
         );
         let row: (i64, Option<i32>) = connection
             .query_row(
@@ -3537,6 +3575,45 @@ mod tests {
         assert_eq!(row, (42, Some(10300)));
         assert!(!table_exists(&connection, "shift_light_learning_state").unwrap());
         assert!(!table_has_column(&connection, "shift_light_configs", "rpm_max").unwrap());
+    }
+
+    #[test]
+    fn v16_migration_preserves_events_and_current_shift_light_data() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Existing event", "A", "Asphalt", "Official", None),
+        )
+        .unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO shift_light_configs
+                   (id, game_id, car_ordinal, car_class, car_performance_index,
+                    drivetrain_type, num_cylinders, reported_redline_rpm)
+                 VALUES (42, 'fh6', 3766, 1, 800, 1, 10, 10300);
+                 ALTER TABLE events DROP COLUMN deleted_at;
+                 UPDATE hud_schema_version SET version = 15;",
+            )
+            .unwrap();
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        assert!(table_has_column(&connection, "events", "deleted_at").unwrap());
+        assert_eq!(
+            load_event_from_connection(&connection, event.id)
+                .unwrap()
+                .name,
+            "Existing event"
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM shift_light_configs", [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .unwrap(),
+            1
+        );
     }
 
     fn test_event(
@@ -3608,6 +3685,7 @@ mod tests {
             .unwrap();
         assert_eq!(version, HUD_SCHEMA_VERSION);
         assert!(table_exists(&connection, "events").unwrap());
+        assert!(table_has_column(&connection, "events", "deleted_at").unwrap());
         assert_eq!(
             connection
                 .query_row("SELECT COUNT(*) FROM garage_cars", [], |row| row
@@ -3866,10 +3944,18 @@ mod tests {
         );
 
         delete_event_in_connection(&connection, event.id).unwrap();
-        assert!(
+        assert_eq!(
             load_event_runs_from_connection(&connection, None)
                 .unwrap()
-                .is_empty()
+                .len(),
+            3
+        );
+        assert!(
+            record_event_run_in_connection(
+                &mut connection,
+                test_event_run(event.id, "sprint", "confirmed", Some(74_000), Vec::new()),
+            )
+            .is_err()
         );
     }
 
@@ -4114,7 +4200,7 @@ mod tests {
     }
 
     #[test]
-    fn events_validate_and_round_trip_without_archiving() {
+    fn events_validate_rename_and_soft_delete() {
         let mut connection = Connection::open_in_memory().unwrap();
         initialize_shift_light_schema(&mut connection).unwrap();
 
@@ -4171,7 +4257,27 @@ mod tests {
 
         delete_event_in_connection(&connection, created.id).unwrap();
         assert!(load_event_from_connection(&connection, created.id).is_err());
+        assert_eq!(load_events_from_connection(&connection).unwrap().len(), 0);
+        let stored_deleted_at: Option<String> = connection
+            .query_row(
+                "SELECT deleted_at FROM events WHERE id = ?1",
+                params![created.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(stored_deleted_at.is_some());
         assert!(delete_event_in_connection(&connection, created.id).is_err());
+        assert!(
+            rename_event_in_connection(&connection, created.id, "Visible again".to_string())
+                .is_err()
+        );
+
+        let recreated = create_event_in_connection(
+            &mut connection,
+            test_event("Recreated", "Any", "Asphalt", "Any", None),
+        )
+        .unwrap();
+        assert!(recreated.id > created.id);
     }
 
     #[test]

@@ -112,6 +112,12 @@
     return normalize({ redlineBrightness: brightness }).redlineBrightness / DEFAULTS.redlineBrightness
   }
 
+  function redlineBrightnessAlpha(brightness) {
+    // Preserve the existing 24% red overlay at the 60% default while making
+    // values above the default increase the visible layer's opacity.
+    return Math.min(1, 0.24 * redlineBrightnessScale(brightness))
+  }
+
   return {
     DEFAULTS,
     MPH_PER_KMH,
@@ -119,6 +125,7 @@
     convertSpeedKmh,
     formatSpeed,
     normalize,
+    redlineBrightnessAlpha,
     redlineBrightnessScale,
     read,
     shiftLightBrightnessScale,
