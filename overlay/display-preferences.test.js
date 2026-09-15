@@ -136,11 +136,14 @@ test('maps the existing 80 percent appearance to brightness scale 1', () => {
   assert.equal(DisplayPreferences.shiftLightBrightnessScale(100), 1.25)
 })
 
-test('maps redline brightness against the shared 80 percent default', () => {
-  assert.equal(DisplayPreferences.redlineBrightnessScale(0), 0)
-  assert.equal(DisplayPreferences.redlineBrightnessScale(40), 0.5)
-  assert.equal(DisplayPreferences.redlineBrightnessScale(80), 1)
-  assert.equal(DisplayPreferences.redlineBrightnessScale(100), 1.25)
+test('maps redline brightness through five opaque color stops', () => {
+  assert.equal(DisplayPreferences.redlineBrightnessColor(0), 'rgb(18 3 2 / 96%)')
+  assert.equal(DisplayPreferences.redlineBrightnessColor(25), 'rgb(77 13 12 / 96%)')
+  assert.equal(DisplayPreferences.redlineBrightnessColor(50), 'rgb(143 27 24 / 96%)')
+  assert.equal(DisplayPreferences.redlineBrightnessColor(75), 'rgb(207 40 36 / 96%)')
+  assert.equal(DisplayPreferences.redlineBrightnessColor(80), 'rgb(217 42 37 / 96%)')
+  assert.equal(DisplayPreferences.redlineBrightnessColor(100), 'rgb(255 49 43 / 96%)')
+  assert.equal(DisplayPreferences.redlineBrightnessColor(60), 'rgb(169 32 29 / 96%)')
 })
 
 test('preserves saved redline brightness values when the default changes', () => {

@@ -189,13 +189,13 @@ function invokeTauri(command, args) {
 garageRuntime = window.HudGarageRuntime?.createGarageRuntime?.({ invoke: invokeTauri }) || null
 
 function applyDisplayPreferences() {
-  const redlineBrightnessScale = window.DisplayPreferences.redlineBrightnessScale(
+  const redlineBrightnessColor = window.DisplayPreferences.redlineBrightnessColor(
     displayPreferences.redlineBrightness
   )
   const brightnessScale = window.DisplayPreferences.shiftLightBrightnessScale(
     displayPreferences.shiftLightBrightness
   )
-  document.documentElement.style.setProperty('--redline-brightness-scale', String(redlineBrightnessScale))
+  document.documentElement.style.setProperty('--redline-background', redlineBrightnessColor)
   document.documentElement.style.setProperty('--shift-light-brightness-scale', String(brightnessScale))
   document.documentElement.style.setProperty('--hud-opacity', String(displayPreferences.hudOpacity / 100))
   document.documentElement.dataset.speedUnit = displayPreferences.speedUnit

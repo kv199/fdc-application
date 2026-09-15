@@ -7,7 +7,7 @@
   --brake: #ff312b;
   --rule: rgb(226 232 240 / 42%);
   --panel: rgb(8 10 12 / 56%);
-  --redline-brightness-scale: 1;
+  --redline-background: rgb(217 42 37 / 96%);
   --shift-light-brightness-scale: 1;
   --hud-opacity: 0.8;
   --hud-scale: min(2, calc((100vw - 16px) / 736px));
@@ -204,8 +204,7 @@ body {
 }
 
 .hud.is-redline .gear::before {
-  background: rgb(255 49 43 / 24%);
-  filter: brightness(var(--redline-brightness-scale));
+  background: var(--redline-background);
 }
 
 .hud.is-redline .gear__speed,
