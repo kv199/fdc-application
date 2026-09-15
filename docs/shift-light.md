@@ -235,8 +235,11 @@ comparison for each observed pair. It does not diagnose the driver's shift as
 "bad" or "too early" when the capture was unusable or the next gear was weaker.
 
 Redline brightness and FDC Shift Light brightness remain independent visual
-preferences. The FDC Shift Light toggle defaults to ON and affects only cue
-visibility.
+preferences. Both controls use the same brightness contract: 80% is the
+baseline appearance (`filter: brightness(1)`), and the selected percentage is
+converted to a scale by dividing it by 80. The FDC Shift Light toggle defaults
+to ON and affects only cue visibility. Existing saved redline brightness
+values remain unchanged when the baseline is updated.
 
 ## Source, build, and release boundary
 

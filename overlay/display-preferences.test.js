@@ -21,7 +21,7 @@ function createStorage(initialValue = null) {
 test('uses the split display defaults and enables the telemetry-driven displays by default', () => {
   assert.deepEqual(DisplayPreferences.read(createStorage()), {
     speedUnit: 'kmh',
-    redlineBrightness: 60,
+    redlineBrightness: 80,
     shiftLightBrightness: 80,
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
@@ -33,7 +33,7 @@ test('uses the split display defaults and enables the telemetry-driven displays 
 test('migrates old records and sanitizes units, brightness, flags and HUD opacity', () => {
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'mph', shiftLightBrightness: 135 }), {
     speedUnit: 'mph',
-    redlineBrightness: 60,
+    redlineBrightness: 80,
     shiftLightBrightness: 100,
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
@@ -42,7 +42,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
   })
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'knots', shiftLightBrightness: -4 }), {
     speedUnit: 'kmh',
-    redlineBrightness: 60,
+    redlineBrightness: 80,
     shiftLightBrightness: 0,
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
@@ -60,7 +60,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
   })
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'mph', shiftLightBrightness: null }), {
     speedUnit: 'mph',
-    redlineBrightness: 60,
+    redlineBrightness: 80,
     shiftLightBrightness: 80,
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
@@ -69,7 +69,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
   })
   assert.deepEqual(DisplayPreferences.normalize({ hudOpacity: 0 }), {
     speedUnit: 'kmh',
-    redlineBrightness: 60,
+    redlineBrightness: 80,
     shiftLightBrightness: 80,
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
@@ -78,7 +78,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
   })
   assert.deepEqual(DisplayPreferences.normalize({ hudOpacity: 101.4 }), {
     speedUnit: 'kmh',
-    redlineBrightness: 60,
+    redlineBrightness: 80,
     shiftLightBrightness: 80,
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
@@ -104,7 +104,7 @@ test('writes a versioned normalized preference record', () => {
   const storage = createStorage()
   const written = DisplayPreferences.write({ speedUnit: 'mph', shiftLightBrightness: 55, hudOpacity: 64, configurationAlwaysOnTop: false }, storage)
 
-  assert.deepEqual(written, { speedUnit: 'mph', redlineBrightness: 60, shiftLightBrightness: 55, fdcShiftLightEnabled: true, showHudWithTelemetry: true, hudOpacity: 64, configurationAlwaysOnTop: false })
+  assert.deepEqual(written, { speedUnit: 'mph', redlineBrightness: 80, shiftLightBrightness: 55, fdcShiftLightEnabled: true, showHudWithTelemetry: true, hudOpacity: 64, configurationAlwaysOnTop: false })
   assert.deepEqual(JSON.parse(storage.value()), written)
 })
 
@@ -113,7 +113,7 @@ test('updates one preference without resetting the other', () => {
 
   assert.deepEqual(DisplayPreferences.update({ shiftLightBrightness: 90 }, storage), {
     speedUnit: 'mph',
-    redlineBrightness: 60,
+    redlineBrightness: 80,
     shiftLightBrightness: 90,
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
@@ -136,15 +136,13 @@ test('maps the existing 80 percent appearance to brightness scale 1', () => {
   assert.equal(DisplayPreferences.shiftLightBrightnessScale(100), 1.25)
 })
 
-test('maps redline brightness against its 60 percent default', () => {
+test('maps redline brightness against the shared 80 percent default', () => {
   assert.equal(DisplayPreferences.redlineBrightnessScale(0), 0)
-  assert.equal(DisplayPreferences.redlineBrightnessScale(30), 0.5)
-  assert.equal(DisplayPreferences.redlineBrightnessScale(60), 1)
-  assert.equal(DisplayPreferences.redlineBrightnessScale(100), 100 / 60)
+  assert.equal(DisplayPreferences.redlineBrightnessScale(40), 0.5)
+  assert.equal(DisplayPreferences.redlineBrightnessScale(80), 1)
+  assert.equal(DisplayPreferences.redlineBrightnessScale(100), 1.25)
 })
 
-test('maps redline brightness to visible overlay alpha without changing the default appearance', () => {
-  assert.equal(DisplayPreferences.redlineBrightnessAlpha(0), 0)
-  assert.equal(DisplayPreferences.redlineBrightnessAlpha(60), 0.24)
-  assert.equal(DisplayPreferences.redlineBrightnessAlpha(100), 0.4)
+test('preserves saved redline brightness values when the default changes', () => {
+  assert.equal(DisplayPreferences.read(createStorage(JSON.stringify({ redlineBrightness: 60 }))).redlineBrightness, 60)
 })
