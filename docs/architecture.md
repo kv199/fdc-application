@@ -133,9 +133,9 @@ Shift Light spans both layers:
 3. Tauri commands persist a compact vehicle configuration, limiter samples,
    per-pair targets, and accepted shift comparisons in local `fdc.sqlite`.
 
-The full identity, variant resolution, learning evidence, target calculation,
-visual timing, persistence rules, compatibility constraints, and verification
-requirements are documented in [Shift Light](shift-light.md).
+The full identity, numeric configuration resolution, learning evidence, target
+calculation, visual timing, persistence rules, compatibility constraints, and
+verification requirements are documented in [Shift Light](shift-light.md).
 
 ## Configuration
 

@@ -35,7 +35,7 @@ Technical details: [docs/asphalt-coach.md](docs/asphalt-coach.md).
 ### Shift Light
 
 Shift Light learns per-gear shift targets from live FH6 telemetry and presents
-fallback, provisional, observed, or optimal timing cues in the HUD. Calibration and
+fallback, provisional, or optimal timing cues in the HUD. Calibration and
 diagnostics are available in Configuration, and learning data is kept locally
 for the matching vehicle and tune.
 

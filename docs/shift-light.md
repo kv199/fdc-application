@@ -46,10 +46,11 @@ game-reported redline is used instead. This means `LEARNING` still has a usable
 purple cue; it does not mean "no guidance".
 
 A learned ceiling requires three stable limiter observations. An observation
-comes from a continuous same-gear full-throttle pull with a meaningful rise,
-a local peak, a limiter drop, and recovery near that peak. The median of three
-observations whose total spread is no more than `100 RPM` becomes the usable
-ceiling. A single maximum or flat RPM value is not sufficient limiter evidence.
+comes from a continuous same-gear full-throttle pull that rises by at least
+`100 RPM`, reaches a local peak, drops by at least `40 RPM`, and then recovers
+to within `60 RPM` of that peak. The median of three observations whose total
+spread is no more than `100 RPM` becomes the usable ceiling. A single maximum
+or flat RPM value is not sufficient limiter evidence.
 
 If a comparable shift produces a negative power delta, no special fallback
 learner is started. The current safe baseline simply remains the answer.
@@ -77,13 +78,18 @@ The comparison is direct engine power:
 PowerDeltaPercent = (powerAfter - powerBefore) / powerBefore × 100
 ```
 
-A comparable sample requires an active or unknown race state, throttle of at
+A direct adjacent-gear transition is accepted, as is a transition through FH6
+neutral gear `11` when the destination gear appears within `400 ms`. A
+comparable sample requires an active or unknown race state, throttle of at
 least `0.95`, clutch no greater than `0.05`, brake and handbrake no greater than
-`0.02`, positive RPM and power, and vehicle speed above `1 km/h`. The temporary
-shift interval itself may contain zero or negative power; those torque-cut
-frames are skipped rather than treated as the destination gear's power.
+`0.02`, positive RPM, power, and vehicle speed. The temporary shift interval
+itself may contain zero or negative power; those torque-cut frames are skipped
+rather than treated as the destination gear's power.
 Partial-throttle, incomplete, stale or otherwise uncapturable shifts are
 ignored silently. They are not labelled bad or too early.
+
+A timestamp gap longer than `1000 ms` clears only in-progress capture, limiter,
+and RPM-rate evidence. It does not erase completed learning or persisted state.
 
 Torque, wheel speed, slip and a reconstructed `power / speed` force proxy are
 not inputs to this decision.
@@ -231,3 +237,17 @@ comparison for each observed pair. It does not diagnose the driver's shift as
 Redline brightness and FDC Shift Light brightness remain independent visual
 preferences. The FDC Shift Light toggle defaults to ON and affects only cue
 visibility.
+
+## Source, build, and release boundary
+
+Canonical Shift Light TypeScript lives in `src/shift-light/`.
+`tools/build-shift-light.mjs` generates the checked-in browser runtime bundle
+at `overlay/shift-light-engine.js`; the release application does not execute
+TypeScript and does not require Node.js or esbuild at runtime.
+
+After changing the canonical source or build tooling, run
+`npm run build:shift-light` before the final Node.js test suite. The generated
+bundle must retain `src/shift-light/` source labels and contain no obsolete
+source path. Completed runtime changes must pass the release verification cycle
+and launch check documented in [README](../README.md#build-and-verify) before
+the Windows installer is distributed.
