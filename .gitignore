@@ -22,6 +22,8 @@ target/
 /export/
 /exports/
 /qa/
+/outputs/
+/.spreadsheet-work/
 *.export.*
 *.qa.*
 *.tmp

@@ -4,6 +4,14 @@ FDC is a local-first, always-on-top telemetry HUD and driving-feedback
 companion for Forza Horizon 6. It receives FH6 Data Out directly, renders
 essential driving telemetry, and keeps the feedback path on the local machine.
 
+## Unofficial project notice
+
+FDC is an independent, unofficial application. It is not affiliated with,
+endorsed by, sponsored by, or otherwise approved by Microsoft, Xbox,
+Playground Games, Turn 10 Studios, or the Forza franchise. Microsoft, Xbox,
+Forza, Forza Horizon, and related names and marks belong to their respective
+owners. FDC does not include or redistribute game assets.
+
 ## What FDC does
 
 FDC provides a compact overlay with:
@@ -122,6 +130,18 @@ Garage and Shift Light data are stored in the FDC application-data directory as
 `fdc.sqlite`. Coach session state and live telemetry state remain local to the
 running application. Layout, visibility, speed-unit, and display preferences
 are stored in the local application webview.
+
+On Windows, Tauri derives the application-data folder name from FDC's stable
+application identifier, `dev.kv199.fdc`:
+
+- `%APPDATA%\dev.kv199.fdc` contains `fdc.sqlite` and native window state;
+- `%LOCALAPPDATA%\dev.kv199.fdc\EBWebView` contains WebView2 local storage,
+  preferences, and disposable browser caches.
+
+The reverse-domain folder name is intentional and is not the user-facing
+product name. It must remain stable across upgrades so existing user data and
+webview preferences continue to be found. Uninstalling FDC may leave these
+folders in place to preserve user data for a later reinstall.
 
 ## Browser demo
 
