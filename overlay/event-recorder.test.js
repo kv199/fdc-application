@@ -92,6 +92,39 @@ test('completed laps persist compact Position and pedal trace points', async () 
   assert.equal(trace[0].brake, 0)
 })
 
+test('a completed circuit lap emits a usable reference candidate immediately', () => {
+  const candidates = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    onReferenceCandidate: candidate => {
+      candidates.push(candidate)
+      assert.equal(instance.snapshot().run.laps.length, 1)
+    }
+  })
+  const frame = (current, distance, number = 0) => telemetry({
+    position: { x: distance, y: 2, z: distance + 1 },
+    throttle: 0.7,
+    brake: 0,
+    lap: { number, current, last: number === 1 ? 30 : 0, raceTime: current, distance }
+  })
+
+  instance.arm(73, 'Rivals Test')
+  instance.update(frame(0, 0))
+  instance.update(frame(0.15, 100))
+  instance.update(frame(0.3, 300))
+  instance.update(frame(0, 0, 1))
+
+  assert.equal(candidates.length, 1)
+  assert.equal(candidates[0].eventId, 73)
+  assert.equal(candidates[0].runType, 'circuit')
+  assert.equal(candidates[0].lapNumber, 1)
+  assert.equal(candidates[0].timeMs, 30000)
+  assert.equal(typeof candidates[0].captureRunId, 'string')
+  assert.ok(candidates[0].tracePoints.length >= 2)
+  assert.deepEqual(candidates[0].tracePoints.map(point => point.positionX), [0, 100, 300])
+})
+
 test('a confirmed sprint persists one synthetic lap with interpolated sectors', async () => {
   const saved = []
   const instance = recorder.createEventRecorder({
@@ -242,6 +275,54 @@ test('a confirmed sprint is saved immediately and the recorder remains armed', a
   assert.equal(instance.snapshot().armed, true)
   assert.equal(instance.snapshot().run, null)
   assert.equal((await instance.stop()).outcome, 'saved')
+})
+
+test('a zeroed sprint packet automatically falls back and restarts on the next clean start', async () => {
+  const saved = []
+  const candidates = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    onReferenceCandidate: candidate => {
+      candidates.push(candidate)
+      assert.equal(saved.length, 0)
+    },
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  instance.arm(74)
+  instance.update(telemetry({ throttle: 0.7, brake: 0, position: { x: 1, y: 2, z: 3 } }))
+  instance.update(telemetry({
+    throttle: 0.7,
+    brake: 0,
+    position: { x: 2, y: 2, z: 4 },
+    lap: { number: 0, current: 108.713, last: 0, raceTime: 108.713, distance: 5951 }
+  }))
+  instance.update(telemetry({
+    isRaceOn: false,
+    lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 }
+  }))
+
+  const previousRunId = instance.snapshot().run.runId
+  instance.update(telemetry({
+    throttle: 0.7,
+    brake: 0,
+    position: { x: 3, y: 2, z: 5 },
+    lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 }
+  }))
+
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(saved.length, 1)
+  assert.equal(saved[0].run.eventId, 74)
+  assert.equal(saved[0].run.runType, 'sprint')
+  assert.equal(saved[0].run.result, 'confirmed')
+  assert.equal(saved[0].run.resultTimeMs, 108713)
+  assert.equal(candidates.length, 1)
+  assert.equal(candidates[0].runType, 'sprint')
+  assert.equal(candidates[0].timeMs, 108713)
+  assert.ok(candidates[0].tracePoints.length >= 2)
+  assert.equal(instance.snapshot().armed, true)
+  assert.ok(instance.snapshot().run)
+  assert.notEqual(instance.snapshot().run.runId, previousRunId)
 })
 
 test('a sprint LastLap equal to the live clock is persisted before stop', async () => {

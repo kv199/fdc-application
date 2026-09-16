@@ -43,8 +43,9 @@ available as the Events tab in Configuration, directly after Garage.
   Current Race Time are at most two seconds and whose travelled distance is at
   most 25 metres.
 - The recorder keeps an orange Sprint warning visible while idle, armed, or
-  recording: press **STOP** in free roam or before starting a new race. The
-  results screen can report an imprecise final time. A finalizing or
+  recording: leave capture armed between attempts and press **STOP** when the
+  session is over. If Forza omits the exact result, FDC uses the last live race
+  time. A finalizing or
   another-Event status temporarily replaces the warning with its operational
   instruction.
 - One saved run ID represents one driving attempt, including every completed
@@ -85,10 +86,10 @@ available as the Events tab in Configuration, directly after Garage.
   detail page uses the saved rows, so a Sprint recorded as a one-lap circuit
   still renders correctly.
 - Paused, non-live, free-roam, and in-race rewind telemetry suspend or resume
-  capture without discarding or splitting a run. A new run ID is created only
-  when live telemetry returns to a clean lap-zero race start after at least one
-  completed lap. That confirmed restart saves a valid preceding attempt while
-  **STOP** remains active.
+  capture without discarding or splitting a run. A new run ID is created when
+  live telemetry returns to a confirmed clean lap-zero restart after at least
+  one completed lap, or after a zeroed Sprint result transition. That restart
+  saves a valid preceding attempt while **STOP** remains active.
 - A circuit attempt with no completed lap, or a sprint without a confirmed
   result, is discarded rather than added to the saved-run list. If a started
   sprint reaches a zeroed non-live result packet before its final packet is
@@ -110,11 +111,19 @@ shared browser `queueTelemetry` path. It does not read the game's result-screen
 UI or use a second telemetry source.
 
 When **Record Run** arms an Event with an Absolute Best trace, the browser
-Delta widget loads that Event's exact fastest saved result as its reference. In
-a live race it interpolates that trace's elapsed time at the current lap
-distance and shows current elapsed time minus reference elapsed time. Negative
-values are ahead and green; positive values are behind and red. The center-out
-bar reaches its corresponding edge at one second in either direction. An Event
+Delta widget loads that Event's exact fastest saved result as its reference. A
+new Event has no Delta during its first circuit lap or Sprint attempt. As soon
+as a completed lap or confirmed Sprint provides a faster usable trace, that
+trace becomes the in-memory reference before the next lap or attempt is
+processed; a slower result leaves the reference unchanged. Circuit rows remain
+part of the active unsaved run until **STOP** or a confirmed restart.
+
+In a live race Delta interpolates the active reference trace's elapsed time at
+the current lap distance and shows current elapsed time minus reference elapsed
+time. Negative values are ahead and green; positive values are behind and red.
+The center-out bar reaches its corresponding edge at one second in either
+direction. The top-right **BEST** value is the official completed time that
+selected the active trace, not the final sampled trace timestamp. An Event
 without a usable recorded reference leaves Delta inactive; stopping capture
 clears its reference.
 
@@ -155,7 +164,9 @@ saved laps are not backfilled because the source telemetry no longer exists.
 - In a circuit, a higher `LapNumber` together with a positive `LastLap` records
   that completed lap in the current run. If `LastLap` arrives one packet late,
   FDC retains the pending boundary until that value arrives. The stored circuit
-  time is the `LastLap` value, not a sampled current clock.
+  time is the `LastLap` value, not a sampled current clock. A faster completed
+  lap becomes Delta's in-memory reference immediately, while persistence still
+  occurs for the complete run at **STOP** or a confirmed restart.
 - In a sprint, a non-live positive `LastLap` that is new and compatible with
   the live attempt confirms the finish immediately. A non-live advancing
   `CurrentLap` can also confirm the finish after the same value is observed in
@@ -164,14 +175,19 @@ saved laps are not backfilled because the source telemetry no longer exists.
 - A live clean lap-zero start after a completed lap is a confirmed restart.
   FDC saves a valid preceding run and begins a new run ID. An in-race rewind,
   pause, non-live transition, or free-roam tail does not by itself split a run.
+- After a zeroed non-live Sprint result, the next clean live start confirms the
+  previous attempt with its last live race time when no exact result arrived.
+  FDC saves that fallback Sprint and starts the next attempt automatically.
 
 ### Result reset and precision
 
 Some sprint result transitions clear `IsRaceOn`, `CurrentLap`,
 `CurrentRaceTime`, `LastLap`, and travelled distance before a final result is
-available to FDC. If **STOP** is selected after such a transition, FDC enters
-the temporary **FINALIZING** state and continues processing up to 48 subsequent
-Direct Data Out samples for at most one second.
+available to FDC. The next clean live start automatically saves the preceding
+attempt using the last live `CurrentRaceTime` and begins a new attempt. If
+**STOP** is selected instead, FDC enters the temporary **FINALIZING** state and
+continues processing up to 48 subsequent Direct Data Out samples for at most
+one second.
 
 If those samples contain a confirmed final `LastLap` or Current Lap result,
 that game-reported telemetry value is saved. If not, FDC saves the last live

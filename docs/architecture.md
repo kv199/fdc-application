@@ -88,12 +88,13 @@ order. The Tauri configuration uses `overlay/` as the frontend distribution.
 
 The main window is a transparent, always-on-top HUD positioned across the
 primary monitor. The browser layer renders the current telemetry HUD, lap time,
-Delta, Coach card, Garage persistence, and Shift Light presentation. Delta is
-configured only when Event recording arms a saved Event reference; it reads the
-existing normalized telemetry stream and the Event's local best trace rather
-than a second transport. It schedules visual updates through
-`requestAnimationFrame`; the normalized sample remains the shared input rather
-than each feature subscribing to the UDP source independently.
+Delta, Coach card, Garage persistence, and Shift Light presentation. Event
+recording initially configures Delta from the saved Event best, then replaces
+that reference in memory when a faster completed circuit lap or Sprint result
+arrives. Delta reads the existing normalized telemetry stream and the Event's
+local best trace rather than a second transport. It schedules visual updates
+through `requestAnimationFrame`; the normalized sample remains the shared input
+rather than each feature subscribing to the UDP source independently.
 
 The settings window is a separate browser page. It observes route status,
 Garage, and Shift Light events, presents the Events library, and invokes native

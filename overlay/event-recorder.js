@@ -229,6 +229,9 @@
     const onStatus = typeof options.onStatus === 'function' ? options.onStatus : () => {}
     const onSaved = typeof options.onSaved === 'function' ? options.onSaved : () => {}
     const onResult = typeof options.onResult === 'function' ? options.onResult : () => {}
+    const onReferenceCandidate = typeof options.onReferenceCandidate === 'function'
+      ? options.onReferenceCandidate
+      : () => {}
     const schedule = typeof options.setTimeout === 'function' ? options.setTimeout : setTimeout
     const cancelSchedule = typeof options.clearTimeout === 'function' ? options.clearTimeout : clearTimeout
     let state = createState()
@@ -375,6 +378,31 @@
       return payload
     }
 
+    function notifyReferenceCandidate(run, lap) {
+      if (!run || !lap || !Array.isArray(lap.tracePoints) || lap.tracePoints.length < 2) return false
+      const candidate = {
+        eventId: resultEventId(run),
+        runType: run.runType,
+        lapNumber: lap.lapNumber,
+        timeMs: lap.timeMs,
+        tracePoints: lap.tracePoints.map(point => ({ ...point })),
+        captureRunId: run.runId,
+        carOrdinal: run.car.ordinal,
+        carName: run.car.name,
+        carClass: run.car.class,
+        carPi: run.car.pi,
+        drivetrain: run.car.drivetrain
+      }
+      try {
+        // The callback is intentionally synchronous: the caller can install the
+        // just-finished trace before processing the next telemetry sample.
+        onReferenceCandidate(candidate)
+      } catch (_) {
+        // Reference observers must not change recorder state or persistence.
+      }
+      return true
+    }
+
     function result(run, outcome, reason, extra = {}) {
       return notifyResult({
         eventId: resultEventId(run),
@@ -454,6 +482,7 @@
       if (finalTimeMs !== null) run.finalTimeMs = finalTimeMs
       if (finalTimeSource !== null) run.finalTimeSource = finalTimeSource
       ensureSprintLap(run)
+      if (run.runType === 'sprint') notifyReferenceCandidate(run, run.laps.at(-1))
       state.lastRunResult = run
       state.run = null
       lastPersistence = persist(run, reason)
@@ -528,9 +557,15 @@
     function update(telemetry) {
       if (!state.armed || !telemetry || typeof telemetry !== 'object') return status()
       const previousTiming = state.timingState || timingApi?.createState?.() || null
-      const restart = isStrongRestart(previousTiming, telemetry)
+      const autoSprintRestart = Boolean(
+        state.run
+        && canUseManualSprintFallback()
+        && isCleanStart(telemetry)
+      )
+      const restart = isStrongRestart(previousTiming, telemetry) || autoSprintRestart
       if (restart) {
-        void finishRun('restart')
+        if (autoSprintRestart) confirmManualSprintFallback()
+        void finishRun(autoSprintRestart ? 'restart_result_reset' : 'restart')
         state.run = null
         state.armedAtMs = Number(now()) || Date.now()
         resetTiming()
@@ -553,7 +588,14 @@
 
       if (timingApi?.update && state.timingState) {
         const nextTiming = timingApi.update(state.timingState, telemetry)
-        if (state.run && detectLapCompletion(previousTiming, telemetry, nextTiming)) appendLap(telemetry, nextTiming)
+        if (state.run && detectLapCompletion(previousTiming, telemetry, nextTiming)) {
+          const appended = appendLap(telemetry, nextTiming)
+          if (appended && state.run.runType === 'circuit') {
+            const lapNumber = Math.round(Number(telemetry.lap.number))
+            const lap = state.run.laps.find(candidate => candidate.lapNumber === lapNumber)
+            notifyReferenceCandidate(state.run, lap)
+          }
+        }
         if (state.run && nextTiming?.phase === 'sprint_complete' && finite(nextTiming.finalTimeMs) !== null) {
           state.run.finalTimeMs = Math.round(nextTiming.finalTimeMs)
           state.run.finalTimeSource = nextTiming.finalTimeSource || 'forza_lap_current'

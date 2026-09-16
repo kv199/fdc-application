@@ -30,6 +30,10 @@
     </div>
 
     <section id="delta-strip" class="delta-strip" aria-label="Lap delta">
+      <div class="delta-strip__best" data-delta-best-container hidden>
+        <span class="delta-strip__best-label" aria-hidden="true">BEST</span>
+        <output id="delta-best" class="delta-strip__best-time" data-delta-best aria-label="Best lap time">&mdash;</output>
+      </div>
       <output id="delta-value" class="delta-strip__value" data-delta-value aria-label="Lap delta">&mdash;</output>
       <div id="delta-bar" class="delta-strip__bar" data-delta-bar role="meter" aria-label="Lap delta bar" aria-valuemin="-1" aria-valuemax="1" aria-valuenow="0">
         <div id="delta-fill" class="delta-strip__fill" data-delta-fill aria-hidden="true"></div>

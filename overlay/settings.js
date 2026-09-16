@@ -1465,7 +1465,7 @@
       eventRecorderToggle.disabled = recordingAnotherEvent || finalizing
     }
     if (eventRecorderHint) {
-      const sprintWarning = 'For Sprint Racing, press STOP in free roam or before starting a new race. The results screen can report an imprecise final time.'
+      const sprintWarning = 'For Sprint Racing, leave recording armed between attempts. Press STOP when you are done; if Forza omits the exact result, FDC uses the last live time.'
       const hint = recordingAnotherEvent
         ? `Recording Event #${recorderState.eventId}. Open that event to stop capture.`
         : finalizing

@@ -115,9 +115,41 @@
       ?? value
   }
 
+  function referenceTimeMsFrom(value) {
+    const source = explicitReference(value)
+    const candidates = source === value ? [source] : [value, source]
+    const millisecondKeys = [
+      'timeMs',
+      'time_ms',
+      'durationMs',
+      'duration_ms',
+      'lapTimeMs',
+      'lap_time_ms',
+      'finalTimeMs',
+      'final_time_ms',
+      'bestTimeMs',
+      'best_time_ms'
+    ]
+    for (const candidate of candidates) {
+      if (!candidate || typeof candidate !== 'object') continue
+      for (const key of millisecondKeys) {
+        const milliseconds = finite(candidate[key])
+        if (milliseconds !== null && milliseconds >= 0) return milliseconds
+      }
+      // Compact callers use unqualified duration/time aliases in seconds;
+      // *_ms and *Ms above are always interpreted as milliseconds.
+      for (const key of ['duration', 'time', 'seconds']) {
+        const seconds = finite(candidate[key])
+        if (seconds !== null && seconds >= 0) return seconds * 1000
+      }
+    }
+    return null
+  }
+
   function normalizeReference(value) {
     const source = explicitReference(value)
     const tracePoints = normalizeTracePoints(source)
+    const timeMs = referenceTimeMsFrom(value)
     if (tracePoints.length < 2) return null
     const distanceOriginM = tracePoints[0].distanceM
     const elapsedOriginMs = tracePoints[0].elapsedMs
@@ -126,13 +158,30 @@
       distanceM: point.distanceM - distanceOriginM,
       elapsedMs: point.elapsedMs - elapsedOriginMs
     }))
+    const traceDurationMs = rebasedTracePoints.at(-1).elapsedMs
     return {
-      eventId: source?.eventId ?? source?.event_id ?? value?.eventId ?? value?.event_id ?? null,
+      eventId: source?.eventId
+        ?? source?.event_id
+        ?? source?.id
+        ?? value?.eventId
+        ?? value?.event_id
+        ?? value?.id
+        ?? null,
+      timeMs,
       tracePoints: rebasedTracePoints,
       startDistanceM: 0,
       endDistanceM: rebasedTracePoints.at(-1).distanceM,
-      durationMs: rebasedTracePoints.at(-1).elapsedMs
+      durationMs: traceDurationMs
     }
+  }
+
+  function isBetterReference(candidate, current) {
+    if (!candidate) return false
+    if (!current || String(candidate.eventId) !== String(current.eventId)) return true
+    const candidateTimeMs = finite(candidate.timeMs)
+    const currentTimeMs = finite(current.timeMs)
+    if (candidateTimeMs === null) return false
+    return currentTimeMs === null || candidateTimeMs < currentTimeMs
   }
 
   function interpolateReferenceMs(reference, distanceM) {
@@ -196,6 +245,15 @@
     return `${sign}${Math.abs(delta).toFixed(3)}`
   }
 
+  function formatRaceTime(timeMs) {
+    const milliseconds = finite(timeMs)
+    if (milliseconds === null || milliseconds < 0) return '—'
+    const roundedMs = Math.round(milliseconds)
+    const minutes = String(Math.floor(roundedMs / 60000)).padStart(2, '0')
+    const seconds = ((roundedMs % 60000) / 1000).toFixed(3).padStart(6, '0')
+    return `${minutes}:${seconds}`
+  }
+
   function createDeltaRuntime(options = {}) {
     const root = options.root
       || (typeof document !== 'undefined' ? document.getElementById('delta-strip') : null)
@@ -208,6 +266,12 @@
     const barElement = options.barElement
       || root?.querySelector?.('[data-delta-bar]')
       || (typeof document !== 'undefined' ? document.getElementById('delta-bar') : null)
+    const bestElement = options.bestElement
+      || root?.querySelector?.('[data-delta-best]')
+      || (typeof document !== 'undefined' ? document.getElementById('delta-best') : null)
+    const bestContainer = options.bestContainer
+      || root?.querySelector?.('[data-delta-best-container]')
+      || bestElement?.parentElement
     const limitSeconds = finite(options.limitSeconds) ?? DEFAULT_LIMIT_SECONDS
     let reference = null
     let latest = null
@@ -252,6 +316,18 @@
       }
       if (fillElement) fillElement.style.width = `${width}%`
       if (root) root.dataset.deltaTone = tone
+      if (bestElement) {
+        const bestTimeMs = reference?.timeMs ?? null
+        bestElement.textContent = formatRaceTime(bestTimeMs)
+        if (bestElement.dataset) bestElement.dataset.available = bestTimeMs === null ? 'false' : 'true'
+        if (typeof bestElement.setAttribute === 'function') {
+          bestElement.setAttribute(
+            'aria-label',
+            bestTimeMs === null ? 'Best lap time unavailable' : `Best lap time ${formatRaceTime(bestTimeMs)}`
+          )
+        }
+      }
+      if (bestContainer) bestContainer.hidden = reference?.timeMs === null || reference?.timeMs === undefined
       return getState()
     }
 
@@ -282,6 +358,7 @@
         deltaSeconds: latest,
         tone: toneForDelta(latest),
         fillPercent: fillPercent(latest, limitSeconds),
+        bestTimeMs: reference?.timeMs ?? null,
         reference
       }
     }
@@ -304,9 +381,12 @@
     currentElapsedMs,
     fillPercent,
     formatDelta,
+    formatRaceTime,
     interpolateReferenceMs,
+    isBetterReference,
     normalizeReference,
     normalizeTracePoints,
+    referenceTimeMsFrom,
     toneForDelta,
     createDeltaRuntime
   }

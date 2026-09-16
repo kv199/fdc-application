@@ -7,9 +7,12 @@ const {
   calculateDelta,
   fillPercent,
   formatDelta,
+  formatRaceTime,
   interpolateReferenceMs,
+  isBetterReference,
   normalizeReference,
   normalizeTracePoints,
+  referenceTimeMsFrom,
   toneForDelta,
   createDeltaRuntime
 } = require('./delta-runtime.js')
@@ -53,6 +56,42 @@ test('accepts an active Event reference nested under a reference run lap', () =>
   assert.deepEqual(reference.tracePoints, referenceTrace)
 })
 
+test('preserves the canonical reference time independently from trace duration', () => {
+  const reference = normalizeReference({
+    eventId: 42,
+    timeMs: 123456,
+    tracePoints: [
+      { distanceM: 0, elapsedMs: 0 },
+      { distanceM: 100, elapsedMs: 120000 }
+    ]
+  })
+
+  assert.equal(reference.timeMs, 123456)
+  assert.equal(reference.durationMs, 120000)
+  assert.equal(referenceTimeMsFrom({ time_ms: 654321, tracePoints: referenceTrace }), 654321)
+  assert.equal(referenceTimeMsFrom({ duration: 95.418, tracePoints: referenceTrace }), 95418)
+  assert.equal(normalizeReference({ timeMs: 45678, tracePoints: [] }), null)
+})
+
+test('does not invent a BEST time from the last trace timestamp', () => {
+  const reference = normalizeReference(referenceTrace)
+  assert.equal(reference.timeMs, null)
+  assert.equal(reference.durationMs, 10000)
+})
+
+test('selects only a faster reference for the active Event', () => {
+  const current = normalizeReference({ eventId: 42, timeMs: 60000, tracePoints: referenceTrace })
+  const faster = normalizeReference({ eventId: 42, timeMs: 59000, tracePoints: referenceTrace })
+  const equal = normalizeReference({ eventId: 42, timeMs: 60000, tracePoints: referenceTrace })
+  const slower = normalizeReference({ eventId: 42, timeMs: 61000, tracePoints: referenceTrace })
+  const otherEvent = normalizeReference({ eventId: 43, timeMs: 61000, tracePoints: referenceTrace })
+
+  assert.equal(isBetterReference(faster, current), true)
+  assert.equal(isBetterReference(equal, current), false)
+  assert.equal(isBetterReference(slower, current), false)
+  assert.equal(isBetterReference(otherEvent, current), true)
+})
+
 test('rebases cumulative reference distance to the first trace sample', () => {
   const reference = normalizeReference([
     { distanceM: 5950, elapsedMs: 0 },
@@ -84,6 +123,14 @@ test('Delta presentation maps ahead to green right and behind to red left', () =
   assert.equal(formatDelta(0.125), '+0.125')
 })
 
+test('formats race and lap times with minutes, seconds, and milliseconds', () => {
+  assert.equal(formatRaceTime(55418), '00:55.418')
+  assert.equal(formatRaceTime(61500), '01:01.500')
+  assert.equal(formatRaceTime(3600000 + 12), '60:00.012')
+  assert.equal(formatRaceTime(null), '—')
+  assert.equal(formatRaceTime(-1), '—')
+})
+
 test('runtime accepts an active Event reference and updates its presentation state', () => {
   const valueElement = { textContent: '', dataset: {} }
   const barElement = {
@@ -92,10 +139,17 @@ test('runtime accepts an active Event reference and updates its presentation sta
     setAttribute(name, value) { this.attributes[name] = value }
   }
   const fillElement = { style: {} }
+  const bestContainer = { hidden: true }
+  const bestElement = {
+    textContent: '',
+    dataset: {},
+    attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value }
+  }
   const root = { dataset: {} }
-  const runtime = createDeltaRuntime({ root, valueElement, barElement, fillElement })
+  const runtime = createDeltaRuntime({ root, valueElement, barElement, fillElement, bestContainer, bestElement })
 
-  runtime.setActiveEvent({ id: 42, reference: { tracePoints: referenceTrace } })
+  runtime.setActiveEvent({ id: 42, reference: { timeMs: 98765, tracePoints: referenceTrace } })
   // The first live packet establishes the lap's distance origin. This keeps
   // cumulative saved traces comparable to a lap whose live distance resets.
   runtime.update({ isRaceOn: true, lap: { number: 0, current: 0, distance: 20 } })
@@ -107,10 +161,17 @@ test('runtime accepts an active Event reference and updates its presentation sta
   assert.equal(fillElement.style.width, '50%')
   assert.equal(barElement.attributes['aria-valuenow'], '-1')
   assert.equal(root.dataset.deltaTone, 'ahead')
+  assert.equal(bestElement.textContent, '01:38.765')
+  assert.equal(bestElement.dataset.available, 'true')
+  assert.equal(bestElement.attributes['aria-label'], 'Best lap time 01:38.765')
+  assert.equal(bestContainer.hidden, false)
 
   runtime.clearReference()
   assert.equal(valueElement.textContent, '—')
   assert.equal(fillElement.style.width, '0%')
+  assert.equal(bestElement.textContent, '—')
+  assert.equal(bestElement.dataset.available, 'false')
+  assert.equal(bestContainer.hidden, true)
 })
 
 test('the shared telemetry path loads and clears the Event reference with recording', () => {
@@ -119,6 +180,8 @@ test('the shared telemetry path loads and clears the Event reference with record
   assert.match(overlaySource, /const nativeEventId = Number\(eventId\)/)
   assert.match(overlaySource, /Number\.isSafeInteger\(nativeEventId\) \|\| nativeEventId <= 0/)
   assert.match(overlaySource, /invokeTauri\('load_event_absolute_best', \{ eventId: nativeEventId \}\)/)
-  assert.match(overlaySource, /deltaRuntime\?\.setActiveEvent\?\.\(reference\)/)
+  assert.match(overlaySource, /onReferenceCandidate: candidate => installBetterDeltaReference\(candidate\)/)
+  assert.match(overlaySource, /installBetterDeltaReference\(reference\)/)
+  assert.match(overlaySource, /HudDelta\?\.isBetterReference\?\.\(normalized, current\)/)
   assert.match(overlaySource, /deltaRuntime\?\.clearReference\?\.\(\)/)
 })

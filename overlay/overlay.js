@@ -94,14 +94,15 @@ function emitRecorderEvent(eventName, payload) {
   }
 }
 
+const deltaRuntime = window.HudDelta?.createDeltaRuntime?.() || null
 const eventRecorder = window.HudEventRecorder?.createEventRecorder?.({
   timingApi: window.HudLapTiming,
   invoke: invokeTauri,
   emit: payload => emitRecorderEvent('event_recorder_status', payload),
   onSaved: payload => emitRecorderEvent('event_recorder_run_saved', payload),
-  onResult: payload => emitRecorderEvent('event_recorder_result', payload)
+  onResult: payload => emitRecorderEvent('event_recorder_result', payload),
+  onReferenceCandidate: candidate => installBetterDeltaReference(candidate)
 }) || null
-const deltaRuntime = window.HudDelta?.createDeltaRuntime?.() || null
 let deltaReferenceRequest = 0
 
 const steeringWheelImage = new Image()
@@ -863,14 +864,27 @@ async function configureDeltaReference(eventId) {
   try {
     const reference = await invokeTauri('load_event_absolute_best', { eventId: nativeEventId })
     if (request !== deltaReferenceRequest) return
-    deltaRuntime?.setActiveEvent?.(reference)
+    installBetterDeltaReference(reference)
     scheduleTelemetryRender()
   } catch (error) {
     if (request !== deltaReferenceRequest) return
-    deltaRuntime?.clearReference?.()
     scheduleTelemetryRender()
     console.warn('[hud] unable to load Event delta reference', error)
   }
+}
+
+function installBetterDeltaReference(candidate) {
+  const normalized = window.HudDelta?.normalizeReference?.(candidate)
+  if (!normalized || !deltaRuntime) return false
+  const recorder = eventRecorder?.snapshot?.()
+  if (!recorder?.armed || String(recorder.eventId) !== String(normalized.eventId)) return false
+
+  const current = deltaRuntime.getState?.().reference || null
+  if (!window.HudDelta?.isBetterReference?.(normalized, current)) return false
+
+  deltaRuntime.setReference?.(normalized)
+  scheduleTelemetryRender()
+  return true
 }
 
 async function retryDirectSource() {
