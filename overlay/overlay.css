@@ -822,7 +822,7 @@ body.is-editing .coachbar {
 
 .hud-frame.is-editing .layout-resize-handle,
 .delta-strip.is-editing .layout-resize-handle,
-.hud-freeform-widget.is-editing .layout-resize-handle {
+.hud-widget-editor-frame:not([hidden]) .layout-resize-handle {
   display: block;
 }
 
@@ -856,13 +856,30 @@ body.is-editing .coachbar {
 .hud[data-layout-mode='freeform'] > section.hud-freeform-widget.is-editing {
   z-index: 7;
   pointer-events: auto;
-  outline: 2px dashed rgb(251 191 36 / 80%);
-  outline-offset: 5px;
   cursor: grab;
 }
 
 .hud[data-layout-mode='freeform'] > section.hud-freeform-widget.is-editing:active {
   cursor: grabbing;
+}
+
+/* The widget itself scales with telemetry. Editor chrome stays in viewport
+   coordinates so its handles and controls remain compact and predictable. */
+.hud-widget-editor-frame {
+  position: absolute;
+  z-index: 8;
+  outline: 2px dashed rgb(251 191 36 / 80%);
+  outline-offset: 5px;
+  pointer-events: none;
+}
+
+.hud-widget-editor-frame[hidden] {
+  display: none;
+}
+
+.hud-widget-editor-frame .layout-edit-tools,
+.hud-widget-editor-frame .layout-resize-handle {
+  pointer-events: auto;
 }
 
 .layout-resize-handle--top-left {

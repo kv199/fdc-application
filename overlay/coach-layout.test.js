@@ -51,7 +51,15 @@ test('freeform targets expose independent edit, reset, cancel, save and resize b
   assert.match(source, /for \(const name of TARGET_NAMES\)/)
   assert.match(source, /const fixedRight = rect\.left \+ rect\.width/)
   assert.match(source, /const fixedBottom = rect\.top \+ rect\.height/)
-  assert.match(css, /\.hud-freeform-widget\.is-editing \{[\s\S]*pointer-events: auto/)
+  assert.match(source, /editorFrame\.className = 'hud-widget-editor-frame'/)
+  assert.match(source, /hud\.append\(editorFrame\)/)
+  assert.match(source, /function syncEditorFrame\(name\)/)
+  assert.match(source, /belowTop \+ toolbarRect\.height <= viewport\.height - EDITOR_CHROME_MARGIN/)
+  assert.match(source, /targetTools\.root\.style\.left = `\$\{toolbarLeft - rect\.left\}px`/)
+  assert.match(source, /if \(name !== editingTarget\) return\s+element\.hidden = false/)
+  assert.match(css, /\.hud-widget-editor-frame \{[\s\S]*pointer-events: none/)
+  assert.match(css, /\.hud-widget-editor-frame:not\(\[hidden\]\) \.layout-resize-handle/)
+  assert.match(css, /\.hud-widget-editor-frame \.layout-edit-tools,[\s\S]*pointer-events: auto/)
 })
 
 test('mode changes refresh visibility layout and both modes retain separate state', () => {

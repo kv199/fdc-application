@@ -13,6 +13,8 @@
   const DEFAULT_SIZE = 0
   const MIN_WIDGET_SIZE = 0.5
   const MAX_WIDGET_SIZE = 2
+  const EDITOR_CHROME_MARGIN = 8
+  const EDITOR_CHROME_GAP = 10
 
   function clamp(value, minimum, maximum) {
     const number = Number(value)
@@ -128,7 +130,15 @@
       root.className = 'layout-edit-tools'
       root.hidden = true
       root.innerHTML = `<span class="layout-edit__hint">DRAG ${name.toUpperCase()} OR A CORNER TO RESIZE</span><button class="layout-edit__button" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
-      elements[name].append(root)
+      const editorFrame = FREEFORM_TARGETS.includes(name) ? document.createElement('div') : null
+      const editorSurface = editorFrame || elements[name]
+      if (editorFrame) {
+        editorFrame.className = 'hud-widget-editor-frame'
+        editorFrame.dataset.layoutEditorTarget = name
+        editorFrame.hidden = true
+        hud.append(editorFrame)
+      }
+      editorSurface.append(root)
       const buttons = [...root.querySelectorAll('button')]
       for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right']) {
         const handle = document.createElement('button')
@@ -137,9 +147,9 @@
         handle.dataset.layoutResizeTarget = name
         handle.dataset.layoutResizeHandle = corner
         handle.setAttribute('aria-label', `Resize ${name} from ${corner} corner`)
-        elements[name].append(handle)
+        editorSurface.append(handle)
       }
-      tools[name] = { root, reset: buttons[0], cancel: buttons[1], save: buttons[2] }
+      tools[name] = { root, editorFrame, reset: buttons[0], cancel: buttons[1], save: buttons[2] }
       return tools[name]
     }
     for (const name of TARGET_NAMES) createTools(name)
@@ -274,9 +284,37 @@
       elements.hud.style.height = `${Math.round(hudRect.height)}px`
     }
 
+    function syncEditorFrame(name) {
+      const targetTools = tools[name]
+      const editorFrame = targetTools?.editorFrame
+      if (!editorFrame || editorFrame.hidden || !isFreeformTarget(name)) return
+      const rect = elements[name].getBoundingClientRect()
+      editorFrame.style.left = `${rect.left}px`
+      editorFrame.style.top = `${rect.top}px`
+      editorFrame.style.width = `${rect.width}px`
+      editorFrame.style.height = `${rect.height}px`
+
+      const viewport = getViewport()
+      const toolbarRect = targetTools.root.getBoundingClientRect()
+      const maximumToolbarLeft = Math.max(EDITOR_CHROME_MARGIN, viewport.width - toolbarRect.width - EDITOR_CHROME_MARGIN)
+      const toolbarLeft = clamp(rect.left, EDITOR_CHROME_MARGIN, maximumToolbarLeft)
+      const belowTop = rect.bottom + EDITOR_CHROME_GAP
+      const aboveTop = rect.top - EDITOR_CHROME_GAP - toolbarRect.height
+      const preferredTop = belowTop + toolbarRect.height <= viewport.height - EDITOR_CHROME_MARGIN
+        ? belowTop
+        : aboveTop
+      const maximumToolbarTop = Math.max(EDITOR_CHROME_MARGIN, viewport.height - toolbarRect.height - EDITOR_CHROME_MARGIN)
+      const toolbarTop = clamp(preferredTop, EDITOR_CHROME_MARGIN, maximumToolbarTop)
+      targetTools.root.style.left = `${toolbarLeft - rect.left}px`
+      targetTools.root.style.top = `${toolbarTop - rect.top}px`
+    }
+
     function applyPosition(name) {
       const element = elements[name]
-      if (element.hidden && name !== editingTarget) return
+      if (element.hidden) {
+        if (name !== editingTarget) return
+        element.hidden = false
+      }
       const viewport = getViewport()
       const position = ensurePosition(name)
       if (isFreeformTarget(name)) {
@@ -288,6 +326,7 @@
         element.classList.add('layout-positioned')
         element.style.left = `${Math.round(available.width * position.x)}px`
         element.style.top = `${Math.round(available.height * position.y)}px`
+        syncEditorFrame(name)
         return
       }
       applyWidgetScale(name)
@@ -337,7 +376,12 @@
     }
 
     function setToolsVisible(name, visible) {
-      createTools(name).root.hidden = !visible
+      const targetTools = createTools(name)
+      targetTools.root.hidden = !visible
+      if (targetTools.editorFrame) {
+        targetTools.editorFrame.hidden = !visible
+        if (visible) syncEditorFrame(name)
+      }
     }
 
     function finishEdit() {
