@@ -41,6 +41,18 @@
     return clamp(size, MIN_WIDGET_SIZE, MAX_WIDGET_SIZE)
   }
 
+  function calculateEditorToolbarPosition(targetRect, toolbarRect, viewport) {
+    const maximumLeft = Math.max(EDITOR_CHROME_MARGIN, viewport.width - toolbarRect.width - EDITOR_CHROME_MARGIN)
+    const left = clamp(targetRect.left, EDITOR_CHROME_MARGIN, maximumLeft)
+    const belowTop = targetRect.bottom + EDITOR_CHROME_GAP
+    const aboveTop = targetRect.top - EDITOR_CHROME_GAP - toolbarRect.height
+    const preferredTop = belowTop + toolbarRect.height <= viewport.height - EDITOR_CHROME_MARGIN
+      ? belowTop
+      : aboveTop
+    const maximumTop = Math.max(EDITOR_CHROME_MARGIN, viewport.height - toolbarRect.height - EDITOR_CHROME_MARGIN)
+    return { left, top: clamp(preferredTop, EDITOR_CHROME_MARGIN, maximumTop) }
+  }
+
   function storageGet(key) {
     try { return globalScope.localStorage?.getItem(key) || null } catch { return null }
   }
@@ -284,6 +296,16 @@
       elements.hud.style.height = `${Math.round(hudRect.height)}px`
     }
 
+    function syncEditorToolbar(name, rect) {
+      const targetTools = tools[name]
+      if (!targetTools || targetTools.root.hidden) return
+      const viewport = getViewport()
+      const toolbarRect = targetTools.root.getBoundingClientRect()
+      const toolbarPosition = calculateEditorToolbarPosition(rect, toolbarRect, viewport)
+      targetTools.root.style.left = `${toolbarPosition.left - rect.left}px`
+      targetTools.root.style.top = `${toolbarPosition.top - rect.top}px`
+    }
+
     function syncEditorFrame(name) {
       const targetTools = tools[name]
       const editorFrame = targetTools?.editorFrame
@@ -293,20 +315,7 @@
       editorFrame.style.top = `${rect.top}px`
       editorFrame.style.width = `${rect.width}px`
       editorFrame.style.height = `${rect.height}px`
-
-      const viewport = getViewport()
-      const toolbarRect = targetTools.root.getBoundingClientRect()
-      const maximumToolbarLeft = Math.max(EDITOR_CHROME_MARGIN, viewport.width - toolbarRect.width - EDITOR_CHROME_MARGIN)
-      const toolbarLeft = clamp(rect.left, EDITOR_CHROME_MARGIN, maximumToolbarLeft)
-      const belowTop = rect.bottom + EDITOR_CHROME_GAP
-      const aboveTop = rect.top - EDITOR_CHROME_GAP - toolbarRect.height
-      const preferredTop = belowTop + toolbarRect.height <= viewport.height - EDITOR_CHROME_MARGIN
-        ? belowTop
-        : aboveTop
-      const maximumToolbarTop = Math.max(EDITOR_CHROME_MARGIN, viewport.height - toolbarRect.height - EDITOR_CHROME_MARGIN)
-      const toolbarTop = clamp(preferredTop, EDITOR_CHROME_MARGIN, maximumToolbarTop)
-      targetTools.root.style.left = `${toolbarLeft - rect.left}px`
-      targetTools.root.style.top = `${toolbarTop - rect.top}px`
+      syncEditorToolbar(name, rect)
     }
 
     function applyPosition(name) {
@@ -335,6 +344,7 @@
       element.classList.add('layout-positioned')
       element.style.left = `${Math.round(available.width * position.x)}px`
       element.style.top = `${Math.round(available.height * position.y)}px`
+      if (name === 'hud') syncEditorToolbar(name, element.getBoundingClientRect())
     }
 
     function refreshLayout() {
@@ -640,6 +650,7 @@
     clampPosition,
     sanitizePosition,
     sanitizeWidgetSize,
+    calculateEditorToolbarPosition,
     readStoredLayout,
     STORAGE_KEY,
     MODE_STORAGE_KEY,

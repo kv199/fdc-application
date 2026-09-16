@@ -18,6 +18,24 @@ test('sanitizes finite positions and widget sizes', () => {
   assert.equal(layout.sanitizeWidgetSize(3), 2)
 })
 
+test('keeps editor toolbar inside the viewport and flips it above bottom-edge targets', () => {
+  const viewport = { width: 1000, height: 800 }
+  const toolbar = { width: 420, height: 48 }
+
+  assert.deepEqual(
+    layout.calculateEditorToolbarPosition({ left: 24, top: 700, bottom: 780 }, toolbar, viewport),
+    { left: 24, top: 642 }
+  )
+  assert.deepEqual(
+    layout.calculateEditorToolbarPosition({ left: 24, top: 20, bottom: 100 }, toolbar, viewport),
+    { left: 24, top: 110 }
+  )
+  assert.deepEqual(
+    layout.calculateEditorToolbarPosition({ left: 900, top: 20, bottom: 100 }, toolbar, viewport),
+    { left: 572, top: 110 }
+  )
+})
+
 test('uses a fresh v2 namespace and never reads the old layout', () => {
   assert.equal(layout.STORAGE_KEY, 'fdc.layout.v2')
   assert.equal(layout.MODE_STORAGE_KEY, 'fdc.layout-mode.v1')
@@ -53,9 +71,10 @@ test('freeform targets expose independent edit, reset, cancel, save and resize b
   assert.match(source, /const fixedBottom = rect\.top \+ rect\.height/)
   assert.match(source, /editorFrame\.className = 'hud-widget-editor-frame'/)
   assert.match(source, /hud\.append\(editorFrame\)/)
+  assert.match(source, /function syncEditorToolbar\(name, rect\)/)
   assert.match(source, /function syncEditorFrame\(name\)/)
-  assert.match(source, /belowTop \+ toolbarRect\.height <= viewport\.height - EDITOR_CHROME_MARGIN/)
-  assert.match(source, /targetTools\.root\.style\.left = `\$\{toolbarLeft - rect\.left\}px`/)
+  assert.match(source, /if \(name === 'hud'\) syncEditorToolbar\(name, element\.getBoundingClientRect\(\)\)/)
+  assert.match(source, /calculateEditorToolbarPosition\(rect, toolbarRect, viewport\)/)
   assert.match(source, /if \(name !== editingTarget\) return\s+element\.hidden = false/)
   assert.match(css, /\.hud-widget-editor-frame \{[\s\S]*pointer-events: none/)
   assert.match(css, /\.hud-widget-editor-frame:not\(\[hidden\]\) \.layout-resize-handle/)
