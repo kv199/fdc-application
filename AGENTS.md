@@ -3,7 +3,7 @@
 ## Repository identity
 
 - Product: FDC (`Feedback-Driven Companion`).
-- Application: standalone Windows Tauri application for Forza Horizon 6.
+- Application: standalone Windows Tauri application compatible with Forza Horizon 6.
 - `main` is the only supported permanent branch.
 - The supported runnable build is the Cargo `release` build.
 - While working on `main`, commit each logically complete and locally verified

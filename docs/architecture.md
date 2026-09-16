@@ -6,7 +6,8 @@ in the feature documents for [Garage](garage.md), [Asphalt Coach](asphalt-coach.
 
 ## System boundary
 
-FDC is a standalone Windows Tauri application for Forza Horizon 6. The
+Feedback-Driven Companion (FDC) is an independent, unofficial Windows Tauri
+application compatible with Forza Horizon 6. The
 repository owns the native Direct Data Out receiver and decoder, the browser
 overlay, Configuration, lap timing, Delta, Garage, Asphalt Coach, Shift Light, Events,
 and local HUD profile persistence.
@@ -49,8 +50,8 @@ Events uses this same normalized sample rather than the game's result-screen
 UI. Its recording logic reads `isRaceOn`, `lap.current`, `lap.raceTime`,
 `lap.distance`, `lap.number`, and `lap.last`, plus the normalized vehicle
 identity. A result time that Forza displays but does not emit through Direct
-Data Out is outside FDC's telemetry boundary and cannot be reconstructed as an
-official result.
+Data Out is outside FDC's telemetry boundary and cannot be reconstructed as a
+game-reported result.
 
 Connection lifecycle is a parallel status path. The native receiver emits
 `direct_status` for waiting, live, stale, offline, and incompatible-packet
@@ -211,8 +212,8 @@ remaining overlay JavaScript, CSS, HTML, and SVG files are loaded directly from
 
 ## Current runtime constraints
 
-- The supported runtime is the Windows PC release build on `main` for Forza
-  Horizon 6.
+- The supported runtime is the Windows PC release build on `main`, compatible
+  with Forza Horizon 6.
 - The Direct Data Out contract is a 324-byte packet received at
   `127.0.0.1:5301`; invalid packet formats are reported instead of being sent
   to feature consumers.

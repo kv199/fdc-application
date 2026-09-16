@@ -93,8 +93,9 @@ available as the Events tab in Configuration, directly after Garage.
   result, is discarded rather than added to the saved-run list. If a started
   sprint reaches a zeroed non-live result packet before its final packet is
   observed, **STOP** checks up to 48 additional packets (for at most one
-  second) for the official final result. It uses that result when available;
-  otherwise it uses the last live race time as the manually confirmed result.
+  second) for the game-reported final result. It uses that result when
+  available; otherwise it uses the last live race time as the manually
+  confirmed result.
   Selecting **STOP** explicitly reports whether the attempt was saved,
   discarded, or could not be stored. A saved circuit reports its latest stored
   completed lap as **LAST**; a saved Sprint reports its stored final result as
@@ -124,7 +125,7 @@ clears its reference.
 | `CurrentRaceTime` | Validates the clean start window and provides the manual sprint fallback time. |
 | `DistanceTraveled` | Validates the clean start window. |
 | `LapNumber` | Detects circuit-lap boundaries and a confirmed clean restart. |
-| `LastLap` | Stores an official completed circuit lap and is the preferred sprint finish evidence. |
+| `LastLap` | Stores a game-reported completed circuit lap and is the preferred sprint finish evidence. |
 | `Position X`, `Position Y`, `Position Z` | Saves a compact per-lap vehicle trace; the detail map renders the top-down X/Z projection while retaining Y. |
 | `Throttle`, `Brake` | Saves the pedal inputs used by the existing HUD and derives trace colors and time-weighted pedal statistics. |
 | Vehicle ordinal, name, class, PI, and drivetrain | Snapshots the vehicle recorded with the run. |
@@ -173,7 +174,7 @@ the temporary **FINALIZING** state and continues processing up to 48 subsequent
 Direct Data Out samples for at most one second.
 
 If those samples contain a confirmed final `LastLap` or Current Lap result,
-that official telemetry value is saved. If not, FDC saves the last live
+that game-reported telemetry value is saved. If not, FDC saves the last live
 `CurrentRaceTime` as the manually confirmed sprint result so the run is not
 lost. That fallback is the last time received before the game cleared its
 telemetry and can differ by a few milliseconds from the time displayed by

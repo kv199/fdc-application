@@ -1,8 +1,9 @@
-# FDC
+# Feedback-Driven Companion (FDC)
 
-FDC is a local-first, always-on-top telemetry HUD and driving-feedback
-companion for Forza Horizon 6. It receives FH6 Data Out directly, renders
-essential driving telemetry, and keeps the feedback path on the local machine.
+Feedback-Driven Companion (FDC) is a local-first, always-on-top telemetry HUD
+app compatible with Forza Horizon 6. It receives Forza Horizon 6 Data Out
+directly, renders essential driving telemetry, and keeps the feedback path on
+the local machine.
 
 ## Unofficial project notice
 

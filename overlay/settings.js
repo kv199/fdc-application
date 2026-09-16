@@ -1469,7 +1469,7 @@
       const hint = recordingAnotherEvent
         ? `Recording Event #${recorderState.eventId}. Open that event to stop capture.`
         : finalizing
-          ? 'Checking post-finish telemetry for the official result.'
+          ? 'Checking post-finish telemetry for the game-reported result.'
           : sprintWarning
       eventRecorderHint.textContent = hint
       eventRecorderHint.dataset.tone = !recordingAnotherEvent && !finalizing ? 'warning' : ''

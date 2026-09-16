@@ -31,7 +31,7 @@ enabled, reports may be submitted through the repository's Security tab using
 
 ## Release trust
 
-Official Windows x64 installers will be attached to GitHub releases. Each
+FDC's official Windows x64 installers will be attached to GitHub releases. Each
 official release must include a matching SHA-256 checksum file. Local builds,
 CI builds from pull requests, and ordinary push builds are not official
 releases.
