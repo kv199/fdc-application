@@ -60,6 +60,7 @@
         "silent": true
       },
       "nsis": {
+        "installerIcon": "icons/icon.ico",
         "installMode": "perMachine"
       }
     }
