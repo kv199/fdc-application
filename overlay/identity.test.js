@@ -25,13 +25,13 @@ test('FDC uses only current versioned browser storage keys', () => {
   assert.doesNotMatch(storageSources, /forza-horizon-6-hud\.(layout|coach-position|telemetry-source|display-preferences|hud-visibility|overlay-visibility)\./u)
 })
 
-test('FDC has a new native identity and database filename', () => {
+test('FDC uses its canonical native identity and database filename', () => {
   const config = JSON.parse(fs.readFileSync(path.join(root, 'src-tauri', 'tauri.conf.json'), 'utf8'))
   const cargo = fs.readFileSync(path.join(root, 'src-tauri', 'Cargo.toml'), 'utf8')
   const rust = fs.readFileSync(path.join(root, 'src-tauri', 'src', 'main.rs'), 'utf8')
 
   assert.equal(config.productName, 'FDC')
-  assert.equal(config.identifier, 'dev.kv199.fdc')
+  assert.equal(config.identifier, 'FDC')
   assert.match(cargo, /^name = "fdc-application"$/mu)
   assert.match(rust, /directory\.join\("fdc\.sqlite"\)/u)
   assert.doesNotMatch(rust, /directory\.join\("hud\.sqlite"\)/u)

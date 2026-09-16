@@ -131,18 +131,6 @@ Garage and Shift Light data are stored in the FDC application-data directory as
 running application. Layout, visibility, speed-unit, and display preferences
 are stored in the local application webview.
 
-On Windows, Tauri derives the application-data folder name from FDC's stable
-application identifier, `dev.kv199.fdc`:
-
-- `%APPDATA%\dev.kv199.fdc` contains `fdc.sqlite` and native window state;
-- `%LOCALAPPDATA%\dev.kv199.fdc\EBWebView` contains WebView2 local storage,
-  preferences, and disposable browser caches.
-
-The reverse-domain folder name is intentional and is not the user-facing
-product name. It must remain stable across upgrades so existing user data and
-webview preferences continue to be found. Uninstalling FDC may leave these
-folders in place to preserve user data for a later reinstall.
-
 ## Browser demo
 
 The overlay can be previewed without Forza by serving the `overlay/` directory
