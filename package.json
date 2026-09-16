@@ -1,6 +1,7 @@
 {
   "name": "fdc-application",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "build:installer": "tauri build --bundles nsis -- --locked",
     "build:shift-light": "node tools/build-shift-light.mjs",

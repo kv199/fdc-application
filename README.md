@@ -257,3 +257,7 @@ as tag `vX.Y.Z`.
   verification boundaries.
 - [Shift Light](docs/shift-light.md) — current learner, presentation,
   persistence, and compatibility contracts.
+
+## License
+
+FDC is available under the [MIT License](LICENSE).
