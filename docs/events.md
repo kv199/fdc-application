@@ -54,8 +54,8 @@ available as the Events tab in Configuration, directly after Garage.
   its lap number in the event page; a sprint shows its confirmed finish time.
   A confirmed sprint is saved immediately and leaves capture armed for the
   next attempt. Circuit laps remain in their current run until **STOP** or a
-  confirmed restart. Each row displays the local run start as
-  `YYYY.MM.DD HH:MM:SS`.
+  confirmed restart. Each saved-run row shows its lap count between Best and
+  Date, then displays the local run start as `YYYY.MM.DD HH:MM:SS`.
 - The saved-run header sorts by ID, Best, or Date. Its default is Date from
   newest to oldest, and that temporary choice is not persisted. Selecting a
   saved run opens its detail page.

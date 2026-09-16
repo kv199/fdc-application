@@ -1107,10 +1107,11 @@
     if (eventRunsEmpty) eventRunsEmpty.hidden = runs.length > 0
     if (eventRunsCount) eventRunsCount.textContent = `${runs.length} ${runs.length === 1 ? 'RUN' : 'RUNS'}`
     for (const run of runs) {
+      const lapCount = run.laps.length
       const row = document.createElement('button')
       row.type = 'button'
       row.className = 'event-run-row'
-      row.setAttribute('aria-label', `Open run ${run.id}`)
+      row.setAttribute('aria-label', `Open run ${run.id}, ${lapCount} ${lapCount === 1 ? 'lap' : 'laps'}`)
       row.addEventListener('click', () => openEventRun(run.id))
       const carDetails = [run.car.class, run.car.pi ? `PI ${run.car.pi}` : '', run.car.drivetrain].filter(Boolean).join(' · ') || '—'
       const bestLap = run.runType !== 'sprint'
@@ -1121,6 +1122,7 @@
         ['CAR', runCarName(run)],
         ['CLASS / PI / DRIVE', carDetails],
         [bestLap ? `BEST L${Math.max(1, Math.round(bestLap.lapNumber))}` : 'SPRINT', formatRunTime(runBestTimeMs(run))],
+        ['LAPS', lapCount],
         ['DATE', formatRunDate(run.startedAt)]
       ]
       for (const [label, value] of cells) {

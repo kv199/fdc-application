@@ -1453,7 +1453,7 @@ h1 {
 .event-run-row {
   appearance: none;
   display: grid;
-  grid-template-columns: minmax(82px, 0.7fr) minmax(120px, 1.4fr) minmax(120px, 1fr) minmax(90px, 0.75fr) minmax(85px, 0.75fr);
+  grid-template-columns: minmax(82px, 0.7fr) minmax(120px, 1.4fr) minmax(120px, 1fr) minmax(90px, 0.75fr) minmax(48px, 0.35fr) minmax(85px, 0.75fr);
   align-items: center;
   gap: 10px;
   min-height: 42px;
