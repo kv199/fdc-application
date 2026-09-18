@@ -13,10 +13,6 @@ const engineElements = {
 }
 const steeringCanvas = document.getElementById('steering-canvas')
 const historyCanvas = document.getElementById('history-canvas')
-const coachCard = document.getElementById('coach-card')
-const coachbar = document.getElementById('coachbar')
-const coachKicker = document.getElementById('coach-kicker')
-const coachStatus = document.getElementById('coach-status')
 const deltaStrip = document.getElementById('delta-strip')
 const tireElements = {
   fl: document.getElementById('tire-fl'),
@@ -37,11 +33,8 @@ const STEERING_WHEEL_RANGE_DEGREES = 90
 const HISTORY_MS = 8000
 const DEMO_MODE = new URLSearchParams(window.location.search).has('demo')
 const DEMO_SIGNAL_FROM_URL = new URLSearchParams(window.location.search).get('signal')
-const DEMO_COACH_FROM_URL = new URLSearchParams(window.location.search).get('coach')
 const DEMO_SIGNALS = ['normal', 'redline', 'shift']
-const DEMO_COACHES = ['calibrating', 'ready', 'front-scrub', 'exit-wheelspin', 'brake-overload', 'abrupt-release', 'clean-exit', 'controlled-release', 'brief', 'run-check', 'focus']
 const REDLINE_RPM_FRACTION = 0.85
-const ASPHALT_BRIEF_DURATION_MS = 25000
 
 let latestTelemetry = null
 let lapTimingState = window.HudLapTiming.createState()
@@ -60,7 +53,6 @@ let routeStatus = window.HudTelemetryRoute.normalizeRouteStatus({
 let historySamples = []
 let steeringWheelImageReady = false
 let demoSignal = DEMO_SIGNALS.includes(DEMO_SIGNAL_FROM_URL) ? DEMO_SIGNAL_FROM_URL : 'normal'
-let demoCoach = DEMO_COACHES.includes(DEMO_COACH_FROM_URL) ? DEMO_COACH_FROM_URL : null
 let activeRpmSignal = null
 let latestShiftLight = {
   status: 'fallback',
@@ -76,12 +68,6 @@ let latestShiftLight = {
 }
 const shiftLightPresentation = window.ShiftLightPresentation.createShiftLightPresentation()
 let shiftLightLatchTimer = null
-let asphaltCoachState = new window.AsphaltCoachState.AsphaltCoachState()
-let asphaltCoachFindings = new window.AsphaltCoachFindings.AsphaltCoachFindings()
-let asphaltCoachPresentation = new window.AsphaltCoachPresentation.AsphaltCoachPresentation()
-let latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
-let lastAsphaltBriefToken = null
-let asphaltBriefTimer = null
 let garageRuntime = null
 
 function emitRecorderEvent(eventName, payload) {
@@ -103,6 +89,18 @@ const eventRecorder = window.HudEventRecorder?.createEventRecorder?.({
   onResult: payload => emitRecorderEvent('event_recorder_result', payload),
   onReferenceCandidate: candidate => installBetterDeltaReference(candidate)
 }) || null
+const driverAnalysisSettings = window.DriverAnalysis?.readSettings?.() || {
+  enabled: false,
+  hotkey: window.DriverAnalysis?.DEFAULT_HOTKEY || 'Ctrl+Shift+F9'
+}
+let driverAnalysisHotkey = driverAnalysisSettings.hotkey
+const driverAnalysisRecorder = window.DriverAnalysis?.createRecorder?.({
+  state: new window.AsphaltCoachState.AsphaltCoachState(),
+  findings: new window.AsphaltCoachFindings.AsphaltCoachFindings(),
+  buildBrief: window.AsphaltCoachPresentation.buildDriverBrief,
+  metaFor: window.AsphaltCoachPresentation.metaFor,
+  enabled: driverAnalysisSettings.enabled
+}) || null
 let deltaReferenceRequest = 0
 
 const steeringWheelImage = new Image()
@@ -118,12 +116,6 @@ function clamp01(value) {
 
 function clampSteer(value) {
   return Math.max(-1, Math.min(1, Number(value) || 0))
-}
-
-function finiteStateNumber(value) {
-  if (value === null || value === undefined || value === '') return null
-  const number = Number(value)
-  return Number.isFinite(number) ? number : null
 }
 
 function formatGear(rawGear) {
@@ -233,219 +225,6 @@ function hasTelemetryPresentation() {
 
 function applyTelemetryVisibility() {
   window.HudPreferences?.setTelemetryVisible?.(hasTelemetryPresentation())
-}
-
-function renderCoach() {
-  const hasAsphaltGuidance = latestAsphaltCoach.mode === 'cue' || latestAsphaltCoach.mode === 'brief'
-  const hasAsphaltStatus = latestAsphaltCoach.mode === 'status'
-    || (latestTelemetry?.isRaceOn === true && !hasAsphaltGuidance)
-  const hasCoachGuidance = hasAsphaltGuidance || hasAsphaltStatus
-  const isCoachEditing = window.HudLayout?.isEditing?.('coach') === true
-  const isDeltaEditing = window.HudLayout?.isEditing?.('delta') === true
-  const isCoachVisible = window.HudPreferences?.isOverlayVisible?.('coach') !== false
-  const isDeltaVisible = window.HudPreferences?.isOverlayVisible?.('delta') !== false
-  const isTelemetryVisible = hasTelemetryPresentation()
-  const hasDeltaReference = Boolean(deltaRuntime?.getState?.().reference)
-  coachCard.dataset.hasCoachGuidance = hasCoachGuidance || isCoachEditing ? 'true' : 'false'
-  coachCard.dataset.coachMode = hasAsphaltGuidance
-    ? latestAsphaltCoach.mode
-    : 'status'
-  coachCard.hidden = !isTelemetryVisible || (!isCoachEditing && (!isCoachVisible || !hasCoachGuidance))
-  deltaStrip.hidden = !isTelemetryVisible || (!isDeltaEditing && (!isDeltaVisible || !hasDeltaReference))
-
-  if (hasAsphaltGuidance) {
-    const cue = latestAsphaltCoach.cue
-    const brief = latestAsphaltCoach.brief
-    coachKicker.textContent = latestAsphaltCoach.mode === 'brief'
-      ? brief.title
-      : `${cue.code} · ${cue.label}`
-    coachStatus.dataset.phase = 'asphalt'
-    coachStatus.dataset.cueKind = cue?.kind || brief?.mainKind || ''
-    coachStatus.textContent = latestAsphaltCoach.mode === 'brief'
-      ? `${brief.mainHeading} — ${brief.mainText}\n${brief.strengthHeading} — ${brief.strengthText}\n${brief.nextHeading} — ${brief.nextText}`
-      : cue.instruction
-  } else if (hasAsphaltStatus) {
-    const ready = latestAsphaltCoach.readiness === 'ready'
-    coachKicker.textContent = ready ? 'ASPHALT COACH · READY' : 'ASPHALT COACH · LEARNING'
-    coachStatus.dataset.phase = 'asphalt'
-    coachStatus.dataset.cueKind = ''
-    coachStatus.textContent = ready
-      ? 'Analyzing driving technique'
-      : 'Learning current speed range'
-  } else {
-    coachKicker.textContent = isCoachEditing ? 'ASPHALT COACH' : ''
-    coachStatus.dataset.phase = ''
-    coachStatus.dataset.cueKind = ''
-    coachStatus.textContent = isCoachEditing ? 'No live cue' : '\u2014'
-  }
-
-  coachbar.dataset.cueKind = hasAsphaltGuidance
-    ? (latestAsphaltCoach.cue?.kind || latestAsphaltCoach.brief?.mainKind || '')
-    : ''
-  coachbar.dataset.phase = hasAsphaltGuidance ? 'asphalt' : ''
-  window.HudLayout.refreshPosition?.()
-}
-
-function resetAsphaltCoach(reason = 'reset') {
-  if (asphaltBriefTimer !== null) {
-    window.clearTimeout(asphaltBriefTimer)
-    asphaltBriefTimer = null
-  }
-  asphaltCoachState.reset(reason)
-  asphaltCoachFindings.reset()
-  asphaltCoachPresentation.reset()
-  latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
-  lastAsphaltBriefToken = null
-}
-
-function resetAsphaltCoachTransient(reason = 'telemetry_gap') {
-  const snapshot = asphaltCoachState.resetTransient(reason)
-  asphaltCoachFindings.resetTransient()
-  if (asphaltCoachPresentation.activeBrief !== null) {
-    latestAsphaltCoach = asphaltCoachPresentation.update({
-      valid: false,
-      events: [],
-      calibration: { ready: true }
-    }, performance.now())
-  } else {
-    latestAsphaltCoach = asphaltCoachPresentation.resetTransient('calibrating')
-  }
-  return snapshot
-}
-
-function beginAsphaltAttempt() {
-  if (asphaltBriefTimer !== null) {
-    window.clearTimeout(asphaltBriefTimer)
-    asphaltBriefTimer = null
-  }
-  asphaltCoachState.beginAttempt()
-  asphaltCoachFindings.beginAttempt(asphaltCoachState.attemptId)
-  latestAsphaltCoach = asphaltCoachPresentation.beginAttempt()
-  lastAsphaltBriefToken = null
-}
-
-function beginAsphaltLapBoundary() {
-  if (asphaltBriefTimer !== null) {
-    window.clearTimeout(asphaltBriefTimer)
-    asphaltBriefTimer = null
-  }
-  asphaltCoachState.resetTransient('lap_boundary')
-  asphaltCoachFindings.resetTransient()
-  const readiness = latestAsphaltCoach?.readiness === 'ready' ? 'ready' : 'calibrating'
-  latestAsphaltCoach = asphaltCoachPresentation.resetTransient(readiness)
-  lastAsphaltBriefToken = null
-}
-
-function updateAsphaltCoach(telemetry, options = {}) {
-  const snapshot = asphaltCoachState.update(telemetry)
-  if (snapshot.ignored) return snapshot
-  if (
-    snapshot.resetReason === 'car_identity_change'
-    || snapshot.resetReason === 'race_clock_rewind'
-    || snapshot.resetReason === 'lap_number_rewind'
-    || snapshot.resetReason === 'lap_distance_rewind'
-    || snapshot.resetReason === 'timestamp_rewind'
-  ) {
-    asphaltCoachFindings.reset()
-    asphaltCoachPresentation.reset()
-    latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
-    lastAsphaltBriefToken = null
-    return snapshot
-  }
-
-  if (!snapshot.valid) {
-    asphaltCoachFindings.resetTransient()
-    if (asphaltCoachPresentation.activeBrief !== null) {
-      latestAsphaltCoach = asphaltCoachPresentation.update({
-        valid: false,
-        events: [],
-        calibration: { ready: true }
-      }, performance.now())
-    } else {
-      latestAsphaltCoach = asphaltCoachPresentation.resetTransient('calibrating')
-    }
-    return snapshot
-  }
-
-  if (snapshot.newAttempt) {
-    if (asphaltBriefTimer !== null) {
-      window.clearTimeout(asphaltBriefTimer)
-      asphaltBriefTimer = null
-    }
-    if (options.presentationAttemptBegan !== true) asphaltCoachPresentation.beginAttempt()
-  }
-  if (telemetry?.isRaceOn === true) {
-    asphaltCoachPresentation.dismissInterimBrief(
-      snapshot.calibration?.ready === true ? 'ready' : 'calibrating'
-    )
-  }
-  const result = asphaltCoachFindings.update(snapshot)
-  latestAsphaltCoach = asphaltCoachPresentation.update({
-    ...result,
-    valid: true
-  }, performance.now())
-  return snapshot
-}
-
-function showAsphaltBrief(token, options = {}) {
-  if (!token || token === lastAsphaltBriefToken) return false
-  lastAsphaltBriefToken = token
-  latestAsphaltCoach = asphaltCoachPresentation.showBrief(
-    asphaltCoachFindings.getSummary(),
-    performance.now(),
-    options
-  )
-  if (asphaltBriefTimer !== null) window.clearTimeout(asphaltBriefTimer)
-  asphaltBriefTimer = window.setTimeout(() => {
-    asphaltBriefTimer = null
-    latestAsphaltCoach = asphaltCoachPresentation.resetTransient('ready')
-    scheduleTelemetryRender()
-  }, ASPHALT_BRIEF_DURATION_MS)
-  scheduleTelemetryRender()
-  return true
-}
-
-function showAsphaltRunCheck(token) {
-  return showAsphaltBrief(token, {
-    title: 'RUN CHECK · NOT FINAL',
-    mainHeading: 'CURRENT PATTERN',
-    strengthHeading: 'CURRENT STRENGTH',
-    nextHeading: 'FOCUS',
-    dismissOnResume: true
-  })
-}
-
-function handleAsphaltLapLifecycle(previousTimingState, previousLapNumber, telemetry) {
-  const action = window.AsphaltCoachLifecycle.resolveLapAction({
-    previousTimingState,
-    timingState: lapTimingState,
-    previousLapNumber,
-    telemetry
-  })
-
-  if (action === 'brief') {
-    showAsphaltBrief(
-      `final:${lapTimingState.phase}:${lapTimingState.lapNumber}:${lapTimingState.finalTimeMs}`
-    )
-    return
-  }
-
-  if (action === 'run_check') {
-    showAsphaltRunCheck(
-      `check:${asphaltCoachState.attemptId}:${previousTimingState.lastLiveCurrentTimeMs}`
-    )
-    return
-  }
-
-  if (action === 'lap_boundary') {
-    beginAsphaltLapBoundary()
-    return
-  }
-
-  if (action === 'begin_attempt') {
-    beginAsphaltAttempt()
-    return
-  }
 }
 
 function getRpmSignal(rawRpm, rawRpmMax) {
@@ -613,10 +392,7 @@ function drawHistory() {
 function renderTelemetry() {
   renderScheduled = false
   const telemetry = latestTelemetry
-  if (!telemetry) {
-    renderCoach()
-    return
-  }
+  if (!telemetry) return
 
   const throttle = clamp01(telemetry.throttle)
   const brake = clamp01(telemetry.brake)
@@ -640,7 +416,6 @@ function renderTelemetry() {
   setRpmSignal(signal)
   if (!DEMO_MODE) pushHistory(throttle, brake)
   drawHistory()
-  renderCoach()
   if (DEMO_MODE) setConnection(telemetry.isRaceOn ? 'is-live' : 'is-waiting')
   else setConnection(forzaConnected && telemetry.isRaceOn ? 'is-live' : 'is-waiting')
 }
@@ -653,17 +428,8 @@ function queueTelemetry(telemetry) {
   deltaRuntime?.update?.(telemetry)
   const shiftLightState = window.HudShiftLightRuntime?.update?.(telemetry)
   if (shiftLightState) queueShiftLight(shiftLightState)
-  const previousTimingState = lapTimingState
-  const previousLapNumber = finiteStateNumber(latestTelemetry?.lap?.number)
   lapTimingState = window.HudLapTiming.update(lapTimingState, telemetry)
-  const raceRestart = window.AsphaltCoachLifecycle.resolveAttemptRestart({
-    previousTelemetry: latestTelemetry,
-    previousTimingState,
-    telemetry
-  })
-  if (raceRestart) beginAsphaltAttempt()
-  updateAsphaltCoach(telemetry, { presentationAttemptBegan: raceRestart })
-  if (!raceRestart) handleAsphaltLapLifecycle(previousTimingState, previousLapNumber, telemetry)
+  driverAnalysisRecorder?.update?.(telemetry)
 
   latestTelemetry = telemetry
   forzaConnected = true
@@ -684,7 +450,7 @@ function resetDirectPresentation() {
   latestTelemetry = null
   applyTelemetryVisibility()
   deltaRuntime?.update?.(null)
-  resetAsphaltCoach('direct_restart')
+  driverAnalysisRecorder?.resetTransient?.('direct_restart')
   lapTimingState = window.HudLapTiming.resetForRestart()
   latestSteer = 0
   historySamples = []
@@ -739,22 +505,14 @@ async function listenDirectEvents(generation) {
       } else if (state === 'is-waiting') {
         forzaConnected = false
         applyTelemetryVisibility()
-        resetAsphaltCoachTransient('waiting')
+        driverAnalysisRecorder?.resetTransient?.('waiting')
         setConnection('is-waiting')
         publishRouteStatus({ phase: 'waiting', message: '' })
         scheduleTelemetryRender()
       } else if (state === 'is-stale') {
         forzaConnected = false
         applyTelemetryVisibility()
-        if (
-          latestTelemetry?.isRaceOn === true
-          && window.AsphaltCoachLifecycle.canSummarizeAttempt(lapTimingState)
-        ) {
-          showAsphaltRunCheck(
-            `stale:${asphaltCoachState.attemptId}:${lapTimingState.lastLiveCurrentTimeMs}`
-          )
-        }
-        resetAsphaltCoachTransient('telemetry_gap')
+        driverAnalysisRecorder?.resetTransient?.('telemetry_gap')
         window.HudShiftLightRuntime?.resetTransient?.()
         setConnection('is-waiting')
         publishRouteStatus({ phase: 'stale', message: '' })
@@ -762,7 +520,7 @@ async function listenDirectEvents(generation) {
       } else {
         forzaConnected = false
         applyTelemetryVisibility()
-        resetAsphaltCoachTransient('offline')
+        driverAnalysisRecorder?.resetTransient?.('offline')
         window.HudShiftLightRuntime?.resetTransient?.()
         setConnection('is-offline')
         publishRouteStatus({
@@ -873,6 +631,52 @@ async function configureDeltaReference(eventId) {
   }
 }
 
+function driverAnalysisStatus() {
+  return {
+    ...(driverAnalysisRecorder?.snapshot?.() || { enabled: false, recording: false, startedAt: null, sampleCount: 0 }),
+    hotkey: driverAnalysisHotkey
+  }
+}
+
+function publishDriverAnalysisStatus() {
+  return emitRecorderEvent('driver_analysis_status', driverAnalysisStatus())
+}
+
+function publishDriverAnalysisHistory(history = window.DriverAnalysis?.readHistory?.() || []) {
+  return emitRecorderEvent('driver_analysis_history', history)
+}
+
+function applyDriverAnalysisAction(payload = {}) {
+  if (!driverAnalysisRecorder) return null
+  if (typeof payload.enabled === 'boolean') driverAnalysisRecorder.setEnabled(payload.enabled)
+  if (typeof payload.hotkey === 'string') driverAnalysisHotkey = payload.hotkey
+
+  let result = null
+  if (payload.action === 'record') result = { status: driverAnalysisRecorder.start(), entry: null }
+  else if (payload.action === 'stop') result = driverAnalysisRecorder.stop()
+  else if (payload.action === 'toggle') result = driverAnalysisRecorder.toggle()
+
+  if (result?.entry) {
+    void emitRecorderEvent('driver_analysis_result', result.entry)
+    void publishDriverAnalysisHistory(result.history)
+  }
+  void publishDriverAnalysisStatus()
+  return result
+}
+
+async function listenDriverAnalysisEvents() {
+  const eventApi = window.HudTauriEvents?.getEventApi?.()
+  if (!eventApi || typeof eventApi.listen !== 'function' || !driverAnalysisRecorder) return
+  await eventApi.listen('driver_analysis_config', event => applyDriverAnalysisAction(event?.payload || {}))
+  await eventApi.listen('driver_analysis_status_request', () => {
+    void publishDriverAnalysisStatus()
+    void publishDriverAnalysisHistory()
+  })
+  await eventApi.listen('driver_analysis_hotkey', () => applyDriverAnalysisAction({ action: 'toggle' }))
+  void publishDriverAnalysisStatus()
+  void publishDriverAnalysisHistory()
+}
+
 function installBetterDeltaReference(candidate) {
   const normalized = window.HudDelta?.normalizeReference?.(candidate)
   if (!normalized || !deltaRuntime) return false
@@ -892,88 +696,6 @@ async function retryDirectSource() {
   resetDirectPresentation()
   await disconnectDirect()
   await connectDirect()
-}
-
-function setDemoCoach(coach, schedule = true) {
-  if (!DEMO_MODE) return
-
-  demoCoach = DEMO_COACHES.includes(coach) ? coach : null
-  asphaltCoachPresentation.reset()
-  const now = performance.now()
-  if (demoCoach === null || demoCoach === 'calibrating') {
-    latestAsphaltCoach = window.AsphaltCoachPresentation.createEmptyView('calibrating')
-  } else if (demoCoach === 'ready') {
-    latestAsphaltCoach = {
-      ...window.AsphaltCoachPresentation.createEmptyView('ready'),
-      mode: 'status'
-    }
-  } else if (demoCoach === 'brief') {
-    latestAsphaltCoach = asphaltCoachPresentation.showBrief({
-      counts: {
-        front_scrub: 3,
-        exit_wheelspin: 1,
-        brake_steering_overload: 0,
-        abrupt_brake_release: 0,
-        clean_exit: 2,
-        controlled_release: 1
-      }
-    }, now)
-  } else if (demoCoach === 'run-check') {
-    latestAsphaltCoach = asphaltCoachPresentation.showBrief({
-      counts: {
-        front_scrub: 2,
-        exit_wheelspin: 1,
-        clean_exit: 1,
-        controlled_release: 1
-      }
-    }, now, {
-      title: 'RUN CHECK · NOT FINAL',
-      mainHeading: 'CURRENT PATTERN',
-      strengthHeading: 'CURRENT STRENGTH',
-      nextHeading: 'FOCUS',
-      dismissOnResume: true
-    })
-  } else if (demoCoach === 'focus') {
-    asphaltCoachPresentation.showBrief({
-      counts: {
-        front_scrub: 2,
-        exit_wheelspin: 1,
-        brake_steering_overload: 0,
-        abrupt_brake_release: 0,
-        clean_exit: 1,
-        controlled_release: 0
-      }
-    }, now)
-    asphaltCoachPresentation.beginAttempt()
-    latestAsphaltCoach = asphaltCoachPresentation.update({
-      valid: true,
-      calibration: { ready: true },
-      events: [
-        { kind: 'exit_wheelspin', confidence: 0.9, eventToken: 'demo-wheelspin' },
-        { kind: 'front_scrub', confidence: 0.9, eventToken: 'demo-focus-front' }
-      ]
-    }, now + 1)
-  } else {
-    const kindByDemoName = {
-      'front-scrub': 'front_scrub',
-      'exit-wheelspin': 'exit_wheelspin',
-      'brake-overload': 'brake_steering_overload',
-      'abrupt-release': 'abrupt_brake_release',
-      'clean-exit': 'clean_exit',
-      'controlled-release': 'controlled_release'
-    }
-    latestAsphaltCoach = asphaltCoachPresentation.update({
-      valid: true,
-      calibration: { ready: true },
-      events: [{
-        kind: kindByDemoName[demoCoach],
-        confidence: 0.92,
-        eventToken: `demo-${demoCoach}`,
-        evidenceCount: 2
-      }]
-    }, now)
-  }
-  if (schedule) scheduleTelemetryRender()
 }
 
 function startDemo() {
@@ -1011,7 +733,6 @@ function startDemo() {
     lap: { current: 50.123 },
     tireTempC: { fl: 79, fr: 84, rl: 77, rr: 77 }
   }
-  setDemoCoach(demoCoach, false)
   setDemoSignal(demoSignal)
   renderTelemetry()
 }
@@ -1041,7 +762,6 @@ window.HudOverlay = {
   refresh: scheduleTelemetryRender,
   setDisplayPreferences,
   retryDirectSource,
-  setDemoCoach,
   resetShiftLight: async () => {
     try {
       return await window.HudShiftLightRuntime?.reset?.() === true
@@ -1057,5 +777,6 @@ window.HudOverlay = {
 applyDisplayPreferences()
 publishRouteStatus({}, true)
 void listenEventRecorderEvents()
+void listenDriverAnalysisEvents()
 if (DEMO_MODE) startDemo()
 else connectDirect()

@@ -147,7 +147,7 @@ h1 {
 
 .settings-tabs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 6px;
   margin-top: 22px;
   padding: 4px;
@@ -1563,6 +1563,235 @@ h1 {
   display: none;
 }
 
+.driver-analysis-heading {
+  align-items: center;
+}
+
+.driver-analysis-heading > div {
+  min-width: 0;
+}
+
+.driver-analysis-heading h2,
+.driver-analysis-heading span {
+  display: block;
+}
+
+.driver-analysis-heading span {
+  margin-top: 6px;
+}
+
+.driver-analysis-warning {
+  padding: 14px 16px;
+  border: 1px solid rgb(249 115 22 / 48%);
+  border-radius: 4px;
+  color: #fed7aa;
+  background: rgb(249 115 22 / 8%);
+}
+
+.driver-analysis-warning strong {
+  color: #fb923c;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.driver-analysis-warning p {
+  max-width: 70ch;
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.driver-analysis-recorder {
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid rgb(226 232 240 / 18%);
+  border-radius: 4px;
+  background: rgb(8 10 12 / 68%);
+}
+
+.driver-analysis-recorder__main,
+.driver-analysis-hotkey {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px;
+}
+
+.driver-analysis-recorder__main h3,
+.driver-analysis-hotkey strong {
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.driver-analysis-recorder__main p,
+.driver-analysis-hotkey small {
+  display: block;
+  margin-top: 6px;
+  color: #a1a1aa;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.driver-analysis-recorder__actions,
+.driver-analysis-hotkey__control {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.driver-analysis-recording-status {
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.driver-analysis-recording-status[data-state='ready'] {
+  color: #69e83f;
+}
+
+.driver-analysis-recording-status[data-state='recording'] {
+  color: #ff827d;
+}
+
+.driver-analysis-record {
+  min-width: 102px;
+}
+
+.driver-analysis-record--ready {
+  border-color: rgb(105 232 63 / 68%);
+  color: #081006;
+  background: #69e83f;
+}
+
+.driver-analysis-record--ready:hover,
+.driver-analysis-record--ready:focus-visible {
+  border-color: #8df36b;
+  background: #8df36b;
+}
+
+.driver-analysis-hotkey {
+  border-top: 1px solid rgb(226 232 240 / 12%);
+}
+
+.driver-analysis-hotkey__control output {
+  min-width: 136px;
+  color: #f8fafc;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-align: right;
+}
+
+.driver-analysis-hotkey-help {
+  margin: -4px 16px 14px;
+  color: #71717a;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.driver-analysis-history {
+  margin-top: 26px;
+}
+
+.driver-analysis-history__list {
+  overflow: hidden;
+  border: 1px solid rgb(226 232 240 / 18%);
+  border-radius: 4px;
+  background: rgb(8 10 12 / 68%);
+}
+
+.driver-analysis-history__list:empty {
+  display: none;
+}
+
+.driver-analysis-history-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.65fr) minmax(0, 1.7fr);
+  gap: 24px;
+  padding: 16px;
+}
+
+.driver-analysis-history-row + .driver-analysis-history-row {
+  border-top: 1px solid rgb(226 232 240 / 12%);
+}
+
+.driver-analysis-history-row__meta time,
+.driver-analysis-history-row__meta span {
+  display: block;
+  color: #a1a1aa;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.driver-analysis-history-row__meta span {
+  margin-top: 7px;
+  color: #71717a;
+}
+
+.driver-analysis-history-row__finding strong {
+  color: #ff827d;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.driver-analysis-history-row[data-result='insufficient'] .driver-analysis-history-row__finding strong {
+  color: #fbbf24;
+}
+
+.driver-analysis-history-row__finding p {
+  margin-top: 6px;
+  color: #d4d4d8;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.driver-analysis-history__empty {
+  padding: 18px 16px;
+  border: 1px solid rgb(226 232 240 / 18%);
+  border-radius: 4px;
+  color: #71717a;
+  background: rgb(8 10 12 / 68%);
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+}
+
+.driver-analysis-history__empty[hidden] {
+  display: none;
+}
+
+@media (max-width: 680px) {
+  .settings-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .driver-analysis-recorder__main,
+  .driver-analysis-hotkey {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .driver-analysis-hotkey__control {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .driver-analysis-history-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
 .settings-section {
   margin-top: 24px;
 }
@@ -1812,6 +2041,14 @@ h1 {
   border-color: rgb(226 232 240 / 58%);
   background: rgb(226 232 240 / 14%);
   outline: none;
+}
+
+.settings-button:disabled,
+.visibility-toggle:disabled {
+  border-color: rgb(226 232 240 / 14%);
+  color: #52525b;
+  background: rgb(226 232 240 / 4%);
+  cursor: not-allowed;
 }
 
 .settings-button--primary {

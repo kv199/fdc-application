@@ -19,6 +19,7 @@ use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Runtime, State,
     WebviewWindow, Window, WindowEvent, menu::MenuBuilder, tray::TrayIconBuilder,
 };
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const SETTINGS_WINDOW_STATE_FILE: &str = "settings-window-size.json";
 #[cfg(test)]
@@ -32,10 +33,24 @@ const SETTINGS_MAX_HEIGHT: u32 = 8192;
 const DIRECT_UDP_BIND: &str = "127.0.0.1:5301";
 const DIRECT_TELEMETRY_EVENT: &str = "direct_telemetry";
 const DIRECT_STATUS_EVENT: &str = "direct_status";
+const DRIVER_ANALYSIS_HOTKEY_EVENT: &str = "driver_analysis_hotkey";
+const DEFAULT_DRIVER_ANALYSIS_HOTKEY: &str = "Ctrl+Shift+F9";
 
 #[derive(Default)]
 struct DirectSourceState {
     run: Mutex<Option<DirectSourceRun>>,
+}
+
+struct DriverAnalysisHotkeyState {
+    current: Mutex<String>,
+}
+
+impl Default for DriverAnalysisHotkeyState {
+    fn default() -> Self {
+        Self {
+            current: Mutex::new(DEFAULT_DRIVER_ANALYSIS_HOTKEY.to_string()),
+        }
+    }
 }
 
 struct DirectSourceRun {
@@ -2968,6 +2983,7 @@ fn show_settings<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 fn settings_window_context_label(context: &str) -> Option<&'static str> {
     match context {
         "hud" => Some("HUD"),
+        "driver-analysis" => Some("DRIVER ANALYSIS"),
         "garage" => Some("GARAGE"),
         "events" => Some("EVENTS"),
         "shift-light" => Some("SHIFT LIGHT"),
@@ -2978,6 +2994,122 @@ fn settings_window_context_label(context: &str) -> Option<&'static str> {
 
 fn settings_window_title(context: &str) -> String {
     format!("FDC · {context} · v{}", get_app_version())
+}
+
+fn normalize_driver_analysis_hotkey(value: &str) -> Result<String, String> {
+    let mut ctrl = false;
+    let mut alt = false;
+    let mut shift = false;
+    let mut main_key = None;
+
+    for token in value
+        .split('+')
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+    {
+        match token.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => ctrl = true,
+            "alt" => alt = true,
+            "shift" => shift = true,
+            "win" | "windows" | "meta" | "super" => {
+                return Err("Windows-key shortcuts are not allowed".to_string());
+            }
+            _ if main_key.is_none() => {
+                let upper = token.to_ascii_uppercase();
+                let supported = (upper.len() == 1
+                    && upper
+                        .chars()
+                        .all(|character| character.is_ascii_alphanumeric()))
+                    || upper
+                        .strip_prefix('F')
+                        .and_then(|number| number.parse::<u8>().ok())
+                        .is_some_and(|number| (1..=12).contains(&number))
+                    || matches!(
+                        upper.as_str(),
+                        "SPACE"
+                            | "ENTER"
+                            | "ESCAPE"
+                            | "TAB"
+                            | "ARROWUP"
+                            | "ARROWDOWN"
+                            | "ARROWLEFT"
+                            | "ARROWRIGHT"
+                    );
+                if !supported {
+                    return Err("Unsupported Driver Analysis hotkey".to_string());
+                }
+                main_key = Some(match upper.as_str() {
+                    "SPACE" => "Space".to_string(),
+                    "ENTER" => "Enter".to_string(),
+                    "ESCAPE" => "Escape".to_string(),
+                    "TAB" => "Tab".to_string(),
+                    "ARROWUP" => "ArrowUp".to_string(),
+                    "ARROWDOWN" => "ArrowDown".to_string(),
+                    "ARROWLEFT" => "ArrowLeft".to_string(),
+                    "ARROWRIGHT" => "ArrowRight".to_string(),
+                    _ => upper,
+                });
+            }
+            _ => return Err("Use one non-modifier key in the hotkey".to_string()),
+        }
+    }
+
+    if !ctrl && !alt && !shift {
+        return Err("Use Ctrl, Alt or Shift with the hotkey".to_string());
+    }
+    let Some(main_key) = main_key else {
+        return Err("Choose a non-modifier key for the hotkey".to_string());
+    };
+    let mut tokens = Vec::new();
+    if ctrl {
+        tokens.push("Ctrl".to_string());
+    }
+    if alt {
+        tokens.push("Alt".to_string());
+    }
+    if shift {
+        tokens.push("Shift".to_string());
+    }
+    tokens.push(main_key);
+    let normalized = tokens.join("+");
+    if matches!(
+        normalized.as_str(),
+        "Alt+F4" | "Alt+Tab" | "Ctrl+Escape" | "Ctrl+Shift+Escape"
+    ) {
+        return Err("That shortcut is reserved by Windows".to_string());
+    }
+    Ok(normalized)
+}
+
+#[tauri::command]
+fn set_driver_analysis_hotkey(
+    app: AppHandle,
+    state: State<DriverAnalysisHotkeyState>,
+    hotkey: String,
+) -> Result<String, String> {
+    let normalized = normalize_driver_analysis_hotkey(&hotkey)?;
+    let mut current = state
+        .current
+        .lock()
+        .map_err(|_| "Driver Analysis hotkey state is unavailable".to_string())?;
+    if *current == normalized {
+        return Ok(normalized);
+    }
+
+    let previous = current.clone();
+    app.global_shortcut()
+        .unregister(previous.as_str())
+        .map_err(|error| {
+            format!("unable to release the previous Driver Analysis hotkey: {error}")
+        })?;
+    if let Err(error) = app.global_shortcut().register(normalized.as_str()) {
+        let _ = app.global_shortcut().register(previous.as_str());
+        return Err(format!(
+            "unable to register {normalized}; choose another hotkey: {error}"
+        ));
+    }
+    *current = normalized.clone();
+    Ok(normalized)
 }
 
 fn eval_main<R: Runtime>(app: &AppHandle<R>, script: &str) -> Result<(), String> {
@@ -3000,7 +3132,7 @@ fn set_window_edit_mode(app: AppHandle, enabled: bool) -> tauri::Result<()> {
 fn is_valid_layout_target(target: &str) -> bool {
     matches!(
         target,
-        "coach" | "delta" | "hud" | "tires" | "pedals" | "steering" | "gear" | "engine" | "history"
+        "delta" | "hud" | "tires" | "pedals" | "steering" | "gear" | "engine" | "history"
     )
 }
 
@@ -3031,7 +3163,6 @@ fn layout_action(app: AppHandle, action: String, target: String) -> Result<(), S
 
     let script = match action.as_str() {
         "edit" => match target.as_str() {
-            "coach" => "window.HudLayout?.enterEditMode?.('coach')",
             "delta" => "window.HudLayout?.enterEditMode?.('delta')",
             "hud" => "window.HudLayout?.enterEditMode?.('hud')",
             "tires" => "window.HudLayout?.enterEditMode?.('tires')",
@@ -3045,7 +3176,6 @@ fn layout_action(app: AppHandle, action: String, target: String) -> Result<(), S
         "save" => "window.HudLayout?.savePosition?.()",
         "cancel" => "window.HudLayout?.cancelEditMode?.()",
         "reset" => match target.as_str() {
-            "coach" => "window.HudLayout?.resetPosition?.('coach')",
             "delta" => "window.HudLayout?.resetPosition?.('delta')",
             "hud" => "window.HudLayout?.resetPosition?.('hud')",
             "tires" => "window.HudLayout?.resetPosition?.('tires')",
@@ -3091,7 +3221,7 @@ fn set_hud_visibility(app: AppHandle, component: String, visible: bool) -> Resul
 #[tauri::command]
 fn set_overlay_visibility(app: AppHandle, component: String, visible: bool) -> Result<(), String> {
     let safe_component = match component.as_str() {
-        "coach" | "delta" | "hud" => component,
+        "delta" | "hud" => component,
         _ => return Err("unknown overlay component".to_string()),
     };
     let value = if visible { "true" } else { "false" };
@@ -3179,7 +3309,17 @@ fn get_app_version() -> &'static str {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        let _ = app.emit(DRIVER_ANALYSIS_HOTKEY_EVENT, ());
+                    }
+                })
+                .build(),
+        )
         .manage(DirectSourceState::default())
+        .manage(DriverAnalysisHotkeyState::default())
         .invoke_handler(tauri::generate_handler![
             set_window_edit_mode,
             notify_layout_state,
@@ -3190,6 +3330,7 @@ fn main() {
             set_display_preferences,
             set_configuration_always_on_top,
             set_settings_window_context,
+            set_driver_analysis_hotkey,
             sync_route_status,
             sync_shift_light_status,
             get_app_version,
@@ -3251,6 +3392,8 @@ fn main() {
                 .expect("settings window must exist");
 
             restore_settings_window_state(app.handle(), &settings)?;
+            app.global_shortcut()
+                .register(DEFAULT_DRIVER_ANALYSIS_HOTKEY)?;
 
             if let Some(monitor) = app.primary_monitor()? {
                 let monitor_position = monitor.position();
@@ -3338,7 +3481,7 @@ mod tests {
     #[test]
     fn layout_targets_cover_grouped_and_freeform_hud_widgets() {
         for target in [
-            "coach", "delta", "hud", "tires", "pedals", "steering", "gear", "engine", "history",
+            "delta", "hud", "tires", "pedals", "steering", "gear", "engine", "history",
         ] {
             assert!(
                 is_valid_layout_target(target),
@@ -3351,6 +3494,17 @@ mod tests {
     #[test]
     fn exposes_the_compiled_cargo_package_version() {
         assert_eq!(get_app_version(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn driver_analysis_hotkeys_require_a_modifier_and_reject_windows_shortcuts() {
+        assert_eq!(
+            normalize_driver_analysis_hotkey("Shift+Ctrl+f9"),
+            Ok("Ctrl+Shift+F9".to_string())
+        );
+        assert!(normalize_driver_analysis_hotkey("F9").is_err());
+        assert!(normalize_driver_analysis_hotkey("Win+R").is_err());
+        assert!(normalize_driver_analysis_hotkey("Alt+F4").is_err());
     }
 
     #[test]
@@ -3368,6 +3522,10 @@ mod tests {
     #[test]
     fn configuration_window_titles_use_known_sections_and_the_compiled_version() {
         assert_eq!(settings_window_context_label("hud"), Some("HUD"));
+        assert_eq!(
+            settings_window_context_label("driver-analysis"),
+            Some("DRIVER ANALYSIS")
+        );
         assert_eq!(settings_window_context_label("garage"), Some("GARAGE"));
         assert_eq!(settings_window_context_label("events"), Some("EVENTS"));
         assert_eq!(

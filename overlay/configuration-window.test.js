@@ -11,10 +11,19 @@ const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src',
 const tauriConfig = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'tauri.conf.json'), 'utf8')
 const cargoManifest = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'Cargo.toml'), 'utf8')
 
-test('Configuration exposes HUD, Garage, Events, Shift Light and Settings tabs', () => {
+test('Configuration exposes Driver Analysis second in the primary tab order', () => {
   const tabs = [...settingsHtml.matchAll(/data-settings-tab="([^"]+)"/g)].map(match => match[1])
 
-  assert.deepEqual(tabs, ['hud', 'shift-light', 'garage', 'events', 'settings'])
+  assert.deepEqual(tabs, ['hud', 'driver-analysis', 'shift-light', 'garage', 'events', 'settings'])
+  assert.match(settingsHtml, /id="driver-analysis-panel"[^>]+data-settings-panel="driver-analysis"/)
+  assert.match(settingsHtml, /id="driver-analysis-enabled"[^>]+aria-pressed="false"/)
+  assert.match(settingsHtml, /id="driver-analysis-record"[^>]+disabled>RECORD<\/button>/)
+  assert.match(settingsHtml, /id="driver-analysis-hotkey-value"[^>]*>Ctrl \+ Shift \+ F9<\/output>/)
+  assert.match(settingsHtml, /BETA \/ MVP/)
+  assert.match(settingsHtml, /Record on asphalt only\./)
+  assert.match(settingsHtml, /id="driver-analysis-history-list"[^>]+aria-live="polite"/)
+  assert.doesNotMatch(settingsHtml, /Driver Coach|data-layout-target="coach"/)
+  assert.doesNotMatch(overlayHtml, /id="coach-card"|id="coachbar"/)
   assert.match(settingsHtml, /id="garage-panel"[^>]+data-settings-panel="garage"/)
   assert.match(settingsHtml, /id="garage-grid"[^>]+aria-live="polite"/)
   assert.match(settingsHtml, /id="garage-current-car"/)
@@ -121,7 +130,7 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsJs, /LAST \$\{formatRunTime\(lap\.timeMs\)\}/)
   assert.match(settingsJs, /eventRunLapSortDirection = 'desc'/)
   assert.match(settingsJs, /value\.dataset\.tone = tone/)
-  assert.match(settingsCss, /\.settings-tabs\s*\{[\s\S]*grid-template-columns:\s*repeat\(5,/)
+  assert.match(settingsCss, /\.settings-tabs\s*\{[\s\S]*grid-template-columns:\s*repeat\(6,/)
   assert.match(settingsCss, /\.events-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit/)
   assert.match(settingsCss, /\.events-card__id\s*\{[\s\S]*font-size:\s*28px/)
   assert.match(settingsCss, /\.events-discard-dialog \.events-discard-dialog__no\s*\{[\s\S]*background:\s*#69e83f/)
@@ -248,7 +257,7 @@ test('HUD layout exposes grouped and freeform modes with independent widget cont
   assert.match(settingsJs, /call\('set_layout_mode', \{ mode: nextMode \}\)/)
   assert.match(settingsJs, /call\('layout_action', \{ action: 'cancel', target: editingTarget \}\)/)
   assert.match(tauriMain, /fn set_layout_mode\(app: AppHandle, mode: String\)/)
-  assert.match(tauriMain, /"coach" \| "delta" \| "hud" \| "tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
+  assert.match(tauriMain, /"delta" \| "hud" \| "tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
 })
 
 test('telemetry status stays separate and right-aligned above the setup card', () => {
@@ -287,7 +296,7 @@ test('Configuration window title reflects the active section and build version w
 
   assert.deepEqual(
     [...settingsHtml.matchAll(/data-settings-tab="([^"]+)"/g)].map(match => match[1]),
-    ['hud', 'shift-light', 'garage', 'events', 'settings']
+    ['hud', 'driver-analysis', 'shift-light', 'garage', 'events', 'settings']
   )
   assert.deepEqual(configuredTitles, ['FDC · HUD', 'FDC · HUD'])
   assert.doesNotMatch(`${configuredTitles.join(' ')} ${overlayHtml}`, /Forza Horizon 6 HUD/u)
@@ -295,6 +304,7 @@ test('Configuration window title reflects the active section and build version w
   assert.match(settingsJs, /call\('set_settings_window_context', \{ context: tabName \}\)/)
   assert.match(tauriMain, /fn settings_window_context_label\(context: &str\) -> Option<&'static str>/)
   assert.match(tauriMain, /"hud" => Some\("HUD"\)/)
+  assert.match(tauriMain, /"driver-analysis" => Some\("DRIVER ANALYSIS"\)/)
   assert.match(tauriMain, /"garage" => Some\("GARAGE"\)/)
   assert.match(tauriMain, /"events" => Some\("EVENTS"\)/)
   assert.match(tauriMain, /"shift-light" => Some\("SHIFT LIGHT"\)/)

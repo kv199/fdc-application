@@ -1,7 +1,7 @@
 # FDC Architecture
 
 This document is the map of the current FDC runtime. Detailed behavior belongs
-in the feature documents for [Garage](garage.md), [Asphalt Coach](asphalt-coach.md),
+in the feature documents for [Garage](garage.md), [Driver Analysis](driver-analysis.md),
 [Shift Light](shift-light.md), and [Events](events.md).
 
 ## System boundary
@@ -9,7 +9,7 @@ in the feature documents for [Garage](garage.md), [Asphalt Coach](asphalt-coach.
 Feedback-Driven Companion (FDC) is an independent, unofficial Windows Tauri
 application compatible with Forza Horizon 6. The
 repository owns the native Direct Data Out receiver and decoder, the browser
-overlay, Configuration, lap timing, Delta, Garage, Asphalt Coach, Shift Light, Events,
+overlay, Configuration, lap timing, Delta, Garage, Driver Analysis, Shift Light, Events,
 and local HUD profile persistence.
 
 The runtime boundary ends at the local application. The current source of
@@ -31,18 +31,18 @@ Normalized telemetry
             |
             v
 queueTelemetry
-    |       |          |       |             |            |            |
-    v       v          v       v             v            v            v
-Telemetry  Lap timing  Delta   Garage         Asphalt      Shift Light  Events
-HUD                         |                   Coach          |          |
-                            v                                  v          v
-                        fdc.sqlite                          fdc.sqlite  fdc.sqlite
+    |       |          |       |             |                |            |
+    v       v          v       v             v                v            v
+Telemetry  Lap timing  Delta   Garage    Driver Analysis  Shift Light  Events
+HUD                         |             |                  |          |
+                            v             v                  v          v
+                        fdc.sqlite    local storage       fdc.sqlite  fdc.sqlite
 ```
 
 The native layer emits one normalized telemetry payload for each valid FH6
 packet. The browser overlay receives it through the `direct_telemetry` Tauri
 event and passes it to `queueTelemetry`. That function fans the sample out to
-the HUD renderer, lap timing, Delta, Garage, Asphalt Coach, Shift Light, and Events
+the HUD renderer, lap timing, Delta, Garage, Driver Analysis, Shift Light, and Events
 runtime. The feature branches keep their own state; Garage, Shift Light, and
 Events write to the local SQLite profile store.
 
@@ -75,20 +75,21 @@ the tray menu, Direct Data Out, and native persistence commands.
 - Garage, Events, and Shift Light database commands open `fdc.sqlite` below the Tauri
   application data directory and apply the versioned schema there.
 
-The native layer does not implement Asphalt Coach or the browser HUD
-presentation. Those consumers operate on the normalized event after the IPC
-boundary.
+The native layer registers the Driver Analysis global recording hotkey but does
+not analyze driving telemetry. The browser consumer operates on normalized
+telemetry after the IPC boundary.
 
 ## Browser overlay
 
 `overlay/index.html` is the static main-window entry point. It loads the
-telemetry route, display preferences, presentation, Coach, lap timing, Delta, layout,
+telemetry route, display preferences, Driver Analysis, lap timing, Delta, layout,
 HUD preference, Tauri event, Garage, Shift Light, and overlay modules in dependency
 order. The Tauri configuration uses `overlay/` as the frontend distribution.
 
 The main window is a transparent, always-on-top HUD positioned across the
 primary monitor. The browser layer renders the current telemetry HUD, lap time,
-Delta, Coach card, Garage persistence, and Shift Light presentation. Event
+Delta, Garage persistence, and Shift Light presentation. Driver Analysis runs
+without a HUD widget and records only when explicitly started. Event
 recording initially configures Delta from the saved Event best, then replaces
 that reference in memory when a faster completed circuit lap or Sprint result
 arrives. Delta reads the existing normalized telemetry stream and the Event's
@@ -112,17 +113,17 @@ single FDC-local `fdc.sqlite` file. It does not create another telemetry
 transport or use a car name service. Its full behavior and SQLite contract are documented in
 [Garage](garage.md).
 
-## Asphalt Coach boundary
+## Driver Analysis boundary
 
-Asphalt Coach is a browser-local consumer of `queueTelemetry`. Its state,
-calibration, findings, lifecycle, and presentation modules do not write to
-`fdc.sqlite` and do not require a network or track service. The current
-behavioral boundary is asphalt-only, current-run, and zero-reference.
+Driver Analysis is a browser-local consumer of `queueTelemetry`. Its state,
+calibration, and findings modules do not write raw telemetry to `fdc.sqlite`
+and do not require a network or track service. Recording is explicit,
+asphalt-only, and zero-reference. Each completed recording persists one compact
+result in versioned local webview storage, newest first.
 
-The full state machine, evidence gates, supported cues, reports, and known
-limitations are documented in [Asphalt Coach](asphalt-coach.md). This document
-only records its position in the system: normalized telemetry in, temporary
-browser state and Coach UI out.
+The full state machine, evidence gates, supported findings, recording controls,
+history contract, and known limitations are documented in
+[Driver Analysis](driver-analysis.md).
 
 ## Shift Light boundary
 
@@ -144,17 +145,19 @@ verification requirements are documented in [Shift Light](shift-light.md).
 Configuration is a local Tauri settings window rather than a second runtime
 telemetry path. It provides:
 
-- overlay target editing for the Coach card, Delta, and telemetry HUD. The
+- overlay target editing for Delta and the telemetry HUD. The
   telemetry HUD offers a default `GROUPED` mode that moves and resizes the
   compact panel as one target, and a `FREEFORM` mode that moves and resizes
   Tires, Throttle and Brake, Steering, Gear / Speed / RPM, Engine / Boost, and
   Input Graph independently. Each mode keeps its own layout, while visibility
   and opacity remain shared. Both modes start from the same compact responsive
   arrangement. Reset returns a target to its active-mode default size and
-  position, while Coach resets only its position;
+  position;
 - visibility controls for the top-level overlay and HUD components, plus a
   `SHOW HUD WITH TELEMETRY` preference that defaults to enabled and hides the
-  HUD, Coach, and Delta until a live telemetry sample is received;
+  HUD and Delta until a live telemetry sample is received;
+- a Driver Analysis tab with an enable toggle, explicit record/stop control,
+  editable global hotkey, beta/asphalt warning, and newest-first history;
 - speed-unit selection and separate Redline and FDC Shift Light brightness;
 - standard minimize and maximize controls, a persisted Configuration
   always-on-top preference that defaults to enabled, and a persisted window
@@ -182,8 +185,9 @@ Shift Light identity. Shift Light replaces one bounded compact calibration per
 configuration, skips writes for unchanged snapshots, and retries failed writes
 in memory with bounded backoff. Reset invalidates stale writers.
 
-The Coach calibration envelope, active findings, lap timing state, telemetry
-history, and visual presentation state remain in memory for the running HUD.
+The Driver Analysis calibration envelope, active findings, raw telemetry, lap
+timing state, and HUD telemetry history remain in memory. Driver Analysis
+preferences and compact completed results use versioned browser storage.
 Configuration and layout preferences use the versioned local browser storage
 keys listed above. The Configuration window size and last valid on-screen
 position are stored separately in the FDC application-data directory so a
@@ -221,7 +225,7 @@ remaining overlay JavaScript, CSS, HTML, and SVG files are loaded directly from
 - `queueTelemetry` is the shared browser ingress. Feature code must preserve
   the normalized telemetry contract and must not create a parallel telemetry
   transport.
-- Garage, Coach, and Shift Light are intentionally separate feature boundaries;
+- Garage, Driver Analysis, and Shift Light are intentionally separate feature boundaries;
   their detailed current behavior and limitations live in their dedicated
   documents.
 - The checked-in generated Shift Light bundle is a runtime input. A source move

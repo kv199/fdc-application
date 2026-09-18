@@ -38,6 +38,7 @@
 
     <div class="settings-tabs" role="tablist" aria-label="Settings categories">
       <button id="hud-tab" class="settings-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="hud-panel" data-settings-tab="hud">HUD</button>
+      <button id="driver-analysis-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="driver-analysis-panel" tabindex="-1" data-settings-tab="driver-analysis">DRIVER</button>
       <button id="shift-light-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="shift-light-panel" tabindex="-1" data-settings-tab="shift-light">SHIFT LIGHT</button>
       <button id="garage-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="garage-panel" tabindex="-1" data-settings-tab="garage">GARAGE</button>
       <button id="events-tab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="events-panel" tabindex="-1" data-settings-tab="events">EVENTS</button>
@@ -99,20 +100,6 @@
       </section>
 
       <div class="layout-list">
-        <article class="layout-row" data-layout-target="coach">
-          <div class="layout-row__content">
-            <h3>Driver Coach</h3>
-            <p>Asphalt only. Live zero-reference technique cues and a short Driver Brief.</p>
-          </div>
-          <div class="layout-row__actions">
-            <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
-            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
-            <button class="visibility-toggle" type="button" data-overlay-toggle="coach" aria-label="Toggle Driver Coach" aria-pressed="true">
-              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
-            </button>
-          </div>
-        </article>
-
         <article class="layout-row" data-layout-target="delta">
           <div class="layout-row__content">
             <h3>Delta</h3>
@@ -276,6 +263,57 @@
           </div>
         </article>
       </div>
+    </section>
+
+    <section id="driver-analysis-panel" class="settings-tab-panel driver-analysis-panel" role="tabpanel" aria-labelledby="driver-analysis-tab" data-settings-panel="driver-analysis" hidden>
+      <div class="settings-section__heading driver-analysis-heading">
+        <div>
+          <h2 id="driver-analysis-title">DRIVER ANALYSIS</h2>
+          <span>RECORDED ASPHALT REVIEW</span>
+        </div>
+        <button id="driver-analysis-enabled" class="visibility-toggle" type="button" aria-label="Enable Driver Analysis" aria-pressed="false">
+          <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+        </button>
+      </div>
+
+      <div class="driver-analysis-warning" role="note" aria-label="Beta warning">
+        <strong>BETA / MVP</strong>
+        <p>Driver Analysis is experimental and may be inaccurate. Record on asphalt only.</p>
+      </div>
+
+      <section class="driver-analysis-recorder" aria-labelledby="driver-analysis-recorder-title">
+        <div class="driver-analysis-recorder__main">
+          <div>
+            <h3 id="driver-analysis-recorder-title">RECORD A SESSION</h3>
+            <p id="driver-analysis-recorder-hint">Enable Driver Analysis to start recording.</p>
+          </div>
+          <div class="driver-analysis-recorder__actions">
+            <span id="driver-analysis-recording-status" class="driver-analysis-recording-status" role="status" aria-live="polite">OFF</span>
+            <button id="driver-analysis-record" class="settings-button driver-analysis-record" type="button" aria-pressed="false" disabled>RECORD</button>
+          </div>
+        </div>
+
+        <div class="driver-analysis-hotkey">
+          <div>
+            <strong>GLOBAL RECORD HOTKEY</strong>
+            <small>Works while Forza is in focus. Windows-key combinations are not allowed.</small>
+          </div>
+          <div class="driver-analysis-hotkey__control">
+            <output id="driver-analysis-hotkey-value" aria-live="polite">Ctrl + Shift + F9</output>
+            <button id="driver-analysis-hotkey-change" class="settings-button" type="button" aria-describedby="driver-analysis-hotkey-help" disabled>CHANGE</button>
+          </div>
+        </div>
+        <p id="driver-analysis-hotkey-help" class="driver-analysis-hotkey-help">Press Escape to cancel while choosing a new combination.</p>
+      </section>
+
+      <section class="driver-analysis-history" aria-labelledby="driver-analysis-history-title">
+        <div class="settings-section__heading">
+          <h2 id="driver-analysis-history-title">HISTORY</h2>
+          <span id="driver-analysis-history-count">0 RECORDINGS</span>
+        </div>
+        <div id="driver-analysis-history-list" class="driver-analysis-history__list" aria-live="polite"></div>
+        <p id="driver-analysis-history-empty" class="driver-analysis-history__empty">No recordings yet.</p>
+      </section>
     </section>
 
     <section id="garage-panel" class="settings-tab-panel garage-panel" role="tabpanel" aria-labelledby="garage-tab" data-settings-panel="garage" hidden>
@@ -615,9 +653,9 @@
           <div class="display-setting-row" data-display-preference>
             <div class="display-setting-row__copy">
               <strong>SHOW HUD WITH TELEMETRY</strong>
-              <small>Show the HUD, Driver Coach, and Delta only while live telemetry is received.</small>
+              <small>Show the HUD and Delta only while live telemetry is received.</small>
             </div>
-            <button id="show-hud-with-telemetry" class="visibility-toggle" type="button" aria-label="Show the HUD, Driver Coach, and Delta only with live telemetry" aria-pressed="true">
+            <button id="show-hud-with-telemetry" class="visibility-toggle" type="button" aria-label="Show the HUD and Delta only with live telemetry" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
           </div>
@@ -654,6 +692,7 @@
   <script src="tauri-events.js"></script>
   <script src="garage-runtime.js"></script>
   <script src="event-recorder.js"></script>
+  <script src="driver-analysis.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

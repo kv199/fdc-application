@@ -7,9 +7,8 @@
   const LAYOUT_MODE_STORAGE_KEY = 'fdc.layout-mode.v1'
   const EVENT_SORT_OPTIONS = ['id-desc', 'id-asc', 'last-recorded-desc', 'last-recorded-asc']
   const COMPONENTS = ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']
-  const OVERLAY_COMPONENTS = ['coach', 'delta', 'hud']
+  const OVERLAY_COMPONENTS = ['delta', 'hud']
   const LAYOUT_TARGET_LABELS = Object.freeze({
-    coach: 'DRIVER COACH',
     delta: 'DELTA',
     hud: 'HUD',
     tires: 'TIRES',
@@ -25,6 +24,16 @@
   }, {})
   const invoke = globalScope.__TAURI_INTERNALS__?.invoke
   const appVersion = document.getElementById('app-version')
+  const driverAnalysisApi = globalScope.DriverAnalysis
+  const driverAnalysisEnabled = document.getElementById('driver-analysis-enabled')
+  const driverAnalysisRecord = document.getElementById('driver-analysis-record')
+  const driverAnalysisRecordingStatus = document.getElementById('driver-analysis-recording-status')
+  const driverAnalysisRecorderHint = document.getElementById('driver-analysis-recorder-hint')
+  const driverAnalysisHotkeyValue = document.getElementById('driver-analysis-hotkey-value')
+  const driverAnalysisHotkeyChange = document.getElementById('driver-analysis-hotkey-change')
+  const driverAnalysisHistoryList = document.getElementById('driver-analysis-history-list')
+  const driverAnalysisHistoryEmpty = document.getElementById('driver-analysis-history-empty')
+  const driverAnalysisHistoryCount = document.getElementById('driver-analysis-history-count')
   const status = document.getElementById('settings-status')
   const telemetryStatus = document.getElementById('telemetry-status')
   const telemetryStatusLabel = document.getElementById('telemetry-status-label')
@@ -47,6 +56,7 @@
   const DEFAULT_HUD_OPACITY = displayPreferencesApi?.DEFAULTS?.hudOpacity ?? 80
   const SETTINGS_WINDOW_CONTEXTS = Object.freeze({
     hud: 'HUD',
+    'driver-analysis': 'DRIVER ANALYSIS',
     garage: 'GARAGE',
     events: 'EVENTS',
     'shift-light': 'SHIFT LIGHT',
@@ -153,6 +163,9 @@
   let latestShiftLightState = null
   let latestRouteRevision = -1
   let latestRouteStatus = globalScope.HudTelemetryRoute?.normalizeRouteStatus?.({ phase: 'offline' })
+  let driverAnalysisSettings = driverAnalysisApi?.readSettings?.() || { enabled: false, hotkey: 'Ctrl+Shift+F9' }
+  let driverAnalysisState = { enabled: driverAnalysisSettings.enabled, recording: false, startedAt: null, sampleCount: 0, hotkey: driverAnalysisSettings.hotkey }
+  let driverAnalysisHotkeyCapture = false
 
   function garageDisplayName(vehicle) {
     return garageApi?.displayName?.(vehicle) || vehicle?.name || String(vehicle?.carOrdinal || '')
@@ -1725,6 +1738,11 @@
     }
     updateSettingsWindowContext(tabName)
     if (tabName === 'events' && eventsView === 'library') void loadEvents()
+    if (tabName === 'driver-analysis') {
+      renderDriverAnalysisHistory()
+      const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+      if (eventApi?.emit) void eventApi.emit('driver_analysis_status_request')
+    }
   }
 
   function updateSettingsWindowContext(tabName) {
@@ -1744,6 +1762,161 @@
       return Promise.reject(new Error('Tauri commands are unavailable'))
     }
     return invoke(command, args)
+  }
+
+  function formatDriverAnalysisDuration(durationMs) {
+    const seconds = Math.max(0, Math.round((Number(durationMs) || 0) / 1000))
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return minutes > 0 ? `${minutes}m ${String(remainingSeconds).padStart(2, '0')}s` : `${remainingSeconds}s`
+  }
+
+  function formatDriverAnalysisDate(value) {
+    const date = new Date(value)
+    if (!Number.isFinite(date.getTime())) return 'UNKNOWN TIME'
+    return `${date.toLocaleDateString()} · ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+  }
+
+  function renderDriverAnalysisHistory(history = driverAnalysisApi?.readHistory?.() || []) {
+    if (!driverAnalysisHistoryList) return
+    const entries = Array.isArray(history) ? history : []
+    driverAnalysisHistoryList.replaceChildren()
+    if (driverAnalysisHistoryEmpty) driverAnalysisHistoryEmpty.hidden = entries.length > 0
+    if (driverAnalysisHistoryCount) {
+      driverAnalysisHistoryCount.textContent = `${entries.length} ${entries.length === 1 ? 'RECORDING' : 'RECORDINGS'}`
+    }
+    for (const entry of entries) {
+      const row = document.createElement('article')
+      row.className = 'driver-analysis-history-row'
+      row.dataset.result = entry.result
+
+      const meta = document.createElement('div')
+      meta.className = 'driver-analysis-history-row__meta'
+      const date = document.createElement('time')
+      date.dateTime = entry.recordedAt
+      date.textContent = formatDriverAnalysisDate(entry.recordedAt)
+      const duration = document.createElement('span')
+      duration.textContent = formatDriverAnalysisDuration(entry.durationMs)
+      meta.append(date, duration)
+
+      const finding = document.createElement('div')
+      finding.className = 'driver-analysis-history-row__finding'
+      const label = document.createElement('strong')
+      const instruction = document.createElement('p')
+      if (entry.result === 'issue') {
+        label.textContent = entry.label
+        instruction.textContent = entry.instruction
+      } else {
+        label.textContent = 'NO RECURRING PROBLEM DETECTED'
+        instruction.textContent = 'Record a longer asphalt session before changing technique.'
+      }
+      finding.append(label, instruction)
+      row.append(meta, finding)
+      driverAnalysisHistoryList.append(row)
+    }
+  }
+
+  function renderDriverAnalysisState(value = driverAnalysisState) {
+    driverAnalysisState = {
+      ...driverAnalysisState,
+      ...(value && typeof value === 'object' ? value : {}),
+      enabled: value?.enabled === true,
+      recording: value?.recording === true,
+      hotkey: driverAnalysisApi?.normalizeHotkey?.(value?.hotkey) || driverAnalysisSettings.hotkey
+    }
+    const { enabled, recording, hotkey } = driverAnalysisState
+    updateOverlayToggle(driverAnalysisEnabled, enabled)
+    driverAnalysisEnabled.disabled = recording
+    driverAnalysisRecord.disabled = !enabled
+    driverAnalysisRecord.textContent = recording ? 'STOP' : 'RECORD'
+    driverAnalysisRecord.setAttribute('aria-pressed', String(recording))
+    driverAnalysisRecord.classList.toggle('settings-button--danger', recording)
+    driverAnalysisRecord.classList.toggle('driver-analysis-record--ready', enabled && !recording)
+    driverAnalysisHotkeyChange.disabled = !enabled || recording
+    driverAnalysisHotkeyValue.textContent = driverAnalysisHotkeyCapture
+      ? 'PRESS KEYS'
+      : driverAnalysisApi?.formatHotkey?.(hotkey) || hotkey
+    driverAnalysisRecordingStatus.dataset.state = recording ? 'recording' : enabled ? 'ready' : 'off'
+    driverAnalysisRecordingStatus.textContent = recording ? 'RECORDING' : enabled ? 'READY' : 'OFF'
+    driverAnalysisRecorderHint.textContent = recording
+      ? 'Drive the asphalt session, then press Stop or use the global hotkey.'
+      : enabled
+        ? 'Record one asphalt session. FDC will save one recurring problem.'
+        : 'Enable Driver Analysis to start recording.'
+  }
+
+  function emitDriverAnalysisConfig(payload) {
+    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+    if (!eventApi || typeof eventApi.emit !== 'function') {
+      return Promise.reject(new Error('Driver Analysis event bridge is unavailable'))
+    }
+    return eventApi.emit('driver_analysis_config', payload)
+  }
+
+  async function setDriverAnalysisEnabled(enabled) {
+    if (driverAnalysisState.recording) return
+    driverAnalysisSettings = driverAnalysisApi.writeSettings({ ...driverAnalysisSettings, enabled })
+    renderDriverAnalysisState({ ...driverAnalysisState, enabled })
+    try {
+      await emitDriverAnalysisConfig({ enabled, hotkey: driverAnalysisSettings.hotkey })
+      setStatus(`DRIVER ANALYSIS ${enabled ? 'ENABLED' : 'DISABLED'}`)
+    } catch (error) {
+      driverAnalysisSettings = driverAnalysisApi.writeSettings({ ...driverAnalysisSettings, enabled: !enabled })
+      renderDriverAnalysisState({ ...driverAnalysisState, enabled: !enabled })
+      setStatus(error.message || 'Unable to update Driver Analysis', true)
+    }
+  }
+
+  async function setDriverAnalysisHotkey(hotkey, announce = true) {
+    const normalized = driverAnalysisApi?.normalizeHotkey?.(hotkey)
+    if (!normalized) {
+      if (announce) setStatus('USE CTRL, ALT OR SHIFT WITH ONE KEY. WINDOWS KEY IS NOT ALLOWED.', true)
+      return false
+    }
+    try {
+      const registered = await call('set_driver_analysis_hotkey', { hotkey: normalized })
+      driverAnalysisSettings = driverAnalysisApi.writeSettings({ ...driverAnalysisSettings, hotkey: registered })
+      driverAnalysisState.hotkey = registered
+      await emitDriverAnalysisConfig({ enabled: driverAnalysisSettings.enabled, hotkey: registered })
+      renderDriverAnalysisState(driverAnalysisState)
+      if (announce) setStatus(`DRIVER ANALYSIS HOTKEY SET TO ${driverAnalysisApi.formatHotkey(registered).toUpperCase()}`)
+      return true
+    } catch (error) {
+      renderDriverAnalysisState(driverAnalysisState)
+      if (announce) setStatus(error.message || 'Unable to register Driver Analysis hotkey', true)
+      return false
+    }
+  }
+
+  async function sendDriverAnalysisAction(action) {
+    try {
+      await emitDriverAnalysisConfig({
+        action,
+        enabled: driverAnalysisSettings.enabled,
+        hotkey: driverAnalysisSettings.hotkey
+      })
+    } catch (error) {
+      setStatus(error.message || 'Unable to update Driver Analysis recording', true)
+    }
+  }
+
+  function setDriverAnalysisHotkeyCapture(active) {
+    driverAnalysisHotkeyCapture = active === true
+    driverAnalysisHotkeyChange.textContent = driverAnalysisHotkeyCapture ? 'CANCEL' : 'CHANGE'
+    renderDriverAnalysisState(driverAnalysisState)
+    if (driverAnalysisHotkeyCapture) setStatus('PRESS A NEW DRIVER ANALYSIS HOTKEY')
+  }
+
+  async function listenDriverAnalysisEvents() {
+    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+    if (!eventApi || typeof eventApi.listen !== 'function') return
+    await eventApi.listen('driver_analysis_status', event => renderDriverAnalysisState(event?.payload || {}))
+    await eventApi.listen('driver_analysis_history', event => renderDriverAnalysisHistory(event?.payload))
+    await eventApi.listen('driver_analysis_result', event => {
+      const entry = event?.payload
+      setStatus(entry?.result === 'issue' ? `ANALYSIS SAVED · ${entry.label}` : 'ANALYSIS SAVED · MORE EVIDENCE NEEDED')
+    })
+    await eventApi.emit('driver_analysis_status_request')
   }
 
   async function loadAppVersion() {
@@ -2462,6 +2635,34 @@
   eventRecorderToggle?.addEventListener('click', () => {
     void sendRecorderConfig(recorderState.recording === true ? 'stop' : 'record')
   })
+  driverAnalysisEnabled?.addEventListener('click', () => {
+    void setDriverAnalysisEnabled(driverAnalysisSettings.enabled !== true)
+  })
+  driverAnalysisRecord?.addEventListener('click', () => {
+    void sendDriverAnalysisAction(driverAnalysisState.recording ? 'stop' : 'record')
+  })
+  driverAnalysisHotkeyChange?.addEventListener('click', () => {
+    setDriverAnalysisHotkeyCapture(!driverAnalysisHotkeyCapture)
+  })
+  document.addEventListener('keydown', event => {
+    if (!driverAnalysisHotkeyCapture) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    if (event.key === 'Escape') {
+      setDriverAnalysisHotkeyCapture(false)
+      setStatus('DRIVER ANALYSIS HOTKEY UNCHANGED')
+      return
+    }
+    const hotkey = driverAnalysisApi?.hotkeyFromKeyboardEvent?.(event)
+    if (!hotkey) {
+      if (!['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) {
+        setStatus('USE CTRL, ALT OR SHIFT WITH ONE KEY. WINDOWS KEY IS NOT ALLOWED.', true)
+      }
+      return
+    }
+    setDriverAnalysisHotkeyCapture(false)
+    void setDriverAnalysisHotkey(hotkey)
+  })
   garageCurrentVariantsToggle?.addEventListener('click', toggleGarageVariants)
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return
@@ -2504,10 +2705,14 @@
   renderShiftLightState(null)
   renderGarage()
   renderEventsLibrary()
+  renderDriverAnalysisState(driverAnalysisState)
+  renderDriverAnalysisHistory()
+  void setDriverAnalysisHotkey(driverAnalysisSettings.hotkey, false)
   void listenShiftLightEvents()
   void listenRouteEvents()
   void listenGarageEvents()
   void listenEventRecorderEvents()
+  void listenDriverAnalysisEvents()
   globalScope.SettingsController = {
     cancelEdit,
     setLayoutEditingState,

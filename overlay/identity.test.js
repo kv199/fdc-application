@@ -6,6 +6,7 @@ const test = require('node:test')
 const root = path.join(__dirname, '..')
 const storageSources = [
   'coach-layout.js',
+  'driver-analysis.js',
   'display-preferences.js',
   'hud-preferences.js',
   'settings.js'
@@ -17,7 +18,9 @@ test('FDC uses only current versioned browser storage keys', () => {
     'fdc.layout-mode.v1',
     'fdc.display-preferences.v1',
     'fdc.hud-visibility.v1',
-    'fdc.overlay-visibility.v1'
+    'fdc.overlay-visibility.v1',
+    'fdc.driver-analysis.settings.v1',
+    'fdc.driver-analysis.history.v1'
   ]) {
     assert.match(storageSources, new RegExp(key.replaceAll('.', '\\.'), 'u'))
   }

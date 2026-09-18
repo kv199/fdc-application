@@ -4,7 +4,7 @@
   const STORAGE_KEY = 'fdc.layout.v2'
   const MODE_STORAGE_KEY = 'fdc.layout-mode.v1'
   const MODES = ['grouped', 'freeform']
-  const GROUPED_TARGETS = ['coach', 'delta', 'hud']
+  const GROUPED_TARGETS = ['delta', 'hud']
   const FREEFORM_TARGETS = ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']
   const TARGET_NAMES = [...GROUPED_TARGETS, ...FREEFORM_TARGETS]
   const COLUMN_WIDTHS = { tires: 72, pedals: 46, steering: 68, gear: 92, engine: 116, history: 342 }
@@ -86,7 +86,7 @@
       }, {})
       return {
         mode: readStoredMode(),
-        shared: sanitizeMap(stored.shared, ['coach', 'delta']),
+        shared: sanitizeMap(stored.shared, ['delta']),
         grouped: sanitizeMap(stored.grouped, ['hud']),
         freeform: sanitizeMap(stored.freeform, FREEFORM_TARGETS)
       }
@@ -103,7 +103,7 @@
     }, {})
     storageSet(STORAGE_KEY, JSON.stringify({
       version: 2,
-      shared: sanitizeMap(layout.shared, ['coach', 'delta']),
+      shared: sanitizeMap(layout.shared, ['delta']),
       grouped: sanitizeMap(layout.grouped, ['hud']),
       freeform: sanitizeMap(layout.freeform, FREEFORM_TARGETS)
     }))
@@ -117,7 +117,6 @@
 
   function createLayout() {
     const elements = {
-      coach: document.getElementById('coach-card'),
       delta: document.getElementById('delta-strip'),
       hud: document.getElementById('hud-frame'),
       tires: document.getElementById('hud-tires'),
@@ -184,7 +183,7 @@
     }
 
     function positionMap(name) {
-      if (name === 'coach' || name === 'delta') return positions.shared
+      if (name === 'delta') return positions.shared
       if (name === 'hud') return positions.grouped
       return positions.freeform
     }
@@ -225,7 +224,6 @@
     }
 
     function getFallbackSize(name, viewport) {
-      if (name === 'coach') return { width: Math.min(460, Math.max(0, viewport.width - 24)), height: 88 }
       if (name === 'delta') return { width: Math.min(1472, Math.max(0, viewport.width - 16)), height: 60 }
       if (name === 'hud') return { width: Math.min(1472, Math.max(0, viewport.width - 16)), height: 138 }
       return { width: COLUMN_WIDTHS[name] * getHudScale(), height: HUD_BASE_HEIGHT * getHudScale() }
@@ -266,7 +264,7 @@
         }
       }
       if (name === 'delta') return { left: hudLeft, top: hudTop - elementSize.height - 10 }
-      return { left: hudLeft, top: hudTop - 60 - elementSize.height - 20 }
+      return { left: hudLeft, top: hudTop }
     }
 
     function ensurePosition(name) {
@@ -355,7 +353,6 @@
         FREEFORM_TARGETS.forEach(applyPosition)
       }
       applyPosition('delta')
-      applyPosition('coach')
     }
     function applyMode() {
       hud.dataset.layoutMode = mode
@@ -422,7 +419,7 @@
       return Promise.resolve(invoke('notify_layout_state', { target: name, editing })).catch(() => {})
     }
 
-    function enterEditMode(name = 'coach') {
+    function enterEditMode(name = 'hud') {
       const unavailableGroupedTarget = name === 'hud' && mode !== 'grouped'
       const unavailableFreeformTarget = FREEFORM_TARGETS.includes(name) && mode !== 'freeform'
       if (!TARGET_NAMES.includes(name) || unavailableGroupedTarget || unavailableFreeformTarget) return
@@ -464,7 +461,7 @@
       finishEdit()
     }
 
-    function resetPosition(name = editingTarget || 'coach') {
+    function resetPosition(name = editingTarget || 'hud') {
       if (!TARGET_NAMES.includes(name)) return
       delete positionMap(name)[name]
       persist()
@@ -493,7 +490,7 @@
     }
 
     function startDrag(name, event) {
-      if (editingTarget !== name || event.button !== 0 || event.target.closest('button, .layout-edit-tools, .coach-edit-tools')) return
+      if (editingTarget !== name || event.button !== 0 || event.target.closest('button, .layout-edit-tools')) return
       const rect = elements[name].getBoundingClientRect()
       dragOffsetX = event.clientX - rect.left
       dragOffsetY = event.clientY - rect.top
@@ -640,7 +637,7 @@
       getPosition: name => ({ ...(positionMap(name)[name] || ensurePosition(name)) })
     }
     if (new URLSearchParams(window.location.search).get('edit') === '1') {
-      window.requestAnimationFrame(() => enterEditMode('coach'))
+      window.requestAnimationFrame(() => enterEditMode('hud'))
     }
     return api
   }

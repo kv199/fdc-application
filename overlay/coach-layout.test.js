@@ -44,8 +44,8 @@ test('uses a fresh v2 namespace and never reads the old layout', () => {
   assert.deepEqual(layout.MODES, ['grouped', 'freeform'])
 })
 
-test('keeps shared coach/delta targets and separates grouped/freeform telemetry targets', () => {
-  assert.deepEqual(layout.GROUPED_TARGETS, ['coach', 'delta', 'hud'])
+test('keeps Delta and grouped HUD separate from freeform telemetry targets', () => {
+  assert.deepEqual(layout.GROUPED_TARGETS, ['delta', 'hud'])
   assert.deepEqual(layout.FREEFORM_TARGETS, ['tires', 'pedals', 'steering', 'gear', 'engine', 'history'])
   assert.match(source, /shared: stored\.shared/)
   assert.match(source, /grouped: stored\.grouped/)
@@ -62,7 +62,7 @@ test('freeform preserves current compact grid widths and 69px height', () => {
 })
 
 test('freeform targets expose independent edit, reset, cancel, save and resize behavior', () => {
-  assert.match(source, /function resetPosition\(name = editingTarget \|\| 'coach'\)/)
+  assert.match(source, /function resetPosition\(name = editingTarget \|\| 'hud'\)/)
   assert.match(source, /function resetLayout\(targetMode = mode\)/)
   assert.match(source, /setMode,[\s\S]*getMode: \(\) => mode/)
   assert.match(source, /dataset\.layoutResizeTarget = name/)

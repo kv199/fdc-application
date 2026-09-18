@@ -4,7 +4,7 @@
   const STORAGE_KEY = 'fdc.hud-visibility.v1'
   const OVERLAY_STORAGE_KEY = 'fdc.overlay-visibility.v1'
   const COMPONENTS = ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']
-  const OVERLAY_COMPONENTS = ['coach', 'delta', 'hud']
+  const OVERLAY_COMPONENTS = ['delta', 'hud']
   const COLUMN_WIDTHS = {
     tires: '72px',
     pedals: '46px',
@@ -68,7 +68,6 @@
     const hud = document.getElementById('hud')
     const hudFrame = document.getElementById('hud-frame')
     const overlayElements = {
-      coach: document.getElementById('coach-card'),
       delta: document.getElementById('delta-strip')
     }
     if (!hud || !hudFrame || Object.values(overlayElements).some(element => !element)) return null
@@ -114,7 +113,6 @@
     }
 
     function applyOverlayVisibility() {
-      if (!overlayState.coach) overlayElements.coach.hidden = true
       if (!overlayState.delta) overlayElements.delta.hidden = true
       apply(state)
       globalScope.HudOverlay?.refresh?.()

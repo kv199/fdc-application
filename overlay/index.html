@@ -9,26 +9,6 @@
 </head>
 <body>
   <div class="hud-shell">
-    <div id="coach-card" class="coach-card">
-      <section id="coachbar" class="coachbar" aria-label="Asphalt Coach" aria-describedby="coach-edit-hint">
-        <div class="coach-card__main">
-          <div class="coach-card__header">
-            <output id="coach-kicker" class="coach__kicker" aria-label="Coach finding"></output>
-          </div>
-          <div class="coach-card__body">
-            <output id="coach-status" class="coach__status" aria-label="Current Asphalt Coach guidance">&mdash;</output>
-          </div>
-        </div>
-      </section>
-
-      <div id="coach-edit-tools" class="coach-edit-tools" hidden>
-        <span id="coach-edit-hint" class="coach-edit__hint">DRAG COACH</span>
-        <button id="coach-reset" class="coach-edit__button" type="button">RESET</button>
-        <button id="coach-cancel" class="coach-edit__button" type="button">CANCEL</button>
-        <button id="coach-save" class="coach-edit__button coach-edit__button--primary" type="button">SAVE</button>
-      </div>
-    </div>
-
     <section id="delta-strip" class="delta-strip" aria-label="Lap delta">
       <div class="delta-strip__best" data-delta-best-container hidden>
         <span class="delta-strip__best-label" aria-hidden="true">BEST</span>
@@ -127,7 +107,7 @@
   <script src="asphalt-coach-state.js"></script>
   <script src="asphalt-coach-findings.js"></script>
   <script src="asphalt-coach-presentation.js"></script>
-  <script src="asphalt-coach-lifecycle.js"></script>
+  <script src="driver-analysis.js"></script>
   <script src="lap-timing.js"></script>
   <script src="delta-runtime.js"></script>
   <script src="event-recorder.js"></script>

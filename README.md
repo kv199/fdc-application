@@ -24,7 +24,7 @@ FDC provides a compact overlay with:
 - throttle and brake history;
 - live lap timing;
 - Garage vehicle library;
-- Asphalt Coach guidance;
+- recorded Driver Analysis;
 - Shift Light guidance.
 
 The native Tauri application receives and decodes Direct Data Out. The browser
@@ -32,14 +32,14 @@ overlay consumes the normalized telemetry through one local runtime path.
 
 ## Current features
 
-### Asphalt Coach
+### Driver Analysis
 
-Asphalt Coach is a current-run, zero-reference technique assistant for Road,
-Street, Rivals, Circuit, and Sprint asphalt events. It learns bounded local
-evidence and shows short technique cues, a Driver Brief, or a non-final Run
-Check. It does not require a track database.
+Driver Analysis is an explicit-recording, zero-reference review tool for
+asphalt driving. It analyzes telemetry in memory, saves one dominant recurring
+problem per recording, and shows saved results from newest to oldest in
+Configuration. It does not require a track database.
 
-Technical details: [docs/asphalt-coach.md](docs/asphalt-coach.md).
+Technical details: [docs/driver-analysis.md](docs/driver-analysis.md).
 
 ### Shift Light
 
@@ -109,8 +109,10 @@ the FDC tray icon.
 
 Configuration lets you:
 
-- move and reset the Coach card, lap timer, and telemetry HUD;
+- move and reset the Delta and telemetry HUD;
 - show or hide overlay targets and individual HUD components;
+- enable Driver Analysis, record an asphalt session, change its global hotkey,
+  and review saved results;
 - choose `km/h` or `mph`;
 - adjust Shift Light brightness;
 - resize Configuration; its `820 × 620` default size is replaced by the last
@@ -128,9 +130,10 @@ FDC is local-first. Direct Data Out is received from the local game session.
 The application keeps runtime data local to the machine.
 
 Garage and Shift Light data are stored in the FDC application-data directory as
-`fdc.sqlite`. Coach session state and live telemetry state remain local to the
-running application. Layout, visibility, speed-unit, and display preferences
-are stored in the local application webview.
+`fdc.sqlite`. Driver Analysis stores compact recording results and preferences
+in versioned local webview storage; its raw telemetry, calibration, and live
+evidence remain in memory. Layout, visibility, speed-unit, and display
+preferences are also stored in the local application webview.
 
 ## Browser demo
 
@@ -141,13 +144,7 @@ with a local static HTTP server and opening:
 http://127.0.0.1:8765/index.html?demo=1
 ```
 
-Useful previews include:
-
-```text
-http://127.0.0.1:8765/index.html?demo=1&coach=front-scrub
-http://127.0.0.1:8765/index.html?demo=1&coach=brief
-http://127.0.0.1:8765/index.html?demo=1&signal=shift
-```
+Use `?demo=1&signal=shift` to preview the Shift Light state.
 
 Demo mode is for offline visual checks. Omit `demo=1` when checking live
 telemetry in the native application.
@@ -236,10 +233,11 @@ as tag `vX.Y.Z`.
 ## Current limitations
 
 - FDC currently supports Forza Horizon 6 Direct Data Out on Windows.
-- Asphalt Coach is asphalt-only, current-run, and zero-reference. It does not
+- Driver Analysis is beta/MVP, asphalt-only, and zero-reference. It does not
   identify track surface, track identity, an ideal line, a driving score, exact
   time loss, or optimal gear advice.
-- Coach calibration and findings are not persisted between application runs.
+- Driver Analysis saves only compact results; raw telemetry, calibration, and
+  finding candidates are not persisted.
 - Shift Light learns from live telemetry and has no manual target-entry flow or
   car-name database.
 - Garage has image placeholders only; it does not download car images or names.
@@ -254,7 +252,7 @@ as tag `vX.Y.Z`.
   colors.
 - [Garage](docs/garage.md) — vehicle identity, local persistence, and
   Configuration behavior.
-- [Asphalt Coach](docs/asphalt-coach.md) — current Coach behavior and
+- [Driver Analysis](docs/driver-analysis.md) — recording, analysis, history, and
   verification boundaries.
 - [Shift Light](docs/shift-light.md) — current learner, presentation,
   persistence, and compatibility contracts.
