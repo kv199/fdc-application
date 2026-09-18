@@ -1804,6 +1804,13 @@
         detail: ''
       }
     }
+    if (entry?.result === 'no_recurring_problem') {
+      return {
+        label: 'NO RECURRING PROBLEM DETECTED',
+        instruction: 'No single technique problem repeated often enough in this recording.',
+        detail: ''
+      }
+    }
     if (entry?.result === 'interrupted' || entry?.status === 'interrupted') {
       return {
         label: 'RECORDING INTERRUPTED',
@@ -2032,7 +2039,11 @@
     await eventApi.listen('driver_analysis_history', () => void loadDriverAnalysisHistory())
     await eventApi.listen('driver_analysis_result', event => {
       const entry = event?.payload
-      setStatus(entry?.result === 'issue' ? `ANALYSIS SAVED · ${entry.label}` : 'ANALYSIS SAVED · MORE EVIDENCE NEEDED')
+      setStatus(entry?.result === 'issue'
+        ? `ANALYSIS SAVED · ${entry.label}`
+        : entry?.result === 'no_recurring_problem'
+          ? 'ANALYSIS SAVED · NO RECURRING PROBLEM'
+          : 'ANALYSIS SAVED · MORE EVIDENCE NEEDED')
       void loadDriverAnalysisHistory()
     })
     await eventApi.emit('driver_analysis_status_request')

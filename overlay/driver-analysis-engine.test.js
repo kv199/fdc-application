@@ -63,6 +63,45 @@ test('normalizes queueTelemetry samples and creates map-free maneuvers', () => {
   assert.equal(second.vehicleIdentity, '1:700:8000:1')
 })
 
+test('duplicate game timestamps are ignored without resetting the active maneuver', () => {
+  const state = new stateApi.DriverAnalysisState()
+  const car = { ordinal: 1, pi: 700, drivetrain: 1 }
+  state.update({ timestampMs: 0, speedKmh: 100, isRaceOn: true, car, rpmMax: 8000, steer: 0, brake: 0, throttle: 0 })
+  const turnIn = state.update({ timestampMs: 100, speedKmh: 100, isRaceOn: true, car, rpmMax: 8000, steer: 0.25, brake: 0, throttle: 0 })
+  const duplicate = state.update({ timestampMs: 100, speedKmh: 100, isRaceOn: true, car, rpmMax: 8000, steer: 0.3, brake: 0, throttle: 0 })
+  const next = state.update({ timestampMs: 200, speedKmh: 99, isRaceOn: true, car, rpmMax: 8000, steer: 0.32, brake: 0, throttle: 0 })
+
+  assert.equal(turnIn.maneuverId, 1)
+  assert.equal(duplicate.valid, false)
+  assert.equal(duplicate.resetReason, null)
+  assert.equal(duplicate.phase, stateApi.PHASES.TURN_IN)
+  assert.equal(next.maneuverId, 1)
+  assert.notEqual(next.resetReason, 'duplicate_timestamp')
+})
+
+test('engine keeps an opportunity valid across duplicate game timestamps', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  const car = { ordinal: 1, pi: 700, drivetrain: 1 }
+  const frame = (timestampMs, steer, frontSlip) => ({
+    timestampMs, speedKmh: 100, isRaceOn: true, car, rpmMax: 8000, steer, brake: 0, throttle: 0,
+    slipAngle: { fl: frontSlip, fr: frontSlip, rl: 0.03, rr: 0.03 },
+    combinedSlip: { fl: frontSlip, fr: frontSlip, rl: 0.03, rr: 0.03 },
+    acceleration: { x: 0.5, y: 0, z: 0 }, angularVelocity: { y: 0.5 }
+  })
+  engine.update(frame(0, 0, 0.03))
+  engine.update(frame(100, 0.25, 0.14))
+  engine.update(frame(100, 0.3, 0.18))
+  engine.update(frame(200, 0.32, 0.19))
+  const result = engine.finalize()
+  const front = result.opportunities.find(item => item.type === 'front_scrub')
+
+  assert.ok(front)
+  assert.equal(front.valid, true)
+  assert.equal(front.invalidReason, null)
+  assert.ok(front.samples.length >= 2)
+  assert.equal(result.sampleCount, 3)
+})
+
 test('collector emits no more than one opportunity of each type per maneuver and retains response samples', () => {
   const collector = new opportunitiesApi.DriverAnalysisOpportunities()
   const samples = [
@@ -103,13 +142,46 @@ test('scoring applies qualification gates and returns one dominant problem', () 
   assert.equal(summary.aggregates.front_scrub.recurrence, 4 / 6)
 })
 
+test('scoring reports no recurring problem when data is sufficient but findings are rare', () => {
+  const opportunities = []
+  const evidence = []
+  for (let index = 0; index < 6; index += 1) {
+    const maneuverId = index + 1
+    opportunities.push({ id: `front-${index}`, type: 'front_scrub', maneuverId, valid: true, outcome: 'clean' })
+    evidence.push({
+      opportunityId: `front-${index}`, type: 'front_scrub', maneuverId,
+      outcome: index === 0 ? 'ambiguous' : 'clean', primary: false,
+      detectorConfidence: index === 0 ? 0.9 : 0.2, attributionConfidence: 0.2, severity: 0.2
+    })
+  }
+  const summary = scoringApi.summarizeDriverAnalysis({ opportunities, evidence })
+  assert.equal(summary.status, scoringApi.STATUS.NO_RECURRING_PROBLEM)
+})
+
+test('scoring reserves ambiguous for a recurring unresolved candidate', () => {
+  const opportunities = []
+  const evidence = []
+  for (let index = 0; index < 6; index += 1) {
+    const maneuverId = index + 1
+    opportunities.push({ id: `front-${index}`, type: 'front_scrub', maneuverId, valid: true, outcome: 'clean' })
+    evidence.push({
+      opportunityId: `front-${index}`, type: 'front_scrub', maneuverId,
+      outcome: index < 3 ? 'ambiguous' : 'clean', primary: false,
+      detectorConfidence: index < 3 ? 0.9 : 0.2, attributionConfidence: 0.2, severity: 0.5
+    })
+  }
+  const summary = scoringApi.summarizeDriverAnalysis({ opportunities, evidence })
+  assert.equal(summary.status, scoringApi.STATUS.AMBIGUOUS)
+  assert.equal(summary.aggregates.front_scrub.candidateRecurrence, 0.5)
+})
+
 test('engine finalization is JSON-serializable and exposes the agreed API', () => {
   const engine = engineApi.createDriverAnalysisEngine()
   const car = { ordinal: 1, pi: 700, drivetrain: 1 }
   engine.update({ timestampMs: 0, speedKmh: 100, isRaceOn: true, car, rpmMax: 8000, steer: 0, brake: 0, throttle: 0 })
   engine.update({ timestampMs: 100, speedKmh: 100, isRaceOn: true, car, rpmMax: 8000, steer: 0.25, brake: 0, throttle: 0 })
   const result = engine.finalize()
-  assert.ok(['insufficient', 'ambiguous', 'issue', 'no_clear_dominant_problem'].includes(result.status))
+  assert.ok(['insufficient', 'ambiguous', 'issue', 'no_recurring_problem', 'no_clear_dominant_problem'].includes(result.status))
   assert.equal(result.algorithmVersion, engineApi.DRIVER_ANALYSIS_VERSION)
   assert.doesNotThrow(() => JSON.stringify(result))
   assert.equal(typeof engine.reset, 'function')

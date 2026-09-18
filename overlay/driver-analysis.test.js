@@ -84,6 +84,10 @@ test('recorder waits for telemetry, batches samples and persists one final resul
     puddle: { fl: 0, fr: 0, rl: 0, rr: 0 }, lap: { current: 5, number: 1, distance: 100 },
     car: { ordinal: 42, pi: 800, drivetrain: 1 }
   })
+  recorder.update({
+    isRaceOn: true, timestampMs: 100, speedKmh: 100, rpmMax: 8000,
+    car: { ordinal: 42, pi: 800, drivetrain: 1 }
+  })
   assert.equal(recorder.snapshot().phase, 'recording')
   await recorder.setEnabled(true)
   assert.equal(recorder.snapshot().phase, 'recording')
@@ -92,7 +96,9 @@ test('recorder waits for telemetry, batches samples and persists one final resul
 
   assert.equal(result.entry.label, 'FRONT SCRUB')
   assert.deepEqual(calls.map(call => call.command), ['create_driver_analysis_session', 'append_driver_analysis_samples', 'finalize_driver_analysis_session'])
-  assert.equal(calls[1].payload.samples.length, 1)
+  assert.equal(calls[1].payload.samples.length, 2)
+  assert.deepEqual(calls[1].payload.samples.map(sample => sample.timestampMs), [100, 100])
+  assert.deepEqual(calls[1].payload.samples.map(sample => sample.sequence), [0, 1])
   assert.equal(calls[2].payload.opportunities.length, 1)
   assert.equal(calls[2].payload.evidence.length, 1)
   assert.equal(recorder.snapshot().phase, 'ready')
@@ -107,4 +113,62 @@ test('recorder refuses to start while Driver Analysis is disabled', () => {
 
   assert.equal(recorder.start().recording, false)
   assert.equal(recorder.start().phase, 'off')
+})
+
+test('stored sessions are replayed once and replaced under the current algorithm version', async () => {
+  const calls = []
+  const replayed = []
+  const storedSample = {
+    sequence: 0, timestampMs: 100, speedKmh: 90, throttle: 0.4, brake: 0.1, steer: 0.2,
+    gear: 3, rpm: 5000, rpmMax: 8000,
+    accelerationX: 1, accelerationY: 2, accelerationZ: 3, yawRate: 0.3,
+    slipRatio: [0.01, 0.02, 0.03, 0.04], slipAngle: [0.1, 0.2, 0.3, 0.4],
+    combinedSlip: [0.2, 0.3, 0.4, 0.5], tireTempC: [80, 81, 82, 83],
+    suspension: [0.5, 0.6, 0.7, 0.8], rumble: [false, true, false, false], puddle: [0, 0, 0, 0],
+    lapTime: 12.5, lapNumber: 2, lapDistance: 450
+  }
+  const invoke = async (command, payload = {}) => {
+    calls.push({ command, payload })
+    if (command === 'load_driver_analysis_sessions') {
+      return [{
+        id: 7, status: 'completed', sampleCount: 1, algorithmVersion: 'driver-analysis-rules-v2',
+        vehicleIdentity: { ordinal: 42, pi: 800, drivetrain: 1, rpmMax: 8000 }
+      }]
+    }
+    if (command === 'load_driver_analysis_samples') return [storedSample]
+    if (command === 'reanalyze_driver_analysis_session') return { id: 7, result: payload.result.result, algorithmVersion: payload.algorithmVersion }
+    throw new Error(`Unexpected command ${command}`)
+  }
+  const createEngine = () => ({
+    snapshot: () => ({ algorithmVersion: 'driver-analysis-rules-v3' }),
+    update: telemetry => replayed.push(telemetry),
+    finalize: () => ({ status: 'no_recurring_problem', mainProblem: null, opportunities: [], evidence: [] })
+  })
+
+  const updated = await analysis.reanalyzeStoredSessions({ invoke, createEngine })
+
+  assert.equal(updated.length, 1)
+  assert.deepEqual(calls.map(call => call.command), [
+    'load_driver_analysis_sessions',
+    'load_driver_analysis_samples',
+    'reanalyze_driver_analysis_session'
+  ])
+  assert.equal(calls[2].payload.algorithmVersion, 'driver-analysis-rules-v3')
+  assert.equal(calls[2].payload.result.result, 'no_recurring_problem')
+  assert.equal(replayed[0].acceleration.x, 1)
+  assert.equal(replayed[0].rumble.fr, true)
+  assert.deepEqual(replayed[0].car, { ordinal: 42, pi: 800, drivetrain: 1 })
+})
+
+test('sessions already analyzed by the current version are not replayed', async () => {
+  const calls = []
+  const updated = await analysis.reanalyzeStoredSessions({
+    invoke: async command => {
+      calls.push(command)
+      return [{ id: 7, status: 'completed', sampleCount: 100, algorithmVersion: 'driver-analysis-rules-v3' }]
+    },
+    createEngine: () => ({ snapshot: () => ({ algorithmVersion: 'driver-analysis-rules-v3' }) })
+  })
+  assert.deepEqual(updated, [])
+  assert.deepEqual(calls, ['load_driver_analysis_sessions'])
 })

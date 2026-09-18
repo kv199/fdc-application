@@ -187,7 +187,8 @@
       if (this.identity === null && sample.carIdentity !== null) this.identity = sample.carIdentity
       if (this.lastTimestampMs !== null) {
         const gap = sample.timestampMs - this.lastTimestampMs
-        if (gap <= 0) return this.resetTransient(gap < 0 ? 'timestamp_rewind' : 'duplicate_timestamp')
+        if (gap === 0) return this.snapshot(null)
+        if (gap < 0) return this.resetTransient('timestamp_rewind')
         if (gap > this.thresholds.maxFrameGapMs) return this.resetTransient('telemetry_gap')
       }
       const previous = this.previousSample

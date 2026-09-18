@@ -10,6 +10,7 @@
   const DEFAULT_HOTKEY = 'Ctrl+Shift+F9'
   const HISTORY_LIMIT = 100
   const SAMPLE_BATCH_MS = 1000
+  const REANALYSIS_PAGE_SIZE = 2000
   const BLOCKED_HOTKEYS = new Set(['Alt+F4', 'Alt+Tab', 'Ctrl+Escape', 'Ctrl+Shift+Escape'])
 
   function storageGet(storage, key) {
@@ -89,7 +90,7 @@
     if (!value || typeof value !== 'object') return null
     const recordedAt = isoDate(value.recordedAt ?? value.startedAt)
     if (!recordedAt) return null
-    const result = ['issue', 'insufficient', 'ambiguous', 'interrupted'].includes(value.result) ? value.result : 'insufficient'
+    const result = ['issue', 'insufficient', 'ambiguous', 'no_recurring_problem', 'interrupted'].includes(value.result) ? value.result : 'insufficient'
     const issue = result === 'issue' && typeof value.mainKind === 'string' && String(value.label || '').trim() && String(value.instruction || '').trim()
     return {
       id: String(value.id || Date.parse(recordedAt)), recordedAt,
@@ -154,6 +155,45 @@
     }
   }
 
+  function replayTelemetry(sample, vehicleIdentity) {
+    if (!sample || typeof sample !== 'object' || !vehicleIdentity || typeof vehicleIdentity !== 'object') return null
+    const ordinal = Math.trunc(finite(vehicleIdentity.ordinal, -1))
+    const pi = Math.trunc(finite(vehicleIdentity.pi, -1))
+    const drivetrain = Math.trunc(finite(vehicleIdentity.drivetrain, -1))
+    const rpmMax = finite(sample.rpmMax, finite(vehicleIdentity.rpmMax, -1))
+    if (ordinal <= 0 || pi < 0 || drivetrain < 0 || rpmMax <= 0) return null
+    const asQuad = value => {
+      const values = Array.isArray(value) ? value : []
+      return { fl: finite(values[0]), fr: finite(values[1]), rl: finite(values[2]), rr: finite(values[3]) }
+    }
+    const asBooleanQuad = value => {
+      const values = Array.isArray(value) ? value : []
+      return { fl: values[0] === true, fr: values[1] === true, rl: values[2] === true, rr: values[3] === true }
+    }
+    return {
+      isRaceOn: true,
+      timestampMs: finite(sample.timestampMs),
+      speedKmh: finite(sample.speedKmh),
+      throttle: finite(sample.throttle),
+      brake: finite(sample.brake),
+      steer: finite(sample.steer),
+      gear: Math.max(0, Math.trunc(finite(sample.gear))),
+      rpm: Math.max(0, finite(sample.rpm)),
+      rpmMax,
+      acceleration: { x: finite(sample.accelerationX), y: finite(sample.accelerationY), z: finite(sample.accelerationZ) },
+      angularVelocity: { y: finite(sample.yawRate) },
+      slipRatio: asQuad(sample.slipRatio),
+      slipAngle: asQuad(sample.slipAngle),
+      combinedSlip: asQuad(sample.combinedSlip),
+      tireTempC: asQuad(sample.tireTempC),
+      suspension: asQuad(sample.suspension),
+      rumble: asBooleanQuad(sample.rumble),
+      puddle: asQuad(sample.puddle),
+      lap: { current: finite(sample.lapTime), raceTime: finite(sample.lapTime), number: Math.max(0, Math.trunc(finite(sample.lapNumber))), distance: Math.max(0, finite(sample.lapDistance)) },
+      car: { ordinal, pi, drivetrain }
+    }
+  }
+
   function persistencePayload(finalized, interrupted = false) {
     const opportunityIndex = new Map(finalized.opportunities.map((opportunity, index) => [opportunity.id, index]))
     const evidenceByOpportunity = new Map(finalized.evidence.map(item => [item.opportunityId, item]))
@@ -175,7 +215,11 @@
     })).filter(item => Number.isSafeInteger(item.opportunityIndex))
     const main = finalized.mainProblem
     const normalizedStatus = finalized.status === 'no_clear_dominant_problem' ? 'ambiguous' : finalized.status
-    const result = interrupted ? 'interrupted' : ['issue', 'ambiguous'].includes(normalizedStatus) ? normalizedStatus : 'insufficient'
+    const result = interrupted
+      ? 'interrupted'
+      : ['issue', 'ambiguous', 'no_recurring_problem'].includes(normalizedStatus)
+        ? normalizedStatus
+        : 'insufficient'
     return {
       opportunities, evidence,
       result: {
@@ -344,10 +388,68 @@
     return { resetTransient, setEnabled, snapshot, start, stop, toggle, update }
   }
 
+  async function reanalyzeStoredSessions(options = {}) {
+    const invoke = typeof options.invoke === 'function' ? options.invoke : null
+    const createEngine = typeof options.createEngine === 'function'
+      ? options.createEngine
+      : globalScope.DriverAnalysisEngine?.createDriverAnalysisEngine
+    const onResult = typeof options.onResult === 'function' ? options.onResult : () => undefined
+    const onError = typeof options.onError === 'function' ? options.onError : () => undefined
+    if (!invoke || typeof createEngine !== 'function') return []
+
+    const probe = createEngine()
+    const algorithmVersion = probe?.snapshot?.().algorithmVersion
+    if (!algorithmVersion) return []
+    const history = await invoke('load_driver_analysis_sessions')
+    const candidates = (Array.isArray(history) ? history : []).filter(entry => (
+      entry?.status === 'completed'
+      && Number(entry?.sampleCount) > 0
+      && entry?.algorithmVersion !== algorithmVersion
+    ))
+    const updated = []
+    for (const entry of candidates) {
+      try {
+        const engine = createEngine()
+        let afterSequence = -1
+        let replayedSamples = 0
+        while (true) {
+          const page = await invoke('load_driver_analysis_samples', {
+            sessionId: Number(entry.id),
+            afterSequence,
+            limit: REANALYSIS_PAGE_SIZE
+          })
+          if (!Array.isArray(page) || page.length === 0) break
+          for (const sample of page) {
+            const telemetry = replayTelemetry(sample, entry.vehicleIdentity)
+            if (!telemetry) throw new Error(`Driver Analysis session ${entry.id} contains an invalid replay sample`)
+            engine.update(telemetry)
+            replayedSamples += 1
+          }
+          afterSequence = Math.trunc(finite(page.at(-1)?.sequence, afterSequence))
+          if (page.length < REANALYSIS_PAGE_SIZE) break
+          await new Promise(resolve => setTimeout(resolve, 0))
+        }
+        if (replayedSamples === 0) throw new Error(`Driver Analysis session ${entry.id} has no replay samples`)
+        const payload = persistencePayload(engine.finalize(), false)
+        const result = await invoke('reanalyze_driver_analysis_session', {
+          sessionId: Number(entry.id),
+          algorithmVersion,
+          ...payload
+        })
+        updated.push(result)
+        onResult(result)
+      } catch (error) {
+        onError(error, entry)
+      }
+    }
+    return updated
+  }
+
   return {
     DEFAULT_HOTKEY, HISTORY_LIMIT, HISTORY_STORAGE_KEY, SETTINGS_STORAGE_KEY,
     appendHistory, clearHistory, createRecorder, formatHotkey, hotkeyFromKeyboardEvent,
     normalizeHistoryEntry, normalizeHotkey, normalizeSettings, persistedSample, persistencePayload,
-    readHistory, readSettings, sortHistoryNewestFirst, vehicleIdentity, writeHistory, writeSettings
+    readHistory, readSettings, reanalyzeStoredSessions, replayTelemetry, sortHistoryNewestFirst,
+    vehicleIdentity, writeHistory, writeSettings
   }
 }))

@@ -16,6 +16,7 @@
     ISSUE: 'issue',
     INSUFFICIENT: 'insufficient',
     AMBIGUOUS: 'ambiguous',
+    NO_RECURRING_PROBLEM: 'no_recurring_problem',
     NO_CLEAR_DOMINANT_PROBLEM: 'no_clear_dominant_problem'
   })
   const DEFAULT_THRESHOLDS = Object.freeze({
@@ -49,6 +50,13 @@
       problemEvidence: 0,
       primaryEvidence: 0,
       ambiguousOpportunities: 0,
+      ambiguousDistinctManeuvers: 0,
+      ambiguousRecurrence: 0,
+      medianAmbiguousDetectorConfidence: 0,
+      candidateEvidence: 0,
+      candidateDistinctManeuvers: 0,
+      candidateRecurrence: 0,
+      medianCandidateDetectorConfidence: 0,
       distinctManeuvers: 0,
       recurrence: 0,
       ambiguity: 0,
@@ -68,6 +76,8 @@
     const problemEvidence = relevantEvidence.filter(item => item.outcome === 'problem')
     const primaryEvidence = problemEvidence.filter(item => item.primary === true)
     const ambiguousOpportunities = relevantEvidence.filter(item => item.outcome === 'ambiguous').length
+    const ambiguousEvidence = relevantEvidence.filter(item => item.outcome === 'ambiguous')
+    const candidateEvidence = [...primaryEvidence, ...ambiguousEvidence]
     const distinctManeuvers = new Set(primaryEvidence.map(item => item.maneuverId)).size
     const recurrence = relevantOpportunities.length ? primaryEvidence.length / relevantOpportunities.length : 0
     const ambiguity = relevantOpportunities.length ? ambiguousOpportunities / relevantOpportunities.length : 0
@@ -84,6 +94,13 @@
       problemEvidence: problemEvidence.length,
       primaryEvidence: primaryEvidence.length,
       ambiguousOpportunities,
+      ambiguousDistinctManeuvers: new Set(ambiguousEvidence.map(item => item.maneuverId)).size,
+      ambiguousRecurrence: relevantOpportunities.length ? ambiguousOpportunities / relevantOpportunities.length : 0,
+      medianAmbiguousDetectorConfidence: median(ambiguousEvidence.map(item => item.detectorConfidence)),
+      candidateEvidence: candidateEvidence.length,
+      candidateDistinctManeuvers: new Set(candidateEvidence.map(item => item.maneuverId)).size,
+      candidateRecurrence: relevantOpportunities.length ? candidateEvidence.length / relevantOpportunities.length : 0,
+      medianCandidateDetectorConfidence: median(candidateEvidence.map(item => item.detectorConfidence)),
       distinctManeuvers,
       recurrence,
       ambiguity,
@@ -112,8 +129,17 @@
     const second = qualified[1] || null
     let status = STATUS.INSUFFICIENT
     let mainProblem = null
-    const hasValid = Object.values(aggregates).some(aggregate => aggregate.validOpportunities > 0)
-    const hasAmbiguous = Object.values(aggregates).some(aggregate => aggregate.ambiguousOpportunities > 0 || (aggregate.problemEvidence > 0 && aggregate.medianAttributionConfidence < thresholds.minAttributionConfidence))
+    const maneuverCount = new Set(opportunities.filter(opportunity => opportunity.valid === true).map(opportunity => opportunity.maneuverId)).size
+    const hasSufficientData = maneuverCount >= thresholds.minDistinctManeuvers
+      && Object.values(aggregates).some(aggregate => aggregate.validOpportunities >= thresholds.minValidOpportunities)
+    const hasRecurringAmbiguousCandidate = Object.values(aggregates).some(aggregate => (
+      aggregate.validOpportunities >= thresholds.minValidOpportunities
+      && aggregate.ambiguousOpportunities > 0
+      && aggregate.candidateEvidence >= thresholds.minPrimaryEvidence
+      && aggregate.candidateDistinctManeuvers >= thresholds.minDistinctManeuvers
+      && aggregate.candidateRecurrence >= thresholds.minRecurrence
+      && aggregate.medianCandidateDetectorConfidence >= thresholds.minDetectorConfidence
+    ))
     if (best) {
       if (second && best.priority < second.priority * thresholds.winnerMargin) {
         status = STATUS.NO_CLEAR_DOMINANT_PROBLEM
@@ -132,10 +158,10 @@
           severity: best.medianSeverity
         }
       }
-    } else if (hasAmbiguous) {
+    } else if (hasRecurringAmbiguousCandidate) {
       status = STATUS.AMBIGUOUS
-    } else if (hasValid) {
-      status = STATUS.INSUFFICIENT
+    } else if (hasSufficientData) {
+      status = STATUS.NO_RECURRING_PROBLEM
     }
     return {
       status,
@@ -144,7 +170,7 @@
       thresholds: { ...thresholds },
       validOpportunityCount: opportunities.filter(opportunity => opportunity.valid === true && opportunity.outcome !== 'incomplete').length,
       evidenceCount: evidence.filter(item => item.outcome === 'problem' && item.primary === true).length,
-      maneuverCount: new Set(opportunities.filter(opportunity => opportunity.valid === true).map(opportunity => opportunity.maneuverId)).size
+      maneuverCount
     }
   }
 

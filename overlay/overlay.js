@@ -649,6 +649,16 @@ function publishDriverAnalysisHistory() {
   return emitRecorderEvent('driver_analysis_history', null)
 }
 
+async function reanalyzeStoredDriverAnalysisSessions() {
+  const updated = await window.DriverAnalysis?.reanalyzeStoredSessions?.({
+    invoke: invokeTauri,
+    createEngine: () => window.DriverAnalysisEngine?.createDriverAnalysisEngine?.(),
+    onError: (error, entry) => console.warn(`[driver-analysis] unable to reanalyze session ${entry?.id ?? 'unknown'}`, error)
+  })
+  if (Array.isArray(updated) && updated.length > 0) await publishDriverAnalysisHistory()
+  return updated || []
+}
+
 async function applyDriverAnalysisAction(payload = {}) {
   if (!driverAnalysisRecorder) return null
   if (typeof payload.enabled === 'boolean') await driverAnalysisRecorder.setEnabled(payload.enabled)
@@ -777,5 +787,6 @@ applyDisplayPreferences()
 publishRouteStatus({}, true)
 void listenEventRecorderEvents()
 void listenDriverAnalysisEvents()
+void reanalyzeStoredDriverAnalysisSessions()
 if (DEMO_MODE) startDemo()
 else connectDirect()

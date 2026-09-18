@@ -1758,6 +1758,10 @@ h1 {
   color: #fbbf24;
 }
 
+.driver-analysis-history-row[data-result='no_recurring_problem'] .driver-analysis-history-row__finding strong {
+  color: #86efac;
+}
+
 .driver-analysis-history-row[data-result='ambiguous'] .driver-analysis-history-row__finding strong,
 .driver-analysis-history-row[data-result='interrupted'] .driver-analysis-history-row__finding strong {
   color: #a1a1aa;

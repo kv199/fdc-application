@@ -375,7 +375,7 @@ struct ShiftLightVariantResolution {
 }
 
 const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 4;
-const HUD_SCHEMA_VERSION: i32 = 17;
+const HUD_SCHEMA_VERSION: i32 = 18;
 const MAX_SHIFT_LIGHT_CEILING_SAMPLES: usize = 3;
 const MAX_SHIFT_LIGHT_GEAR_TARGETS: usize = 9;
 const MAX_SHIFT_LIGHT_SHIFT_SAMPLES: usize = 64;
@@ -1047,6 +1047,7 @@ fn migrate_shift_light_v15(connection: &mut Connection) -> Result<(), String> {
 }
 
 const DRIVER_ANALYSIS_SCHEMA_VERSION: i32 = HUD_SCHEMA_VERSION;
+const DRIVER_ANALYSIS_INITIAL_SCHEMA_VERSION: i32 = 17;
 
 fn create_driver_analysis_tables(transaction: &Transaction<'_>) -> Result<(), String> {
     transaction
@@ -1057,7 +1058,7 @@ fn create_driver_analysis_tables(transaction: &Transaction<'_>) -> Result<(), St
                started_at_ms INTEGER NOT NULL CHECK (started_at_ms >= 0),
                finished_at_ms INTEGER CHECK (finished_at_ms IS NULL OR finished_at_ms >= started_at_ms),
                status TEXT NOT NULL CHECK (status IN ('recording', 'completed', 'insufficient', 'interrupted', 'error')),
-               result TEXT CHECK (result IS NULL OR result IN ('issue', 'insufficient', 'ambiguous', 'interrupted')),
+               result TEXT CHECK (result IS NULL OR result IN ('issue', 'insufficient', 'ambiguous', 'no_recurring_problem', 'interrupted')),
                main_kind TEXT,
                label TEXT NOT NULL DEFAULT '',
                instruction TEXT NOT NULL DEFAULT '',
@@ -1181,6 +1182,31 @@ fn migrate_driver_analysis_schema(connection: &mut Connection) -> Result<(), Str
         .map_err(|error| format!("unable to commit Driver Analysis schema migration: {error}"))
 }
 
+fn migrate_driver_analysis_v18(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Driver Analysis v18 migration: {error}"))?;
+    transaction
+        .execute_batch(
+            "ALTER TABLE driver_analysis_sessions
+               ADD COLUMN result_v18 TEXT
+               CHECK (result_v18 IS NULL OR result_v18 IN ('issue', 'insufficient', 'ambiguous', 'no_recurring_problem', 'interrupted'));
+             UPDATE driver_analysis_sessions SET result_v18 = result;
+             ALTER TABLE driver_analysis_sessions DROP COLUMN result;
+             ALTER TABLE driver_analysis_sessions RENAME COLUMN result_v18 TO result;",
+        )
+        .map_err(|error| format!("unable to extend Driver Analysis results: {error}"))?;
+    transaction
+        .execute(
+            "UPDATE hud_schema_version SET version = ?1",
+            params![DRIVER_ANALYSIS_SCHEMA_VERSION],
+        )
+        .map_err(|error| format!("unable to update Driver Analysis v18 schema version: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Driver Analysis v18 migration: {error}"))
+}
+
 fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), String> {
     connection
         .execute_batch(
@@ -1190,7 +1216,7 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
                version INTEGER NOT NULL
              );
              INSERT INTO hud_schema_version (version)
-             SELECT 17
+             SELECT 18
              WHERE NOT EXISTS (SELECT 1 FROM hud_schema_version);",
         )
         .map_err(|error| format!("unable to initialize HUD SQLite metadata: {error}"))?;
@@ -1280,8 +1306,10 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
     if version < 16 {
         migrate_event_soft_delete_schema(connection)?;
     }
-    if version < DRIVER_ANALYSIS_SCHEMA_VERSION {
+    if version < DRIVER_ANALYSIS_INITIAL_SCHEMA_VERSION {
         migrate_driver_analysis_schema(connection)?;
+    } else if version < DRIVER_ANALYSIS_SCHEMA_VERSION {
+        migrate_driver_analysis_v18(connection)?;
     } else {
         let transaction = connection
             .transaction()
@@ -1320,7 +1348,7 @@ struct DriverAnalysisSessionInput {
     vehicle_rpm_limit: Option<f64>,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DriverAnalysisSampleInput {
     sequence: i64,
@@ -1680,10 +1708,72 @@ fn append_driver_analysis_samples_in_connection(
     Ok(samples.len())
 }
 
+fn load_driver_analysis_samples_in_connection(
+    connection: &Connection,
+    session_id: i64,
+    after_sequence: i64,
+    limit: i64,
+) -> Result<Vec<DriverAnalysisSampleInput>, String> {
+    if session_id <= 0 || after_sequence < -1 || !(1..=5000).contains(&limit) {
+        return Err("Driver Analysis sample page is invalid".to_string());
+    }
+    let mut statement = connection
+        .prepare(
+            "SELECT sequence, timestamp_ms, speed_kmh, throttle, brake, steer, gear, rpm, rpm_max,
+                    acceleration_x, acceleration_y, acceleration_z, yaw_rate,
+                    slip_ratio_fl, slip_ratio_fr, slip_ratio_rl, slip_ratio_rr,
+                    slip_angle_fl, slip_angle_fr, slip_angle_rl, slip_angle_rr,
+                    combined_slip_fl, combined_slip_fr, combined_slip_rl, combined_slip_rr,
+                    tire_temp_fl, tire_temp_fr, tire_temp_rl, tire_temp_rr,
+                    suspension_fl, suspension_fr, suspension_rl, suspension_rr,
+                    rumble_fl, rumble_fr, rumble_rl, rumble_rr,
+                    puddle_fl, puddle_fr, puddle_rl, puddle_rr,
+                    lap_time, lap_number, lap_distance
+               FROM driver_analysis_samples
+              WHERE session_id = ?1 AND sequence > ?2
+              ORDER BY sequence
+              LIMIT ?3",
+        )
+        .map_err(|error| format!("unable to prepare Driver Analysis sample replay: {error}"))?;
+    let rows = statement
+        .query_map(params![session_id, after_sequence, limit], |row| {
+            Ok(DriverAnalysisSampleInput {
+                sequence: row.get(0)?,
+                timestamp_ms: row.get(1)?,
+                speed_kmh: row.get(2)?,
+                throttle: row.get(3)?,
+                brake: row.get(4)?,
+                steer: row.get(5)?,
+                gear: row.get(6)?,
+                rpm: row.get(7)?,
+                rpm_max: row.get(8)?,
+                acceleration_x: row.get(9)?,
+                acceleration_y: row.get(10)?,
+                acceleration_z: row.get(11)?,
+                yaw_rate: row.get(12)?,
+                slip_ratio: [row.get(13)?, row.get(14)?, row.get(15)?, row.get(16)?],
+                slip_angle: [row.get(17)?, row.get(18)?, row.get(19)?, row.get(20)?],
+                combined_slip: [row.get(21)?, row.get(22)?, row.get(23)?, row.get(24)?],
+                tire_temp_c: [row.get(25)?, row.get(26)?, row.get(27)?, row.get(28)?],
+                suspension: [row.get(29)?, row.get(30)?, row.get(31)?, row.get(32)?],
+                rumble: [row.get(33)?, row.get(34)?, row.get(35)?, row.get(36)?],
+                puddle: [row.get(37)?, row.get(38)?, row.get(39)?, row.get(40)?],
+                lap_time: row.get(41)?,
+                lap_number: row.get(42)?,
+                lap_distance: row.get(43)?,
+            })
+        })
+        .map_err(|error| format!("unable to load Driver Analysis sample replay: {error}"))?;
+    rows.map(|row| {
+        row.map_err(|error| format!("unable to read Driver Analysis sample replay: {error}"))
+    })
+    .collect()
+}
+
 fn validate_final_result(input: &DriverAnalysisFinalResultInput) -> Result<(), String> {
     if !matches!(
         input.result.as_str(),
-        "issue" | "insufficient" | "ambiguous" | "interrupted"
+        "issue" | "insufficient" | "ambiguous" | "no_recurring_problem" | "interrupted"
     ) {
         return Err("unknown Driver Analysis result".to_string());
     }
@@ -1706,16 +1796,27 @@ fn validate_final_result(input: &DriverAnalysisFinalResultInput) -> Result<(), S
     Ok(())
 }
 
-fn finalize_driver_analysis_session_in_connection(
+fn save_driver_analysis_result_in_connection(
     connection: &mut Connection,
     session_id: i64,
     opportunities: &[DriverAnalysisOpportunityInput],
     evidence: &[DriverAnalysisEvidenceInput],
     result: &DriverAnalysisFinalResultInput,
+    algorithm_version: Option<&str>,
 ) -> Result<DriverAnalysisHistoryRecord, String> {
     if session_id <= 0 {
         return Err("Driver Analysis session id must be positive".to_string());
     }
+    let algorithm_version = match algorithm_version {
+        Some(value) => {
+            let value = value.trim();
+            if value.is_empty() || value.len() > 120 {
+                return Err("Driver Analysis algorithm version is invalid".to_string());
+            }
+            Some(value)
+        }
+        None => None,
+    };
     validate_final_result(result)?;
     let mut maneuver_ids = HashSet::new();
     for opportunity in opportunities {
@@ -1768,15 +1869,35 @@ fn finalize_driver_analysis_session_in_connection(
     let transaction = connection
         .transaction()
         .map_err(|error| format!("unable to start Driver Analysis finalization: {error}"))?;
-    let current_status: Option<String> = transaction
+    let current_state: Option<(String, String, i64)> = transaction
         .query_row(
-            "SELECT status FROM driver_analysis_sessions WHERE id = ?1",
+            "SELECT status, algorithm_version, sample_count
+               FROM driver_analysis_sessions WHERE id = ?1",
             params![session_id],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()
         .map_err(|error| format!("unable to inspect Driver Analysis session: {error}"))?;
-    if current_status.as_deref() != Some("recording") {
+    let Some((current_status, current_algorithm_version, sample_count)) = current_state else {
+        return Err("Driver Analysis session does not exist".to_string());
+    };
+    if let Some(target_version) = algorithm_version {
+        if current_status != "completed" || sample_count <= 0 {
+            return Err("Driver Analysis session is not eligible for reanalysis".to_string());
+        }
+        if current_algorithm_version == target_version {
+            transaction.commit().map_err(|error| {
+                format!("unable to finish Driver Analysis reanalysis check: {error}")
+            })?;
+            return load_driver_analysis_session_from_connection(connection, session_id);
+        }
+        transaction
+            .execute(
+                "DELETE FROM driver_analysis_opportunities WHERE session_id = ?1",
+                params![session_id],
+            )
+            .map_err(|error| format!("unable to replace Driver Analysis opportunities: {error}"))?;
+    } else if current_status != "recording" {
         return Err("Driver Analysis session is not recording".to_string());
     }
     let mut opportunity_ids = Vec::with_capacity(opportunities.len());
@@ -1850,13 +1971,14 @@ fn finalize_driver_analysis_session_in_connection(
     transaction
         .execute(
             "UPDATE driver_analysis_sessions
-             SET finished_at_ms = ?1, status = ?2, result = ?3, main_kind = ?4,
+             SET finished_at_ms = COALESCE(?1, finished_at_ms), status = ?2, result = ?3, main_kind = ?4,
                  label = ?5, instruction = ?6, maneuver_count = ?7,
                  opportunity_count = ?8, evidence_count = ?9,
-                 detector_confidence = ?10, attribution_confidence = ?11, severity = ?12
-             WHERE id = ?13",
+                 detector_confidence = ?10, attribution_confidence = ?11, severity = ?12,
+                 algorithm_version = COALESCE(?13, algorithm_version)
+             WHERE id = ?14",
             params![
-                finished_at_ms,
+                if algorithm_version.is_some() { None } else { Some(finished_at_ms) },
                 status,
                 result.result,
                 main_kind,
@@ -1868,6 +1990,7 @@ fn finalize_driver_analysis_session_in_connection(
                 result.detector_confidence,
                 result.attribution_confidence,
                 result.severity,
+                algorithm_version,
                 session_id,
             ],
         )
@@ -1876,6 +1999,23 @@ fn finalize_driver_analysis_session_in_connection(
         .commit()
         .map_err(|error| format!("unable to commit Driver Analysis finalization: {error}"))?;
     load_driver_analysis_session_from_connection(connection, session_id)
+}
+
+fn finalize_driver_analysis_session_in_connection(
+    connection: &mut Connection,
+    session_id: i64,
+    opportunities: &[DriverAnalysisOpportunityInput],
+    evidence: &[DriverAnalysisEvidenceInput],
+    result: &DriverAnalysisFinalResultInput,
+) -> Result<DriverAnalysisHistoryRecord, String> {
+    save_driver_analysis_result_in_connection(
+        connection,
+        session_id,
+        opportunities,
+        evidence,
+        result,
+        None,
+    )
 }
 
 fn history_record_from_row(
@@ -2021,7 +2161,7 @@ fn import_legacy_driver_analysis_history_in_connection(
         let result = entry.result.as_deref().unwrap_or("insufficient");
         if !matches!(
             result,
-            "issue" | "insufficient" | "ambiguous" | "interrupted"
+            "issue" | "insufficient" | "ambiguous" | "no_recurring_problem" | "interrupted"
         ) {
             return Err("unknown legacy Driver Analysis result".to_string());
         }
@@ -2163,6 +2303,37 @@ fn finalize_driver_analysis_session(
         &opportunities,
         &evidence,
         &result,
+    )
+}
+
+#[tauri::command]
+fn load_driver_analysis_samples(
+    app: AppHandle,
+    session_id: i64,
+    after_sequence: i64,
+    limit: i64,
+) -> Result<Vec<DriverAnalysisSampleInput>, String> {
+    let connection = open_shift_light_db(&app)?;
+    load_driver_analysis_samples_in_connection(&connection, session_id, after_sequence, limit)
+}
+
+#[tauri::command]
+fn reanalyze_driver_analysis_session(
+    app: AppHandle,
+    session_id: i64,
+    algorithm_version: String,
+    opportunities: Vec<DriverAnalysisOpportunityInput>,
+    evidence: Vec<DriverAnalysisEvidenceInput>,
+    result: DriverAnalysisFinalResultInput,
+) -> Result<DriverAnalysisHistoryRecord, String> {
+    let mut connection = open_shift_light_db(&app)?;
+    save_driver_analysis_result_in_connection(
+        &mut connection,
+        session_id,
+        &opportunities,
+        &evidence,
+        &result,
+        Some(&algorithm_version),
     )
 }
 
@@ -4362,6 +4533,8 @@ fn main() {
             create_driver_analysis_session,
             append_driver_analysis_samples,
             finalize_driver_analysis_session,
+            load_driver_analysis_samples,
+            reanalyze_driver_analysis_session,
             load_driver_analysis_sessions,
             delete_driver_analysis_session,
             import_legacy_driver_analysis_history,
@@ -5989,6 +6162,47 @@ mod tests {
     }
 
     #[test]
+    fn v18_migration_preserves_driver_analysis_results_and_adds_no_recurring_result() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE hud_schema_version (version INTEGER NOT NULL);
+                 INSERT INTO hud_schema_version VALUES (17);
+                 CREATE TABLE driver_analysis_sessions (
+                   id INTEGER PRIMARY KEY,
+                   result TEXT CHECK (result IS NULL OR result IN ('issue', 'insufficient', 'ambiguous', 'interrupted'))
+                 );
+                 INSERT INTO driver_analysis_sessions (id, result) VALUES (1, 'insufficient');",
+            )
+            .unwrap();
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+        assert_eq!(
+            connection
+                .query_row("SELECT version FROM hud_schema_version", [], |row| row
+                    .get::<_, i32>(0))
+                .unwrap(),
+            HUD_SCHEMA_VERSION
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT result FROM driver_analysis_sessions WHERE id = 1",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .unwrap(),
+            "insufficient"
+        );
+        connection
+            .execute(
+                "UPDATE driver_analysis_sessions SET result = 'no_recurring_problem' WHERE id = 1",
+                [],
+            )
+            .unwrap();
+    }
+
+    #[test]
     fn driver_analysis_creates_session_and_appends_batch_transactionally() {
         let mut connection = driver_analysis_connection();
         let session_id = create_driver_analysis_session_in_connection(
@@ -6024,6 +6238,50 @@ mod tests {
                 )
                 .unwrap(),
             2
+        );
+    }
+
+    #[test]
+    fn driver_analysis_sample_replay_is_ordered_and_paginated() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[
+                driver_analysis_sample(0),
+                driver_analysis_sample(1),
+                driver_analysis_sample(2),
+            ],
+        )
+        .unwrap();
+
+        let first =
+            load_driver_analysis_samples_in_connection(&connection, session_id, -1, 2).unwrap();
+        let second = load_driver_analysis_samples_in_connection(
+            &connection,
+            session_id,
+            first.last().unwrap().sequence,
+            2,
+        )
+        .unwrap();
+        assert_eq!(
+            first
+                .iter()
+                .map(|sample| sample.sequence)
+                .collect::<Vec<_>>(),
+            vec![0, 1]
+        );
+        assert_eq!(
+            second
+                .iter()
+                .map(|sample| sample.sequence)
+                .collect::<Vec<_>>(),
+            vec![2]
         );
     }
 
@@ -6085,6 +6343,68 @@ mod tests {
         assert_eq!(record.result.as_deref(), Some("issue"));
         assert_eq!(record.evidence_count, 1);
         assert_eq!(record.opportunity_count, 1);
+    }
+
+    #[test]
+    fn driver_analysis_reanalysis_replaces_derived_data_and_preserves_raw_session() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_sample(0), driver_analysis_sample(1)],
+        )
+        .unwrap();
+        finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_opportunity()],
+            &[],
+            &driver_analysis_result("insufficient"),
+        )
+        .unwrap();
+        let before = load_driver_analysis_session_from_connection(&connection, session_id).unwrap();
+
+        let record = save_driver_analysis_result_in_connection(
+            &mut connection,
+            session_id,
+            &[],
+            &[],
+            &driver_analysis_result("no_recurring_problem"),
+            Some("driver-analysis-rules-v3"),
+        )
+        .unwrap();
+        assert_eq!(record.result.as_deref(), Some("no_recurring_problem"));
+        assert_eq!(record.algorithm_version, "driver-analysis-rules-v3");
+        assert_eq!(record.finished_at, before.finished_at);
+        assert_eq!(record.sample_count, before.sample_count);
+        assert_eq!(record.storage_bytes, before.storage_bytes);
+        assert_eq!(record.opportunity_count, 0);
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM driver_analysis_samples WHERE session_id = ?1",
+                    params![session_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            2
+        );
+
+        let repeated = save_driver_analysis_result_in_connection(
+            &mut connection,
+            session_id,
+            &[],
+            &[],
+            &driver_analysis_result("no_recurring_problem"),
+            Some("driver-analysis-rules-v3"),
+        )
+        .unwrap();
+        assert_eq!(repeated.opportunity_count, 0);
     }
 
     #[test]

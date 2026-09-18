@@ -43,6 +43,8 @@ OFF → READY → WAITING → RECORDING → FINALIZING → READY
 - The first valid sample creates the local session and enters `RECORDING`.
 - Samples are appended to SQLite in ordered batches rather than one command per
   packet.
+- Raw packets that share a game timestamp are retained for reproducibility, but
+  only the first packet at that timestamp advances the maneuver analysis.
 - A telemetry gap invalidates the active maneuver evidence and recording can
   continue.
 - A vehicle-identity change ends the session as interrupted. Completed
@@ -105,6 +107,14 @@ confidence, severity, sample support, and an ambiguity penalty. The winner must
 score at least 15% above the second problem. Otherwise the recording is saved
 as ambiguous and the UI does not invent a dominant recommendation.
 
+Data sufficiency is evaluated separately from problem qualification. When a
+recording contains enough valid opportunities for at least one supported
+pattern across enough maneuvers but no problem reaches the recurrence and
+confidence gates, the result is `NO
+RECURRING PROBLEM DETECTED`. An ambiguous result is reserved for a recurring
+candidate that the available evidence cannot reliably attribute to the driver,
+or for qualified candidates that are too close to prioritize.
+
 ## Local persistence and deletion
 
 The native layer stores data in the application-data `fdc.sqlite` database:
@@ -125,6 +135,11 @@ Only enable state and hotkey remain in browser storage under
 `fdc.driver-analysis.settings.v1`. Results created by the previous MVP are
 imported once from `fdc.driver-analysis.history.v1` into SQLite and the legacy
 browser history is then cleared.
+
+When the analysis algorithm version changes, completed recordings with saved
+samples are replayed locally once. Their raw samples, timestamps, vehicle
+identity, and storage metadata are preserved; only derived opportunities,
+evidence, and the summary result are replaced transactionally.
 
 ## Current limitations
 
