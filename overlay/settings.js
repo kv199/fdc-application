@@ -166,6 +166,9 @@
   let driverAnalysisSettings = driverAnalysisApi?.readSettings?.() || { enabled: false, hotkey: 'Ctrl+Shift+F9' }
   let driverAnalysisState = { enabled: driverAnalysisSettings.enabled, recording: false, startedAt: null, sampleCount: 0, hotkey: driverAnalysisSettings.hotkey }
   let driverAnalysisHotkeyCapture = false
+  let driverAnalysisHistory = []
+  let driverAnalysisHistoryPending = false
+  let driverAnalysisActionPending = false
 
   function garageDisplayName(vehicle) {
     return garageApi?.displayName?.(vehicle) || vehicle?.name || String(vehicle?.carOrdinal || '')
@@ -1739,7 +1742,7 @@
     updateSettingsWindowContext(tabName)
     if (tabName === 'events' && eventsView === 'library') void loadEvents()
     if (tabName === 'driver-analysis') {
-      renderDriverAnalysisHistory()
+      void loadDriverAnalysisHistory()
       const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
       if (eventApi?.emit) void eventApi.emit('driver_analysis_status_request')
     }
@@ -1777,9 +1780,69 @@
     return `${date.toLocaleDateString()} · ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
   }
 
-  function renderDriverAnalysisHistory(history = driverAnalysisApi?.readHistory?.() || []) {
+  function formatDriverAnalysisSize(value) {
+    const bytes = Math.max(0, Number(value) || 0)
+    if (bytes < 1024) return `${Math.round(bytes)} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`
+  }
+
+  function driverAnalysisResultCopy(entry) {
+    if (entry?.result === 'issue' && entry.label) {
+      const eligible = Math.max(0, Number(entry.opportunityCount) || 0)
+      const evidence = Math.max(0, Number(entry.evidenceCount) || 0)
+      return {
+        label: entry.label,
+        instruction: entry.instruction || 'Repeat the session before changing another part of your technique.',
+        detail: eligible > 0 ? `Observed in ${evidence} of ${eligible} eligible opportunities.` : ''
+      }
+    }
+    if (entry?.result === 'ambiguous') {
+      return {
+        label: 'NO DRIVER-DOMINANT PATTERN DETECTED',
+        instruction: 'The recording could not separate driver input from vehicle behaviour.',
+        detail: ''
+      }
+    }
+    if (entry?.result === 'interrupted' || entry?.status === 'interrupted') {
+      return {
+        label: 'RECORDING INTERRUPTED',
+        instruction: 'Only completed maneuvers were kept. Record another asphalt session for a reliable result.',
+        detail: ''
+      }
+    }
+    return {
+      label: 'NOT ENOUGH ELIGIBLE MANEUVERS',
+      instruction: 'Record a longer asphalt session before changing technique.',
+      detail: ''
+    }
+  }
+
+  async function deleteDriverAnalysisSession(entry) {
+    const id = Number(entry?.id)
+    if (!Number.isSafeInteger(id) || id <= 0 || driverAnalysisHistoryPending) return false
+    if (typeof globalScope.confirm === 'function' && !globalScope.confirm('Delete this Driver Analysis recording and its saved telemetry?')) return false
+    driverAnalysisHistoryPending = true
+    renderDriverAnalysisHistory()
+    try {
+      await call('delete_driver_analysis_session', { sessionId: id })
+      driverAnalysisHistory = driverAnalysisHistory.filter(candidate => Number(candidate.id) !== id)
+      renderDriverAnalysisHistory()
+      setStatus('DRIVER ANALYSIS RECORDING DELETED')
+      return true
+    } catch (error) {
+      setStatus(error.message || 'Unable to delete Driver Analysis recording', true)
+      return false
+    } finally {
+      driverAnalysisHistoryPending = false
+      renderDriverAnalysisHistory()
+    }
+  }
+
+  function renderDriverAnalysisHistory(history = driverAnalysisHistory) {
     if (!driverAnalysisHistoryList) return
     const entries = Array.isArray(history) ? history : []
+    driverAnalysisHistory = entries
     driverAnalysisHistoryList.replaceChildren()
     if (driverAnalysisHistoryEmpty) driverAnalysisHistoryEmpty.hidden = entries.length > 0
     if (driverAnalysisHistoryCount) {
@@ -1793,26 +1856,64 @@
       const meta = document.createElement('div')
       meta.className = 'driver-analysis-history-row__meta'
       const date = document.createElement('time')
-      date.dateTime = entry.recordedAt
+      const recordedDate = new Date(entry.recordedAt)
+      date.dateTime = Number.isFinite(recordedDate.getTime()) ? recordedDate.toISOString() : ''
       date.textContent = formatDriverAnalysisDate(entry.recordedAt)
       const duration = document.createElement('span')
       duration.textContent = formatDriverAnalysisDuration(entry.durationMs)
-      meta.append(date, duration)
+      const storage = document.createElement('span')
+      storage.textContent = formatDriverAnalysisSize(entry.storageBytes)
+      meta.append(date, duration, storage)
 
       const finding = document.createElement('div')
       finding.className = 'driver-analysis-history-row__finding'
       const label = document.createElement('strong')
       const instruction = document.createElement('p')
-      if (entry.result === 'issue') {
-        label.textContent = entry.label
-        instruction.textContent = entry.instruction
-      } else {
-        label.textContent = 'NO RECURRING PROBLEM DETECTED'
-        instruction.textContent = 'Record a longer asphalt session before changing technique.'
-      }
+      const copy = driverAnalysisResultCopy(entry)
+      label.textContent = copy.label
+      instruction.textContent = copy.instruction
       finding.append(label, instruction)
-      row.append(meta, finding)
+      if (copy.detail) {
+        const detail = document.createElement('span')
+        detail.className = 'driver-analysis-history-row__detail'
+        detail.textContent = copy.detail
+        finding.append(detail)
+      }
+
+      const actions = document.createElement('div')
+      actions.className = 'driver-analysis-history-row__actions'
+      const remove = document.createElement('button')
+      remove.className = 'settings-button settings-button--danger driver-analysis-history-row__delete'
+      remove.type = 'button'
+      remove.textContent = 'DELETE'
+      remove.disabled = driverAnalysisHistoryPending || driverAnalysisState.recording === true
+      remove.setAttribute('aria-label', `Delete Driver Analysis recording from ${date.textContent}`)
+      remove.addEventListener('click', () => void deleteDriverAnalysisSession(entry))
+      actions.append(remove)
+
+      row.append(meta, finding, actions)
       driverAnalysisHistoryList.append(row)
+    }
+  }
+
+  async function importLegacyDriverAnalysisHistory() {
+    const legacy = driverAnalysisApi?.readHistory?.() || []
+    if (!Array.isArray(legacy) || legacy.length === 0) return false
+    await call('import_legacy_driver_analysis_history', { entries: legacy })
+    driverAnalysisApi?.clearHistory?.()
+    return true
+  }
+
+  async function loadDriverAnalysisHistory() {
+    try {
+      await importLegacyDriverAnalysisHistory()
+      const history = await call('load_driver_analysis_sessions')
+      renderDriverAnalysisHistory(Array.isArray(history) ? history : [])
+      return driverAnalysisHistory
+    } catch (error) {
+      renderDriverAnalysisHistory([])
+      setStatus(error.message || 'Unable to load Driver Analysis history', true)
+      return []
     }
   }
 
@@ -1822,27 +1923,38 @@
       ...(value && typeof value === 'object' ? value : {}),
       enabled: value?.enabled === true,
       recording: value?.recording === true,
+      phase: typeof value?.phase === 'string' ? value.phase : value?.recording === true ? 'recording' : value?.enabled === true ? 'ready' : 'off',
       hotkey: driverAnalysisApi?.normalizeHotkey?.(value?.hotkey) || driverAnalysisSettings.hotkey
     }
-    const { enabled, recording, hotkey } = driverAnalysisState
+    const { enabled, recording, hotkey, phase } = driverAnalysisState
+    const busy = driverAnalysisActionPending || phase === 'finalizing'
+    const waiting = phase === 'waiting'
+    const failed = phase === 'error'
     updateOverlayToggle(driverAnalysisEnabled, enabled)
-    driverAnalysisEnabled.disabled = recording
-    driverAnalysisRecord.disabled = !enabled
-    driverAnalysisRecord.textContent = recording ? 'STOP' : 'RECORD'
+    driverAnalysisEnabled.disabled = recording || busy
+    driverAnalysisRecord.disabled = !enabled || busy
+    driverAnalysisRecord.textContent = recording || waiting ? 'STOP' : busy ? 'SAVING' : 'RECORD'
     driverAnalysisRecord.setAttribute('aria-pressed', String(recording))
-    driverAnalysisRecord.classList.toggle('settings-button--danger', recording)
-    driverAnalysisRecord.classList.toggle('driver-analysis-record--ready', enabled && !recording)
-    driverAnalysisHotkeyChange.disabled = !enabled || recording
+    driverAnalysisRecord.classList.toggle('settings-button--danger', recording || waiting)
+    driverAnalysisRecord.classList.toggle('driver-analysis-record--ready', enabled && !recording && !waiting && !busy)
+    driverAnalysisHotkeyChange.disabled = !enabled || recording || waiting || busy
     driverAnalysisHotkeyValue.textContent = driverAnalysisHotkeyCapture
       ? 'PRESS KEYS'
       : driverAnalysisApi?.formatHotkey?.(hotkey) || hotkey
-    driverAnalysisRecordingStatus.dataset.state = recording ? 'recording' : enabled ? 'ready' : 'off'
-    driverAnalysisRecordingStatus.textContent = recording ? 'RECORDING' : enabled ? 'READY' : 'OFF'
-    driverAnalysisRecorderHint.textContent = recording
-      ? 'Drive the asphalt session, then press Stop or use the global hotkey.'
-      : enabled
-        ? 'Record one asphalt session. FDC will save one recurring problem.'
-        : 'Enable Driver Analysis to start recording.'
+    driverAnalysisRecordingStatus.dataset.state = phase
+    driverAnalysisRecordingStatus.textContent = phase.toUpperCase()
+    driverAnalysisRecorderHint.textContent = busy
+      ? 'Saving telemetry and completing the analysis.'
+      : waiting
+        ? 'Waiting for valid Forza telemetry. Recording starts automatically when data arrives.'
+        : recording
+          ? 'Drive the asphalt session, then press Stop or use the global hotkey.'
+          : failed
+            ? 'The last recording could not be saved. Start a new session when ready.'
+            : enabled
+              ? 'Record one asphalt session. FDC will save one recurring problem.'
+              : 'Enable Driver Analysis to start recording.'
+    renderDriverAnalysisHistory()
   }
 
   function emitDriverAnalysisConfig(payload) {
@@ -1889,6 +2001,9 @@
   }
 
   async function sendDriverAnalysisAction(action) {
+    if (driverAnalysisActionPending) return
+    driverAnalysisActionPending = true
+    renderDriverAnalysisState(driverAnalysisState)
     try {
       await emitDriverAnalysisConfig({
         action,
@@ -1897,6 +2012,9 @@
       })
     } catch (error) {
       setStatus(error.message || 'Unable to update Driver Analysis recording', true)
+    } finally {
+      driverAnalysisActionPending = false
+      renderDriverAnalysisState(driverAnalysisState)
     }
   }
 
@@ -1911,10 +2029,11 @@
     const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
     if (!eventApi || typeof eventApi.listen !== 'function') return
     await eventApi.listen('driver_analysis_status', event => renderDriverAnalysisState(event?.payload || {}))
-    await eventApi.listen('driver_analysis_history', event => renderDriverAnalysisHistory(event?.payload))
+    await eventApi.listen('driver_analysis_history', () => void loadDriverAnalysisHistory())
     await eventApi.listen('driver_analysis_result', event => {
       const entry = event?.payload
       setStatus(entry?.result === 'issue' ? `ANALYSIS SAVED · ${entry.label}` : 'ANALYSIS SAVED · MORE EVIDENCE NEEDED')
+      void loadDriverAnalysisHistory()
     })
     await eventApi.emit('driver_analysis_status_request')
   }
@@ -2707,6 +2826,7 @@
   renderEventsLibrary()
   renderDriverAnalysisState(driverAnalysisState)
   renderDriverAnalysisHistory()
+  void loadDriverAnalysisHistory()
   void setDriverAnalysisHotkey(driverAnalysisSettings.hotkey, false)
   void listenShiftLightEvents()
   void listenRouteEvents()

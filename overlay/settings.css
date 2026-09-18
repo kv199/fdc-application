@@ -1655,8 +1655,17 @@ h1 {
   color: #69e83f;
 }
 
+.driver-analysis-recording-status[data-state='waiting'],
+.driver-analysis-recording-status[data-state='finalizing'] {
+  color: #fbbf24;
+}
+
 .driver-analysis-recording-status[data-state='recording'] {
   color: #ff827d;
+}
+
+.driver-analysis-recording-status[data-state='error'] {
+  color: #fb7185;
 }
 
 .driver-analysis-record {
@@ -1713,7 +1722,8 @@ h1 {
 
 .driver-analysis-history-row {
   display: grid;
-  grid-template-columns: minmax(170px, 0.65fr) minmax(0, 1.7fr);
+  grid-template-columns: minmax(170px, 0.65fr) minmax(0, 1.7fr) auto;
+  align-items: start;
   gap: 24px;
   padding: 16px;
 }
@@ -1748,11 +1758,33 @@ h1 {
   color: #fbbf24;
 }
 
+.driver-analysis-history-row[data-result='ambiguous'] .driver-analysis-history-row__finding strong,
+.driver-analysis-history-row[data-result='interrupted'] .driver-analysis-history-row__finding strong {
+  color: #a1a1aa;
+}
+
 .driver-analysis-history-row__finding p {
   margin-top: 6px;
   color: #d4d4d8;
   font-size: 13px;
   line-height: 1.4;
+}
+
+.driver-analysis-history-row__detail {
+  display: block;
+  margin-top: 8px;
+  color: #71717a;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.driver-analysis-history-row__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.driver-analysis-history-row__delete {
+  min-width: 84px;
 }
 
 .driver-analysis-history__empty {

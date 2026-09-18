@@ -1,116 +1,139 @@
 # Driver Analysis
 
-## Purpose and boundaries
+## Purpose and product boundary
 
-Driver Analysis is a local-first, zero-reference review tool for asphalt driving
-in Forza Horizon 6. It is an MVP/beta feature. The driver explicitly enables it
-and starts and stops each recording from Configuration or with the global
-recording hotkey.
+Driver Analysis is a local, zero-reference review tool for asphalt driving in
+Forza Horizon 6. It is an MVP/beta feature. The driver enables it and explicitly
+starts and stops each recording from Configuration or with the global hotkey.
 
-The feature does not identify the road surface from telemetry. The driver must
-record on asphalt. It does not infer track identity, an ideal line, a driving
-score, exact metres or seconds of loss, a wrong apex, or optimal gear advice.
+The feature does not identify the road surface, track, ideal line, apex, or
+optimal gear. It does not produce a driving score or an exact time-loss claim.
+The driver must record on asphalt. Each completed recording shows at most one
+dominant, recurring technique problem.
 
 ## Runtime data flow
 
 ```text
 FH6 Data Out → UDP 127.0.0.1:5301 → native decoder → direct_telemetry
   → queueTelemetry → Driver Analysis recorder
-  → AsphaltCoachState.update → AsphaltCoachFindings.update
-  → one dominant recurring problem → local history
-  → Configuration / Driver Analysis
+  → phase/maneuver state → opportunities → evidence → scoring
+  → samples + analysis in local fdc.sqlite
+  → Configuration / Driver Analysis history
 ```
 
-The internal `AsphaltCoachState`, `AsphaltCoachFindings`, and
-`AsphaltCoachPresentation` modules remain the existing analysis engine. They
-consume the normalized `queueTelemetry` stream and do not create another
-telemetry transport. Driver Analysis has no HUD widget and does not show live
-driving cues.
+Driver Analysis remains a consumer of the existing normalized `queueTelemetry`
+stream. It does not add another telemetry transport or subscribe directly to
+UDP. It has no HUD widget and displays no live driving cues.
 
-Raw telemetry is analyzed in memory and is not written to disk. When a
-recording stops, FDC persists only the compact result in the webview's versioned
-local storage under `fdc.driver-analysis.history.v1`. History is displayed from
-newest to oldest and is limited to 100 results.
+## Controls and lifecycle
 
-## Controls
+Driver Analysis is disabled by default. Its Configuration tab is second after
+HUD and contains the enable toggle, `RECORD` / `STOP` control, editable hotkey,
+beta/asphalt warning, and newest-first history.
 
-Driver Analysis is disabled by default. Its Configuration tab is the second
-tab after HUD and provides:
+The recording state machine is:
 
-- an enable toggle;
-- a `RECORD` / `STOP` button;
-- an editable global recording hotkey;
-- the beta/MVP and asphalt-only warning; and
-- saved recording history.
+```text
+OFF → READY → WAITING → RECORDING → FINALIZING → READY
+                                      └────────→ ERROR
+```
 
-The default global hotkey is `Ctrl+Shift+F9`. Windows-key combinations, bare
-keys, `Alt+F4`, `Alt+Tab`, `Ctrl+Escape`, and `Ctrl+Shift+Escape` are rejected.
-If Windows or another application already owns a requested shortcut, FDC keeps
-the previous shortcut and reports the registration error.
+- `WAITING` means recording is armed but valid telemetry has not arrived. No
+  empty database session is created.
+- The first valid sample creates the local session and enters `RECORDING`.
+- Samples are appended to SQLite in ordered batches rather than one command per
+  packet.
+- A telemetry gap invalidates the active maneuver evidence and recording can
+  continue.
+- A vehicle-identity change ends the session as interrupted. Completed
+  opportunities remain available in the saved recording.
+- An unfinished `recording` row found after restart is recovered as
+  `interrupted` when history is loaded.
 
-## Analysis lifecycle
+The default hotkey is `Ctrl+Shift+F9`. Windows-key combinations, bare keys,
+`Alt+F4`, `Alt+Tab`, `Ctrl+Escape`, and `Ctrl+Shift+Escape` are rejected.
 
-Starting a recording clears the previous in-memory calibration and finding
-counts. While recording, normalized telemetry is passed through the existing
-asphalt state and evidence gates. Paused, invalid, rewound, duplicate, or
-disturbed samples do not create findings. A telemetry gap resets transient
-evidence without inventing a result.
+## Opportunity and evidence model
 
-Stopping a recording builds one result. The selected problem is the most
-frequent supported negative finding. Ties use this priority:
+The map-free state engine segments telemetry into straight, braking, turn-in,
+rotation, and exit phases. It creates bounded opportunities for four supported
+problem types:
 
-1. abrupt brake release;
-2. brake plus steering overload;
-3. front scrub;
-4. exit wheelspin.
-
-If no negative pattern has enough evidence, the recording is saved as `NO
-RECURRING PROBLEM DETECTED`; FDC asks for a longer asphalt recording instead of
-inventing a problem.
-
-## Supported findings
-
-| Finding | Evidence pattern | Focus |
+| Problem | Driver input and observed response | User instruction |
 | --- | --- | --- |
-| `FRONT SCRUB` | Steering and front slip grow while lateral or yaw response stops improving | Reduce steering and let the front recover |
-| `EXIT WHEELSPIN` | Throttle and driven slip rise while acceleration response is weak | Build throttle after the car is settled |
-| `BRAKE + STEERING OVERLOAD` | Brake, steering, and front combined slip are high while response stalls | Release brake as steering builds |
-| `ABRUPT BRAKE RELEASE` | Sharp brake release is followed by response/yaw loss or rear-slip growth | Release brake smoothly through rotation |
+| `FRONT SCRUB` | More steering/front slip without improving lateral or yaw response | Reduce steering and let the front recover |
+| `EXIT WHEELSPIN` | More throttle/driven-wheel slip with weak acceleration response | Build throttle after the car is settled |
+| `BRAKE + STEERING OVERLOAD` | Brake and steering overlap with high combined front slip and stalled response | Release brake as steering builds |
+| `ABRUPT BRAKE RELEASE` | Sharp brake release followed by response/yaw loss or rear-slip growth | Release brake smoothly through rotation |
 
-The engine also recognizes clean exits and controlled brake releases as
-positive evidence, but the MVP history intentionally stores and displays only
-one negative problem. Positive evidence is not shown as a second recommendation.
+Each opportunity ends as `clean`, `problem`, `ambiguous`, or `incomplete` and
+has one evidence record. Evidence includes detector confidence, driver
+attribution confidence, severity, causal metrics, counterexample support, and
+confounders. If several symptoms occur in one maneuver, causal ordering marks
+only the earliest supported cause as primary.
 
-## Calibration and confidence
+## Separating driver input from vehicle behavior
 
-Calibration is a zero-reference envelope for the current car session. The
-vehicle identity is derived from car ordinal, PI, rounded RPM limit, and
-drivetrain. Twelve fixed 25 km/h speed bins cover 0–300 km/h. The global
-envelope requires at least 36 accepted samples across three bins; a current bin
-requires at least eight accepted samples.
+A detector is not enough to blame the driver. Attribution additionally needs:
 
-Samples are excluded from calibration when they show obvious front scrub,
-wheelspin, combined brake/steering overload, abrupt release, rumble contact,
-puddle depth, complete suspension extension, or a learned transient outlier.
-Negative sustained findings require more than 140 ms of evidence and a minimum
-confidence of 0.84. These gates are unchanged from the previous analysis
-engine.
+- temporal causality: the relevant input change occurs before the degraded
+  response;
+- comparable clean counterexamples from the same car and similar speed/gear
+  context;
+- repeatability across distinct maneuvers; and
+- no surface/contact confounder such as rumble contact, puddle data, or full
+  suspension extension.
 
-## Persistence and privacy
+Missing counterexamples or conflicting signals reduce attribution and produce
+an ambiguous result. This is intentionally conservative: the feature prefers
+no conclusion over incorrectly labeling vehicle behavior as driver error.
 
-The enable preference and hotkey use
-`fdc.driver-analysis.settings.v1`. Completed compact results use
-`fdc.driver-analysis.history.v1`. Both are local browser storage shared by the
-FDC windows. The calibration envelope, raw telemetry, and candidate evidence
-remain in memory and are not stored in `fdc.sqlite`.
+## Qualification and prioritization
+
+A problem can qualify only with all of these gates:
+
+- at least 5 valid opportunities;
+- at least 3 primary problem evidence records;
+- at least 3 distinct maneuvers;
+- recurrence of at least 40%;
+- median detector confidence of at least 0.84;
+- median attribution confidence of at least 0.70; and
+- ambiguity of at most 30%.
+
+Qualified problems are ranked by recurrence, detector confidence, attribution
+confidence, severity, sample support, and an ambiguity penalty. The winner must
+score at least 15% above the second problem. Otherwise the recording is saved
+as ambiguous and the UI does not invent a dominant recommendation.
+
+## Local persistence and deletion
+
+The native layer stores data in the application-data `fdc.sqlite` database:
+
+- `driver_analysis_sessions` stores lifecycle, vehicle identity, algorithm
+  version, counts, selected result, and approximate storage size;
+- `driver_analysis_samples` stores the selected normalized telemetry needed to
+  reproduce or improve analysis;
+- `driver_analysis_opportunities` stores eligible windows and their context;
+- `driver_analysis_evidence` stores detector, attribution, severity, and causal
+  metrics.
+
+Foreign keys use cascading deletion. There is no automatic retention limit.
+The user deletes an individual recording with `DELETE`; after confirmation the
+session, samples, opportunities, and evidence are removed together.
+
+Only enable state and hotkey remain in browser storage under
+`fdc.driver-analysis.settings.v1`. Results created by the previous MVP are
+imported once from `fdc.driver-analysis.history.v1` into SQLite and the legacy
+browser history is then cleared.
 
 ## Current limitations
 
-- Driver Analysis is beta/MVP functionality and may be inaccurate.
-- It is asphalt-only by product boundary; telemetry does not identify surface
-  type.
-- Short recordings or unseen speed ranges may produce no recurring problem.
-- It has no track identity, map, reference lap, ideal line, score, exact time
+- Results are beta/MVP and may be inaccurate.
+- The feature is asphalt-only by product boundary; telemetry does not prove the
+  surface type.
+- Short or inconsistent recordings commonly produce insufficient or ambiguous
+  results.
+- The supported findings are bounded technique patterns, not a complete
+  driving assessment.
+- There is no map, track identity, reference lap, ideal line, score, exact time
   loss, or optimal-gear recommendation.
-- Supported findings are bounded technique patterns, not a complete driving
-  assessment.

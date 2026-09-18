@@ -288,189 +288,6 @@ body {
   overflow: hidden;
 }
 
-.coachbar {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  display: block;
-  width: min(460px, calc(100vw - 24px));
-  min-height: 88px;
-  padding: 12px 16px;
-  overflow: visible;
-  background: rgb(8 10 12 / 82%);
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-  transform: none;
-  z-index: 2;
-}
-
-.coach-card__main {
-  min-width: 0;
-}
-
-.coach-card__header,
-.coach-card__body {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.coach-card__body {
-  justify-content: flex-start;
-  margin-top: 6px;
-}
-
-.coach__kicker {
-  color: #facc15;
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.coachbar output {
-  overflow: hidden;
-  border-radius: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.coach__status {
-  padding: 0;
-  font-style: normal;
-}
-
-.coach__status {
-  color: #a1a1aa;
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  line-height: 1.1;
-}
-
-.coach__status[data-phase='BRAKE'] {
-  color: var(--brake);
-}
-
-.coach__status[data-phase='BLEND'] {
-  color: #fbbf24;
-}
-
-.coach__status[data-phase='COAST'] {
-  color: #e4e4e7;
-}
-
-.coach__status[data-phase='POWER'] {
-  color: var(--gas);
-}
-
-.coach__status[data-cue-kind='brake_late'],
-.coach__status[data-cue-kind='brake_early'] {
-  color: var(--brake);
-}
-
-.coach__status[data-cue-kind='release_late'] {
-  color: #fbbf24;
-}
-
-.coach__status[data-cue-kind='apex_too_fast'],
-.coach__status[data-cue-kind='apex_too_slow'] {
-  color: #fbbf24;
-}
-
-.coach__status[data-cue-kind='throttle_late'],
-.coach__status[data-cue-kind='throttle_early'],
-.coach__status[data-cue-kind='good'] {
-  color: var(--gas);
-}
-
-.coach-edit-tools {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 14px;
-  padding-top: 10px;
-  border-top: 1px solid rgb(226 232 240 / 24%);
-  pointer-events: auto;
-}
-
-.coach-edit-tools[hidden] {
-  display: none;
-}
-
-.coach-edit__hint {
-  flex: 1 1 auto;
-  color: #a1a1aa;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.coach-edit__button {
-  min-width: 64px;
-  padding: 5px 8px;
-  border: 1px solid rgb(226 232 240 / 46%);
-  border-radius: 3px;
-  color: #f8fafc;
-  background: rgb(226 232 240 / 10%);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 750;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-}
-
-.coach-edit__button:hover,
-.coach-edit__button:focus-visible {
-  background: rgb(226 232 240 / 20%);
-  outline: none;
-}
-
-.coach-edit__button--primary {
-  border-color: rgb(105 232 63 / 70%);
-  color: var(--gas);
-}
-
-.coachbar.is-editing,
-body.is-editing .coachbar {
-  outline: 2px dashed rgb(251 191 36 / 80%);
-  outline-offset: 5px;
-  cursor: grab;
-  pointer-events: auto;
-}
-
-.coachbar.is-editing:active,
-body.is-editing .coachbar:active {
-  cursor: grabbing;
-}
-
-.coachbar:has(.coach__status[data-phase='COAST']) {
-  background: rgb(8 10 12 / 88%);
-}
-
-.coachbar:has(.coach__status[data-cue-kind='brake_late']),
-.coachbar:has(.coach__status[data-cue-kind='brake_early']) {
-  background: rgb(103 24 21 / 30%);
-}
-
-.coachbar:has(.coach__status[data-cue-kind='release_late']),
-.coachbar:has(.coach__status[data-cue-kind='apex_too_fast']),
-.coachbar:has(.coach__status[data-cue-kind='apex_too_slow']) {
-  background: rgb(92 66 15 / 30%);
-}
-
-.coachbar:has(.coach__status[data-cue-kind='throttle_late']),
-.coachbar:has(.coach__status[data-cue-kind='throttle_early']),
-.coachbar:has(.coach__status[data-cue-kind='good']) {
-  background: rgb(35 83 28 / 34%);
-}
-
-body.is-editing .coachbar {
-  background: rgb(8 10 12 / 88%);
-}
-
 .history canvas {
   display: block;
   width: calc(100% - 18px);
@@ -487,84 +304,6 @@ body.is-editing .coachbar {
   .hud-frame {
     height: calc(69px * var(--hud-scale));
   }
-
-  .coachbar {
-    min-height: 80px;
-    padding: 12px 14px;
-  }
-
-  .coach__status {
-    font-size: 22px;
-  }
-}
-
-/* The Coach card is movable; the lap timer belongs to the HUD. */
-.coach-card {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  width: min(460px, calc(100vw - 24px));
-  overflow: visible;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.coachbar {
-  position: relative;
-  top: auto;
-  left: auto;
-  display: block;
-  width: 100%;
-  min-height: 88px;
-  padding: 12px 16px;
-  transform: none;
-}
-
-.coach-card__header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.coach-card__body {
-  justify-content: flex-start;
-  margin-top: 6px;
-}
-
-.coach__status {
-  font-size: 28px;
-}
-
-.coach-card[data-coach-mode='cue'] .coach__status {
-  color: #f8fafc;
-  font-size: 24px;
-  line-height: 1.05;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-}
-
-.coach-card[data-coach-mode='status'] .coach__status {
-  color: #f8fafc;
-  font-size: 18px;
-  line-height: 1.1;
-}
-
-.coach-card[data-coach-mode='brief'] .coachbar {
-  min-height: 156px;
-}
-
-.coach-card[data-coach-mode='brief'] .coach__kicker {
-  color: #f8fafc;
-  font-size: 15px;
-}
-
-.coach-card[data-coach-mode='brief'] .coach__status {
-  color: #f8fafc;
-  font-size: 15px;
-  line-height: 1.45;
-  white-space: pre-line;
 }
 
 .delta-strip {
@@ -682,7 +421,7 @@ body.is-editing .coachbar {
   background: var(--brake);
 }
 
-/* Layout editor: Coach, Delta, and the telemetry HUD are independent targets. */
+/* Layout editor: Delta and the telemetry HUD are independent targets. */
 .hud-frame {
   top: auto;
   right: 0;
@@ -777,18 +516,6 @@ body.is-editing .coachbar {
   color: var(--gas);
 }
 
-.coach-edit-tools {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: 0;
-  z-index: 5;
-  margin: 0;
-  padding: 8px 10px;
-  border-top: 1px solid rgb(226 232 240 / 30%);
-  background: rgb(8 10 12 / 94%);
-}
-
-.coach-card.is-editing,
 .delta-strip.is-editing,
 .hud-frame.is-editing {
   pointer-events: auto;
@@ -797,39 +524,9 @@ body.is-editing .coachbar {
   cursor: grab;
 }
 
-.coach-card.is-editing:active,
 .delta-strip.is-editing:active,
 .hud-frame.is-editing:active {
   cursor: grabbing;
-}
-
-body.is-editing .coachbar {
-  background: rgb(8 10 12 / 88%);
-}
-
-.coach-card.is-editing,
-body.is-editing .coach-card {
-  pointer-events: auto;
-}
-
-.coach-card.is-editing .coachbar,
-body.is-editing .coachbar {
-  pointer-events: auto;
-}
-
-@media (max-width: 684px) {
-  .coach-card {
-    width: calc(100vw - 24px);
-  }
-
-  .coachbar {
-    min-height: 80px;
-    padding: 12px 14px;
-  }
-
-  .coach__status {
-    font-size: 22px;
-  }
 }
 
 .layout-resize-handle {

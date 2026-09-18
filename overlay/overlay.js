@@ -95,10 +95,13 @@ const driverAnalysisSettings = window.DriverAnalysis?.readSettings?.() || {
 }
 let driverAnalysisHotkey = driverAnalysisSettings.hotkey
 const driverAnalysisRecorder = window.DriverAnalysis?.createRecorder?.({
-  state: new window.AsphaltCoachState.AsphaltCoachState(),
-  findings: new window.AsphaltCoachFindings.AsphaltCoachFindings(),
-  buildBrief: window.AsphaltCoachPresentation.buildDriverBrief,
-  metaFor: window.AsphaltCoachPresentation.metaFor,
+  engine: window.DriverAnalysisEngine?.createDriverAnalysisEngine?.(),
+  invoke: invokeTauri,
+  emit: payload => emitRecorderEvent('driver_analysis_status', payload),
+  onResult: entry => Promise.all([
+    emitRecorderEvent('driver_analysis_result', entry),
+    publishDriverAnalysisHistory()
+  ]),
   enabled: driverAnalysisSettings.enabled
 }) || null
 let deltaReferenceRequest = 0
@@ -642,24 +645,20 @@ function publishDriverAnalysisStatus() {
   return emitRecorderEvent('driver_analysis_status', driverAnalysisStatus())
 }
 
-function publishDriverAnalysisHistory(history = window.DriverAnalysis?.readHistory?.() || []) {
-  return emitRecorderEvent('driver_analysis_history', history)
+function publishDriverAnalysisHistory() {
+  return emitRecorderEvent('driver_analysis_history', null)
 }
 
-function applyDriverAnalysisAction(payload = {}) {
+async function applyDriverAnalysisAction(payload = {}) {
   if (!driverAnalysisRecorder) return null
-  if (typeof payload.enabled === 'boolean') driverAnalysisRecorder.setEnabled(payload.enabled)
+  if (typeof payload.enabled === 'boolean') await driverAnalysisRecorder.setEnabled(payload.enabled)
   if (typeof payload.hotkey === 'string') driverAnalysisHotkey = payload.hotkey
 
   let result = null
   if (payload.action === 'record') result = { status: driverAnalysisRecorder.start(), entry: null }
-  else if (payload.action === 'stop') result = driverAnalysisRecorder.stop()
-  else if (payload.action === 'toggle') result = driverAnalysisRecorder.toggle()
+  else if (payload.action === 'stop') result = await driverAnalysisRecorder.stop()
+  else if (payload.action === 'toggle') result = await driverAnalysisRecorder.toggle()
 
-  if (result?.entry) {
-    void emitRecorderEvent('driver_analysis_result', result.entry)
-    void publishDriverAnalysisHistory(result.history)
-  }
   void publishDriverAnalysisStatus()
   return result
 }
@@ -667,12 +666,12 @@ function applyDriverAnalysisAction(payload = {}) {
 async function listenDriverAnalysisEvents() {
   const eventApi = window.HudTauriEvents?.getEventApi?.()
   if (!eventApi || typeof eventApi.listen !== 'function' || !driverAnalysisRecorder) return
-  await eventApi.listen('driver_analysis_config', event => applyDriverAnalysisAction(event?.payload || {}))
+  await eventApi.listen('driver_analysis_config', event => { void applyDriverAnalysisAction(event?.payload || {}) })
   await eventApi.listen('driver_analysis_status_request', () => {
     void publishDriverAnalysisStatus()
     void publishDriverAnalysisHistory()
   })
-  await eventApi.listen('driver_analysis_hotkey', () => applyDriverAnalysisAction({ action: 'toggle' }))
+  await eventApi.listen('driver_analysis_hotkey', () => { void applyDriverAnalysisAction({ action: 'toggle' }) })
   void publishDriverAnalysisStatus()
   void publishDriverAnalysisHistory()
 }

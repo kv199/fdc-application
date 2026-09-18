@@ -2,13 +2,13 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const analysis = require('./driver-analysis.js')
-const presentation = require('./asphalt-coach-presentation.js')
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial))
   return {
     getItem: key => values.has(key) ? values.get(key) : null,
-    setItem: (key, value) => values.set(key, String(value))
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: key => values.delete(key)
   }
 }
 
@@ -46,59 +46,65 @@ test('history is durable, bounded and ordered newest first', () => {
   assert.deepEqual(analysis.readHistory(storage).map(entry => entry.id), ['new', 'old'])
 })
 
-test('recorder stores only the most frequent negative issue using existing tie priority', () => {
+test('recorder waits for telemetry, batches samples and persists one final result', async () => {
   let currentTime = Date.parse('2026-09-18T12:00:00.000Z')
-  const storage = memoryStorage()
-  const counts = {
-    front_scrub: 2,
-    exit_wheelspin: 0,
-    brake_steering_overload: 2,
-    abrupt_brake_release: 0,
-    clean_exit: 9,
-    controlled_release: 0
+  const calls = []
+  const engine = {
+    reset() {}, resetTransient() {}, update() {},
+    snapshot() { return { algorithmVersion: 'test-v1', opportunityCount: 1, maneuverCount: 1 } },
+    finalize() {
+      return {
+        status: 'issue',
+        mainProblem: { kind: 'front_scrub', label: 'FRONT SCRUB', instruction: 'Reduce steering', detectorConfidence: 0.9, attributionConfidence: 0.8, severity: 0.6 },
+        opportunities: [{ id: 'op-1', type: 'front_scrub', maneuverId: 1, startedAtMs: 100, endedAtMs: 200, speedBin: 3, context: { gear: 3 }, valid: true, outcome: 'clean' }],
+        evidence: [{ opportunityId: 'op-1', type: 'front_scrub', outcome: 'problem', primary: true, detectorConfidence: 0.9, attributionConfidence: 0.8, severity: 0.6, metrics: {} }]
+      }
+    }
   }
-  const state = {
-    reset() {},
-    resetTransient() {},
-    update() { return { valid: true, calibration: { ready: true }, sample: {}, resetReason: null } }
-  }
-  const findings = {
-    reset() {},
-    resetTransient() {},
-    update() {},
-    getSummary() { return { counts } }
+  const invoke = async (command, payload) => {
+    calls.push({ command, payload })
+    if (command === 'create_driver_analysis_session') return 17
+    if (command === 'finalize_driver_analysis_session') return { id: 17, result: payload.result.result, label: payload.result.label }
+    return payload.samples.length
   }
   const recorder = analysis.createRecorder({
-    state,
-    findings,
-    buildBrief: presentation.buildDriverBrief,
-    metaFor: presentation.metaFor,
+    engine,
+    invoke,
     enabled: true,
-    storage,
     now: () => currentTime
   })
 
-  recorder.start()
-  recorder.update({ speedKmh: 100 })
+  assert.equal(recorder.start().phase, 'waiting')
+  recorder.update({
+    isRaceOn: true, timestampMs: 100, speedKmh: 100, throttle: 0.5, brake: 0, steer: 0.2, gear: 3, rpm: 5000, rpmMax: 8000,
+    acceleration: { x: 1, y: 0, z: 2 }, angularVelocity: { y: 0.2 },
+    slipRatio: { fl: 0, fr: 0, rl: 0.1, rr: 0.1 }, slipAngle: { fl: 0.1, fr: 0.1, rl: 0.05, rr: 0.05 },
+    combinedSlip: { fl: 0.2, fr: 0.2, rl: 0.1, rr: 0.1 }, tireTempC: { fl: 80, fr: 80, rl: 75, rr: 75 },
+    suspension: { fl: 0.1, fr: 0.1, rl: 0.1, rr: 0.1 }, rumble: { fl: false, fr: false, rl: false, rr: false },
+    puddle: { fl: 0, fr: 0, rl: 0, rr: 0 }, lap: { current: 5, number: 1, distance: 100 },
+    car: { ordinal: 42, pi: 800, drivetrain: 1 }
+  })
+  assert.equal(recorder.snapshot().phase, 'recording')
+  await recorder.setEnabled(true)
+  assert.equal(recorder.snapshot().phase, 'recording')
   currentTime += 5000
-  const result = recorder.stop()
+  const result = await recorder.stop()
 
-  assert.equal(result.entry.mainKind, 'brake_steering_overload')
-  assert.equal(result.entry.label, 'BRAKE + STEERING OVERLOAD')
-  assert.equal(result.entry.evidenceCount, 2)
-  assert.equal(result.history.length, 1)
-  assert.equal(Object.hasOwn(result.entry, 'telemetry'), false)
+  assert.equal(result.entry.label, 'FRONT SCRUB')
+  assert.deepEqual(calls.map(call => call.command), ['create_driver_analysis_session', 'append_driver_analysis_samples', 'finalize_driver_analysis_session'])
+  assert.equal(calls[1].payload.samples.length, 1)
+  assert.equal(calls[2].payload.opportunities.length, 1)
+  assert.equal(calls[2].payload.evidence.length, 1)
+  assert.equal(recorder.snapshot().phase, 'ready')
 })
 
 test('recorder refuses to start while Driver Analysis is disabled', () => {
   const recorder = analysis.createRecorder({
-    state: { reset() {}, resetTransient() {}, update() {} },
-    findings: { reset() {}, resetTransient() {}, update() {}, getSummary() { return { counts: {} } } },
-    buildBrief: presentation.buildDriverBrief,
-    metaFor: presentation.metaFor,
+    engine: { reset() {}, resetTransient() {}, update() {}, snapshot() { return {} } },
+    invoke: async () => 1,
     enabled: false,
-    storage: memoryStorage()
   })
 
   assert.equal(recorder.start().recording, false)
+  assert.equal(recorder.start().phase, 'off')
 })

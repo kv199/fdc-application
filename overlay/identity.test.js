@@ -5,7 +5,7 @@ const test = require('node:test')
 
 const root = path.join(__dirname, '..')
 const storageSources = [
-  'coach-layout.js',
+  'hud-layout.js',
   'driver-analysis.js',
   'display-preferences.js',
   'hud-preferences.js',

@@ -10,11 +10,12 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use rusqlite::{Connection, Error as SqliteError, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Runtime, State,
     WebviewWindow, Window, WindowEvent, menu::MenuBuilder, tray::TrayIconBuilder,
@@ -374,7 +375,7 @@ struct ShiftLightVariantResolution {
 }
 
 const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 4;
-const HUD_SCHEMA_VERSION: i32 = 16;
+const HUD_SCHEMA_VERSION: i32 = 17;
 const MAX_SHIFT_LIGHT_CEILING_SAMPLES: usize = 3;
 const MAX_SHIFT_LIGHT_GEAR_TARGETS: usize = 9;
 const MAX_SHIFT_LIGHT_SHIFT_SAMPLES: usize = 64;
@@ -1045,6 +1046,141 @@ fn migrate_shift_light_v15(connection: &mut Connection) -> Result<(), String> {
         .map_err(|error| format!("unable to commit Shift Light v15 migration: {error}"))
 }
 
+const DRIVER_ANALYSIS_SCHEMA_VERSION: i32 = HUD_SCHEMA_VERSION;
+
+fn create_driver_analysis_tables(transaction: &Transaction<'_>) -> Result<(), String> {
+    transaction
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS driver_analysis_sessions (
+               id INTEGER PRIMARY KEY,
+               legacy_id TEXT UNIQUE,
+               started_at_ms INTEGER NOT NULL CHECK (started_at_ms >= 0),
+               finished_at_ms INTEGER CHECK (finished_at_ms IS NULL OR finished_at_ms >= started_at_ms),
+               status TEXT NOT NULL CHECK (status IN ('recording', 'completed', 'insufficient', 'interrupted', 'error')),
+               result TEXT CHECK (result IS NULL OR result IN ('issue', 'insufficient', 'ambiguous', 'interrupted')),
+               main_kind TEXT,
+               label TEXT NOT NULL DEFAULT '',
+               instruction TEXT NOT NULL DEFAULT '',
+               sample_count INTEGER NOT NULL DEFAULT 0 CHECK (sample_count >= 0),
+               maneuver_count INTEGER NOT NULL DEFAULT 0 CHECK (maneuver_count >= 0),
+               opportunity_count INTEGER NOT NULL DEFAULT 0 CHECK (opportunity_count >= 0),
+               evidence_count INTEGER NOT NULL DEFAULT 0 CHECK (evidence_count >= 0),
+               detector_confidence REAL CHECK (detector_confidence IS NULL OR detector_confidence BETWEEN 0 AND 1),
+               attribution_confidence REAL CHECK (attribution_confidence IS NULL OR attribution_confidence BETWEEN 0 AND 1),
+               severity REAL CHECK (severity IS NULL OR severity BETWEEN 0 AND 1),
+               storage_bytes INTEGER NOT NULL DEFAULT 0 CHECK (storage_bytes >= 0),
+               algorithm_version TEXT NOT NULL CHECK (length(trim(algorithm_version)) > 0),
+               vehicle_identity TEXT NOT NULL CHECK (length(trim(vehicle_identity)) > 0),
+               vehicle_ordinal INTEGER,
+               vehicle_pi INTEGER,
+               vehicle_drivetrain INTEGER,
+               vehicle_rpm_limit REAL,
+               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+             );
+             CREATE INDEX IF NOT EXISTS idx_driver_analysis_sessions_newest
+               ON driver_analysis_sessions(started_at_ms DESC, id DESC);
+             CREATE TABLE IF NOT EXISTS driver_analysis_samples (
+               id INTEGER PRIMARY KEY,
+               session_id INTEGER NOT NULL,
+               sequence INTEGER NOT NULL CHECK (sequence >= 0),
+               timestamp_ms INTEGER NOT NULL CHECK (timestamp_ms >= 0),
+               speed_kmh REAL NOT NULL,
+               throttle REAL NOT NULL,
+               brake REAL NOT NULL,
+               steer REAL NOT NULL,
+               gear INTEGER NOT NULL,
+               rpm REAL NOT NULL,
+               rpm_max REAL NOT NULL,
+               acceleration_x REAL NOT NULL,
+               acceleration_y REAL NOT NULL,
+               acceleration_z REAL NOT NULL,
+               yaw_rate REAL NOT NULL,
+               slip_ratio_fl REAL NOT NULL,
+               slip_ratio_fr REAL NOT NULL,
+               slip_ratio_rl REAL NOT NULL,
+               slip_ratio_rr REAL NOT NULL,
+               slip_angle_fl REAL NOT NULL,
+               slip_angle_fr REAL NOT NULL,
+               slip_angle_rl REAL NOT NULL,
+               slip_angle_rr REAL NOT NULL,
+               combined_slip_fl REAL NOT NULL,
+               combined_slip_fr REAL NOT NULL,
+               combined_slip_rl REAL NOT NULL,
+               combined_slip_rr REAL NOT NULL,
+               tire_temp_fl REAL NOT NULL,
+               tire_temp_fr REAL NOT NULL,
+               tire_temp_rl REAL NOT NULL,
+               tire_temp_rr REAL NOT NULL,
+               suspension_fl REAL NOT NULL,
+               suspension_fr REAL NOT NULL,
+               suspension_rl REAL NOT NULL,
+               suspension_rr REAL NOT NULL,
+               rumble_fl INTEGER NOT NULL CHECK (rumble_fl IN (0, 1)),
+               rumble_fr INTEGER NOT NULL CHECK (rumble_fr IN (0, 1)),
+               rumble_rl INTEGER NOT NULL CHECK (rumble_rl IN (0, 1)),
+               rumble_rr INTEGER NOT NULL CHECK (rumble_rr IN (0, 1)),
+               puddle_fl REAL NOT NULL,
+               puddle_fr REAL NOT NULL,
+               puddle_rl REAL NOT NULL,
+               puddle_rr REAL NOT NULL,
+               lap_time REAL NOT NULL,
+               lap_number INTEGER NOT NULL,
+               lap_distance REAL NOT NULL,
+               UNIQUE (session_id, sequence),
+               FOREIGN KEY (session_id) REFERENCES driver_analysis_sessions(id) ON DELETE CASCADE
+             );
+             CREATE INDEX IF NOT EXISTS idx_driver_analysis_samples_session
+               ON driver_analysis_samples(session_id, sequence);
+             CREATE TABLE IF NOT EXISTS driver_analysis_opportunities (
+               id INTEGER PRIMARY KEY,
+               session_id INTEGER NOT NULL,
+               maneuver_id TEXT NOT NULL,
+               opportunity_type TEXT NOT NULL CHECK (length(trim(opportunity_type)) > 0),
+               started_at_ms INTEGER NOT NULL CHECK (started_at_ms >= 0),
+               finished_at_ms INTEGER NOT NULL CHECK (finished_at_ms >= started_at_ms),
+               speed_bin INTEGER,
+               gear INTEGER,
+               outcome TEXT NOT NULL CHECK (outcome IN ('clean', 'problem', 'ambiguous', 'incomplete')),
+               valid INTEGER NOT NULL CHECK (valid IN (0, 1)),
+               invalid_reason TEXT,
+               context_json TEXT NOT NULL DEFAULT '{}',
+               FOREIGN KEY (session_id) REFERENCES driver_analysis_sessions(id) ON DELETE CASCADE
+             );
+             CREATE INDEX IF NOT EXISTS idx_driver_analysis_opportunities_session
+               ON driver_analysis_opportunities(session_id, id);
+             CREATE TABLE IF NOT EXISTS driver_analysis_evidence (
+               id INTEGER PRIMARY KEY,
+               opportunity_id INTEGER NOT NULL,
+               problem_type TEXT NOT NULL CHECK (length(trim(problem_type)) > 0),
+               is_primary INTEGER NOT NULL CHECK (is_primary IN (0, 1)),
+               detector_confidence REAL NOT NULL CHECK (detector_confidence BETWEEN 0 AND 1),
+               attribution_confidence REAL NOT NULL CHECK (attribution_confidence BETWEEN 0 AND 1),
+               severity REAL NOT NULL CHECK (severity BETWEEN 0 AND 1),
+               metrics_json TEXT NOT NULL DEFAULT '{}',
+               FOREIGN KEY (opportunity_id) REFERENCES driver_analysis_opportunities(id) ON DELETE CASCADE
+             );
+             CREATE INDEX IF NOT EXISTS idx_driver_analysis_evidence_opportunity
+               ON driver_analysis_evidence(opportunity_id, id);",
+        )
+        .map_err(|error| format!("unable to create Driver Analysis schema: {error}"))
+}
+
+fn migrate_driver_analysis_schema(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Driver Analysis schema migration: {error}"))?;
+    create_driver_analysis_tables(&transaction)?;
+    transaction
+        .execute(
+            "UPDATE hud_schema_version SET version = ?1",
+            params![DRIVER_ANALYSIS_SCHEMA_VERSION],
+        )
+        .map_err(|error| format!("unable to update Driver Analysis schema version: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Driver Analysis schema migration: {error}"))
+}
+
 fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), String> {
     connection
         .execute_batch(
@@ -1054,7 +1190,7 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
                version INTEGER NOT NULL
              );
              INSERT INTO hud_schema_version (version)
-             SELECT 16
+             SELECT 17
              WHERE NOT EXISTS (SELECT 1 FROM hud_schema_version);",
         )
         .map_err(|error| format!("unable to initialize HUD SQLite metadata: {error}"))?;
@@ -1144,6 +1280,17 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
     if version < 16 {
         migrate_event_soft_delete_schema(connection)?;
     }
+    if version < DRIVER_ANALYSIS_SCHEMA_VERSION {
+        migrate_driver_analysis_schema(connection)?;
+    } else {
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("unable to start Driver Analysis schema check: {error}"))?;
+        create_driver_analysis_tables(&transaction)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("unable to commit Driver Analysis schema check: {error}"))?;
+    }
     Ok(())
 }
 
@@ -1159,6 +1306,887 @@ fn open_shift_light_db<R: Runtime>(app: &AppHandle<R>) -> Result<Connection, Str
         .map_err(|error| format!("unable to open HUD SQLite database: {error}"))?;
     initialize_shift_light_schema(&mut connection)?;
     Ok(connection)
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DriverAnalysisSessionInput {
+    algorithm_version: String,
+    vehicle_identity: JsonValue,
+    started_at_ms: i64,
+    vehicle_ordinal: Option<i32>,
+    vehicle_pi: Option<i32>,
+    vehicle_drivetrain: Option<i32>,
+    vehicle_rpm_limit: Option<f64>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DriverAnalysisSampleInput {
+    sequence: i64,
+    timestamp_ms: i64,
+    speed_kmh: f64,
+    throttle: f64,
+    brake: f64,
+    steer: f64,
+    gear: i32,
+    rpm: f64,
+    rpm_max: f64,
+    acceleration_x: f64,
+    acceleration_y: f64,
+    acceleration_z: f64,
+    yaw_rate: f64,
+    slip_ratio: [f64; 4],
+    slip_angle: [f64; 4],
+    combined_slip: [f64; 4],
+    tire_temp_c: [f64; 4],
+    suspension: [f64; 4],
+    rumble: [bool; 4],
+    puddle: [f64; 4],
+    lap_time: f64,
+    lap_number: i32,
+    lap_distance: f64,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DriverAnalysisOpportunityInput {
+    maneuver_id: String,
+    opportunity_type: String,
+    started_at_ms: i64,
+    finished_at_ms: i64,
+    speed_bin: Option<i32>,
+    gear: Option<i32>,
+    outcome: String,
+    valid: bool,
+    invalid_reason: Option<String>,
+    context_json: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DriverAnalysisEvidenceInput {
+    opportunity_index: usize,
+    problem_type: String,
+    primary: bool,
+    detector_confidence: f64,
+    attribution_confidence: f64,
+    severity: f64,
+    metrics_json: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DriverAnalysisFinalResultInput {
+    result: String,
+    main_kind: Option<String>,
+    label: String,
+    instruction: String,
+    detector_confidence: Option<f64>,
+    attribution_confidence: Option<f64>,
+    severity: Option<f64>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DriverAnalysisHistoryRecord {
+    id: i64,
+    recorded_at: i64,
+    started_at: i64,
+    finished_at: Option<i64>,
+    duration_ms: i64,
+    status: String,
+    result: Option<String>,
+    main_kind: Option<String>,
+    label: String,
+    instruction: String,
+    sample_count: i64,
+    maneuver_count: i64,
+    opportunity_count: i64,
+    evidence_count: i64,
+    detector_confidence: Option<f64>,
+    attribution_confidence: Option<f64>,
+    severity: Option<f64>,
+    storage_bytes: i64,
+    algorithm_version: String,
+    vehicle_identity: JsonValue,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DriverAnalysisLegacyHistoryInput {
+    id: Option<String>,
+    recorded_at: String,
+    duration_ms: Option<i64>,
+    sample_count: Option<i64>,
+    maneuver_count: Option<i64>,
+    opportunity_count: Option<i64>,
+    evidence_count: Option<i64>,
+    result: Option<String>,
+    main_kind: Option<String>,
+    label: Option<String>,
+    instruction: Option<String>,
+    detector_confidence: Option<f64>,
+    attribution_confidence: Option<f64>,
+    severity: Option<f64>,
+    algorithm_version: Option<String>,
+    vehicle_identity: Option<JsonValue>,
+}
+
+fn now_epoch_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
+}
+
+fn validate_finite(value: f64, field: &str) -> Result<(), String> {
+    if value.is_finite() {
+        Ok(())
+    } else {
+        Err(format!("Driver Analysis {field} must be finite"))
+    }
+}
+
+fn validate_confidence(value: Option<f64>, field: &str) -> Result<(), String> {
+    if let Some(value) = value {
+        validate_finite(value, field)?;
+        if !(0.0..=1.0).contains(&value) {
+            return Err(format!("Driver Analysis {field} must be between 0 and 1"));
+        }
+    }
+    Ok(())
+}
+
+fn validate_json_text(value: Option<&str>, field: &str) -> Result<String, String> {
+    let text = value.unwrap_or("{}");
+    let parsed: JsonValue = serde_json::from_str(text)
+        .map_err(|error| format!("Driver Analysis {field} must be valid JSON: {error}"))?;
+    serde_json::to_string(&parsed)
+        .map_err(|error| format!("Driver Analysis {field} cannot be serialized: {error}"))
+}
+
+fn json_identity(value: &JsonValue) -> Result<String, String> {
+    if value.is_null() {
+        return Err("Driver Analysis vehicle identity is required".to_string());
+    }
+    let text = serde_json::to_string(value)
+        .map_err(|error| format!("Driver Analysis vehicle identity is invalid: {error}"))?;
+    if text.len() > 4096 {
+        return Err("Driver Analysis vehicle identity is too large".to_string());
+    }
+    Ok(text)
+}
+
+fn validate_sample(sample: &DriverAnalysisSampleInput) -> Result<(), String> {
+    if sample.sequence < 0 || sample.timestamp_ms < 0 {
+        return Err(
+            "Driver Analysis sample sequence and timestamp must be non-negative".to_string(),
+        );
+    }
+    if sample.gear < 0 || sample.lap_number < 0 {
+        return Err("Driver Analysis sample gear and lap number must be non-negative".to_string());
+    }
+    for (field, value) in [
+        ("speedKmh", sample.speed_kmh),
+        ("throttle", sample.throttle),
+        ("brake", sample.brake),
+        ("steer", sample.steer),
+        ("rpm", sample.rpm),
+        ("rpmMax", sample.rpm_max),
+        ("accelerationX", sample.acceleration_x),
+        ("accelerationY", sample.acceleration_y),
+        ("accelerationZ", sample.acceleration_z),
+        ("yawRate", sample.yaw_rate),
+        ("lapTime", sample.lap_time),
+        ("lapDistance", sample.lap_distance),
+    ] {
+        validate_finite(value, field)?;
+    }
+    for (name, values) in [
+        ("slipRatio", &sample.slip_ratio),
+        ("slipAngle", &sample.slip_angle),
+        ("combinedSlip", &sample.combined_slip),
+        ("tireTempC", &sample.tire_temp_c),
+        ("suspension", &sample.suspension),
+        ("puddle", &sample.puddle),
+    ] {
+        for value in values {
+            validate_finite(*value, name)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_session_input(input: &DriverAnalysisSessionInput) -> Result<String, String> {
+    if input.started_at_ms < 0 {
+        return Err("Driver Analysis session start time must be non-negative".to_string());
+    }
+    let algorithm_version = input.algorithm_version.trim();
+    if algorithm_version.is_empty() || algorithm_version.len() > 120 {
+        return Err("Driver Analysis algorithm version is invalid".to_string());
+    }
+    if let Some(value) = input.vehicle_rpm_limit {
+        validate_finite(value, "vehicleRpmLimit")?;
+        if value < 0.0 {
+            return Err("Driver Analysis vehicle RPM limit must be non-negative".to_string());
+        }
+    }
+    if input.vehicle_ordinal.is_some_and(|value| value <= 0)
+        || input.vehicle_pi.is_some_and(|value| value < 0)
+        || input.vehicle_drivetrain.is_some_and(|value| value < 0)
+    {
+        return Err("Driver Analysis vehicle identity fields are invalid".to_string());
+    }
+    json_identity(&input.vehicle_identity)?;
+    Ok(algorithm_version.to_string())
+}
+
+fn create_driver_analysis_session_in_connection(
+    connection: &mut Connection,
+    input: &DriverAnalysisSessionInput,
+) -> Result<i64, String> {
+    let algorithm_version = validate_session_input(input)?;
+    connection
+        .execute(
+            "INSERT INTO driver_analysis_sessions
+               (started_at_ms, status, algorithm_version, vehicle_identity,
+                vehicle_ordinal, vehicle_pi, vehicle_drivetrain, vehicle_rpm_limit)
+             VALUES (?1, 'recording', ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                input.started_at_ms,
+                algorithm_version,
+                serde_json::to_string(&input.vehicle_identity).unwrap(),
+                input.vehicle_ordinal,
+                input.vehicle_pi,
+                input.vehicle_drivetrain,
+                input.vehicle_rpm_limit,
+            ],
+        )
+        .map_err(|error| format!("unable to create Driver Analysis session: {error}"))?;
+    Ok(connection.last_insert_rowid())
+}
+
+fn append_driver_analysis_samples_in_connection(
+    connection: &mut Connection,
+    session_id: i64,
+    samples: &[DriverAnalysisSampleInput],
+) -> Result<usize, String> {
+    if session_id <= 0 {
+        return Err("Driver Analysis session id must be positive".to_string());
+    }
+    if samples.is_empty() {
+        return Err("Driver Analysis sample batch cannot be empty".to_string());
+    }
+    for sample in samples {
+        validate_sample(sample)?;
+    }
+    let status: Option<String> = connection
+        .query_row(
+            "SELECT status FROM driver_analysis_sessions WHERE id = ?1",
+            params![session_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("unable to inspect Driver Analysis session: {error}"))?;
+    if status.as_deref() != Some("recording") {
+        return Err("Driver Analysis session is not recording".to_string());
+    }
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Driver Analysis sample batch: {error}"))?;
+    for sample in samples {
+        transaction
+            .execute(
+                "INSERT INTO driver_analysis_samples
+                   (session_id, sequence, timestamp_ms, speed_kmh, throttle, brake, steer,
+                    gear, rpm, rpm_max, acceleration_x, acceleration_y, acceleration_z, yaw_rate,
+                    slip_ratio_fl, slip_ratio_fr, slip_ratio_rl, slip_ratio_rr,
+                    slip_angle_fl, slip_angle_fr, slip_angle_rl, slip_angle_rr,
+                    combined_slip_fl, combined_slip_fr, combined_slip_rl, combined_slip_rr,
+                    tire_temp_fl, tire_temp_fr, tire_temp_rl, tire_temp_rr,
+                    suspension_fl, suspension_fr, suspension_rl, suspension_rr,
+                    rumble_fl, rumble_fr, rumble_rl, rumble_rr,
+                    puddle_fl, puddle_fr, puddle_rl, puddle_rr,
+                    lap_time, lap_number, lap_distance)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+                         ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
+                         ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38,
+                         ?39, ?40, ?41, ?42, ?43, ?44, ?45)",
+                params![
+                    session_id,
+                    sample.sequence,
+                    sample.timestamp_ms,
+                    sample.speed_kmh,
+                    sample.throttle,
+                    sample.brake,
+                    sample.steer,
+                    sample.gear,
+                    sample.rpm,
+                    sample.rpm_max,
+                    sample.acceleration_x,
+                    sample.acceleration_y,
+                    sample.acceleration_z,
+                    sample.yaw_rate,
+                    sample.slip_ratio[0],
+                    sample.slip_ratio[1],
+                    sample.slip_ratio[2],
+                    sample.slip_ratio[3],
+                    sample.slip_angle[0],
+                    sample.slip_angle[1],
+                    sample.slip_angle[2],
+                    sample.slip_angle[3],
+                    sample.combined_slip[0],
+                    sample.combined_slip[1],
+                    sample.combined_slip[2],
+                    sample.combined_slip[3],
+                    sample.tire_temp_c[0],
+                    sample.tire_temp_c[1],
+                    sample.tire_temp_c[2],
+                    sample.tire_temp_c[3],
+                    sample.suspension[0],
+                    sample.suspension[1],
+                    sample.suspension[2],
+                    sample.suspension[3],
+                    sample.rumble[0],
+                    sample.rumble[1],
+                    sample.rumble[2],
+                    sample.rumble[3],
+                    sample.puddle[0],
+                    sample.puddle[1],
+                    sample.puddle[2],
+                    sample.puddle[3],
+                    sample.lap_time,
+                    sample.lap_number,
+                    sample.lap_distance,
+                ],
+            )
+            .map_err(|error| format!("unable to append Driver Analysis samples: {error}"))?;
+    }
+    let storage_bytes = (samples.len() * std::mem::size_of::<DriverAnalysisSampleInput>()) as i64;
+    transaction
+        .execute(
+            "UPDATE driver_analysis_sessions
+             SET sample_count = sample_count + ?1,
+                 storage_bytes = storage_bytes + ?2
+             WHERE id = ?3",
+            params![samples.len() as i64, storage_bytes, session_id],
+        )
+        .map_err(|error| format!("unable to update Driver Analysis sample metadata: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Driver Analysis sample batch: {error}"))?;
+    Ok(samples.len())
+}
+
+fn validate_final_result(input: &DriverAnalysisFinalResultInput) -> Result<(), String> {
+    if !matches!(
+        input.result.as_str(),
+        "issue" | "insufficient" | "ambiguous" | "interrupted"
+    ) {
+        return Err("unknown Driver Analysis result".to_string());
+    }
+    validate_confidence(input.detector_confidence, "detectorConfidence")?;
+    validate_confidence(input.attribution_confidence, "attributionConfidence")?;
+    validate_confidence(input.severity, "severity")?;
+    if input.label.len() > 240 || input.instruction.len() > 1000 {
+        return Err("Driver Analysis result text is too long".to_string());
+    }
+    if input.result == "issue" {
+        if input.main_kind.as_deref().unwrap_or("").trim().is_empty()
+            || input.label.trim().is_empty()
+            || input.instruction.trim().is_empty()
+        {
+            return Err(
+                "Driver Analysis issue result requires kind, label, and instruction".to_string(),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn finalize_driver_analysis_session_in_connection(
+    connection: &mut Connection,
+    session_id: i64,
+    opportunities: &[DriverAnalysisOpportunityInput],
+    evidence: &[DriverAnalysisEvidenceInput],
+    result: &DriverAnalysisFinalResultInput,
+) -> Result<DriverAnalysisHistoryRecord, String> {
+    if session_id <= 0 {
+        return Err("Driver Analysis session id must be positive".to_string());
+    }
+    validate_final_result(result)?;
+    let mut maneuver_ids = HashSet::new();
+    for opportunity in opportunities {
+        if opportunity.maneuver_id.trim().is_empty() || opportunity.maneuver_id.len() > 120 {
+            return Err("Driver Analysis maneuver id is invalid".to_string());
+        }
+        if opportunity.opportunity_type.trim().is_empty() || opportunity.opportunity_type.len() > 80
+        {
+            return Err("Driver Analysis opportunity type is invalid".to_string());
+        }
+        if opportunity.started_at_ms < 0 || opportunity.finished_at_ms < opportunity.started_at_ms {
+            return Err("Driver Analysis opportunity time range is invalid".to_string());
+        }
+        if !matches!(
+            opportunity.outcome.as_str(),
+            "clean" | "problem" | "ambiguous" | "incomplete"
+        ) {
+            return Err("unknown Driver Analysis opportunity outcome".to_string());
+        }
+        let context_json = validate_json_text(opportunity.context_json.as_deref(), "contextJson")?;
+        if !opportunity.valid
+            && opportunity
+                .invalid_reason
+                .as_deref()
+                .unwrap_or("")
+                .trim()
+                .is_empty()
+        {
+            return Err("invalid Driver Analysis opportunities require a reason".to_string());
+        }
+        if opportunity.valid && opportunity.outcome == "incomplete" {
+            return Err("complete Driver Analysis opportunities cannot be incomplete".to_string());
+        }
+        let _ = context_json;
+        maneuver_ids.insert(opportunity.maneuver_id.clone());
+    }
+    for item in evidence {
+        if item.opportunity_index >= opportunities.len() {
+            return Err("Driver Analysis evidence references an unknown opportunity".to_string());
+        }
+        if item.problem_type.trim().is_empty() || item.problem_type.len() > 80 {
+            return Err("Driver Analysis evidence problem type is invalid".to_string());
+        }
+        validate_confidence(Some(item.detector_confidence), "detectorConfidence")?;
+        validate_confidence(Some(item.attribution_confidence), "attributionConfidence")?;
+        validate_confidence(Some(item.severity), "severity")?;
+        validate_json_text(item.metrics_json.as_deref(), "metricsJson")?;
+    }
+
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Driver Analysis finalization: {error}"))?;
+    let current_status: Option<String> = transaction
+        .query_row(
+            "SELECT status FROM driver_analysis_sessions WHERE id = ?1",
+            params![session_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("unable to inspect Driver Analysis session: {error}"))?;
+    if current_status.as_deref() != Some("recording") {
+        return Err("Driver Analysis session is not recording".to_string());
+    }
+    let mut opportunity_ids = Vec::with_capacity(opportunities.len());
+    for opportunity in opportunities {
+        let context_json = validate_json_text(opportunity.context_json.as_deref(), "contextJson")?;
+        transaction
+            .execute(
+                "INSERT INTO driver_analysis_opportunities
+                   (session_id, maneuver_id, opportunity_type, started_at_ms, finished_at_ms,
+                    speed_bin, gear, outcome, valid, invalid_reason, context_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![
+                    session_id,
+                    opportunity.maneuver_id,
+                    opportunity.opportunity_type,
+                    opportunity.started_at_ms,
+                    opportunity.finished_at_ms,
+                    opportunity.speed_bin,
+                    opportunity.gear,
+                    opportunity.outcome,
+                    opportunity.valid,
+                    opportunity.invalid_reason,
+                    context_json,
+                ],
+            )
+            .map_err(|error| format!("unable to save Driver Analysis opportunity: {error}"))?;
+        opportunity_ids.push(transaction.last_insert_rowid());
+    }
+    for item in evidence {
+        let metrics_json = validate_json_text(item.metrics_json.as_deref(), "metricsJson")?;
+        transaction
+            .execute(
+                "INSERT INTO driver_analysis_evidence
+                   (opportunity_id, problem_type, is_primary, detector_confidence,
+                    attribution_confidence, severity, metrics_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    opportunity_ids[item.opportunity_index],
+                    item.problem_type,
+                    item.primary,
+                    item.detector_confidence,
+                    item.attribution_confidence,
+                    item.severity,
+                    metrics_json,
+                ],
+            )
+            .map_err(|error| format!("unable to save Driver Analysis evidence: {error}"))?;
+    }
+    let finished_at_ms = now_epoch_ms();
+    let primary_evidence_count = evidence.iter().filter(|item| item.primary).count();
+    let status = if result.result == "interrupted" {
+        "interrupted"
+    } else {
+        "completed"
+    };
+    let main_kind = if result.result == "issue" {
+        result.main_kind.as_deref()
+    } else {
+        None
+    };
+    let label = if result.result == "issue" {
+        result.label.trim()
+    } else {
+        ""
+    };
+    let instruction = if result.result == "issue" {
+        result.instruction.trim()
+    } else {
+        ""
+    };
+    transaction
+        .execute(
+            "UPDATE driver_analysis_sessions
+             SET finished_at_ms = ?1, status = ?2, result = ?3, main_kind = ?4,
+                 label = ?5, instruction = ?6, maneuver_count = ?7,
+                 opportunity_count = ?8, evidence_count = ?9,
+                 detector_confidence = ?10, attribution_confidence = ?11, severity = ?12
+             WHERE id = ?13",
+            params![
+                finished_at_ms,
+                status,
+                result.result,
+                main_kind,
+                label,
+                instruction,
+                maneuver_ids.len() as i64,
+                opportunities.len() as i64,
+                primary_evidence_count as i64,
+                result.detector_confidence,
+                result.attribution_confidence,
+                result.severity,
+                session_id,
+            ],
+        )
+        .map_err(|error| format!("unable to finalize Driver Analysis session: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Driver Analysis finalization: {error}"))?;
+    load_driver_analysis_session_from_connection(connection, session_id)
+}
+
+fn history_record_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<DriverAnalysisHistoryRecord> {
+    let started_at: i64 = row.get(1)?;
+    let finished_at: Option<i64> = row.get(2)?;
+    let vehicle_identity_text: String = row.get(17)?;
+    let vehicle_identity = serde_json::from_str(&vehicle_identity_text)
+        .unwrap_or(JsonValue::String(vehicle_identity_text));
+    Ok(DriverAnalysisHistoryRecord {
+        id: row.get(0)?,
+        recorded_at: started_at,
+        started_at,
+        finished_at,
+        duration_ms: finished_at.map_or(0, |value| value.saturating_sub(started_at)),
+        status: row.get(3)?,
+        result: row.get(4)?,
+        main_kind: row.get(5)?,
+        label: row.get(6)?,
+        instruction: row.get(7)?,
+        sample_count: row.get(8)?,
+        maneuver_count: row.get(9)?,
+        opportunity_count: row.get(10)?,
+        evidence_count: row.get(11)?,
+        detector_confidence: row.get(12)?,
+        attribution_confidence: row.get(13)?,
+        severity: row.get(14)?,
+        storage_bytes: row.get(15)?,
+        algorithm_version: row.get(16)?,
+        vehicle_identity,
+    })
+}
+
+const DRIVER_ANALYSIS_HISTORY_SELECT: &str =
+    "SELECT id, started_at_ms, finished_at_ms, status, result, main_kind, label, instruction,
+            sample_count, maneuver_count, opportunity_count, evidence_count,
+            detector_confidence, attribution_confidence, severity, storage_bytes,
+            algorithm_version, vehicle_identity, vehicle_ordinal
+       FROM driver_analysis_sessions";
+
+fn load_driver_analysis_sessions_from_connection(
+    connection: &Connection,
+) -> Result<Vec<DriverAnalysisHistoryRecord>, String> {
+    let mut statement = connection
+        .prepare(&format!(
+            "{DRIVER_ANALYSIS_HISTORY_SELECT} ORDER BY started_at_ms DESC, id DESC"
+        ))
+        .map_err(|error| format!("unable to load Driver Analysis history: {error}"))?;
+    let rows = statement
+        .query_map([], history_record_from_row)
+        .map_err(|error| format!("unable to load Driver Analysis history: {error}"))?;
+    rows.map(|row| row.map_err(|error| format!("unable to read Driver Analysis history: {error}")))
+        .collect()
+}
+
+fn recover_driver_analysis_sessions_in_connection(
+    connection: &Connection,
+) -> Result<usize, String> {
+    let now = now_epoch_ms();
+    connection
+        .execute(
+            "UPDATE driver_analysis_sessions
+             SET status = 'interrupted', result = 'interrupted',
+                 finished_at_ms = COALESCE(finished_at_ms, ?1)
+             WHERE status = 'recording'",
+            params![now],
+        )
+        .map_err(|error| format!("unable to recover Driver Analysis sessions: {error}"))
+}
+
+fn load_driver_analysis_session_from_connection(
+    connection: &Connection,
+    session_id: i64,
+) -> Result<DriverAnalysisHistoryRecord, String> {
+    if session_id <= 0 {
+        return Err("Driver Analysis session id must be positive".to_string());
+    }
+    connection
+        .query_row(
+            &format!("{DRIVER_ANALYSIS_HISTORY_SELECT} WHERE id = ?1"),
+            params![session_id],
+            history_record_from_row,
+        )
+        .map_err(|error| format!("unable to load Driver Analysis session: {error}"))
+}
+
+fn delete_driver_analysis_session_in_connection(
+    connection: &Connection,
+    session_id: i64,
+) -> Result<(), String> {
+    if session_id <= 0 {
+        return Err("Driver Analysis session id must be positive".to_string());
+    }
+    let changed = connection
+        .execute(
+            "DELETE FROM driver_analysis_sessions WHERE id = ?1",
+            params![session_id],
+        )
+        .map_err(|error| format!("unable to delete Driver Analysis session: {error}"))?;
+    if changed == 0 {
+        return Err("Driver Analysis session does not exist".to_string());
+    }
+    Ok(())
+}
+
+fn parse_legacy_recorded_at(connection: &Connection, value: &str) -> Result<i64, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("legacy Driver Analysis history has no recordedAt".to_string());
+    }
+    if let Ok(number) = trimmed.parse::<i64>() {
+        if number >= 0 {
+            return Ok(number);
+        }
+    }
+    connection
+        .query_row(
+            "SELECT CAST(strftime('%s', ?1) AS INTEGER) * 1000",
+            params![trimmed],
+            |row| row.get::<_, Option<i64>>(0),
+        )
+        .optional()
+        .map_err(|error| format!("unable to parse legacy Driver Analysis timestamp: {error}"))?
+        .flatten()
+        .filter(|value| *value >= 0)
+        .ok_or_else(|| "legacy Driver Analysis recordedAt is invalid".to_string())
+}
+
+fn import_legacy_driver_analysis_history_in_connection(
+    connection: &mut Connection,
+    entries: &[DriverAnalysisLegacyHistoryInput],
+) -> Result<Vec<DriverAnalysisHistoryRecord>, String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Driver Analysis legacy import: {error}"))?;
+    for entry in entries {
+        let recorded_at_ms = parse_legacy_recorded_at(&transaction, &entry.recorded_at)?;
+        let duration_ms = entry.duration_ms.unwrap_or(0);
+        if duration_ms < 0 {
+            return Err("legacy Driver Analysis duration must be non-negative".to_string());
+        }
+        let result = entry.result.as_deref().unwrap_or("insufficient");
+        if !matches!(
+            result,
+            "issue" | "insufficient" | "ambiguous" | "interrupted"
+        ) {
+            return Err("unknown legacy Driver Analysis result".to_string());
+        }
+        validate_confidence(entry.detector_confidence, "detectorConfidence")?;
+        validate_confidence(entry.attribution_confidence, "attributionConfidence")?;
+        validate_confidence(entry.severity, "severity")?;
+        let main_kind = if result == "issue" {
+            entry
+                .main_kind
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+        } else {
+            None
+        };
+        if result == "issue"
+            && (main_kind.is_none()
+                || entry.label.as_deref().unwrap_or("").trim().is_empty()
+                || entry.instruction.as_deref().unwrap_or("").trim().is_empty())
+        {
+            return Err("legacy Driver Analysis issue is missing result text".to_string());
+        }
+        let legacy_id = entry
+            .id
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| {
+                format!(
+                    "legacy:{recorded_at_ms}:{}:{}:{}",
+                    duration_ms,
+                    main_kind.unwrap_or(""),
+                    entry.label.as_deref().unwrap_or("")
+                )
+            });
+        if legacy_id.len() > 240 {
+            return Err("legacy Driver Analysis id is too long".to_string());
+        }
+        let vehicle_identity = match entry.vehicle_identity.as_ref() {
+            Some(value) => json_identity(value)?,
+            None => "{\"legacy\":true}".to_string(),
+        };
+        let sample_count = entry.sample_count.unwrap_or(0);
+        let maneuver_count = entry.maneuver_count.unwrap_or(0);
+        let opportunity_count = entry.opportunity_count.unwrap_or(0);
+        let evidence_count = entry.evidence_count.unwrap_or(0);
+        if [
+            sample_count,
+            maneuver_count,
+            opportunity_count,
+            evidence_count,
+        ]
+        .iter()
+        .any(|value| *value < 0)
+        {
+            return Err("legacy Driver Analysis counts must be non-negative".to_string());
+        }
+        let algorithm_version = entry
+            .algorithm_version
+            .as_deref()
+            .unwrap_or("legacy-driver-analysis-v1")
+            .trim();
+        if algorithm_version.is_empty() || algorithm_version.len() > 120 {
+            return Err("legacy Driver Analysis algorithm version is invalid".to_string());
+        }
+        transaction
+            .execute(
+                "INSERT OR IGNORE INTO driver_analysis_sessions
+                   (legacy_id, started_at_ms, finished_at_ms, status, result, main_kind,
+                    label, instruction, sample_count, maneuver_count, opportunity_count,
+                    evidence_count, detector_confidence, attribution_confidence, severity,
+                    algorithm_version, vehicle_identity)
+                 VALUES (?1, ?2, ?3, 'completed', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+                         ?12, ?13, ?14, ?15, ?16)",
+                params![
+                    legacy_id,
+                    recorded_at_ms,
+                    recorded_at_ms.saturating_add(duration_ms),
+                    result,
+                    main_kind,
+                    if result == "issue" {
+                        entry.label.as_deref().unwrap_or("")
+                    } else {
+                        ""
+                    },
+                    if result == "issue" {
+                        entry.instruction.as_deref().unwrap_or("")
+                    } else {
+                        ""
+                    },
+                    sample_count,
+                    maneuver_count,
+                    opportunity_count,
+                    evidence_count,
+                    entry.detector_confidence,
+                    entry.attribution_confidence,
+                    entry.severity,
+                    algorithm_version,
+                    vehicle_identity,
+                ],
+            )
+            .map_err(|error| format!("unable to import Driver Analysis history: {error}"))?;
+    }
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Driver Analysis legacy import: {error}"))?;
+    load_driver_analysis_sessions_from_connection(connection)
+}
+
+#[tauri::command]
+fn create_driver_analysis_session(
+    app: AppHandle,
+    input: DriverAnalysisSessionInput,
+) -> Result<i64, String> {
+    let mut connection = open_shift_light_db(&app)?;
+    create_driver_analysis_session_in_connection(&mut connection, &input)
+}
+
+#[tauri::command]
+fn append_driver_analysis_samples(
+    app: AppHandle,
+    session_id: i64,
+    samples: Vec<DriverAnalysisSampleInput>,
+) -> Result<usize, String> {
+    let mut connection = open_shift_light_db(&app)?;
+    append_driver_analysis_samples_in_connection(&mut connection, session_id, &samples)
+}
+
+#[tauri::command]
+fn finalize_driver_analysis_session(
+    app: AppHandle,
+    session_id: i64,
+    opportunities: Vec<DriverAnalysisOpportunityInput>,
+    evidence: Vec<DriverAnalysisEvidenceInput>,
+    result: DriverAnalysisFinalResultInput,
+) -> Result<DriverAnalysisHistoryRecord, String> {
+    let mut connection = open_shift_light_db(&app)?;
+    finalize_driver_analysis_session_in_connection(
+        &mut connection,
+        session_id,
+        &opportunities,
+        &evidence,
+        &result,
+    )
+}
+
+#[tauri::command]
+fn load_driver_analysis_sessions(
+    app: AppHandle,
+) -> Result<Vec<DriverAnalysisHistoryRecord>, String> {
+    let connection = open_shift_light_db(&app)?;
+    load_driver_analysis_sessions_from_connection(&connection)
+}
+
+#[tauri::command]
+fn delete_driver_analysis_session(app: AppHandle, session_id: i64) -> Result<(), String> {
+    let connection = open_shift_light_db(&app)?;
+    delete_driver_analysis_session_in_connection(&connection, session_id)
+}
+
+#[tauri::command]
+fn import_legacy_driver_analysis_history(
+    app: AppHandle,
+    entries: Vec<DriverAnalysisLegacyHistoryInput>,
+) -> Result<Vec<DriverAnalysisHistoryRecord>, String> {
+    let mut connection = open_shift_light_db(&app)?;
+    import_legacy_driver_analysis_history_in_connection(&mut connection, &entries)
 }
 
 const EVENT_CLASSES: [&str; 9] = ["Any", "D", "C", "B", "A", "S1", "S2", "R", "X"];
@@ -3331,6 +4359,12 @@ fn main() {
             set_configuration_always_on_top,
             set_settings_window_context,
             set_driver_analysis_hotkey,
+            create_driver_analysis_session,
+            append_driver_analysis_samples,
+            finalize_driver_analysis_session,
+            load_driver_analysis_sessions,
+            delete_driver_analysis_session,
+            import_legacy_driver_analysis_history,
             sync_route_status,
             sync_shift_light_status,
             get_app_version,
@@ -3392,6 +4426,9 @@ fn main() {
                 .expect("settings window must exist");
 
             restore_settings_window_state(app.handle(), &settings)?;
+            let connection = open_shift_light_db(app.handle()).map_err(std::io::Error::other)?;
+            recover_driver_analysis_sessions_in_connection(&connection)
+                .map_err(std::io::Error::other)?;
             app.global_shortcut()
                 .register(DEFAULT_DRIVER_ANALYSIS_HOTKEY)?;
 
@@ -4871,5 +5908,319 @@ mod tests {
 
         let migrated = load_garage_snapshot_from_connection(&connection).unwrap();
         assert_eq!(migrated.cars[0].variants[0].cylinders, 6);
+    }
+
+    fn driver_analysis_session_input(started_at_ms: i64) -> DriverAnalysisSessionInput {
+        DriverAnalysisSessionInput {
+            algorithm_version: "driver-analysis-rules-v2".to_string(),
+            vehicle_identity: serde_json::json!({ "ordinal": 3766, "pi": 800 }),
+            started_at_ms,
+            vehicle_ordinal: Some(3766),
+            vehicle_pi: Some(800),
+            vehicle_drivetrain: Some(1),
+            vehicle_rpm_limit: Some(10_300.0),
+        }
+    }
+
+    fn driver_analysis_sample(sequence: i64) -> DriverAnalysisSampleInput {
+        DriverAnalysisSampleInput {
+            sequence,
+            timestamp_ms: 1000 + sequence,
+            speed_kmh: 120.0,
+            throttle: 0.5,
+            brake: 0.1,
+            steer: 0.2,
+            gear: 4,
+            rpm: 6500.0,
+            rpm_max: 10300.0,
+            acceleration_x: 0.1,
+            acceleration_y: 0.2,
+            acceleration_z: 0.0,
+            yaw_rate: 0.3,
+            slip_ratio: [0.01; 4],
+            slip_angle: [0.02; 4],
+            combined_slip: [0.03; 4],
+            tire_temp_c: [80.0; 4],
+            suspension: [0.5; 4],
+            rumble: [false; 4],
+            puddle: [0.0; 4],
+            lap_time: 30.0,
+            lap_number: 1,
+            lap_distance: 100.0,
+        }
+    }
+
+    fn driver_analysis_opportunity() -> DriverAnalysisOpportunityInput {
+        DriverAnalysisOpportunityInput {
+            maneuver_id: "m1".to_string(),
+            opportunity_type: "front_scrub".to_string(),
+            started_at_ms: 1100,
+            finished_at_ms: 1300,
+            speed_bin: Some(100),
+            gear: Some(4),
+            outcome: "problem".to_string(),
+            valid: true,
+            invalid_reason: None,
+            context_json: Some("{\"surface\":\"clean\"}".to_string()),
+        }
+    }
+
+    fn driver_analysis_result(result: &str) -> DriverAnalysisFinalResultInput {
+        DriverAnalysisFinalResultInput {
+            result: result.to_string(),
+            main_kind: (result == "issue").then(|| "front_scrub".to_string()),
+            label: if result == "issue" { "Front Scrub" } else { "" }.to_string(),
+            instruction: if result == "issue" {
+                "Reduce steering"
+            } else {
+                ""
+            }
+            .to_string(),
+            detector_confidence: Some(0.9),
+            attribution_confidence: Some(0.8),
+            severity: Some(0.6),
+        }
+    }
+
+    fn driver_analysis_connection() -> Connection {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        connection
+    }
+
+    #[test]
+    fn driver_analysis_creates_session_and_appends_batch_transactionally() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        assert_eq!(
+            append_driver_analysis_samples_in_connection(
+                &mut connection,
+                session_id,
+                &[driver_analysis_sample(0), driver_analysis_sample(1)],
+            )
+            .unwrap(),
+            2
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT sample_count FROM driver_analysis_sessions WHERE id = ?1",
+                    params![session_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM driver_analysis_samples WHERE session_id = ?1",
+                    params![session_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            2
+        );
+    }
+
+    #[test]
+    fn driver_analysis_finalization_is_atomic_and_saves_result() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        let opportunities = vec![driver_analysis_opportunity()];
+        let bad_evidence = vec![DriverAnalysisEvidenceInput {
+            opportunity_index: 2,
+            problem_type: "front_scrub".to_string(),
+            primary: true,
+            detector_confidence: 0.9,
+            attribution_confidence: 0.8,
+            severity: 0.6,
+            metrics_json: None,
+        }];
+        assert!(
+            finalize_driver_analysis_session_in_connection(
+                &mut connection,
+                session_id,
+                &opportunities,
+                &bad_evidence,
+                &driver_analysis_result("issue"),
+            )
+            .is_err()
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM driver_analysis_opportunities WHERE session_id = ?1",
+                    params![session_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            0
+        );
+        let evidence = vec![DriverAnalysisEvidenceInput {
+            opportunity_index: 0,
+            problem_type: "front_scrub".to_string(),
+            primary: true,
+            detector_confidence: 0.9,
+            attribution_confidence: 0.8,
+            severity: 0.6,
+            metrics_json: Some("{\"steeringGrowth\":0.2}".to_string()),
+        }];
+        let record = finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &opportunities,
+            &evidence,
+            &driver_analysis_result("issue"),
+        )
+        .unwrap();
+        assert_eq!(record.result.as_deref(), Some("issue"));
+        assert_eq!(record.evidence_count, 1);
+        assert_eq!(record.opportunity_count, 1);
+    }
+
+    #[test]
+    fn driver_analysis_history_is_newest_first_and_startup_recovers_recording_sessions() {
+        let mut connection = driver_analysis_connection();
+        let older = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        let newer = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(2_000),
+        )
+        .unwrap();
+        let live_history = load_driver_analysis_sessions_from_connection(&connection).unwrap();
+        assert!(
+            live_history
+                .iter()
+                .all(|record| record.status == "recording")
+        );
+        assert_eq!(
+            recover_driver_analysis_sessions_in_connection(&connection).unwrap(),
+            2
+        );
+        let history = load_driver_analysis_sessions_from_connection(&connection).unwrap();
+        assert_eq!(history[0].id, newer);
+        assert_eq!(history[1].id, older);
+        assert!(history.iter().all(|record| record.status == "interrupted"));
+        assert!(
+            history
+                .iter()
+                .all(|record| record.result.as_deref() == Some("interrupted"))
+        );
+    }
+
+    #[test]
+    fn driver_analysis_delete_cascades_samples_opportunities_and_evidence() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_sample(0)],
+        )
+        .unwrap();
+        finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_opportunity()],
+            &[DriverAnalysisEvidenceInput {
+                opportunity_index: 0,
+                problem_type: "front_scrub".to_string(),
+                primary: true,
+                detector_confidence: 0.9,
+                attribution_confidence: 0.8,
+                severity: 0.6,
+                metrics_json: None,
+            }],
+            &driver_analysis_result("issue"),
+        )
+        .unwrap();
+        delete_driver_analysis_session_in_connection(&connection, session_id).unwrap();
+        for table in ["driver_analysis_samples", "driver_analysis_opportunities"] {
+            assert_eq!(
+                connection
+                    .query_row(
+                        &format!("SELECT COUNT(*) FROM {table} WHERE session_id = ?1"),
+                        params![session_id],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .unwrap(),
+                0
+            );
+        }
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM driver_analysis_evidence AS evidence
+                     JOIN driver_analysis_opportunities AS opportunities
+                       ON opportunities.id = evidence.opportunity_id
+                     WHERE opportunities.session_id = ?1",
+                    params![session_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn driver_analysis_legacy_import_is_idempotent() {
+        let mut connection = driver_analysis_connection();
+        let entry = DriverAnalysisLegacyHistoryInput {
+            id: Some("legacy-1".to_string()),
+            recorded_at: "2026-09-18T10:00:00.000Z".to_string(),
+            duration_ms: Some(2_000),
+            sample_count: Some(20),
+            maneuver_count: Some(2),
+            opportunity_count: Some(2),
+            evidence_count: Some(1),
+            result: Some("issue".to_string()),
+            main_kind: Some("front_scrub".to_string()),
+            label: Some("Front Scrub".to_string()),
+            instruction: Some("Reduce steering".to_string()),
+            detector_confidence: None,
+            attribution_confidence: None,
+            severity: None,
+            algorithm_version: None,
+            vehicle_identity: None,
+        };
+        let first = import_legacy_driver_analysis_history_in_connection(
+            &mut connection,
+            std::slice::from_ref(&entry),
+        )
+        .unwrap();
+        let second = import_legacy_driver_analysis_history_in_connection(
+            &mut connection,
+            std::slice::from_ref(&entry),
+        )
+        .unwrap();
+        assert_eq!(first.len(), 1);
+        assert_eq!(second.len(), 1);
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM driver_analysis_sessions WHERE legacy_id = 'legacy-1'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            1
+        );
     }
 }

@@ -36,7 +36,7 @@ queueTelemetry
 Telemetry  Lap timing  Delta   Garage    Driver Analysis  Shift Light  Events
 HUD                         |             |                  |          |
                             v             v                  v          v
-                        fdc.sqlite    local storage       fdc.sqlite  fdc.sqlite
+                        fdc.sqlite      fdc.sqlite         fdc.sqlite  fdc.sqlite
 ```
 
 The native layer emits one normalized telemetry payload for each valid FH6
@@ -71,8 +71,8 @@ the tray menu, Direct Data Out, and native persistence commands.
   `direct_status`; a packet gap longer than one second becomes stale.
 - Tauri commands control source lifecycle, Configuration, layout and
   visibility, display preferences, Garage and Events operations, Shift Light
-  profile operations, and reset.
-- Garage, Events, and Shift Light database commands open `fdc.sqlite` below the Tauri
+  profile operations, Driver Analysis recording/history operations, and reset.
+- Garage, Driver Analysis, Events, and Shift Light database commands open `fdc.sqlite` below the Tauri
   application data directory and apply the versioned schema there.
 
 The native layer registers the Driver Analysis global recording hotkey but does
@@ -115,11 +115,12 @@ transport or use a car name service. Its full behavior and SQLite contract are d
 
 ## Driver Analysis boundary
 
-Driver Analysis is a browser-local consumer of `queueTelemetry`. Its state,
-calibration, and findings modules do not write raw telemetry to `fdc.sqlite`
-and do not require a network or track service. Recording is explicit,
-asphalt-only, and zero-reference. Each completed recording persists one compact
-result in versioned local webview storage, newest first.
+Driver Analysis is a browser-local consumer of `queueTelemetry`. Its map-free
+state, opportunity, evidence, and scoring modules do not require a network or
+track service. Recording is explicit, asphalt-only, and zero-reference. The
+browser batches selected normalized samples to native commands; sessions,
+samples, opportunities, evidence, and the single selected result are kept in
+the local `fdc.sqlite` database until the user deletes that recording.
 
 The full state machine, evidence gates, supported findings, recording controls,
 history contract, and known limitations are documented in

@@ -35,9 +35,10 @@ overlay consumes the normalized telemetry through one local runtime path.
 ### Driver Analysis
 
 Driver Analysis is an explicit-recording, zero-reference review tool for
-asphalt driving. It analyzes telemetry in memory, saves one dominant recurring
-problem per recording, and shows saved results from newest to oldest in
-Configuration. It does not require a track database.
+asphalt driving. It saves the selected telemetry and analysis locally in
+`fdc.sqlite`, shows at most one dominant recurring problem per recording, and
+lists recordings newest-first in Configuration. Recordings remain local until
+the user deletes them. It does not require a track database.
 
 Technical details: [docs/driver-analysis.md](docs/driver-analysis.md).
 

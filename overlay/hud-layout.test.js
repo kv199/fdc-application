@@ -3,8 +3,8 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const layout = require('./coach-layout.js')
-const source = fs.readFileSync(path.join(__dirname, 'coach-layout.js'), 'utf8')
+const layout = require('./hud-layout.js')
+const source = fs.readFileSync(path.join(__dirname, 'hud-layout.js'), 'utf8')
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 const css = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
 

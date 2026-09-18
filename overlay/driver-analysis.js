@@ -1,15 +1,15 @@
 (function (globalScope, factory) {
-  const api = factory()
-
+  const api = factory(globalScope)
   if (typeof module !== 'undefined' && module.exports && typeof document === 'undefined') module.exports = api
   else globalScope.DriverAnalysis = api
-}(typeof globalThis !== 'undefined' ? globalThis : this, () => {
+}(typeof globalThis !== 'undefined' ? globalThis : this, globalScope => {
   'use strict'
 
   const SETTINGS_STORAGE_KEY = 'fdc.driver-analysis.settings.v1'
   const HISTORY_STORAGE_KEY = 'fdc.driver-analysis.history.v1'
   const DEFAULT_HOTKEY = 'Ctrl+Shift+F9'
   const HISTORY_LIMIT = 100
+  const SAMPLE_BATCH_MS = 1000
   const BLOCKED_HOTKEYS = new Set(['Alt+F4', 'Alt+Tab', 'Ctrl+Escape', 'Ctrl+Shift+Escape'])
 
   function storageGet(storage, key) {
@@ -20,23 +20,20 @@
     try { storage?.setItem?.(key, value) } catch { /* restricted webview */ }
   }
 
+  function storageRemove(storage, key) {
+    try { storage?.removeItem?.(key) } catch { /* restricted webview */ }
+  }
+
   function normalizeSettings(value) {
     const source = value && typeof value === 'object' ? value : {}
-    return {
-      enabled: source.enabled === true,
-      hotkey: normalizeHotkey(source.hotkey) || DEFAULT_HOTKEY
-    }
+    return { enabled: source.enabled === true, hotkey: normalizeHotkey(source.hotkey) || DEFAULT_HOTKEY }
   }
 
-  function readSettings(storage = globalThis.localStorage) {
-    try {
-      return normalizeSettings(JSON.parse(storageGet(storage, SETTINGS_STORAGE_KEY) || 'null'))
-    } catch {
-      return normalizeSettings(null)
-    }
+  function readSettings(storage = globalScope.localStorage) {
+    try { return normalizeSettings(JSON.parse(storageGet(storage, SETTINGS_STORAGE_KEY) || 'null')) } catch { return normalizeSettings(null) }
   }
 
-  function writeSettings(value, storage = globalThis.localStorage) {
+  function writeSettings(value, storage = globalScope.localStorage) {
     const settings = normalizeSettings(value)
     storageSet(storage, SETTINGS_STORAGE_KEY, JSON.stringify(settings))
     return settings
@@ -47,19 +44,7 @@
     if (/^[a-z]$/i.test(raw)) return raw.toUpperCase()
     if (/^[0-9]$/.test(raw)) return raw
     if (/^f(?:[1-9]|1[0-2])$/i.test(raw)) return raw.toUpperCase()
-    const aliases = {
-      ' ': 'Space',
-      spacebar: 'Space',
-      space: 'Space',
-      enter: 'Enter',
-      escape: 'Escape',
-      esc: 'Escape',
-      tab: 'Tab',
-      arrowup: 'ArrowUp',
-      arrowdown: 'ArrowDown',
-      arrowleft: 'ArrowLeft',
-      arrowright: 'ArrowRight'
-    }
+    const aliases = { ' ': 'Space', spacebar: 'Space', space: 'Space', enter: 'Enter', escape: 'Escape', esc: 'Escape', tab: 'Tab', arrowup: 'ArrowUp', arrowdown: 'ArrowDown', arrowleft: 'ArrowLeft', arrowright: 'ArrowRight' }
     return aliases[raw.toLowerCase()] || null
   }
 
@@ -88,188 +73,281 @@
     if (!event || event.metaKey) return null
     const mainKey = normalizedMainKey(event.key)
     if (!mainKey || ['Ctrl', 'Alt', 'Shift'].includes(mainKey)) return null
-    return normalizeHotkey([
-      event.ctrlKey ? 'Ctrl' : '',
-      event.altKey ? 'Alt' : '',
-      event.shiftKey ? 'Shift' : '',
-      mainKey
-    ].filter(Boolean).join('+'))
+    return normalizeHotkey([event.ctrlKey ? 'Ctrl' : '', event.altKey ? 'Alt' : '', event.shiftKey ? 'Shift' : '', mainKey].filter(Boolean).join('+'))
   }
 
   function formatHotkey(value) {
     return (normalizeHotkey(value) || DEFAULT_HOTKEY).replaceAll('+', ' + ')
   }
 
+  function isoDate(value) {
+    const date = new Date(value)
+    return Number.isFinite(date.getTime()) ? date.toISOString() : null
+  }
+
   function normalizeHistoryEntry(value) {
     if (!value || typeof value !== 'object') return null
-    const recordedAt = new Date(value.recordedAt)
-    if (!Number.isFinite(recordedAt.getTime())) return null
-    const durationMs = Math.max(0, Math.round(Number(value.durationMs) || 0))
-    const sampleCount = Math.max(0, Math.round(Number(value.sampleCount) || 0))
-    const evidenceCount = Math.max(0, Math.round(Number(value.evidenceCount) || 0))
-    const result = value.result === 'issue' ? 'issue' : 'insufficient'
-    const mainKind = result === 'issue' && typeof value.mainKind === 'string' ? value.mainKind : null
-    const label = result === 'issue' && typeof value.label === 'string' ? value.label.trim() : ''
-    const instruction = result === 'issue' && typeof value.instruction === 'string' ? value.instruction.trim() : ''
+    const recordedAt = isoDate(value.recordedAt ?? value.startedAt)
+    if (!recordedAt) return null
+    const result = ['issue', 'insufficient', 'ambiguous', 'interrupted'].includes(value.result) ? value.result : 'insufficient'
+    const issue = result === 'issue' && typeof value.mainKind === 'string' && String(value.label || '').trim() && String(value.instruction || '').trim()
     return {
-      id: String(value.id || recordedAt.getTime()),
-      recordedAt: recordedAt.toISOString(),
-      durationMs,
-      sampleCount,
-      evidenceCount,
-      result: mainKind && label && instruction ? 'issue' : 'insufficient',
-      mainKind: mainKind && label && instruction ? mainKind : null,
-      label: mainKind && label && instruction ? label : '',
-      instruction: mainKind && label && instruction ? instruction : ''
+      id: String(value.id || Date.parse(recordedAt)), recordedAt,
+      durationMs: Math.max(0, Math.round(Number(value.durationMs) || 0)), sampleCount: Math.max(0, Math.round(Number(value.sampleCount) || 0)),
+      maneuverCount: Math.max(0, Math.round(Number(value.maneuverCount) || 0)), opportunityCount: Math.max(0, Math.round(Number(value.opportunityCount) || 0)),
+      evidenceCount: Math.max(0, Math.round(Number(value.evidenceCount) || 0)),
+      result: issue ? 'issue' : result === 'issue' ? 'insufficient' : result,
+      mainKind: issue ? value.mainKind : null, label: issue ? String(value.label).trim() : '', instruction: issue ? String(value.instruction).trim() : ''
     }
   }
 
   function sortHistoryNewestFirst(entries) {
-    return entries.slice().sort((left, right) => {
-      const timeDifference = Date.parse(right.recordedAt) - Date.parse(left.recordedAt)
-      return timeDifference || String(right.id).localeCompare(String(left.id))
-    })
+    return entries.slice().sort((left, right) => Date.parse(right.recordedAt) - Date.parse(left.recordedAt) || String(right.id).localeCompare(String(left.id)))
   }
 
-  function readHistory(storage = globalThis.localStorage) {
+  function readHistory(storage = globalScope.localStorage) {
     try {
       const stored = JSON.parse(storageGet(storage, HISTORY_STORAGE_KEY) || '[]')
-      if (!Array.isArray(stored)) return []
-      return sortHistoryNewestFirst(stored.map(normalizeHistoryEntry).filter(Boolean)).slice(0, HISTORY_LIMIT)
-    } catch {
-      return []
-    }
+      return Array.isArray(stored) ? sortHistoryNewestFirst(stored.map(normalizeHistoryEntry).filter(Boolean)).slice(0, HISTORY_LIMIT) : []
+    } catch { return [] }
   }
 
-  function writeHistory(entries, storage = globalThis.localStorage) {
-    const history = sortHistoryNewestFirst(
-      (Array.isArray(entries) ? entries : []).map(normalizeHistoryEntry).filter(Boolean)
-    ).slice(0, HISTORY_LIMIT)
+  function writeHistory(entries, storage = globalScope.localStorage) {
+    const history = sortHistoryNewestFirst((Array.isArray(entries) ? entries : []).map(normalizeHistoryEntry).filter(Boolean)).slice(0, HISTORY_LIMIT)
     storageSet(storage, HISTORY_STORAGE_KEY, JSON.stringify(history))
     return history
   }
 
-  function appendHistory(entry, storage = globalThis.localStorage) {
+  function appendHistory(entry, storage = globalScope.localStorage) {
     const normalized = normalizeHistoryEntry(entry)
-    if (!normalized) return readHistory(storage)
-    return writeHistory([normalized, ...readHistory(storage)], storage)
+    return normalized ? writeHistory([normalized, ...readHistory(storage)], storage) : readHistory(storage)
+  }
+
+  function clearHistory(storage = globalScope.localStorage) { storageRemove(storage, HISTORY_STORAGE_KEY) }
+
+  function finite(value, fallback = 0) {
+    const number = Number(value)
+    return Number.isFinite(number) ? number : fallback
+  }
+
+  function quad(value, fallback = 0) { return ['fl', 'fr', 'rl', 'rr'].map(key => finite(value?.[key], fallback)) }
+
+  function vehicleIdentity(telemetry) {
+    const ordinal = Math.trunc(finite(telemetry?.car?.ordinal, -1))
+    const pi = Math.trunc(finite(telemetry?.car?.pi, -1))
+    const drivetrain = Math.trunc(finite(telemetry?.car?.drivetrain, -1))
+    const rpmMax = Math.round(finite(telemetry?.rpmMax, -1))
+    if (ordinal <= 0 || pi < 0 || drivetrain < 0 || rpmMax <= 0) return null
+    return { key: `${ordinal}:${pi}:${rpmMax}:${drivetrain}`, ordinal, pi, drivetrain, rpmMax }
+  }
+
+  function persistedSample(telemetry, sequence) {
+    if (!telemetry || telemetry.isRaceOn === false || !Number.isFinite(Number(telemetry.timestampMs)) || !Number.isFinite(Number(telemetry.speedKmh))) return null
+    return {
+      sequence, timestampMs: Math.max(0, Math.round(finite(telemetry.timestampMs))), speedKmh: Math.max(0, finite(telemetry.speedKmh)),
+      throttle: finite(telemetry.throttle), brake: finite(telemetry.brake), steer: finite(telemetry.steer),
+      gear: Math.max(0, Math.trunc(finite(telemetry.gear))), rpm: Math.max(0, finite(telemetry.rpm)), rpmMax: Math.max(0, finite(telemetry.rpmMax)),
+      accelerationX: finite(telemetry.acceleration?.x), accelerationY: finite(telemetry.acceleration?.y), accelerationZ: finite(telemetry.acceleration?.z), yawRate: finite(telemetry.angularVelocity?.y),
+      slipRatio: quad(telemetry.slipRatio), slipAngle: quad(telemetry.slipAngle), combinedSlip: quad(telemetry.combinedSlip), tireTempC: quad(telemetry.tireTempC),
+      suspension: quad(telemetry.suspension), rumble: quad(telemetry.rumble, false).map(Boolean), puddle: quad(telemetry.puddle),
+      lapTime: Math.max(0, finite(telemetry.lap?.current)), lapNumber: Math.max(0, Math.trunc(finite(telemetry.lap?.number))), lapDistance: Math.max(0, finite(telemetry.lap?.distance))
+    }
+  }
+
+  function persistencePayload(finalized, interrupted = false) {
+    const opportunityIndex = new Map(finalized.opportunities.map((opportunity, index) => [opportunity.id, index]))
+    const evidenceByOpportunity = new Map(finalized.evidence.map(item => [item.opportunityId, item]))
+    const opportunities = finalized.opportunities.map(opportunity => {
+      const item = evidenceByOpportunity.get(opportunity.id)
+      return {
+        maneuverId: String(opportunity.maneuverId), opportunityType: opportunity.type,
+        startedAtMs: Math.max(0, Math.round(finite(opportunity.startedAtMs))), finishedAtMs: Math.max(0, Math.round(finite(opportunity.endedAtMs, opportunity.startedAtMs))),
+        speedBin: Number.isFinite(Number(opportunity.speedBin)) ? Math.trunc(Number(opportunity.speedBin)) : null,
+        gear: Number.isFinite(Number(opportunity.context?.gear)) ? Math.trunc(Number(opportunity.context.gear)) : null,
+        outcome: item?.outcome || opportunity.outcome || 'incomplete', valid: opportunity.valid === true,
+        invalidReason: opportunity.valid === true ? null : opportunity.invalidReason || 'incomplete_opportunity', contextJson: JSON.stringify(opportunity.context || {})
+      }
+    })
+    const evidence = finalized.evidence.map(item => ({
+      opportunityIndex: opportunityIndex.get(item.opportunityId), problemType: item.type, primary: item.primary === true,
+      detectorConfidence: finite(item.detectorConfidence), attributionConfidence: finite(item.attributionConfidence), severity: finite(item.severity),
+      metricsJson: JSON.stringify({ ...(item.metrics || {}), confounders: item.confounders || [], counterexampleCount: finite(item.counterexampleCount) })
+    })).filter(item => Number.isSafeInteger(item.opportunityIndex))
+    const main = finalized.mainProblem
+    const normalizedStatus = finalized.status === 'no_clear_dominant_problem' ? 'ambiguous' : finalized.status
+    const result = interrupted ? 'interrupted' : ['issue', 'ambiguous'].includes(normalizedStatus) ? normalizedStatus : 'insufficient'
+    return {
+      opportunities, evidence,
+      result: {
+        result, mainKind: result === 'issue' ? main?.kind || null : null, label: result === 'issue' ? main?.label || '' : '', instruction: result === 'issue' ? main?.instruction || '' : '',
+        detectorConfidence: result === 'issue' ? main?.detectorConfidence ?? null : null, attributionConfidence: result === 'issue' ? main?.attributionConfidence ?? null : null,
+        severity: result === 'issue' ? main?.severity ?? null : null
+      }
+    }
   }
 
   function createRecorder(options = {}) {
-    const state = options.state
-    const findings = options.findings
-    const buildBrief = options.buildBrief
-    const metaFor = options.metaFor
+    const engine = options.engine || globalScope.DriverAnalysisEngine?.createDriverAnalysisEngine?.()
+    const invoke = typeof options.invoke === 'function' ? options.invoke : null
+    const emit = typeof options.emit === 'function' ? options.emit : () => Promise.resolve()
+    const onResult = typeof options.onResult === 'function' ? options.onResult : () => Promise.resolve()
     const now = typeof options.now === 'function' ? options.now : () => Date.now()
-    const storage = options.storage ?? globalThis.localStorage
-    if (!state || !findings || typeof buildBrief !== 'function' || typeof metaFor !== 'function') return null
+    if (!engine || !invoke) return null
 
     let enabled = options.enabled === true
-    let recording = false
+    let phase = enabled ? 'ready' : 'off'
     let startedAt = null
-    let sampleCount = 0
-
-    function resetAnalysis(reason = 'recording_reset') {
-      state.reset(reason)
-      findings.reset()
-      sampleCount = 0
-    }
+    let sessionId = null
+    let sessionPromise = null
+    let identity = null
+    let sequence = 0
+    let samples = []
+    let lastFlushAt = 0
+    let lastError = null
+    let persistence = Promise.resolve()
 
     function snapshot() {
-      return { enabled, recording, startedAt, sampleCount }
+      const engineState = engine.snapshot?.() || {}
+      return { enabled, phase, startedAt, sessionId, sampleCount: sequence, lastError, ...engineState, recording: phase === 'waiting' || phase === 'recording' }
     }
 
-    function setEnabled(value) {
-      enabled = value === true
-      if (!enabled && recording) cancel()
-      return snapshot()
+    function publish() { void Promise.resolve(emit(snapshot())).catch(() => undefined) }
+
+    function fail(error) {
+      lastError = error instanceof Error ? error.message : String(error || 'Driver Analysis persistence failed')
+      phase = 'error'
+      publish()
+    }
+
+    function enqueue(task) {
+      const next = persistence.then(task)
+      persistence = next.catch(error => { fail(error) })
+      return next
+    }
+
+    function resetRuntime(reason) {
+      engine.reset?.(reason)
+      startedAt = null
+      sessionId = null
+      sessionPromise = null
+      identity = null
+      sequence = 0
+      samples = []
+      lastFlushAt = 0
+      lastError = null
+    }
+
+    function flushSamples() {
+      if (!sessionId || samples.length === 0) return Promise.resolve(0)
+      const batch = samples
+      samples = []
+      lastFlushAt = now()
+      return enqueue(() => invoke('append_driver_analysis_samples', { sessionId, samples: batch })).catch(error => {
+        samples = [...batch, ...samples]
+        throw error
+      })
+    }
+
+    function ensureSession(car) {
+      if (sessionId) return Promise.resolve(sessionId)
+      if (sessionPromise) return sessionPromise
+      startedAt = now()
+      lastFlushAt = startedAt
+      identity = car
+      phase = 'recording'
+      publish()
+      const input = {
+        algorithmVersion: engine.snapshot?.().algorithmVersion || 'driver-analysis-rules-v2',
+        vehicleIdentity: { ordinal: car.ordinal, pi: car.pi, drivetrain: car.drivetrain, rpmMax: car.rpmMax }, startedAtMs: startedAt,
+        vehicleOrdinal: car.ordinal, vehiclePi: car.pi, vehicleDrivetrain: car.drivetrain, vehicleRpmLimit: car.rpmMax
+      }
+      sessionPromise = enqueue(() => invoke('create_driver_analysis_session', { input })).then(id => {
+        sessionId = Number(id)
+        if (!Number.isSafeInteger(sessionId) || sessionId <= 0) throw new Error('Driver Analysis session was not created')
+        return sessionId
+      })
+      return sessionPromise
     }
 
     function start() {
-      if (!enabled || recording) return snapshot()
-      resetAnalysis('recording_start')
-      recording = true
-      startedAt = now()
+      if (!enabled || phase === 'waiting' || phase === 'recording' || phase === 'finalizing') return snapshot()
+      resetRuntime('recording_start')
+      phase = 'waiting'
+      publish()
       return snapshot()
     }
 
-    function cancel() {
-      recording = false
-      startedAt = null
-      resetAnalysis('recording_cancel')
+    async function stop(interrupted = false) {
+      if (phase !== 'waiting' && phase !== 'recording') return { status: snapshot(), entry: null }
+      const hadSession = sessionPromise !== null
+      phase = 'finalizing'
+      publish()
+      if (!hadSession) {
+        resetRuntime('recording_stopped_without_telemetry')
+        phase = enabled ? 'ready' : 'off'
+        publish()
+        return { status: snapshot(), entry: null }
+      }
+      try {
+        await sessionPromise
+        await flushSamples()
+        await persistence
+        const finalized = engine.finalize()
+        const payload = persistencePayload(finalized, interrupted)
+        const entry = await enqueue(() => invoke('finalize_driver_analysis_session', { sessionId, ...payload }))
+        void Promise.resolve(onResult(entry)).catch(() => undefined)
+        resetRuntime('recording_stop')
+        phase = enabled ? 'ready' : 'off'
+        publish()
+        return { status: snapshot(), entry }
+      } catch (error) {
+        fail(error)
+        return { status: snapshot(), entry: null, error }
+      }
+    }
+
+    async function setEnabled(value) {
+      const next = value === true
+      if (!next && (phase === 'waiting' || phase === 'recording')) await stop(true)
+      enabled = next
+      if (!enabled && phase !== 'finalizing') phase = 'off'
+      else if (enabled && phase === 'off') phase = 'ready'
+      publish()
       return snapshot()
     }
 
     function update(telemetry) {
-      if (!enabled || !recording) return snapshot()
-      const analysis = state.update(telemetry)
-      if (analysis?.ignored === true) return snapshot()
-      sampleCount += 1
-      if (
-        analysis?.resetReason === 'car_identity_change'
-        || analysis?.resetReason === 'race_clock_rewind'
-        || analysis?.resetReason === 'lap_number_rewind'
-        || analysis?.resetReason === 'lap_distance_rewind'
-        || analysis?.resetReason === 'timestamp_rewind'
-      ) findings.reset()
-      else findings.update(analysis)
+      if (!enabled || (phase !== 'waiting' && phase !== 'recording')) return snapshot()
+      const car = vehicleIdentity(telemetry)
+      const sample = persistedSample(telemetry, sequence)
+      if (!car || !sample) return snapshot()
+      if (identity && car.key !== identity.key) {
+        void stop(true)
+        return snapshot()
+      }
+      sequence += 1
+      samples.push(sample)
+      engine.update(telemetry)
+      void ensureSession(car).then(() => {
+        if (samples.length > 0 && now() - lastFlushAt >= SAMPLE_BATCH_MS) void flushSamples()
+      }).catch(() => undefined)
       return snapshot()
     }
 
     function resetTransient(reason = 'telemetry_gap') {
-      if (!recording) return snapshot()
-      state.resetTransient(reason)
-      findings.resetTransient()
+      if (phase === 'recording') engine.resetTransient?.(reason)
       return snapshot()
     }
 
-    function stop() {
-      if (!recording) return { status: snapshot(), entry: null, history: readHistory(storage) }
-      const stoppedAt = now()
-      const summary = findings.getSummary()
-      const brief = buildBrief(summary)
-      const meta = brief.mainKind ? metaFor(brief.mainKind) : null
-      const entry = normalizeHistoryEntry({
-        id: `${stoppedAt}-${startedAt || stoppedAt}`,
-        recordedAt: new Date(stoppedAt).toISOString(),
-        durationMs: Math.max(0, stoppedAt - (startedAt || stoppedAt)),
-        sampleCount,
-        evidenceCount: brief.mainEvidenceCount || 0,
-        result: brief.mainKind ? 'issue' : 'insufficient',
-        mainKind: brief.mainKind,
-        label: meta?.label || '',
-        instruction: brief.nextText || ''
-      })
-      const history = appendHistory(entry, storage)
-      recording = false
-      startedAt = null
-      resetAnalysis('recording_stop')
-      return { status: snapshot(), entry, history }
-    }
+    function toggle() { return phase === 'waiting' || phase === 'recording' ? stop() : Promise.resolve({ status: start(), entry: null }) }
 
-    function toggle() {
-      return recording ? stop() : { status: start(), entry: null, history: readHistory(storage) }
-    }
-
-    return { appendHistory, cancel, resetTransient, setEnabled, snapshot, start, stop, toggle, update }
+    return { resetTransient, setEnabled, snapshot, start, stop, toggle, update }
   }
 
   return {
-    DEFAULT_HOTKEY,
-    HISTORY_LIMIT,
-    HISTORY_STORAGE_KEY,
-    SETTINGS_STORAGE_KEY,
-    appendHistory,
-    createRecorder,
-    formatHotkey,
-    hotkeyFromKeyboardEvent,
-    normalizeHistoryEntry,
-    normalizeHotkey,
-    normalizeSettings,
-    readHistory,
-    readSettings,
-    sortHistoryNewestFirst,
-    writeHistory,
-    writeSettings
+    DEFAULT_HOTKEY, HISTORY_LIMIT, HISTORY_STORAGE_KEY, SETTINGS_STORAGE_KEY,
+    appendHistory, clearHistory, createRecorder, formatHotkey, hotkeyFromKeyboardEvent,
+    normalizeHistoryEntry, normalizeHotkey, normalizeSettings, persistedSample, persistencePayload,
+    readHistory, readSettings, sortHistoryNewestFirst, vehicleIdentity, writeHistory, writeSettings
   }
 }))
