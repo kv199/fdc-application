@@ -1572,11 +1572,11 @@ h1 {
 }
 
 .driver-analysis-heading h2,
-.driver-analysis-heading span {
+.driver-analysis-heading > div > span {
   display: block;
 }
 
-.driver-analysis-heading span {
+.driver-analysis-heading > div > span {
   margin-top: 6px;
 }
 

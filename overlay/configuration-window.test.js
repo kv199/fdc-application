@@ -465,3 +465,8 @@ test('Configuration replays Shift Light state and waits for the real reset resul
   assert.equal(settingsJs.match(/CALIBRATION RESET COMPLETE/g)?.length, 1)
   assert.match(tauriMain, /fn sync_shift_light_status/)
 })
+
+test('Driver Analysis heading spacing does not affect toggle internals', () => {
+  assert.match(settingsCss, /\.driver-analysis-heading > div > span\s*\{[\s\S]*?margin-top:\s*6px;/)
+  assert.doesNotMatch(settingsCss, /\.driver-analysis-heading span\s*\{/)
+})
