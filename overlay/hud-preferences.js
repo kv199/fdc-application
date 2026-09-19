@@ -100,6 +100,7 @@
       const hasVisibleContent = visibleColumns.length > 0
       hud.hidden = !hasVisibleContent
       hudFrame.hidden = !telemetryVisible || !overlayState.hud || !hasVisibleContent
+      overlayElements.delta.hidden = !telemetryVisible || !overlayState.delta
       if (hasVisibleContent && globalScope.HudLayout?.getMode?.() !== 'freeform') {
         hud.style.gridTemplateColumns = visibleColumns.join(' ')
         hud.style.width = `${visibleColumns.reduce((total, column) => total + Number.parseFloat(column), 0)}px`
@@ -113,7 +114,6 @@
     }
 
     function applyOverlayVisibility() {
-      if (!overlayState.delta) overlayElements.delta.hidden = true
       apply(state)
       globalScope.HudOverlay?.refresh?.()
     }

@@ -295,8 +295,15 @@ test('telemetry status stays separate and right-aligned above the setup card', (
 })
 
 test('Configuration title sits directly below the product name', () => {
-  assert.match(settingsHtml, /class="settings-header__brand"[\s\S]*Feedback-Driven Companion[\s\S]*<h1>CONFIGURATION<\/h1>/u)
+  assert.match(settingsHtml, /class="settings-header__brand"[\s\S]*Feedback-Driven Companion[\s\S]*<h1 id="settings-title">CONFIGURATION<\/h1>/u)
   assert.doesNotMatch(settingsHtml, /Configure the overlay and Shift Light\./u)
+})
+
+test('Configuration heading follows the active tab', () => {
+  assert.match(settingsJs, /const settingsTitle = document\.getElementById\('settings-title'\)/)
+  assert.match(settingsJs, /const activeTab = settingsTabs\.find\(tab => tab\.dataset\.settingsTab === tabName\)/)
+  assert.match(settingsJs, /settingsTitle\.textContent = activeTab\?\.textContent\.trim\(\) \|\| context/)
+  assert.match(settingsJs, /function selectSettingsTab\(tabName\)/)
 })
 
 test('Configuration window title reflects the active section and build version without game branding', () => {

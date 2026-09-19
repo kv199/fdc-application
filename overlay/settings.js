@@ -24,6 +24,7 @@
   }, {})
   const invoke = globalScope.__TAURI_INTERNALS__?.invoke
   const appVersion = document.getElementById('app-version')
+  const settingsTitle = document.getElementById('settings-title')
   const driverAnalysisApi = globalScope.DriverAnalysis
   const driverAnalysisEnabled = document.getElementById('driver-analysis-enabled')
   const driverAnalysisRecord = document.getElementById('driver-analysis-record')
@@ -1751,6 +1752,8 @@
   function updateSettingsWindowContext(tabName) {
     const context = SETTINGS_WINDOW_CONTEXTS[tabName]
     if (!context) return
+    const activeTab = settingsTabs.find(tab => tab.dataset.settingsTab === tabName)
+    if (settingsTitle) settingsTitle.textContent = activeTab?.textContent.trim() || context
     document.title = `FDC · ${context}`
     void call('set_settings_window_context', { context: tabName }).catch(() => undefined)
   }
