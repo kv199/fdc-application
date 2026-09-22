@@ -1,6 +1,6 @@
 [package]
 name = "fdc-application"
-version = "7.14.39"
+version = "7.14.40"
 description = "Feedback-Driven Companion (FDC), an unofficial telemetry HUD app compatible with Forza Horizon 6"
 license = "MIT"
 edition = "2024"

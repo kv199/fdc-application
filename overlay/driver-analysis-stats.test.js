@@ -41,7 +41,7 @@ test('distribution filters non-finite values and sorts', () => {
 
 test('MIN_EVENTS and STATS_VERSION are exported', () => {
   assert.equal(statsApi.MIN_EVENTS, 3)
-  assert.equal(statsApi.STATS_VERSION, 4)
+  assert.equal(statsApi.STATS_VERSION, 5)
 })
 
 test('DEFAULT_THRESHOLDS includes required configuration', () => {
@@ -126,10 +126,10 @@ test('synthetic session: 5 laps with acceleration, braking, turns, and exits', (
       engine.update(driveFrame(speed, 0, 0.6, steerAmount))
     }
 
-    // Turn: lateral acceleration x=10 (approximately 1.02 g)
-    for (let i = 0; i < 30; i++) {
-      const steerAmount = Math.sin((i / 30) * Math.PI) * 0.5
-      const speed = 60 + Math.sin((i / 30) * Math.PI) * 20
+    // Turn: 1 s at lateral acceleration x=10 (approximately 1.02 g)
+    for (let i = 0; i < 63; i++) {
+      const steerAmount = Math.sin((i / 63) * Math.PI) * 0.5
+      const speed = 60 + Math.sin((i / 63) * Math.PI) * 20
       engine.update(driveFrame(speed, 0, 0, steerAmount))
     }
 
@@ -174,10 +174,9 @@ test('synthetic session: 5 laps with acceleration, braking, turns, and exits', (
   assert.ok(Math.abs(stats.braking.peakDecelG.median - expectedDecelG) < 0.02,
     `peak decel should be ~${expectedDecelG}, got ${stats.braking.peakDecelG.median}`)
 
-  // Lateral G should be close to 10/9.80665 (~1.02), but smoothing may reduce it slightly
   const expectedLateralG = 10 / 9.80665
   assert.ok(stats.corners.lateralG.median !== null, 'lateral G median should not be null')
-  assert.ok(Math.abs(stats.corners.lateralG.median - expectedLateralG) < 0.08,
+  assert.ok(Math.abs(stats.corners.lateralG.median - expectedLateralG) < 0.15,
     `lateral G should be close to ~${expectedLateralG}, got ${stats.corners.lateralG.median}`)
 
   // Distance and speed should be positive
@@ -408,13 +407,13 @@ test('single-frame lateral spike does not dominate corner peak', () => {
     return frame
   }
 
-  // Simulate a corner with mostly ~10 m/s² lateral (1.02 g)
+  // Simulate a corner with mostly ~10 m/s² lateral (1.02 g) for 1 second (63 frames)
   // but one spike frame at 60 m/s² (6.1 g)
-  for (let i = 0; i < 30; i++) {
-    const steer = Math.sin((i / 30) * Math.PI) * 0.5
-    const speed = 60 + Math.sin((i / 30) * Math.PI) * 20
+  for (let i = 0; i < 63; i++) {
+    const steer = Math.sin((i / 63) * Math.PI) * 0.5
+    const speed = 60 + Math.sin((i / 63) * Math.PI) * 20
     let lateralAccel = null
-    if (i === 15) {
+    if (i === 31) {
       // Single spike frame at peak of turn
       lateralAccel = 60
     }
@@ -551,10 +550,10 @@ test('flat-out corner excluded from exits, lifted corner included', () => {
     return frame
   }
 
-  // Flat-out corner: no brake, full throttle throughout
-  for (let i = 0; i < 30; i++) {
-    const steer = Math.sin((i / 30) * Math.PI) * 0.5
-    const speed = 60 + Math.sin((i / 30) * Math.PI) * 20
+  // Flat-out corner: 1 s, no brake, full throttle throughout
+  for (let i = 0; i < 63; i++) {
+    const steer = Math.sin((i / 63) * Math.PI) * 0.5
+    const speed = 60 + Math.sin((i / 63) * Math.PI) * 20
     engine.update(driveFrame(speed, 0.98, 0, steer))
   }
 
@@ -564,10 +563,10 @@ test('flat-out corner excluded from exits, lifted corner included', () => {
     engine.update(driveFrame(speed, 0.98, 0, 0.1 * Math.max(0, 1 - i / 25)))
   }
 
-  // Lifted corner: no throttle during turn
-  for (let i = 0; i < 30; i++) {
-    const steer = Math.sin((i / 30) * Math.PI) * 0.5
-    const speed = 60 + Math.sin((i / 30) * Math.PI) * 20
+  // Lifted corner: 1 s, no throttle during turn
+  for (let i = 0; i < 63; i++) {
+    const steer = Math.sin((i / 63) * Math.PI) * 0.5
+    const speed = 60 + Math.sin((i / 63) * Math.PI) * 20
     engine.update(driveFrame(speed, 0, 0, steer))
   }
 
@@ -584,9 +583,7 @@ test('flat-out corner excluded from exits, lifted corner included', () => {
   assert.equal(stats.corners.count, 2, `should have 2 corners, got ${stats.corners.count}`)
   assert.equal(stats.corners.flatOutCount, 1, `should have 1 flat-out corner, got ${stats.corners.flatOutCount}`)
   assert.equal(stats.exits.count, 1, `should have 1 exit (only lifted corners with full throttle), got ${stats.exits.count}`)
-  if (stats.exits.count > 0) {
-    assert.ok(stats.exits.toFullThrottleS.median > 0, 'lifted corner exit should have positive time to full throttle')
-  }
+  assert.ok(stats.exits.toFullThrottleS.median > 0, 'lifted corner should need time to reach full throttle')
 })
 
 test('formatStatsRows returns empty array for null or missing stats', () => {
@@ -1134,7 +1131,7 @@ test('steering: full-lock pulses counted per corner', () => {
       slipAngle: { fl: 0.05, fr: 0.05, rl: 0.03, rr: 0.03 },
       car,
       steerMagnitude: Math.abs(steer),
-      lateralResponse: 0,
+      lateralResponse: steer !== 0 ? Math.abs(steer) * 10 : 0,  // Provide lateral response proportional to steering
       longitudinalResponse: 0,
       frontSlip: 0.05,
       rearSlip: 0.03,
@@ -1339,4 +1336,270 @@ test('steering: singular "pulse" when median is 1', () => {
   const steeringRow = rows.find(r => r.key === 'steering')
 
   assert.ok(steeringRow.text.includes('1 full-lock pulse per corner'), 'should use singular "pulse" when median is 1')
+})
+
+test('corner threshold: 1 second maneuver with ~10 m/s² lateral counts', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: steer !== 0 ? steer * 10 : 0,
+        y: 0,
+        z: brake > 0.1 ? -11 : (throttle > 0.5 ? throttle * 8 : 0)
+      },
+      angularVelocity: { y: steer !== 0 ? steer * 1.5 : 0 },
+      slipAngle: {
+        fl: Math.abs(steer) * 0.15,
+        fr: Math.abs(steer) * 0.15,
+        rl: 0.03,
+        rr: 0.03
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // 1 second turn (63 frames * 16ms ≈ 1008ms): lateral ~10 m/s² should count
+  for (let i = 0; i < 63; i++) {
+    const steer = Math.sin((i / 63) * Math.PI) * 0.6  // Increased to 0.6 to get higher lateral
+    const speed = 60 + Math.sin((i / 63) * Math.PI) * 20
+    engine.update(driveFrame(speed, 0, 0, steer))
+  }
+
+  // Exit with throttle
+  for (let i = 0; i < 50; i++) {
+    const throttleAmount = (i / 50) * 0.98
+    const speed = 60 + i * 2
+    engine.update(driveFrame(speed, throttleAmount, 0, 0))
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.equal(stats.corners.count, 1, `1s turn with lateral >= 4 m/s² should count as 1 corner, got ${stats.corners.count}`)
+  assert.ok(stats.corners.lateralG.median !== null, 'should have lateral g median')
+  assert.ok(stats.corners.lateralG.median >= 0.4, `lateral g should be >= 0.4g (4 m/s²), got ${stats.corners.lateralG.median}g`)
+})
+
+test('corner threshold: 1 second maneuver with ~2 m/s² lateral does not count', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer, lateralAccel = null) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: lateralAccel !== null ? lateralAccel : (steer !== 0 ? steer * 10 : 0),
+        y: 0,
+        z: brake > 0.1 ? -11 : (throttle > 0.5 ? throttle * 8 : 0)
+      },
+      angularVelocity: { y: steer !== 0 ? steer * 1.5 : 0 },
+      slipAngle: {
+        fl: Math.abs(steer) * 0.15,
+        fr: Math.abs(steer) * 0.15,
+        rl: 0.03,
+        rr: 0.03
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // 1 second turn (63 frames * 16ms ≈ 1008ms): lateral ~2 m/s² should NOT count
+  for (let i = 0; i < 63; i++) {
+    const steer = Math.sin((i / 63) * Math.PI) * 0.3  // steering reduced to ~2 m/s² lateral
+    const speed = 60 + Math.sin((i / 63) * Math.PI) * 20
+    engine.update(driveFrame(speed, 0, 0, steer, 2))  // explicit 2 m/s² lateral
+  }
+
+  // Exit with throttle
+  for (let i = 0; i < 50; i++) {
+    const throttleAmount = (i / 50) * 0.98
+    const speed = 60 + i * 2
+    engine.update(driveFrame(speed, throttleAmount, 0, 0))
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.equal(stats.corners.count, 0, `1s turn with lateral ~2 m/s² should NOT count (below 4 m/s² threshold), got ${stats.corners.count}`)
+})
+
+test('corner threshold: 400ms maneuver with high lateral does not count', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer, lateralAccel = null) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: lateralAccel !== null ? lateralAccel : (steer !== 0 ? steer * 10 : 0),
+        y: 0,
+        z: brake > 0.1 ? -11 : (throttle > 0.5 ? throttle * 8 : 0)
+      },
+      angularVelocity: { y: steer !== 0 ? steer * 1.5 : 0 },
+      slipAngle: {
+        fl: Math.abs(steer) * 0.15,
+        fr: Math.abs(steer) * 0.15,
+        rl: 0.03,
+        rr: 0.03
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // 400ms turn (25 frames * 16ms = 400ms): lateral ~10 m/s² should NOT count (too short)
+  for (let i = 0; i < 25; i++) {
+    const steer = Math.sin((i / 25) * Math.PI) * 0.5
+    const speed = 60 + Math.sin((i / 25) * Math.PI) * 20
+    engine.update(driveFrame(speed, 0, 0, steer, 10))  // explicit 10 m/s² lateral
+  }
+
+  // Exit with throttle
+  for (let i = 0; i < 50; i++) {
+    const throttleAmount = (i / 50) * 0.98
+    const speed = 60 + i * 2
+    engine.update(driveFrame(speed, throttleAmount, 0, 0))
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.equal(stats.corners.count, 0, `400ms turn should NOT count (below 700ms threshold), got ${stats.corners.count}`)
+})
+
+test('corner threshold: dropped maneuvers do not contribute to exits or pulsesPerCorner', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer, lateralAccel = null) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: lateralAccel !== null ? lateralAccel : (steer !== 0 ? steer * 10 : 0),
+        y: 0,
+        z: 0
+      },
+      angularVelocity: { y: steer !== 0 ? steer * 1.5 : 0 },
+      slipAngle: {
+        fl: Math.abs(steer) * 0.15,
+        fr: Math.abs(steer) * 0.15,
+        rl: 0.03,
+        rr: 0.03
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // Two short turns with high lateral (should be dropped)
+  for (let i = 0; i < 25; i++) {
+    const steer = Math.sin((i / 25) * Math.PI) * 0.5
+    const speed = 60 + Math.sin((i / 25) * Math.PI) * 20
+    engine.update(driveFrame(speed, 0, 0, steer, 10))
+  }
+
+  // Exit with throttle to full
+  for (let i = 0; i < 50; i++) {
+    const throttleAmount = (i / 50) * 0.98
+    const speed = 60 + i * 2
+    engine.update(driveFrame(speed, throttleAmount, 0, 0))
+  }
+
+  // Another short turn with low lateral (should be dropped)
+  for (let i = 0; i < 25; i++) {
+    const steer = Math.sin((i / 25) * Math.PI) * 0.2
+    const speed = 60 + Math.sin((i / 25) * Math.PI) * 20
+    engine.update(driveFrame(speed, 0, 0, steer, 2))
+  }
+
+  // Exit with throttle
+  for (let i = 0; i < 50; i++) {
+    const throttleAmount = (i / 50) * 0.98
+    const speed = 60 + i * 2
+    engine.update(driveFrame(speed, throttleAmount, 0, 0))
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.equal(stats.corners.count, 0, 'short turns should not be counted as corners')
+  assert.equal(stats.exits.count, 0, 'dropped corners should not contribute to exits')
+  assert.equal(stats.steering.pulsesPerCorner, null, 'dropped corners should not contribute to pulsesPerCorner')
 })

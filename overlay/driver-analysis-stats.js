@@ -5,7 +5,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   'use strict'
 
-  const STATS_VERSION = 4
+  const STATS_VERSION = 5
   const GRAVITY = 9.80665
   const MIN_EVENTS = 3
   const TURNING_PHASES = new Set(['turn-in', 'rotation', 'exit'])
@@ -25,7 +25,8 @@
     brakeReleaseLevel: 0.8,
     trailBrakeLevel: 0.3,
     trailBrakingMinMs: 250,
-    cornerMinMs: 300,
+    cornerMinMs: 700,
+    cornerLateralMin: 4,
     exitWindowMs: 6000,
     exitAfterFullThrottleMs: 2000,
     smoothingWindowMs: 150
@@ -118,6 +119,7 @@
       const peakLateral = item.lateralValues.length > 0
         ? quantile(item.lateralValues.slice().sort((a, b) => a - b), 0.95)
         : 0
+      if (peakLateral < thresholds.cornerLateralMin) return
       const peakLongitudinal = item.longitudinalValues.length > 0
         ? quantile(item.longitudinalValues.slice().sort((a, b) => a - b), 0.95)
         : 0
