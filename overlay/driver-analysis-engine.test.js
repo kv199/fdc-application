@@ -26,8 +26,8 @@ function snapshot(type, maneuverId, samples, context = {}) {
 
 function frontSamples(offset = 0) {
   return [
-    { timestampMs: offset + 0, steerMagnitude: 0.2, steerRate: 0.15, frontSlip: 0.12, lateralResponse: 0.55, yawRate: 0.55, speedKmh: 100 },
-    { timestampMs: offset + 100, steerMagnitude: 0.34, steerRate: 0.08, frontSlip: 0.19, lateralResponse: 0.42, yawRate: 0.41, speedKmh: 99 }
+    { timestampMs: offset + 0, steerMagnitude: 0.2, steerRate: 0.15, frontSlip: 0.5, lateralResponse: 0.9, yawRate: 0.5, speedKmh: 100 },
+    { timestampMs: offset + 100, steerMagnitude: 0.34, steerRate: 0.08, frontSlip: 0.95, lateralResponse: 0.35, yawRate: 0.45, speedKmh: 99 }
   ]
 }
 
@@ -82,16 +82,17 @@ test('duplicate game timestamps are ignored without resetting the active maneuve
 test('engine keeps an opportunity valid across duplicate game timestamps', () => {
   const engine = engineApi.createDriverAnalysisEngine()
   const car = { ordinal: 1, pi: 700, drivetrain: 1 }
-  const frame = (timestampMs, steer, frontSlip) => ({
+  const frame = (timestampMs, steer, frontSlip, lateralResponse, yawRate) => ({
     timestampMs, speedKmh: 100, isRaceOn: true, car, rpmMax: 8000, steer, brake: 0, throttle: 0,
     slipAngle: { fl: frontSlip, fr: frontSlip, rl: 0.03, rr: 0.03 },
     combinedSlip: { fl: frontSlip, fr: frontSlip, rl: 0.03, rr: 0.03 },
-    acceleration: { x: 0.5, y: 0, z: 0 }, angularVelocity: { y: 0.5 }
+    acceleration: { x: lateralResponse, y: 0, z: 0 }, angularVelocity: { y: yawRate }
   })
-  engine.update(frame(0, 0, 0.03))
-  engine.update(frame(100, 0.25, 0.14))
-  engine.update(frame(100, 0.3, 0.18))
-  engine.update(frame(200, 0.32, 0.19))
+  engine.update(frame(0, 0.2, 0.5, 0.9, 0.5))
+  engine.update(frame(100, 0.25, 0.7, 0.6, 0.4))
+  engine.update(frame(100, 0.3, 0.8, 0.55, 0.38))
+  engine.update(frame(200, 0.32, 0.95, 0.35, 0.4))
+  engine.update(frame(300, 0.35, 1.0, 0.2, 0.35))
   const result = engine.finalize()
   const front = result.opportunities.find(item => item.type === 'front_scrub')
 
@@ -99,7 +100,7 @@ test('engine keeps an opportunity valid across duplicate game timestamps', () =>
   assert.equal(front.valid, true)
   assert.equal(front.invalidReason, null)
   assert.ok(front.samples.length >= 2)
-  assert.equal(result.sampleCount, 3)
+  assert.equal(result.sampleCount, 4)
 })
 
 test('collector emits no more than one opportunity of each type per maneuver and retains response samples', () => {

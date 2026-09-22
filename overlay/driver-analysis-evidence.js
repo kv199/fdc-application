@@ -17,6 +17,9 @@
     minAttributionConfidence: 0.70,
     frontSteerGrowth: 0.03,
     frontSlipRise: 0.04,
+    frontSlipLimit: 0.9,
+    frontLateralLoss: 0.5,
+    frontYawLoss: 0.05,
     responseLoss: 0.02,
     wheelspinSlip: 0.12,
     wheelspinSlipRise: 0.04,
@@ -73,26 +76,27 @@
     const last = samples[samples.length - 1]
     const steerGrowth = abs(last.steerMagnitude) - abs(first.steerMagnitude)
     const frontSlipRise = (n(last.frontSlip, 0) - n(first.frontSlip, 0))
+    const peakFrontSlip = max(samples.map(sample => n(sample.frontSlip, 0)), 0)
     const lateralLoss = responseLoss(samples, 'lateralResponse')
     const yawLoss = responseLoss(samples, 'yawRate')
-    const responseLossValue = max([lateralLoss, yawLoss], 0)
     const action = steerGrowth >= thresholds.frontSteerGrowth || max(samples.map(sample => n(sample.steerRate, 0)), 0) >= thresholds.frontSteerGrowth
     const actionIndex = samples.findIndex((sample, index) => index > 0 && (n(sample.steerRate, 0) >= thresholds.frontSteerGrowth || abs(sample.steerMagnitude) - abs(samples[0].steerMagnitude) >= thresholds.frontSteerGrowth))
     const slipIndex = samples.findIndex(sample => n(sample.frontSlip, 0) - n(first.frontSlip, 0) >= thresholds.frontSlipRise)
     const ordered = actionIndex >= 0 && slipIndex >= 0 && actionIndex <= slipIndex
-    const triggered = action && ordered && responseLossValue >= thresholds.responseLoss
+    const triggered = action && ordered && peakFrontSlip >= thresholds.frontSlipLimit && ((lateralLoss ?? -Infinity) >= thresholds.frontLateralLoss || (yawLoss ?? -Infinity) >= thresholds.frontYawLoss)
     const marginConfidence = average([
       clamp((steerGrowth - thresholds.frontSteerGrowth) / 0.15),
-      clamp((frontSlipRise - thresholds.frontSlipRise) / 0.18),
-      clamp((responseLossValue - thresholds.responseLoss) / 0.2)
+      clamp((peakFrontSlip - thresholds.frontSlipLimit) / 0.3),
+      clamp(max([(lateralLoss ?? 0) / thresholds.frontLateralLoss, (yawLoss ?? 0) / thresholds.frontYawLoss]) - 1)
     ], 0)
     const confidence = triggered ? 0.84 + 0.16 * marginConfidence : 0.84 * marginConfidence
+    const severity = clamp(average([(peakFrontSlip - thresholds.frontSlipLimit) / 0.4, (lateralLoss ?? 0) / 3], 0))
     return {
       triggered,
-      inputCausality: ordered && responseLossValue >= 0 ? 0.9 : 0.35,
+      inputCausality: ordered && max([lateralLoss, yawLoss], 0) >= 0 ? 0.9 : 0.35,
       detectorConfidence: clamp(confidence),
-      severity: clamp(average([frontSlipRise / 0.2, responseLossValue / 0.3], 0)),
-      metrics: { steerGrowth, frontSlipRise, lateralResponseLoss: lateralLoss, yawResponseLoss: yawLoss, responseLoss: responseLossValue }
+      severity,
+      metrics: { steerGrowth, frontSlipRise, peakFrontSlip, lateralResponseLoss: lateralLoss, yawResponseLoss: yawLoss, responseLoss: max([lateralLoss, yawLoss], 0) }
     }
   }
 

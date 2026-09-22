@@ -20,6 +20,7 @@
     minSpeedKmh: 25,
     frontSteerMin: 0.18,
     frontSteerGrowthMin: 0.03,
+    frontSustainMs: 200,
     exitThrottleMin: 0.35,
     exitThrottleRateMin: 0.15,
     wheelspinSlipMin: 0.1,
@@ -183,6 +184,27 @@
 
     finish(active, outcome = 'clean', valid = true, invalidReason = null) {
       if (!active) return null
+      const context = { ...active.context }
+      let finalValid = valid === true
+      let finalInvalidReason = invalidReason || null
+      if (active.type === PROBLEM_TYPES.FRONT_SCRUB && finalValid && outcome === 'clean') {
+        let sustainedSteerMs = 0
+        for (let i = 1; i < active.samples.length; i += 1) {
+          const prevSample = active.samples[i - 1]
+          const currSample = active.samples[i]
+          const prevSteer = number(prevSample.steerMagnitude, 0)
+          const currSteer = number(currSample.steerMagnitude, 0)
+          if (prevSteer >= this.thresholds.frontSteerMin && currSteer >= this.thresholds.frontSteerMin) {
+            const deltaMs = number(currSample.timestampMs, 0) - number(prevSample.timestampMs, 0)
+            if (deltaMs > 0) sustainedSteerMs += deltaMs
+          }
+        }
+        context.sustainedSteerMs = sustainedSteerMs
+        if (sustainedSteerMs < this.thresholds.frontSustainMs) {
+          finalValid = false
+          finalInvalidReason = 'steering_pulse'
+        }
+      }
       const opportunity = {
         id: active.id,
         type: active.type,
@@ -191,12 +213,12 @@
         endedAtMs: number(active.endedAtMs, active.startedAtMs),
         durationMs: Math.max(0, number(active.endedAtMs, active.startedAtMs) - number(active.startedAtMs, 0)),
         speedBin: active.context.speedBin,
-        context: { ...active.context },
+        context,
         samples: active.samples.slice(),
         preTriggerSample: active.preTriggerSample,
-        valid: valid === true,
-        invalidReason: invalidReason || null,
-        outcome
+        valid: finalValid,
+        invalidReason: finalInvalidReason,
+        outcome: finalInvalidReason === 'steering_pulse' ? 'incomplete' : outcome
       }
       this.opportunities.push(opportunity)
       return opportunity

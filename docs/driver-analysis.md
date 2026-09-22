@@ -65,10 +65,14 @@ problem types:
 
 | Problem | Driver input and observed response | User instruction |
 | --- | --- | --- |
-| `FRONT SCRUB` | More steering/front slip without improving lateral or yaw response | Reduce steering and let the front recover |
+| `FRONT SCRUB` | More steering drives the front tires to the grip limit (front slip angle at least 0.9) while lateral acceleration drops by at least 0.5 m/s² or yaw rate by at least 0.05 rad/s | Reduce steering and let the front recover |
 | `EXIT WHEELSPIN` | More throttle/driven-wheel slip with weak acceleration response | Build throttle after the car is settled |
 | `BRAKE + STEERING OVERLOAD` | Brake and steering overlap with high combined front slip and stalled response | Release brake as steering builds |
 | `ABRUPT BRAKE RELEASE` | Sharp brake release followed by response/yaw loss or rear-slip growth | Release brake smoothly through rotation |
+
+A front scrub opportunity needs at least 200 ms of sustained steering. Shorter
+steering pulses are stored as invalid `steering_pulse` opportunities and do not
+count toward recurrence.
 
 Each opportunity ends as `clean`, `problem`, `ambiguous`, or `incomplete` and
 has one evidence record. Evidence includes detector confidence, driver
