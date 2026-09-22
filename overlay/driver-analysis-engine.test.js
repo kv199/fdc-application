@@ -205,3 +205,18 @@ test('evidence keeps invalid opportunities out of qualification and classifies v
   const summary = scoringApi.summarizeDriverAnalysis({ opportunities: [invalid, clean], evidence: result })
   assert.equal(summary.aggregates.front_scrub.validOpportunities, 1)
 })
+
+test('all-wheel-drive telemetry is analyzed without throwing', () => {
+  const quad = value => ({ fl: value, fr: value, rl: value, rr: value })
+  const frame = {
+    isRaceOn: true, timestampMs: 1000, speedKmh: 90, throttle: 1, brake: 0, steer: 0, gear: 4, rpm: 6000, rpmMax: 8000,
+    acceleration: { x: 0, y: 0, z: 2 }, angularVelocity: { y: 0 },
+    slipRatio: { fl: 0.02, fr: -0.02, rl: 0.04, rr: 0.04 }, slipAngle: quad(0.05), combinedSlip: quad(0.1),
+    lap: { distance: 10 }, car: { ordinal: 3318, pi: 700, drivetrain: 2 }
+  }
+  const sample = stateApi.normalizeSample(frame)
+  assert.equal(sample.drivenSlip, 0.03)
+  const engine = engineApi.createDriverAnalysisEngine()
+  for (let index = 0; index < 20; index += 1) engine.update({ ...frame, timestampMs: 1000 + index * 16 })
+  assert.equal(engine.snapshot().sampleCount, 20)
+})

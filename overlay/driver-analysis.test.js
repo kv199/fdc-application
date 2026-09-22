@@ -371,3 +371,26 @@ test('reanalyzeStoredSessions with statsVersion: old algorithm version still tri
   const stats = JSON.parse(reanalysisCall.payload.result.statsJson)
   assert.equal(stats.version, 1)
 })
+
+test('an analysis engine fault stops the recording without throwing into the telemetry path', async () => {
+  const commands = []
+  const recorder = analysis.createRecorder({
+    enabled: true,
+    engine: {
+      reset: () => undefined,
+      snapshot: () => ({ algorithmVersion: 'test' }),
+      update: () => { throw new Error('engine fault') }
+    },
+    invoke: async command => { commands.push(command); return 1 }
+  })
+  recorder.start()
+  const telemetry = {
+    isRaceOn: true, timestampMs: 100, speedKmh: 90, rpmMax: 8000,
+    car: { ordinal: 42, pi: 800, drivetrain: 2 }
+  }
+  assert.doesNotThrow(() => recorder.update(telemetry))
+  const status = recorder.snapshot()
+  assert.equal(status.phase, 'error')
+  assert.equal(status.lastError, 'engine fault')
+  assert.deepEqual(commands, [])
+})

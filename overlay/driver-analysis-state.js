@@ -37,7 +37,7 @@
     return number === null ? 0 : Math.max(0, Math.min(1, number))
   }
 
-  function averageQuad(quad, keys, absoluteValues = true) {
+  function averageQuad(quad, keys = ['fl', 'fr', 'rl', 'rr'], absoluteValues = true) {
     const values = keys.map(key => finite(quad?.[key]))
     if (values.some(value => value === null)) return null
     return values.reduce((sum, value) => sum + (absoluteValues ? Math.abs(value) : value), 0) / values.length

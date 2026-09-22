@@ -370,9 +370,15 @@
         void stop(true)
         return snapshot()
       }
+      try {
+        engine.update(telemetry)
+      } catch (error) {
+        // An analysis fault must not break the shared telemetry path or the HUD.
+        fail(error)
+        return snapshot()
+      }
       sequence += 1
       samples.push(sample)
-      engine.update(telemetry)
       void ensureSession(car).then(() => {
         if (samples.length > 0 && now() - lastFlushAt >= SAMPLE_BATCH_MS) void flushSamples()
       }).catch(() => undefined)
