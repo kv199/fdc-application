@@ -30,7 +30,7 @@
     releaseBrakeMin: 0.35,
     releaseRateMin: 1.5,
     minSamples: 2,
-    maxOpportunityMs: 1400
+    maxOpportunityMs: 2500
   })
 
   function number(value, fallback = null) {
@@ -139,8 +139,9 @@
       for (const type of TYPE_ORDER) {
         const candidate = this.active.get(type)
         const qualifies = eligible(type, snapshot, this.thresholds)
+        const isBridgedGap = snapshot.phase === PHASES.STRAIGHT && snapshot.inManeuver === true
         const phaseRelevant = (type === PROBLEM_TYPES.EXIT_WHEELSPIN && snapshot.phase === PHASES.EXIT)
-          || (type !== PROBLEM_TYPES.EXIT_WHEELSPIN && (snapshot.phase === PHASES.TURN_IN || snapshot.phase === PHASES.ROTATION))
+          || (type !== PROBLEM_TYPES.EXIT_WHEELSPIN && (snapshot.phase === PHASES.TURN_IN || snapshot.phase === PHASES.ROTATION || isBridgedGap))
         const disturbed = sample.surfaceDisturbed === true || sample.rumbleContact === true || number(sample.puddleDepth, 0) > 0 || sample.suspensionFullyExtended === true
         if (disturbed && candidate !== undefined) {
           emitted.push(this.finish(candidate, 'incomplete', false, 'surface_disturbance'))

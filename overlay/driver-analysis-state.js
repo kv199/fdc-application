@@ -23,7 +23,9 @@
     throttleOn: 0.2,
     speedBinKmh: 25,
     maneuverEndMs: 180,
-    minManeuverMs: 120
+    minManeuverMs: 120,
+    bridgeMaxMs: 1000,
+    bridgeLateralMin: 3
   })
 
   function finite(value) {
@@ -162,6 +164,10 @@
       this.maneuverStartedAtMs = null
       this.lastTimestampMs = null
       this.lastResetReason = reason
+      this.maneuverSteerSign = null
+      this.bridgeStartMs = null
+      this.bridgeSteerSign = null
+      this.gapSampleLateralMin = null
       return this.snapshot(null, reason)
     }
 
@@ -173,6 +179,10 @@
       this.maneuverStartedAtMs = null
       this.lastTimestampMs = null
       this.lastResetReason = reason
+      this.maneuverSteerSign = null
+      this.bridgeStartMs = null
+      this.bridgeSteerSign = null
+      this.gapSampleLateralMin = null
       return this.snapshot(null, reason)
     }
 
@@ -195,19 +205,113 @@
       const nextPhase = classifyPhase(sample, previous, this.phase, this.thresholds)
       const previousPhase = this.phase
       const phaseChanged = nextPhase !== previousPhase
+      const isTurningNow = isTurning(sample, this.thresholds)
+      const isBraking = sample.brake >= this.thresholds.brakeOn
+      const currentSteerSign = isTurningNow ? Math.sign(sample.steer) : null
+
+      let endsManeuver = false
+      let beginsManeuver = false
+      let inBridge = this.bridgeStartMs !== null
+      let inManeuver = false
+
       if (phaseChanged) {
         this.phase = nextPhase
         this.phaseSinceMs = sample.timestampMs
       } else if (this.phaseSinceMs === null) {
         this.phaseSinceMs = sample.timestampMs
       }
-      const beginsManeuver = (previousPhase === PHASES.STRAIGHT || previousPhase === PHASES.BRAKING) && (nextPhase === PHASES.TURN_IN || nextPhase === PHASES.ROTATION)
+
+      const wasTurning = previousPhase === PHASES.EXIT || previousPhase === PHASES.ROTATION || previousPhase === PHASES.TURN_IN
+      const isTurningPhaseNow = nextPhase === PHASES.EXIT || nextPhase === PHASES.ROTATION || nextPhase === PHASES.TURN_IN
+
+      // State machine for gap bridging
+      if (inBridge) {
+        // We are in a gap - check if bridge should end or continue
+        if (isBraking) {
+          // Brake during gap ends the maneuver
+          endsManeuver = true
+          this.maneuverSteerSign = null
+          this.bridgeStartMs = null
+          this.bridgeSteerSign = null
+          this.gapSampleLateralMin = null
+        } else if (isTurningPhaseNow) {
+          // Steering resumed - check if bridge succeeds
+          const lateralOk = this.gapSampleLateralMin !== null && this.gapSampleLateralMin >= this.thresholds.bridgeLateralMin
+          const sameSign = currentSteerSign === this.bridgeSteerSign
+
+          if (sameSign && lateralOk) {
+            // Bridge succeeds - continue same maneuver
+            this.bridgeStartMs = null
+            this.bridgeSteerSign = null
+            this.gapSampleLateralMin = null
+            this.maneuverSteerSign = currentSteerSign
+          } else {
+            // Bridge fails - end maneuver and start new one
+            endsManeuver = true
+            beginsManeuver = true
+            this.maneuverSteerSign = currentSteerSign
+            this.bridgeStartMs = null
+            this.bridgeSteerSign = null
+            this.gapSampleLateralMin = null
+          }
+        } else {
+          // Still in gap (STRAIGHT phase) - track lateral response
+          const lateralMag = sample.lateralResponse !== null ? Math.abs(sample.lateralResponse) : null
+
+          if (lateralMag === null || lateralMag < this.thresholds.bridgeLateralMin) {
+            // Lateral is too low - end bridge
+            endsManeuver = true
+            this.maneuverSteerSign = null
+            this.bridgeStartMs = null
+            this.bridgeSteerSign = null
+            this.gapSampleLateralMin = null
+          } else if (sample.timestampMs - this.bridgeStartMs > this.thresholds.bridgeMaxMs) {
+            // Gap exceeded timeout - end bridge
+            endsManeuver = true
+            this.maneuverSteerSign = null
+            this.bridgeStartMs = null
+            this.bridgeSteerSign = null
+            this.gapSampleLateralMin = null
+          } else {
+            // Gap continues, track minimum lateral
+            if (this.gapSampleLateralMin === null) {
+              this.gapSampleLateralMin = lateralMag
+            } else {
+              this.gapSampleLateralMin = Math.min(this.gapSampleLateralMin, lateralMag)
+            }
+          }
+        }
+      } else if (wasTurning && !isTurningPhaseNow && !isBraking) {
+        // Transition from turning to straight - enter bridge unless the car already stopped cornering
+        const lateralMag = sample.lateralResponse !== null ? Math.abs(sample.lateralResponse) : null
+        if (lateralMag === null || lateralMag < this.thresholds.bridgeLateralMin) {
+          endsManeuver = true
+          this.maneuverSteerSign = null
+        } else {
+          this.bridgeStartMs = sample.timestampMs
+          this.bridgeSteerSign = this.maneuverSteerSign
+          this.gapSampleLateralMin = lateralMag
+        }
+      } else if (!wasTurning && isTurningPhaseNow) {
+        // Start a new maneuver (not bridging)
+        beginsManeuver = true
+        this.maneuverSteerSign = currentSteerSign
+      } else if (wasTurning && isTurningPhaseNow && currentSteerSign !== null) {
+        // Update steering sign while continuing to turn
+        this.maneuverSteerSign = currentSteerSign
+      }
+
+      // Apply maneuver ID changes
       if (beginsManeuver) {
         this.maneuverId += 1
         this.maneuverStartedAtMs = sample.timestampMs
       }
-      const endsManeuver = nextPhase === PHASES.STRAIGHT && (previousPhase === PHASES.EXIT || previousPhase === PHASES.ROTATION || previousPhase === PHASES.TURN_IN)
-      const snapshot = this.snapshot(sample, null, { previous, previousPhase, phaseChanged, endsManeuver })
+
+      // Set inManeuver flag: true while turning or bridging
+      inManeuver = isTurningPhaseNow || this.bridgeStartMs !== null
+
+      // A new maneuver already closes the previous one through the id change.
+      const snapshot = this.snapshot(sample, null, { previous, previousPhase, phaseChanged, endsManeuver: endsManeuver && !beginsManeuver, inManeuver })
       this.previousSample = sample
       this.previousPhase = previousPhase
       this.lastTimestampMs = sample.timestampMs
@@ -227,6 +331,7 @@
         maneuverId: this.maneuverId,
         maneuverStartedAtMs: this.maneuverStartedAtMs,
         maneuverEnded: overrides.endsManeuver === true,
+        inManeuver: overrides.inManeuver ?? false,
         sample,
         previousSample: overrides.previous ?? null,
         vehicleIdentity: this.identity

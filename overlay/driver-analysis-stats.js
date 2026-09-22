@@ -5,7 +5,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   'use strict'
 
-  const STATS_VERSION = 3
+  const STATS_VERSION = 4
   const GRAVITY = 9.80665
   const MIN_EVENTS = 3
   const TURNING_PHASES = new Set(['turn-in', 'rotation', 'exit'])
@@ -16,6 +16,7 @@
     brakeOn: 0.1,
     brakeOff: 0.05,
     steerOn: 0.12,
+    fullLock: 0.99,
     fullThrottle: 0.95,
     throttleOn: 0.05,
     brakingMinSpeedKmh: 40,
@@ -73,18 +74,21 @@
     let corner
     let corners
     let accelerationWindow = []
+    let prevSteerMagnitude = 0
 
     function reset() {
       totals = {
         movingMs: 0, distanceM: 0, maxSpeedKmh: 0,
         fullThrottleMs: 0, partialThrottleMs: 0, coastMs: 0, brakeMs: 0, brakeWithSteeringMs: 0,
-        turningMs: 0, frontSlipDominantMs: 0
+        turningMs: 0, frontSlipDominantMs: 0,
+        steeringMs: 0, fullLockMs: 0
       }
       brakingEvent = null
       brakingEvents = []
       corner = null
       corners = []
       accelerationWindow = []
+      prevSteerMagnitude = 0
     }
 
     function closeBraking(endMs) {
@@ -121,7 +125,8 @@
         lateralG: peakLateral / GRAVITY,
         lifted: item.lifted,
         toFullThrottleS: item.fullThrottleAt === null ? null : (item.fullThrottleAt - item.minSpeedAt) / 1000,
-        peakLongitudinalG: item.fullThrottleAt === null || item.longitudinalValues.length === 0 ? null : peakLongitudinal / GRAVITY
+        peakLongitudinalG: item.fullThrottleAt === null || item.longitudinalValues.length === 0 ? null : peakLongitudinal / GRAVITY,
+        fullLockEntries: item.fullLockEntries
       })
     }
 
@@ -183,7 +188,7 @@
         corner = {
           id: maneuverId, startMs: sample.timestampMs, lastTurnMs: sample.timestampMs,
           lateralValues: [], longitudinalValues: [], lifted: false, minSpeed: Infinity, minSpeedAt: sample.timestampMs,
-          fullThrottleAt: null
+          fullThrottleAt: null, fullLockEntries: 0
         }
       }
       if (!corner) return
@@ -245,11 +250,17 @@
           } else if (sample.throttle >= thresholds.fullThrottle) totals.fullThrottleMs += dtMs
           else if (sample.throttle >= thresholds.throttleOn) totals.partialThrottleMs += dtMs
           else totals.coastMs += dtMs
+          if (sample.steerMagnitude >= thresholds.steerOn) totals.steeringMs += dtMs
+          if (sample.steerMagnitude >= thresholds.fullLock) totals.fullLockMs += dtMs
         }
         if (TURNING_PHASES.has(snapshot.phase) && finite(sample.frontSlip) !== null && finite(sample.rearSlip) !== null) {
           totals.turningMs += dtMs
           if (sample.frontSlip > sample.rearSlip) totals.frontSlipDominantMs += dtMs
         }
+        if (prevSteerMagnitude < thresholds.fullLock && sample.steerMagnitude >= thresholds.fullLock && corner) {
+          corner.fullLockEntries++
+        }
+        prevSteerMagnitude = sample.steerMagnitude
       }
       updateBraking(sample, dtMs)
       updateCorner(snapshot, sample)
@@ -263,6 +274,7 @@
       const moving = totals.movingMs
       const straightStartCount = brakingEvents.filter(item => item.startedStraight).length
       const trailBrakingEvents = brakingEvents.filter(item => item.trailBraking)
+      const cornersWithoutFullLock = corners.filter(c => c.fullLockEntries === 0).length
       return {
         version: STATS_VERSION,
         movingMs: Math.round(moving),
@@ -275,6 +287,11 @@
           coast: share(totals.coastMs, moving),
           brake: share(totals.brakeMs, moving),
           brakeWithSteering: share(totals.brakeWithSteeringMs, moving)
+        },
+        steering: {
+          fullLockShare: share(totals.fullLockMs, totals.steeringMs),
+          pulsesPerCorner: distribution(corners.map(c => c.fullLockEntries)),
+          cornersWithoutFullLock: cornersWithoutFullLock
         },
         braking: {
           count: brakingEvents.length,
@@ -347,6 +364,31 @@
           steering ? `Brake ${brake} (steering ${steering})` : `Brake ${brake}`
         ]),
         title: 'Share of moving time'
+      })
+    }
+
+    const steeringStats = stats.steering || {}
+    if (finite(steeringStats.fullLockShare) !== null) {
+      const fullLockPercent = percent(steeringStats.fullLockShare)
+      const cornersCount = finite(stats.corners?.count) || 0
+      const pulsesPerCorner = steeringStats.pulsesPerCorner
+      const cornersWithoutFullLock = finite(steeringStats.cornersWithoutFullLock)
+      const pulseText = cornersCount >= MIN_EVENTS && pulsesPerCorner && finite(pulsesPerCorner.median) !== null
+        ? `${Math.round(pulsesPerCorner.median)} full-lock pulse${Math.round(pulsesPerCorner.median) === 1 ? '' : 's'} per corner`
+        : null
+      const noFullLockText = cornersCount >= MIN_EVENTS && cornersWithoutFullLock !== null
+        ? `no full lock in ${cornersWithoutFullLock} of ${cornersCount} corners`
+        : null
+      rows.push({
+        key: 'steering', label: 'STEERING', count: null,
+        text: join([
+          fullLockPercent ? `full lock ${fullLockPercent} of steering time` : null,
+          pulseText,
+          noFullLockText
+        ]),
+        title: pulsesPerCorner && finite(pulsesPerCorner.p10) !== null && finite(pulsesPerCorner.p90) !== null
+          ? range(pulsesPerCorner, 0, 'full-lock pulses per corner')
+          : ''
       })
     }
 

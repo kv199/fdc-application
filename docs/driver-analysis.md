@@ -60,7 +60,13 @@ The default hotkey is `Ctrl+Shift+F9`. Windows-key combinations, bare keys,
 ## Opportunity and evidence model
 
 The map-free state engine segments telemetry into straight, braking, turn-in,
-rotation, and exit phases. It creates bounded opportunities for four supported
+rotation, and exit phases. A maneuver survives short steering gaps: when the
+steering returns within 1 s in the same direction and lateral acceleration
+stays at 3 m/s² or more throughout the gap, the same maneuver continues. This
+keeps pulsed gamepad steering inside one corner. The maneuver ends when the gap
+fails, when the brake is applied during the gap, or when steering resumes in
+the opposite direction, which starts a new maneuver. Opportunities other than
+exit wheelspin stay open across a bridged gap. It creates bounded opportunities for four supported
 problem types:
 
 | Problem | Driver input and observed response | User instruction |
@@ -138,6 +144,7 @@ such as curb or contact impacts do not dominate the result.
 | --- | --- |
 | `OVERVIEW` | Distance, average speed over moving time (at least 5 km/h), and maximum speed. Distance uses the game's distance delta when it is consistent with speed and falls back to integrated speed otherwise. The recording duration is shown in the card metadata. |
 | `PEDALS` | Share of moving time with full throttle (at least 95%), partial throttle, coasting, and braking. The brake share also shows the part with steering applied. |
+| `STEERING` | Share of steering time (moving, steering input at least 12%) spent at full lock (at least 99%), median number of full-lock entries per corner, and the number of corners without full lock. |
 | `BRAKING` | Braking events that start at 40 km/h or more and last 0.3–15 s: median peak deceleration, duration, release time (from the last brake level at or above 80% of that event's peak until release), and trail braking. An event counts as trail braking when it starts without steering and the brake stays at 30% or more while steering is applied for at least 250 ms. The share is taken over events that start without steering, and the median brake-and-steering overlap of those events is shown in parentheses. |
 | `CORNERS` | Maneuvers of at least 0.3 s: median and 90th-percentile peak lateral acceleration, the share of turning time in which the front slip angle exceeds the rear, and how many corners were taken flat-out (full throttle and no brake throughout the turning phases). |
 | `EXIT` | Corners with a throttle lift or brake application in which full throttle was reached afterwards: median time from the corner's minimum speed to full throttle and median peak longitudinal acceleration afterwards. Flat-out corners are excluded. |

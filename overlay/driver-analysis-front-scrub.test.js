@@ -144,8 +144,8 @@ test('sustained window with lateral loss 0.2 m/s² and yaw loss 0.01 rad/s does 
   assert.notEqual(evidence.outcome, 'problem', 'does not trigger with insufficient response loss')
 })
 
-test('engine snapshot algorithmVersion is driver-analysis-rules-v4', () => {
+test('engine snapshot algorithmVersion is driver-analysis-rules-v5', () => {
   const engine = engineApi.createDriverAnalysisEngine()
   const snapshot = engine.snapshot()
-  assert.equal(snapshot.algorithmVersion, 'driver-analysis-rules-v4')
+  assert.equal(snapshot.algorithmVersion, 'driver-analysis-rules-v5')
 })

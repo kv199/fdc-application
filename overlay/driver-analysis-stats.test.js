@@ -41,7 +41,7 @@ test('distribution filters non-finite values and sorts', () => {
 
 test('MIN_EVENTS and STATS_VERSION are exported', () => {
   assert.equal(statsApi.MIN_EVENTS, 3)
-  assert.equal(statsApi.STATS_VERSION, 3)
+  assert.equal(statsApi.STATS_VERSION, 4)
 })
 
 test('DEFAULT_THRESHOLDS includes required configuration', () => {
@@ -1067,4 +1067,276 @@ test('formatStatsRows shows trail braking with median time', () => {
   assert.ok(brakingRow.text.includes('trail braking 50%'), 'should show trail braking percentage')
   assert.ok(brakingRow.text.includes('(0.5 s)'), 'should show trail braking median time in parentheses')
   assert.ok(brakingRow.title.includes('0.3–0.7 s trail braking'), 'should show trail braking range in title')
+})
+
+test('steering: smooth steering at 0.5 gives 0% full lock', () => {
+  const stats = statsApi.createDriverAnalysisStats()
+  const car = { ordinal: 1, pi: 800, drivetrain: 1 }
+  let timestampMs = 0
+
+  const sample = (speed, steer) => {
+    const s = {
+      timestampMs,
+      speedKmh: speed,
+      throttle: 0.5,
+      brake: 0,
+      steer,
+      gear: 3,
+      rpm: 3000,
+      rpmMax: 8000,
+      acceleration: { x: steer * 10, y: 0, z: 0 },
+      angularVelocity: { y: 0 },
+      slipAngle: { fl: 0.05, fr: 0.05, rl: 0.03, rr: 0.03 },
+      car,
+      steerMagnitude: Math.abs(steer),
+      lateralResponse: 0,
+      longitudinalResponse: 0,
+      frontSlip: 0.05,
+      rearSlip: 0.03,
+      drivenSlip: 0
+    }
+    timestampMs += 16
+    return s
+  }
+
+  // Smooth steering at 0.5 for 1 second (62 frames)
+  let prevSample = null
+  for (let i = 0; i < 62; i++) {
+    const s = sample(60, 0.5)
+    const snapshot = { valid: true, resetReason: null, phase: 'turn-in', maneuverId: 1, sample: s, previousSample: prevSample }
+    stats.update(snapshot)
+    prevSample = s
+  }
+
+  const result = stats.finalize()
+
+  assert.ok(result.steering, 'should have steering stats')
+  assert.equal(result.steering.fullLockShare, 0, 'steering at 0.5 should have 0% full lock')
+})
+
+test('steering: full-lock pulses counted per corner', () => {
+  const stats = statsApi.createDriverAnalysisStats()
+  const car = { ordinal: 1, pi: 800, drivetrain: 1 }
+  let timestampMs = 0
+
+  const sample = (speed, steer) => {
+    const s = {
+      timestampMs,
+      speedKmh: speed,
+      throttle: 0.5,
+      brake: 0,
+      steer,
+      gear: 3,
+      rpm: 3000,
+      rpmMax: 8000,
+      acceleration: { x: steer * 10, y: 0, z: 0 },
+      angularVelocity: { y: 0 },
+      slipAngle: { fl: 0.05, fr: 0.05, rl: 0.03, rr: 0.03 },
+      car,
+      steerMagnitude: Math.abs(steer),
+      lateralResponse: 0,
+      longitudinalResponse: 0,
+      frontSlip: 0.05,
+      rearSlip: 0.03,
+      drivenSlip: 0
+    }
+    timestampMs += 16
+    return s
+  }
+
+  // Three full-lock entries with releases between (staying within corner phase)
+  // Entry 1: transition to full lock
+  let prevSample = sample(60, 0.3)
+  let snapshot = { valid: true, resetReason: null, phase: 'turn-in', maneuverId: 1, sample: prevSample, previousSample: null }
+  stats.update(snapshot)
+
+  // Full lock for 10 frames
+  for (let i = 0; i < 10; i++) {
+    const s = sample(60, 1.0)
+    snapshot = { valid: true, resetReason: null, phase: 'rotation', maneuverId: 1, sample: s, previousSample: prevSample }
+    stats.update(snapshot)
+    prevSample = s
+  }
+
+  // Release to 0.3 for 5 frames
+  for (let i = 0; i < 5; i++) {
+    const s = sample(60, 0.3)
+    snapshot = { valid: true, resetReason: null, phase: 'rotation', maneuverId: 1, sample: s, previousSample: prevSample }
+    stats.update(snapshot)
+    prevSample = s
+  }
+
+  // Entry 2: transition to full lock
+  for (let i = 0; i < 10; i++) {
+    const s = sample(60, 1.0)
+    snapshot = { valid: true, resetReason: null, phase: 'rotation', maneuverId: 1, sample: s, previousSample: prevSample }
+    stats.update(snapshot)
+    prevSample = s
+  }
+
+  // Release to 0.3 for 5 frames
+  for (let i = 0; i < 5; i++) {
+    const s = sample(60, 0.3)
+    snapshot = { valid: true, resetReason: null, phase: 'rotation', maneuverId: 1, sample: s, previousSample: prevSample }
+    stats.update(snapshot)
+    prevSample = s
+  }
+
+  // Entry 3: transition to full lock
+  for (let i = 0; i < 10; i++) {
+    const s = sample(60, 1.0)
+    snapshot = { valid: true, resetReason: null, phase: 'rotation', maneuverId: 1, sample: s, previousSample: prevSample }
+    stats.update(snapshot)
+    prevSample = s
+  }
+
+  // Release to 0.3 for 20 frames
+  for (let i = 0; i < 20; i++) {
+    const s = sample(60, 0.3)
+    snapshot = { valid: true, resetReason: null, phase: 'exit', maneuverId: 1, sample: s, previousSample: prevSample }
+    stats.update(snapshot)
+    prevSample = s
+  }
+
+  const result = stats.finalize()
+
+  assert.ok(result.corners.count >= 1, 'should have at least 1 corner')
+  assert.ok(result.steering.pulsesPerCorner, 'should have pulsesPerCorner distribution')
+  assert.equal(result.steering.pulsesPerCorner.median, 3, 'corner should have median 3 full-lock pulses')
+})
+
+test('steering: fullLockShare 0.5 for period half at 1.0 and half at 0.5', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: steer !== 0 ? steer * 10 : 0,
+        y: 0,
+        z: 0
+      },
+      angularVelocity: { y: steer !== 0 ? steer * 1.5 : 0 },
+      slipAngle: {
+        fl: Math.abs(steer) * 0.15,
+        fr: Math.abs(steer) * 0.15,
+        rl: 0.03,
+        rr: 0.03
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // Half the period at full lock (1.0): 31 frames ~496ms
+  for (let i = 0; i < 31; i++) engine.update(driveFrame(60, 0, 0, 1.0))
+  // Half at partial steering (0.5): 31 frames ~496ms
+  for (let i = 0; i < 31; i++) engine.update(driveFrame(60, 0, 0, 0.5))
+
+  // Exit
+  for (let i = 0; i < 25; i++) {
+    engine.update(driveFrame(60 + i * 2, i / 25 * 0.98, 0, 0.1))
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.ok(stats.steering, 'should have steering stats')
+  assert.ok(Math.abs(stats.steering.fullLockShare - 0.5) < 0.05, `fullLockShare should be ~0.5, got ${stats.steering.fullLockShare}`)
+})
+
+test('formatStatsRows includes steering row with correct order and content', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    distanceM: 5000,
+    avgSpeedKmh: 100,
+    maxSpeedKmh: 150,
+    movingMs: 180000,
+    pedals: {
+      fullThrottle: 0.4,
+      partialThrottle: 0.2,
+      coast: 0.2,
+      brake: 0.2,
+      brakeWithSteering: 0.05
+    },
+    steering: {
+      fullLockShare: 0.68,
+      pulsesPerCorner: { median: 5, p10: 3, p90: 7, max: 10 },
+      cornersWithoutFullLock: 12
+    },
+    braking: {
+      count: 5,
+      peakDecelG: { median: 1.12, p10: 1.0, p90: 1.2, max: 1.3 },
+      durationS: { median: 2.5, p10: 2.0, p90: 3.0, max: 3.5 },
+      releaseS: { median: 0.5, p10: 0.3, p90: 0.7, max: 0.9 },
+      straightStartCount: 2
+    },
+    corners: {
+      count: 40,
+      flatOutCount: 1,
+      lateralG: { median: 1.02, p10: 0.9, p90: 1.1, max: 1.2 }
+    },
+    exits: {
+      count: 5,
+      toFullThrottleS: { median: 1.5, p10: 1.0, p90: 2.0, max: 2.5 },
+      peakLongitudinalG: { median: 0.8, p10: 0.6, p90: 1.0, max: 1.1 }
+    }
+  }
+
+  const rows = statsApi.formatStatsRows(stats)
+  const keys = rows.map(r => r.key)
+
+  // Check row order: overview, pedals, steering, braking, corners, exits
+  const expectedOrder = ['overview', 'pedals', 'steering', 'braking', 'corners', 'exits']
+  assert.deepEqual(keys, expectedOrder, `row order should be ${expectedOrder.join(', ')}, got ${keys.join(', ')}`)
+
+  const steeringRow = rows.find(r => r.key === 'steering')
+  assert.ok(steeringRow, 'should have steering row')
+  assert.ok(steeringRow.text.includes('full lock 68% of steering time'), 'should include full lock percentage')
+  assert.ok(steeringRow.text.includes('5 full-lock pulses per corner'), 'should include pulse median (not singular)')
+  assert.ok(steeringRow.text.includes('no full lock in 12 of 40 corners'), 'should include corners without full lock')
+  assert.ok(steeringRow.title.includes('3–7 full-lock pulses per corner'), 'should include range in title')
+})
+
+test('steering: singular "pulse" when median is 1', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    distanceM: 1000,
+    avgSpeedKmh: 50,
+    maxSpeedKmh: 100,
+    movingMs: 72000,
+    pedals: { fullThrottle: 0.2, partialThrottle: 0.2, coast: 0.2, brake: 0.2, brakeWithSteering: 0 },
+    steering: {
+      fullLockShare: 0.3,
+      pulsesPerCorner: { median: 1, p10: 1, p90: 1, max: 1 },
+      cornersWithoutFullLock: 0
+    },
+    braking: { count: 0 },
+    corners: { count: 5, flatOutCount: 0, lateralG: null },
+    exits: { count: 0 }
+  }
+
+  const rows = statsApi.formatStatsRows(stats)
+  const steeringRow = rows.find(r => r.key === 'steering')
+
+  assert.ok(steeringRow.text.includes('1 full-lock pulse per corner'), 'should use singular "pulse" when median is 1')
 })
