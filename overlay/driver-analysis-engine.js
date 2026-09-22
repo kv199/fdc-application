@@ -69,6 +69,29 @@
         outcome: outcomeById.get(opportunity.id) || opportunity.outcome
       }))
       const summary = scoringApi.summarizeDriverAnalysis({ opportunities: classifiedOpportunities, evidence }, { thresholds: options.scoringThresholds || {} })
+      const finalStats = stats?.finalize() || null
+
+      // Build patterns array from classified opportunities and evidence
+      if (finalStats !== null && classifiedOpportunities.length > 0) {
+        const patternMap = new Map()
+        for (const opp of classifiedOpportunities) {
+          if (opp.valid !== true) continue
+          const kind = opp.type
+          if (!patternMap.has(kind)) {
+            patternMap.set(kind, { kind, checked: 0, problems: 0, ambiguous: 0 })
+          }
+          const pattern = patternMap.get(kind)
+          pattern.checked++
+          const outcome = outcomeById.get(opp.id) || opp.outcome
+          if (outcome === 'problem') {
+            pattern.problems++
+          } else if (outcome === 'ambiguous') {
+            pattern.ambiguous++
+          }
+        }
+        finalStats.patterns = Array.from(patternMap.values()).sort((a, b) => (b.problems / b.checked) - (a.problems / a.checked))
+      }
+
       const result = {
         status: summary.status,
         mainProblem: summary.mainProblem,
@@ -77,7 +100,7 @@
         aggregates: summary.aggregates,
         maneuverCount: summary.maneuverCount,
         sampleCount,
-        stats: stats?.finalize() || null,
+        stats: finalStats,
         algorithmVersion: DRIVER_ANALYSIS_VERSION
       }
       lastResult = result

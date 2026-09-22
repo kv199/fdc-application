@@ -41,7 +41,7 @@ test('distribution filters non-finite values and sorts', () => {
 
 test('MIN_EVENTS and STATS_VERSION are exported', () => {
   assert.equal(statsApi.MIN_EVENTS, 3)
-  assert.equal(statsApi.STATS_VERSION, 5)
+  assert.equal(statsApi.STATS_VERSION, 6)
 })
 
 test('DEFAULT_THRESHOLDS includes required configuration', () => {
@@ -660,7 +660,7 @@ test('formatStatsRows returns rows with required keys and no judgmental words', 
 
   assert.ok(rows.length > 0, 'should have rows')
   const keys = new Set(rows.map(r => r.key))
-  assert.ok(keys.has('overview'), 'should have overview row')
+  assert.ok(!keys.has('overview'), 'the overview is shown by formatSummaryLine, not as a row')
   assert.ok(keys.has('pedals'), 'should have pedals row')
   assert.ok(keys.has('braking'), 'should have braking row')
   assert.ok(keys.has('corners'), 'should have corners row')
@@ -1303,7 +1303,7 @@ test('formatStatsRows includes steering row with correct order and content', () 
   const keys = rows.map(r => r.key)
 
   // Check row order: overview, pedals, steering, braking, corners, exits
-  const expectedOrder = ['overview', 'pedals', 'steering', 'braking', 'corners', 'exits']
+  const expectedOrder = ['pedals', 'steering', 'braking', 'corners', 'exits']
   assert.deepEqual(keys, expectedOrder, `row order should be ${expectedOrder.join(', ')}, got ${keys.join(', ')}`)
 
   const steeringRow = rows.find(r => r.key === 'steering')
@@ -1602,4 +1602,258 @@ test('corner threshold: dropped maneuvers do not contribute to exits or pulsesPe
   assert.equal(stats.corners.count, 0, 'short turns should not be counted as corners')
   assert.equal(stats.exits.count, 0, 'dropped corners should not contribute to exits')
   assert.equal(stats.steering.pulsesPerCorner, null, 'dropped corners should not contribute to pulsesPerCorner')
+})
+
+test('exits structure has cornerCount and atMinSpeedCount fields', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: steer !== 0 ? steer * 10 : 0,
+        y: 0,
+        z: brake > 0.1 ? -11 : (throttle > 0.5 ? throttle * 8 : 0)
+      },
+      angularVelocity: { y: steer !== 0 ? steer * 1.5 : 0 },
+      slipAngle: {
+        fl: Math.abs(steer) * 0.15,
+        fr: Math.abs(steer) * 0.15,
+        rl: 0.03,
+        rr: 0.03
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // Straight approach
+  for (let i = 0; i < 10; i++) {
+    engine.update(driveFrame(100, 0.5, 0, 0))
+  }
+
+  // Lifted corner (with brake) - will have exit with time to reach full throttle
+  for (let i = 0; i < 63; i++) {
+    const steer = Math.sin((i / 63) * Math.PI) * 0.5
+    const speed = 60 + Math.sin((i / 63) * Math.PI) * 20
+    engine.update(driveFrame(speed, 0, 0.9, steer))
+  }
+
+  // Exit with throttle ramp
+  for (let i = 0; i < 50; i++) {
+    const throttleAmount = (i / 50) * 0.98
+    const speed = 60 + i * 2
+    engine.update(driveFrame(speed, throttleAmount, 0, 0))
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.ok(stats, 'stats should be finalized')
+  assert.ok(stats.exits, 'exits should exist')
+  assert.equal(typeof stats.exits.cornerCount, 'number', 'cornerCount should be a number')
+  assert.equal(typeof stats.exits.atMinSpeedCount, 'number', 'atMinSpeedCount should be a number')
+  assert.equal(typeof stats.exits.count, 'number', 'count should be a number')
+  assert.ok(stats.exits.cornerCount >= 0, 'cornerCount should be >= 0')
+  assert.ok(stats.exits.atMinSpeedCount >= 0, 'atMinSpeedCount should be >= 0')
+  assert.ok(stats.exits.count >= 0, 'count should be >= 0')
+  // atMinSpeedCount should be <= cornerCount
+  assert.ok(stats.exits.atMinSpeedCount <= stats.exits.cornerCount, 'atMinSpeedCount should be <= cornerCount')
+})
+
+test('formatSummaryLine returns empty string when no stats', () => {
+  assert.equal(statsApi.formatSummaryLine(null), '')
+  assert.equal(statsApi.formatSummaryLine(undefined), '')
+  assert.equal(statsApi.formatSummaryLine({}), '')
+})
+
+test('formatSummaryLine includes available metrics', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    distanceM: 5000,
+    avgSpeedKmh: 100,
+    maxSpeedKmh: 200,
+    corners: { count: 5 }
+  }
+  const result = statsApi.formatSummaryLine(stats)
+  assert.ok(result.includes('5.0 km'), 'should include distance')
+  assert.ok(result.includes('average 100 km/h'), 'should include average speed')
+  assert.ok(result.includes('top 200 km/h'), 'should include top speed')
+  assert.ok(result.includes('5 corners'), 'should include corner count')
+})
+
+test('formatSummaryLine omits corner count when < 3', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    distanceM: 5000,
+    avgSpeedKmh: 100,
+    maxSpeedKmh: 200,
+    corners: { count: 2 }
+  }
+  const result = statsApi.formatSummaryLine(stats)
+  assert.ok(!result.includes('corners'), 'should omit corners when count < 3')
+})
+
+test('formatPatternSummary returns null when no patterns', () => {
+  const stats = { version: statsApi.STATS_VERSION }
+  assert.equal(statsApi.formatPatternSummary(stats), null)
+})
+
+test('formatPatternSummary returns null when patterns have checked < 10', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    patterns: [
+      { kind: 'front_scrub', checked: 5, problems: 2, ambiguous: 1 }
+    ]
+  }
+  assert.equal(statsApi.formatPatternSummary(stats), null)
+})
+
+test('formatPatternSummary returns null when patterns have problems < 3', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    patterns: [
+      { kind: 'front_scrub', checked: 10, problems: 2, ambiguous: 1 }
+    ]
+  }
+  assert.equal(statsApi.formatPatternSummary(stats), null)
+})
+
+test('formatPatternSummary returns pattern with highest problem ratio', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    patterns: [
+      { kind: 'front_scrub', checked: 37, problems: 5, ambiguous: 2 },
+      { kind: 'exit_wheelspin', checked: 35, problems: 10, ambiguous: 1 }
+    ]
+  }
+  const result = statsApi.formatPatternSummary(stats)
+  assert.ok(result !== null)
+  assert.equal(result.kind, 'exit_wheelspin', 'should select highest problem ratio')
+  assert.equal(result.label, 'Exit wheelspin')
+  assert.equal(result.problems, 10)
+  assert.equal(result.checked, 35)
+  assert.ok(result.text.includes('Exit wheelspin'), 'should include label')
+  assert.ok(result.text.includes('more throttle than the driven wheels can take'), 'should include description')
+  assert.ok(result.text.includes('10 of 35 checks'), 'should include counts')
+})
+
+test('formatStatsRows returns items array with new structure', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    distanceM: 5000,
+    avgSpeedKmh: 100,
+    maxSpeedKmh: 150,
+    movingMs: 180000,
+    pedals: {
+      fullThrottle: 0.4,
+      partialThrottle: 0.2,
+      coast: 0.2,
+      brake: 0.2,
+      brakeWithSteering: 0.05
+    },
+    steering: {
+      fullLockShare: 0.3,
+      pulsesPerCorner: { median: 2, p10: 1, p90: 3, max: 4 },
+      cornersWithoutFullLock: 1
+    },
+    braking: {
+      count: 5,
+      peakDecelG: { median: 1.12, p10: 1.0, p90: 1.2, max: 1.3 },
+      durationS: { median: 2.5, p10: 2.0, p90: 3.0, max: 3.5 },
+      releaseS: { median: 0.5, p10: 0.3, p90: 0.7, max: 0.9 },
+      trailBrakingShare: 0.8,
+      trailOverlapS: { median: 0.7, p10: 0.5, p90: 0.9, max: 1.0 }
+    },
+    corners: {
+      count: 5,
+      flatOutCount: 1,
+      lateralG: { median: 1.02, p10: 0.9, p90: 1.1, max: 1.2 },
+      frontSlipDominantShare: 0.6
+    },
+    exits: {
+      cornerCount: 5,
+      atMinSpeedCount: 1,
+      count: 3,
+      toFullThrottleS: { median: 1.5, p10: 1.0, p90: 2.0, max: 2.5 },
+      peakLongitudinalG: { median: 0.8, p10: 0.6, p90: 1.0, max: 1.1 }
+    }
+  }
+
+  const rows = statsApi.formatStatsRows(stats)
+
+  // Check that all rows have items array
+  for (const row of rows) {
+    assert.ok(Array.isArray(row.items), `row ${row.key} should have items array`)
+    for (const item of row.items) {
+      assert.ok(typeof item.name === 'string', `item should have name string`)
+      assert.ok(typeof item.value === 'string', `item should have value string`)
+    }
+  }
+
+  // Check specific rows
+  const pedalRow = rows.find(r => r.key === 'pedals')
+  assert.ok(pedalRow, 'should have pedals row')
+  assert.ok(pedalRow.items.length > 0, 'pedals row should have items')
+
+  const exitsRow = rows.find(r => r.key === 'exits')
+  assert.ok(exitsRow, 'should have exits row')
+  assert.equal(exitsRow.label, 'ON POWER')
+  assert.equal(exitsRow.count, 3, 'exits row count should be 3 (exits.count)')
+})
+
+test('engine attaches patterns array to stats', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+
+  const frame = (ts, steer, frontSlip, lateralResponse, yawRate) => ({
+    timestampMs: ts,
+    speedKmh: 100,
+    isRaceOn: true,
+    car: { ordinal: 1, pi: 700, drivetrain: 1 },
+    rpmMax: 8000,
+    steer,
+    brake: 0,
+    throttle: 0,
+    slipAngle: { fl: frontSlip, fr: frontSlip, rl: 0.03, rr: 0.03 },
+    combinedSlip: { fl: frontSlip, fr: frontSlip, rl: 0.03, rr: 0.03 },
+    acceleration: { x: lateralResponse, y: 0, z: 0 },
+    angularVelocity: { y: yawRate }
+  })
+
+  // Generate a front scrub opportunity
+  engine.update(frame(0, 0.2, 0.5, 0.9, 0.5))
+  engine.update(frame(100, 0.25, 0.7, 0.6, 0.4))
+  engine.update(frame(200, 0.32, 0.95, 0.35, 0.4))
+  engine.update(frame(300, 0.35, 1.0, 0.2, 0.35))
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.ok(stats !== null, 'stats should exist')
+  assert.ok(Array.isArray(stats.patterns), 'stats should have patterns array')
+  assert.ok(stats.patterns.length > 0, 'should have at least one pattern')
+  assert.ok(stats.patterns[0].kind, 'pattern should have kind')
+  assert.ok(stats.patterns[0].checked >= 0, 'pattern should have checked count')
+  assert.ok(stats.patterns[0].problems >= 0, 'pattern should have problems count')
 })

@@ -1786,6 +1786,64 @@ h1 {
   line-height: 1.35;
 }
 
+.driver-analysis-history-row__summary {
+  margin-top: 8px;
+  color: #d4d4d8;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.driver-analysis-history-row__details-toggle {
+  margin-top: 12px;
+  min-width: 78px;
+}
+
+.driver-analysis-history-row__details-panel {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgb(226 232 240 / 10%);
+  display: grid;
+  gap: 14px;
+}
+
+.driver-analysis-history-row__details-panel[hidden] {
+  display: none;
+}
+
+.driver-analysis-history-row__details-section-title {
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+}
+
+.driver-analysis-history-row__details-list {
+  display: grid;
+  gap: 4px;
+}
+
+.driver-analysis-history-row__details-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.driver-analysis-history-row__details-item-name {
+  min-width: 0;
+  color: #d4d4d8;
+}
+
+.driver-analysis-history-row__details-item-value {
+  color: #d4d4d8;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
 .driver-analysis-stats {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
@@ -1860,6 +1918,10 @@ h1 {
   .driver-analysis-history-row {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .driver-analysis-history-row__details-item {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 

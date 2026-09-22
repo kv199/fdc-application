@@ -151,13 +151,17 @@ such as curb or contact impacts do not dominate the result.
 | --- | --- |
 | `OVERVIEW` | Distance, average speed over moving time (at least 5 km/h), and maximum speed. Distance uses the game's distance delta when it is consistent with speed and falls back to integrated speed otherwise. The recording duration is shown in the card metadata. |
 | `PEDALS` | Share of moving time with full throttle (at least 95%), partial throttle, coasting, and braking. The brake share also shows the part with steering applied. |
-| `STEERING` | Share of steering time (moving, steering input at least 12%) spent at full lock (at least 99%), median number of full-lock entries per corner, and the number of corners without full lock. |
+| `STEERING` | Share of steering time (moving, steering input at least 12%) spent at full lock (at least 99%) and the median number of full-lock entries per corner. |
 | `BRAKING` | Braking events that start at 40 km/h or more and last 0.3–15 s: median peak deceleration, duration, release time (from the last brake level at or above 80% of that event's peak until release), and trail braking. An event counts as trail braking when it starts without steering and the brake stays at 30% or more while steering is applied for at least 250 ms. The share is taken over events that start without steering, and the median brake-and-steering overlap of those events is shown in parentheses. |
+| `CHECKED` | How many opportunities of each supported pattern were evaluated and how many ended as a problem. |
 | `CORNERS` | Maneuvers that last at least 0.7 s and reach a peak lateral acceleration of 4 m/s², so brief steering corrections are not counted as corners: median and 90th-percentile peak lateral acceleration, the share of turning time in which the front slip angle exceeds the rear, and how many corners were taken flat-out (full throttle and no brake throughout the turning phases). |
-| `EXIT` | Corners with a throttle lift or brake application in which full throttle was reached afterwards: median time from the corner's minimum speed to full throttle and median peak longitudinal acceleration afterwards. Flat-out corners are excluded. |
+| `ON POWER` | How many corners were already at full throttle at their minimum-speed sample, and, for the corners that lifted and returned to full throttle later, the median delay after the minimum speed and the median peak longitudinal acceleration. |
 
-The `BRAKING`, `CORNERS`, and `EXIT` rows are hidden when fewer than three
-events were measured. Each row shows its event count, and hovering a row
+The `BRAKING`, `CORNERS`, and `ON POWER` rows are hidden when fewer than three
+events were measured. The card shows the recording summary and, when no
+finding qualifies, the most frequent pattern with its share of checked
+opportunities and the share a reported problem requires. The remaining rows
+are collapsed behind a `DETAILS` control. Each row shows its event count, and hovering a row
 shows the 10th–90th percentile range. The statistics are stored as versioned
 JSON in the session's `stats_json` column. Finished recordings with saved samples
 but missing or outdated statistics are replayed locally once to compute them.
