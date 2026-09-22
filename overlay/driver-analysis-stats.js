@@ -5,7 +5,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   'use strict'
 
-  const STATS_VERSION = 2
+  const STATS_VERSION = 3
   const GRAVITY = 9.80665
   const MIN_EVENTS = 3
   const TURNING_PHASES = new Set(['turn-in', 'rotation', 'exit'])
@@ -22,7 +22,8 @@
     brakingMinMs: 300,
     brakingMaxMs: 15000,
     brakeReleaseLevel: 0.8,
-    trailBrakingMinMs: 150,
+    trailBrakeLevel: 0.3,
+    trailBrakingMinMs: 250,
     cornerMinMs: 300,
     exitWindowMs: 6000,
     exitAfterFullThrottleMs: 2000,
@@ -95,11 +96,14 @@
       const peakDecel = event.peakDecelValues.length > 0
         ? quantile(event.peakDecelValues.slice().sort((a, b) => a - b), 0.95)
         : 0
+      const isTrailBraking = event.startedStraight && event.trailMs >= thresholds.trailBrakingMinMs
       brakingEvents.push({
         durationS: durationMs / 1000,
         releaseS: Math.max(0, endMs - event.lastHighAt) / 1000,
         peakDecelG: peakDecel / GRAVITY,
-        trailBraking: event.trailMs >= thresholds.trailBrakingMinMs
+        startedStraight: event.startedStraight,
+        trailBraking: isTrailBraking,
+        trailS: event.trailMs / 1000
       })
     }
 
@@ -157,7 +161,7 @@
       const speed = sample.speedKmh
       if (!brakingEvent) {
         if (sample.brake >= thresholds.brakeOn && speed >= thresholds.brakingMinSpeedKmh) {
-          brakingEvent = { startMs: sample.timestampMs, peakBrake: sample.brake, lastHighAt: sample.timestampMs, peakDecelValues: [], trailMs: 0 }
+          brakingEvent = { startMs: sample.timestampMs, peakBrake: sample.brake, lastHighAt: sample.timestampMs, peakDecelValues: [], trailMs: 0, startedStraight: sample.steerMagnitude < thresholds.steerOn }
         } else return
       }
       if (sample.brake < thresholds.brakeOff) {
@@ -168,7 +172,7 @@
       if (sample.brake >= brakingEvent.peakBrake * thresholds.brakeReleaseLevel) brakingEvent.lastHighAt = sample.timestampMs
       const smoothed = getSmoothedAccelerations(sample.timestampMs)
       if (smoothed.longitudinal !== 0) brakingEvent.peakDecelValues.push(-smoothed.longitudinal)
-      if (dtMs && sample.brake >= thresholds.brakeOn && sample.steerMagnitude >= thresholds.steerOn) brakingEvent.trailMs += dtMs
+      if (dtMs && sample.brake >= thresholds.trailBrakeLevel && sample.steerMagnitude >= thresholds.steerOn) brakingEvent.trailMs += dtMs
     }
 
     function updateCorner(snapshot, sample) {
@@ -257,6 +261,8 @@
       const exits = corners.filter(item => item.lifted === true && item.toFullThrottleS !== null)
       const flatOutCount = corners.filter(item => item.lifted === false).length
       const moving = totals.movingMs
+      const straightStartCount = brakingEvents.filter(item => item.startedStraight).length
+      const trailBrakingEvents = brakingEvents.filter(item => item.trailBraking)
       return {
         version: STATS_VERSION,
         movingMs: Math.round(moving),
@@ -275,7 +281,9 @@
           peakDecelG: distribution(brakingEvents.map(item => item.peakDecelG)),
           durationS: distribution(brakingEvents.map(item => item.durationS)),
           releaseS: distribution(brakingEvents.map(item => item.releaseS)),
-          trailBrakingShare: share(brakingEvents.filter(item => item.trailBraking).length, brakingEvents.length)
+          straightStartCount: straightStartCount,
+          trailBrakingShare: share(trailBrakingEvents.length, straightStartCount),
+          trailOverlapS: distribution(trailBrakingEvents.map(item => item.trailS))
         },
         corners: {
           count: corners.length,
@@ -344,18 +352,24 @@
 
     const braking = stats.braking || {}
     if (finite(braking.count) >= MIN_EVENTS) {
+      const trailBrakingText = finite(braking.trailBrakingShare) === null
+        ? null
+        : finite(braking.trailOverlapS?.median) === null
+          ? `trail braking ${percent(braking.trailBrakingShare)}`
+          : `trail braking ${percent(braking.trailBrakingShare)} (${Number(braking.trailOverlapS.median).toFixed(1)} s)`
       rows.push({
         key: 'braking', label: 'BRAKING', count: braking.count,
         text: join([
           fixed('peak', braking.peakDecelG?.median, 2, 'g'),
           fixed('', braking.durationS?.median, 1, 's'),
           fixed('release', braking.releaseS?.median, 2, 's'),
-          finite(braking.trailBrakingShare) === null ? null : `trail braking ${percent(braking.trailBrakingShare)}`
+          trailBrakingText
         ]),
         title: join([
           range(braking.peakDecelG, 2, 'g peak decel'),
           range(braking.durationS, 1, 's braking'),
-          range(braking.releaseS, 2, 's release')
+          range(braking.releaseS, 2, 's release'),
+          range(braking.trailOverlapS, 1, 's trail braking')
         ])
       })
     }

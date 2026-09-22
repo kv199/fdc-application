@@ -41,7 +41,7 @@ test('distribution filters non-finite values and sorts', () => {
 
 test('MIN_EVENTS and STATS_VERSION are exported', () => {
   assert.equal(statsApi.MIN_EVENTS, 3)
-  assert.equal(statsApi.STATS_VERSION, 2)
+  assert.equal(statsApi.STATS_VERSION, 3)
 })
 
 test('DEFAULT_THRESHOLDS includes required configuration', () => {
@@ -119,10 +119,10 @@ test('synthetic session: 5 laps with acceleration, braking, turns, and exits', (
       engine.update(driveFrame(speed, 0, 0.9, 0))
     }
 
-    // Braking with steering at the end (trail braking)
-    for (let i = 0; i < 15; i++) {
-      const speed = Math.max(30, 40 - i * 1)
-      const steerAmount = (i / 15) * 0.4
+    // Braking with steering at the end (trail braking with >= 0.3 brake for >= 250ms)
+    for (let i = 0; i < 25; i++) {
+      const speed = Math.max(30, 40 - i * 0.4)
+      const steerAmount = (i / 25) * 0.5
       engine.update(driveFrame(speed, 0, 0.6, steerAmount))
     }
 
@@ -740,4 +740,331 @@ test('stats finalize returns null distributions when no events', () => {
   assert.equal(result.corners.lateralG, null)
   assert.equal(result.exits.count, 0)
   assert.equal(result.exits.toFullThrottleS, null)
+})
+
+test('trail braking: light brake tail without steering is not trail braking', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: 0,
+        y: 0,
+        z: brake > 0.1 ? -11 : 0
+      },
+      angularVelocity: { y: 0 },
+      slipAngle: {
+        fl: 0,
+        fr: 0,
+        rl: 0,
+        rr: 0
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // Hard braking straight (no steering)
+  for (let i = 0; i < 30; i++) {
+    const speed = Math.max(40, 100 - i * 2)
+    engine.update(driveFrame(speed, 0, 0.9, 0))
+  }
+
+  // Light brake tail only (0.15) with steering - should NOT count as trail braking
+  for (let i = 0; i < 20; i++) {
+    const speed = Math.max(30, 40 - i * 0.5)
+    const steer = 0.4
+    engine.update(driveFrame(speed, 0, 0.15, steer))
+  }
+
+  // Release brake completely
+  for (let i = 0; i < 10; i++) {
+    engine.update(driveFrame(25, 0, 0, 0.4))
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.ok(stats.braking.count >= 1, `should have at least 1 braking event, got ${stats.braking.count}`)
+  assert.equal(stats.braking.trailBrakingShare, 0, 'light brake tail (0.15) should not trigger trail braking (0%)')
+})
+
+test('trail braking: brake >= 0.3 with steering after straight start IS trail braking', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: 0,
+        y: 0,
+        z: brake > 0.1 ? -11 : 0
+      },
+      angularVelocity: { y: 0 },
+      slipAngle: {
+        fl: 0,
+        fr: 0,
+        rl: 0,
+        rr: 0
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // Hard braking straight (no steering) - starts straight
+  for (let i = 0; i < 30; i++) {
+    const speed = Math.max(40, 100 - i * 2)
+    engine.update(driveFrame(speed, 0, 0.9, 0))
+  }
+
+  // Brake >= 0.3 with steering for ~0.5 s (31 frames * 16ms ≈ 496ms of trail braking overlap)
+  for (let i = 0; i < 31; i++) {
+    const speed = Math.max(30, 40 - i * 0.3)
+    const steer = 0.4
+    engine.update(driveFrame(speed, 0, 0.5, steer))
+  }
+
+  // Release brake
+  for (let i = 0; i < 10; i++) {
+    engine.update(driveFrame(20, 0, 0, 0.4))
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.ok(stats.braking.count >= 1, `should have at least 1 braking event, got ${stats.braking.count}`)
+  assert.equal(stats.braking.trailBrakingShare, 1, 'brake >= 0.3 with steering for >= 250ms should be trail braking')
+  assert.ok(stats.braking.trailOverlapS !== null, 'trail braking events should have trailOverlapS distribution')
+  assert.ok(stats.braking.trailOverlapS.median !== null, 'trailOverlapS.median should not be null')
+  const medianTrailS = stats.braking.trailOverlapS.median
+  assert.ok(Math.abs(medianTrailS - 0.5) < 0.05, `trailOverlapS.median should be ~0.5s, got ${medianTrailS}s`)
+})
+
+test('trail braking: event starting with steering already applied excluded from share denominator', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: 0,
+        y: 0,
+        z: brake > 0.1 ? -11 : 0
+      },
+      angularVelocity: { y: 0 },
+      slipAngle: {
+        fl: 0,
+        fr: 0,
+        rl: 0,
+        rr: 0
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // Event 1: brake straight, then with steering (counted in denominator)
+  for (let i = 0; i < 25; i++) {
+    const speed = Math.max(40, 100 - i * 2.4)
+    engine.update(driveFrame(speed, 0, 0.9, 0))
+  }
+  for (let i = 0; i < 20; i++) {
+    const speed = Math.max(30, 40 - i * 0.5)
+    engine.update(driveFrame(speed, 0, 0.5, 0.4))
+  }
+
+  // Release brake completely to close Event 1
+  for (let i = 0; i < 10; i++) {
+    engine.update(driveFrame(20, 0, 0, 0))
+  }
+
+  // Event 2: brake with steering already applied (NOT counted in denominator)
+  for (let i = 0; i < 25; i++) {
+    const speed = Math.max(40, 100 - i * 2.4)
+    engine.update(driveFrame(speed, 0, 0.9, 0.4))
+  }
+  for (let i = 0; i < 20; i++) {
+    const speed = Math.max(30, 40 - i * 0.5)
+    engine.update(driveFrame(speed, 0, 0.5, 0.4))
+  }
+
+  // Release brake completely to close Event 2
+  for (let i = 0; i < 10; i++) {
+    engine.update(driveFrame(20, 0, 0, 0))
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.equal(stats.braking.straightStartCount, 1, 'straightStartCount should be 1 (only first event started straight)')
+  assert.equal(stats.braking.count, 2, 'should have 2 total braking events')
+})
+
+test('trail braking: 0.2s overlap below 250ms threshold is not trail braking', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: 0,
+        y: 0,
+        z: brake > 0.1 ? -11 : 0
+      },
+      angularVelocity: { y: 0 },
+      slipAngle: {
+        fl: 0,
+        fr: 0,
+        rl: 0,
+        rr: 0
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // Brake straight for 25 frames (~400ms)
+  for (let i = 0; i < 25; i++) {
+    const speed = Math.max(40, 100 - i * 2.4)
+    engine.update(driveFrame(speed, 0, 0.9, 0))
+  }
+
+  // Trail braking overlap of only 0.2s (12 frames * 16ms ≈ 192ms) - below 250ms
+  for (let i = 0; i < 12; i++) {
+    const speed = Math.max(30, 40 - i * 0.83)
+    engine.update(driveFrame(speed, 0, 0.5, 0.4))
+  }
+
+  // Release
+  for (let i = 0; i < 10; i++) {
+    engine.update(driveFrame(20, 0, 0, 0.4))
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.equal(stats.braking.count, 1, 'should have 1 braking event')
+  assert.equal(stats.braking.trailBrakingShare, 0, 'overlap of 0.2s (< 250ms) should not be trail braking (0%)')
+})
+
+test('formatStatsRows shows trail braking with median time', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    distanceM: 5000,
+    avgSpeedKmh: 100,
+    maxSpeedKmh: 150,
+    movingMs: 180000,
+    pedals: {
+      fullThrottle: 0.4,
+      partialThrottle: 0.2,
+      coast: 0.2,
+      brake: 0.2,
+      brakeWithSteering: 0.05
+    },
+    braking: {
+      count: 5,
+      peakDecelG: { median: 1.12, p10: 1.0, p90: 1.2, max: 1.3 },
+      durationS: { median: 2.5, p10: 2.0, p90: 3.0, max: 3.5 },
+      releaseS: { median: 0.5, p10: 0.3, p90: 0.7, max: 0.9 },
+      straightStartCount: 2,
+      trailBrakingShare: 0.5,
+      trailOverlapS: { median: 0.5, p10: 0.3, p90: 0.7, max: 0.8 }
+    },
+    corners: {
+      count: 5,
+      flatOutCount: 1,
+      lateralG: { median: 1.02, p10: 0.9, p90: 1.1, max: 1.2 }
+    },
+    exits: {
+      count: 5,
+      toFullThrottleS: { median: 1.5, p10: 1.0, p90: 2.0, max: 2.5 },
+      peakLongitudinalG: { median: 0.8, p10: 0.6, p90: 1.0, max: 1.1 }
+    }
+  }
+
+  const rows = statsApi.formatStatsRows(stats)
+  const brakingRow = rows.find(r => r.key === 'braking')
+
+  assert.ok(brakingRow, 'should have braking row')
+  assert.ok(brakingRow.text.includes('trail braking 50%'), 'should show trail braking percentage')
+  assert.ok(brakingRow.text.includes('(0.5 s)'), 'should show trail braking median time in parentheses')
+  assert.ok(brakingRow.title.includes('0.3–0.7 s trail braking'), 'should show trail braking range in title')
 })
