@@ -5,7 +5,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   'use strict'
 
-  const STATS_VERSION = 1
+  const STATS_VERSION = 2
   const GRAVITY = 9.80665
   const MIN_EVENTS = 3
   const TURNING_PHASES = new Set(['turn-in', 'rotation', 'exit'])
@@ -25,7 +25,8 @@
     trailBrakingMinMs: 150,
     cornerMinMs: 300,
     exitWindowMs: 6000,
-    exitAfterFullThrottleMs: 2000
+    exitAfterFullThrottleMs: 2000,
+    smoothingWindowMs: 150
   })
 
   function finite(value) {
@@ -70,6 +71,7 @@
     let brakingEvents
     let corner
     let corners
+    let accelerationWindow = []
 
     function reset() {
       totals = {
@@ -81,6 +83,7 @@
       brakingEvents = []
       corner = null
       corners = []
+      accelerationWindow = []
     }
 
     function closeBraking(endMs) {
@@ -89,10 +92,13 @@
       if (!event) return
       const durationMs = endMs - event.startMs
       if (durationMs < thresholds.brakingMinMs || durationMs > thresholds.brakingMaxMs) return
+      const peakDecel = event.peakDecelValues.length > 0
+        ? quantile(event.peakDecelValues.slice().sort((a, b) => a - b), 0.95)
+        : 0
       brakingEvents.push({
         durationS: durationMs / 1000,
         releaseS: Math.max(0, endMs - event.lastHighAt) / 1000,
-        peakDecelG: event.peakDecel / GRAVITY,
+        peakDecelG: peakDecel / GRAVITY,
         trailBraking: event.trailMs >= thresholds.trailBrakingMinMs
       })
     }
@@ -101,23 +107,57 @@
       const item = corner
       corner = null
       if (!item || item.lastTurnMs - item.startMs < thresholds.cornerMinMs) return
+      const peakLateral = item.lateralValues.length > 0
+        ? quantile(item.lateralValues.slice().sort((a, b) => a - b), 0.95)
+        : 0
+      const peakLongitudinal = item.longitudinalValues.length > 0
+        ? quantile(item.longitudinalValues.slice().sort((a, b) => a - b), 0.95)
+        : 0
       corners.push({
-        lateralG: item.peakLateral / GRAVITY,
+        lateralG: peakLateral / GRAVITY,
+        lifted: item.lifted,
         toFullThrottleS: item.fullThrottleAt === null ? null : (item.fullThrottleAt - item.minSpeedAt) / 1000,
-        peakLongitudinalG: item.fullThrottleAt === null ? null : item.peakLongitudinal / GRAVITY
+        peakLongitudinalG: item.fullThrottleAt === null || item.longitudinalValues.length === 0 ? null : peakLongitudinal / GRAVITY
       })
     }
 
     function discardTransient() {
       brakingEvent = null
       corner = null
+      accelerationWindow = []
+    }
+
+    function getSmoothedAccelerations(now) {
+      const cutoff = now - thresholds.smoothingWindowMs
+      const windowSamples = accelerationWindow.filter(entry => entry.timestampMs >= cutoff)
+      if (windowSamples.length === 0) return { lateral: 0, longitudinal: 0 }
+      const lateralSum = windowSamples.reduce((sum, entry) => sum + Math.abs(entry.lateral), 0)
+      const longitudinalSum = windowSamples.reduce((sum, entry) => sum + entry.longitudinal, 0)
+      return {
+        lateral: lateralSum / windowSamples.length,
+        longitudinal: longitudinalSum / windowSamples.length
+      }
+    }
+
+    function addAccelerationSample(sample) {
+      const lateral = finite(sample.lateralResponse)
+      const longitudinal = finite(sample.longitudinalResponse)
+      if (lateral !== null || longitudinal !== null) {
+        accelerationWindow.push({
+          timestampMs: sample.timestampMs,
+          lateral: lateral || 0,
+          longitudinal: longitudinal || 0
+        })
+        const cutoff = sample.timestampMs - thresholds.smoothingWindowMs
+        accelerationWindow = accelerationWindow.filter(entry => entry.timestampMs >= cutoff)
+      }
     }
 
     function updateBraking(sample, dtMs) {
       const speed = sample.speedKmh
       if (!brakingEvent) {
         if (sample.brake >= thresholds.brakeOn && speed >= thresholds.brakingMinSpeedKmh) {
-          brakingEvent = { startMs: sample.timestampMs, peakBrake: sample.brake, lastHighAt: sample.timestampMs, peakDecel: 0, trailMs: 0 }
+          brakingEvent = { startMs: sample.timestampMs, peakBrake: sample.brake, lastHighAt: sample.timestampMs, peakDecelValues: [], trailMs: 0 }
         } else return
       }
       if (sample.brake < thresholds.brakeOff) {
@@ -126,8 +166,8 @@
       }
       if (sample.brake > brakingEvent.peakBrake) brakingEvent.peakBrake = sample.brake
       if (sample.brake >= brakingEvent.peakBrake * thresholds.brakeReleaseLevel) brakingEvent.lastHighAt = sample.timestampMs
-      const longitudinal = finite(sample.longitudinalResponse)
-      if (longitudinal !== null && -longitudinal > brakingEvent.peakDecel) brakingEvent.peakDecel = -longitudinal
+      const smoothed = getSmoothedAccelerations(sample.timestampMs)
+      if (smoothed.longitudinal !== 0) brakingEvent.peakDecelValues.push(-smoothed.longitudinal)
       if (dtMs && sample.brake >= thresholds.brakeOn && sample.steerMagnitude >= thresholds.steerOn) brakingEvent.trailMs += dtMs
     }
 
@@ -138,21 +178,24 @@
         closeCorner()
         corner = {
           id: maneuverId, startMs: sample.timestampMs, lastTurnMs: sample.timestampMs,
-          peakLateral: 0, minSpeed: Infinity, minSpeedAt: sample.timestampMs,
-          fullThrottleAt: null, peakLongitudinal: 0
+          lateralValues: [], longitudinalValues: [], lifted: false, minSpeed: Infinity, minSpeedAt: sample.timestampMs,
+          fullThrottleAt: null
         }
       }
       if (!corner) return
       const now = sample.timestampMs
       if (turning) {
         corner.lastTurnMs = now
-        const lateral = finite(sample.lateralResponse)
-        if (lateral !== null && Math.abs(lateral) > corner.peakLateral) corner.peakLateral = Math.abs(lateral)
+        const smoothed = getSmoothedAccelerations(now)
+        if (smoothed.lateral !== 0) corner.lateralValues.push(Math.abs(smoothed.lateral))
+        if (sample.brake >= thresholds.brakeOn || sample.throttle < thresholds.fullThrottle) {
+          corner.lifted = true
+        }
         if (sample.speedKmh < corner.minSpeed) {
           corner.minSpeed = sample.speedKmh
           corner.minSpeedAt = now
           corner.fullThrottleAt = null
-          corner.peakLongitudinal = 0
+          corner.longitudinalValues = []
         }
       } else if (sample.brake >= thresholds.brakeOn || now - corner.lastTurnMs > thresholds.exitWindowMs) {
         closeCorner()
@@ -161,8 +204,10 @@
       if (corner.fullThrottleAt === null && sample.throttle >= thresholds.fullThrottle && sample.brake < thresholds.brakeOn) {
         corner.fullThrottleAt = now
       }
-      const longitudinal = finite(sample.longitudinalResponse)
-      if (longitudinal !== null && longitudinal > corner.peakLongitudinal) corner.peakLongitudinal = longitudinal
+      const smoothed = getSmoothedAccelerations(now)
+      if (smoothed.longitudinal !== 0 && corner.fullThrottleAt !== null && now >= corner.minSpeedAt) {
+        corner.longitudinalValues.push(smoothed.longitudinal)
+      }
       if (!turning && corner.fullThrottleAt !== null && now - corner.fullThrottleAt >= thresholds.exitAfterFullThrottleMs) closeCorner()
     }
 
@@ -173,7 +218,11 @@
         return
       }
       const previous = snapshot.previousSample
-      if (!previous) discardTransient()
+      if (!previous) {
+        discardTransient()
+      } else {
+        addAccelerationSample(sample)
+      }
       const rawDt = previous ? sample.timestampMs - previous.timestampMs : 0
       const dtMs = rawDt > 0 && rawDt <= thresholds.maxStepMs ? rawDt : 0
       totals.maxSpeedKmh = Math.max(totals.maxSpeedKmh, sample.speedKmh)
@@ -205,7 +254,8 @@
     function finalize() {
       brakingEvent = null
       closeCorner()
-      const exits = corners.filter(item => item.toFullThrottleS !== null)
+      const exits = corners.filter(item => item.lifted === true && item.toFullThrottleS !== null)
+      const flatOutCount = corners.filter(item => item.lifted === false).length
       const moving = totals.movingMs
       return {
         version: STATS_VERSION,
@@ -229,6 +279,7 @@
         },
         corners: {
           count: corners.length,
+          flatOutCount: flatOutCount,
           lateralG: distribution(corners.map(item => item.lateralG)),
           frontSlipDominantShare: share(totals.frontSlipDominantMs, totals.turningMs)
         },
@@ -311,12 +362,16 @@
 
     const corners = stats.corners || {}
     if (finite(corners.count) >= MIN_EVENTS) {
+      const flatOutText = finite(corners.flatOutCount) !== null
+        ? `flat-out ${corners.flatOutCount} of ${corners.count}`
+        : null
       rows.push({
         key: 'corners', label: 'CORNERS', count: corners.count,
         text: join([
           fixed('lateral', corners.lateralG?.median, 2, 'g'),
-          fixed('peak', corners.lateralG?.max, 2, 'g'),
-          finite(corners.frontSlipDominantShare) === null ? null : `front slip > rear ${percent(corners.frontSlipDominantShare)}`
+          fixed('peak', corners.lateralG?.p90, 2, 'g'),
+          finite(corners.frontSlipDominantShare) === null ? null : `front slip > rear ${percent(corners.frontSlipDominantShare)}`,
+          flatOutText
         ]),
         title: range(corners.lateralG, 2, 'g lateral') || ''
       })

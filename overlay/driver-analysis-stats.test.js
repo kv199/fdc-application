@@ -41,7 +41,7 @@ test('distribution filters non-finite values and sorts', () => {
 
 test('MIN_EVENTS and STATS_VERSION are exported', () => {
   assert.equal(statsApi.MIN_EVENTS, 3)
-  assert.equal(statsApi.STATS_VERSION, 1)
+  assert.equal(statsApi.STATS_VERSION, 2)
 })
 
 test('DEFAULT_THRESHOLDS includes required configuration', () => {
@@ -51,6 +51,7 @@ test('DEFAULT_THRESHOLDS includes required configuration', () => {
   assert.ok(thresholds.brakeOn > 0)
   assert.ok(thresholds.brakeOff > 0)
   assert.ok(thresholds.brakeOff < thresholds.brakeOn)
+  assert.ok(thresholds.smoothingWindowMs > 0)
 })
 
 test('createDriverAnalysisStats exports required methods', () => {
@@ -173,11 +174,11 @@ test('synthetic session: 5 laps with acceleration, braking, turns, and exits', (
   assert.ok(Math.abs(stats.braking.peakDecelG.median - expectedDecelG) < 0.02,
     `peak decel should be ~${expectedDecelG}, got ${stats.braking.peakDecelG.median}`)
 
-  // Lateral G should be close to 10/9.80665 (~1.02)
+  // Lateral G should be close to 10/9.80665 (~1.02), but smoothing may reduce it slightly
   const expectedLateralG = 10 / 9.80665
   assert.ok(stats.corners.lateralG.median !== null, 'lateral G median should not be null')
-  assert.ok(Math.abs(stats.corners.lateralG.median - expectedLateralG) < 0.02,
-    `lateral G should be ~${expectedLateralG}, got ${stats.corners.lateralG.median}`)
+  assert.ok(Math.abs(stats.corners.lateralG.median - expectedLateralG) < 0.08,
+    `lateral G should be close to ~${expectedLateralG}, got ${stats.corners.lateralG.median}`)
 
   // Distance and speed should be positive
   assert.ok(stats.distanceM > 0, 'distance should be > 0')
@@ -365,6 +366,229 @@ test('telemetry gap > 250ms during braking discards the braking event', () => {
   assert.equal(result.braking.count, 0, 'braking event interrupted by gap should not be counted')
 })
 
+test('single-frame lateral spike does not dominate corner peak', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer, lateralAccel = null) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: lateralAccel !== null ? lateralAccel : (steer !== 0 ? steer * 10 : 0),
+        y: 0,
+        z: brake > 0.1 ? -11 : (throttle > 0.5 ? throttle * 8 : 0)
+      },
+      angularVelocity: { y: steer !== 0 ? steer * 1.5 : 0 },
+      slipAngle: {
+        fl: Math.abs(steer) * 0.15,
+        fr: Math.abs(steer) * 0.15,
+        rl: 0.03,
+        rr: 0.03
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // Simulate a corner with mostly ~10 m/s² lateral (1.02 g)
+  // but one spike frame at 60 m/s² (6.1 g)
+  for (let i = 0; i < 30; i++) {
+    const steer = Math.sin((i / 30) * Math.PI) * 0.5
+    const speed = 60 + Math.sin((i / 30) * Math.PI) * 20
+    let lateralAccel = null
+    if (i === 15) {
+      // Single spike frame at peak of turn
+      lateralAccel = 60
+    }
+    engine.update(driveFrame(speed, 0, 0, steer, lateralAccel))
+  }
+
+  // Exit turn
+  for (let i = 0; i < 25; i++) {
+    const throttleAmount = (i / 25) * 0.98
+    const speed = 60 + i * 3
+    engine.update(driveFrame(speed, throttleAmount, 0, 0.1 * (1 - i / 25)))
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.ok(stats.corners.count >= 1, 'should have at least 1 corner')
+  assert.ok(stats.corners.lateralG.p90 !== null, 'should have p90 for lateral g')
+  // Peak should be the 95th percentile, not affected much by single spike
+  // Expected: smoothed values mostly around 1.02 g, so p90 should be around 1.2-1.3 g
+  assert.ok(stats.corners.lateralG.p90 < 2, `peak lateral should be smoothed, got ${stats.corners.lateralG.p90} g`)
+})
+
+test('single-frame braking spike does not dominate peak decel', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer, brakingAccel = null) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: steer !== 0 ? steer * 20 : 0,
+        y: 0,
+        z: brakingAccel !== null ? brakingAccel : (brake > 0.1 ? -11 : (throttle > 0.5 ? throttle * 8 : 0))
+      },
+      angularVelocity: { y: steer !== 0 ? steer * 1.5 : 0 },
+      slipAngle: {
+        fl: Math.abs(steer) * 0.15,
+        fr: Math.abs(steer) * 0.15,
+        rl: 0.03,
+        rr: 0.03
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // Multiple braking events with one spike frame each
+  for (let event = 0; event < 5; event++) {
+    // Build speed before braking
+    for (let i = 0; i < 20; i++) {
+      engine.update(driveFrame(200 - i * 2, 0.98, 0, 0))
+    }
+
+    // Braking event with one spike: 40 frames = 640ms (> 300ms minimum)
+    for (let i = 0; i < 40; i++) {
+      const speed = Math.max(50, 200 - i * 3.75)
+      let brakingAccel = null
+      if (i === 20) {
+        // Single spike at -30 m/s² instead of -11
+        brakingAccel = -30
+      }
+      engine.update(driveFrame(speed, 0, 0.9, 0, brakingAccel))
+    }
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.ok(stats.braking.count >= 3, `should have at least 3 braking events, got ${stats.braking.count}`)
+  assert.ok(stats.braking.peakDecelG.median !== null, 'should have peak decel median')
+  // Peak decel should be around 1.12 g (11 m/s²), not dominated by the single spike
+  // Even with smoothing, values shouldn't exceed ~1.5 g
+  assert.ok(stats.braking.peakDecelG.median < 1.8, `peak decel should be smoothed, got ${stats.braking.peakDecelG.median} g`)
+})
+
+test('flat-out corner excluded from exits, lifted corner included', () => {
+  const engine = engineApi.createDriverAnalysisEngine()
+  let timestampMs = 0
+  const rpmMax = 8000
+  let lapDistance = 0
+  let lapCount = 1
+
+  const driveFrame = (speedKmh, throttle, brake, steer) => {
+    const frame = {
+      timestampMs,
+      speedKmh,
+      throttle,
+      brake,
+      steer,
+      gear: 3,
+      rpm: speedKmh > 20 ? 4000 + speedKmh * 30 : 1000,
+      rpmMax,
+      isRaceOn: true,
+      car: { ordinal: 1, pi: 800, drivetrain: 1 },
+      acceleration: {
+        x: steer !== 0 ? steer * 10 : 0,
+        y: 0,
+        z: brake > 0.1 ? -11 : (throttle > 0.5 ? throttle * 8 : 0)
+      },
+      angularVelocity: { y: steer !== 0 ? steer * 1.5 : 0 },
+      slipAngle: {
+        fl: Math.abs(steer) * 0.15,
+        fr: Math.abs(steer) * 0.15,
+        rl: 0.03,
+        rr: 0.03
+      },
+      lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
+    }
+    lapDistance += (speedKmh / 3.6) * 0.016
+    if (lapDistance > 5000) {
+      lapDistance = 0
+      lapCount++
+    }
+    timestampMs += 16
+    return frame
+  }
+
+  // Flat-out corner: no brake, full throttle throughout
+  for (let i = 0; i < 30; i++) {
+    const steer = Math.sin((i / 30) * Math.PI) * 0.5
+    const speed = 60 + Math.sin((i / 30) * Math.PI) * 20
+    engine.update(driveFrame(speed, 0.98, 0, steer))
+  }
+
+  // Exit with full throttle
+  for (let i = 0; i < 50; i++) {
+    const speed = 60 + i * 3
+    engine.update(driveFrame(speed, 0.98, 0, 0.1 * Math.max(0, 1 - i / 25)))
+  }
+
+  // Lifted corner: no throttle during turn
+  for (let i = 0; i < 30; i++) {
+    const steer = Math.sin((i / 30) * Math.PI) * 0.5
+    const speed = 60 + Math.sin((i / 30) * Math.PI) * 20
+    engine.update(driveFrame(speed, 0, 0, steer))
+  }
+
+  // Exit with throttle ramp to full
+  for (let i = 0; i < 50; i++) {
+    const throttleAmount = (i / 50) * 0.98
+    const speed = 60 + i * 2
+    engine.update(driveFrame(speed, throttleAmount, 0, 0.1 * Math.max(0, 1 - i / 25)))
+  }
+
+  const result = engine.finalize()
+  const stats = result.stats
+
+  assert.equal(stats.corners.count, 2, `should have 2 corners, got ${stats.corners.count}`)
+  assert.equal(stats.corners.flatOutCount, 1, `should have 1 flat-out corner, got ${stats.corners.flatOutCount}`)
+  assert.equal(stats.exits.count, 1, `should have 1 exit (only lifted corners with full throttle), got ${stats.exits.count}`)
+  if (stats.exits.count > 0) {
+    assert.ok(stats.exits.toFullThrottleS.median > 0, 'lifted corner exit should have positive time to full throttle')
+  }
+})
+
 test('formatStatsRows returns empty array for null or missing stats', () => {
   assert.deepEqual(statsApi.formatStatsRows(null), [])
   assert.deepEqual(statsApi.formatStatsRows(undefined), [])
@@ -387,7 +611,7 @@ test('formatStatsRows hides sections when count < MIN_EVENTS', () => {
       brakeWithSteering: 0.05
     },
     braking: { count: 2, peakDecelG: null, durationS: null, releaseS: null, trailBrakingShare: null },
-    corners: { count: 1, lateralG: null },
+    corners: { count: 1, flatOutCount: 0, lateralG: null },
     exits: { count: 0, toFullThrottleS: null }
   }
 
@@ -424,6 +648,7 @@ test('formatStatsRows returns rows with required keys and no judgmental words', 
     },
     corners: {
       count: 5,
+      flatOutCount: 1,
       lateralG: { median: 1.02, p10: 0.9, p90: 1.1, max: 1.2 },
       frontSlipDominantShare: 0.6
     },
@@ -471,6 +696,8 @@ test('formatStatsRows returns rows with required keys and no judgmental words', 
 
   const cornersRow = rows.find(r => r.key === 'corners')
   assert.ok(cornersRow.text.includes('lateral'), 'corners row should mention lateral g')
+  assert.ok(cornersRow.text.includes('peak'), 'corners row should mention peak lateral')
+  assert.ok(cornersRow.text.includes('flat-out'), 'corners row should mention flat-out count')
 
   const exitsRow = rows.find(r => r.key === 'exits')
   assert.ok(exitsRow.text.includes('full throttle'), 'exits row should mention full throttle')
@@ -509,6 +736,7 @@ test('stats finalize returns null distributions when no events', () => {
   assert.equal(result.braking.count, 0)
   assert.equal(result.braking.peakDecelG, null)
   assert.equal(result.corners.count, 0)
+  assert.equal(result.corners.flatOutCount, 0)
   assert.equal(result.corners.lateralG, null)
   assert.equal(result.exits.count, 0)
   assert.equal(result.exits.toFullThrottleS, null)
