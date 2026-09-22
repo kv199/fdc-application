@@ -41,6 +41,8 @@ OFF → READY → WAITING → RECORDING → FINALIZING → READY
 - `WAITING` means recording is armed but valid telemetry has not arrived. No
   empty database session is created.
 - The first valid sample creates the local session and enters `RECORDING`.
+  While it records, the history shows the session as `RECORDING IN PROGRESS`
+  with a `LIVE` duration and a disabled `DELETE` control.
 - Samples are appended to SQLite in ordered batches rather than one command per
   packet.
 - Raw packets that share a game timestamp are retained for reproducibility, but

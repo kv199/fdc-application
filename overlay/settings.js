@@ -1791,6 +1791,13 @@
   }
 
   function driverAnalysisResultCopy(entry) {
+    if (entry?.status === 'recording') {
+      return {
+        label: 'RECORDING IN PROGRESS',
+        instruction: 'Press STOP to finish. The analysis and statistics appear here when the recording is saved.',
+        detail: ''
+      }
+    }
     if (entry?.result === 'issue' && entry.label) {
       const eligible = Math.max(0, Number(entry.opportunityCount) || 0)
       const evidence = Math.max(0, Number(entry.evidenceCount) || 0)
@@ -1861,7 +1868,7 @@
     for (const entry of entries) {
       const row = document.createElement('article')
       row.className = 'driver-analysis-history-row'
-      row.dataset.result = entry.result
+      row.dataset.result = entry.status === 'recording' ? 'recording' : entry.result
 
       const meta = document.createElement('div')
       meta.className = 'driver-analysis-history-row__meta'
@@ -1870,7 +1877,7 @@
       date.dateTime = Number.isFinite(recordedDate.getTime()) ? recordedDate.toISOString() : ''
       date.textContent = formatDriverAnalysisDate(entry.recordedAt)
       const duration = document.createElement('span')
-      duration.textContent = formatDriverAnalysisDuration(entry.durationMs)
+      duration.textContent = entry.status === 'recording' ? 'LIVE' : formatDriverAnalysisDuration(entry.durationMs)
       const storage = document.createElement('span')
       storage.textContent = formatDriverAnalysisSize(entry.storageBytes)
       meta.append(date, duration, storage)
