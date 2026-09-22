@@ -375,7 +375,7 @@ struct ShiftLightVariantResolution {
 }
 
 const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 4;
-const HUD_SCHEMA_VERSION: i32 = 18;
+const HUD_SCHEMA_VERSION: i32 = 19;
 const MAX_SHIFT_LIGHT_CEILING_SAMPLES: usize = 3;
 const MAX_SHIFT_LIGHT_GEAR_TARGETS: usize = 9;
 const MAX_SHIFT_LIGHT_SHIFT_SAMPLES: usize = 64;
@@ -1048,6 +1048,8 @@ fn migrate_shift_light_v15(connection: &mut Connection) -> Result<(), String> {
 
 const DRIVER_ANALYSIS_SCHEMA_VERSION: i32 = HUD_SCHEMA_VERSION;
 const DRIVER_ANALYSIS_INITIAL_SCHEMA_VERSION: i32 = 17;
+const DRIVER_ANALYSIS_RESULTS_SCHEMA_VERSION: i32 = 18;
+const DRIVER_ANALYSIS_STATS_MAX_BYTES: usize = 16 * 1024;
 
 fn create_driver_analysis_tables(transaction: &Transaction<'_>) -> Result<(), String> {
     transaction
@@ -1076,6 +1078,7 @@ fn create_driver_analysis_tables(transaction: &Transaction<'_>) -> Result<(), St
                vehicle_pi INTEGER,
                vehicle_drivetrain INTEGER,
                vehicle_rpm_limit REAL,
+               stats_json TEXT,
                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
              );
              CREATE INDEX IF NOT EXISTS idx_driver_analysis_sessions_newest
@@ -1207,6 +1210,32 @@ fn migrate_driver_analysis_v18(connection: &mut Connection) -> Result<(), String
         .map_err(|error| format!("unable to commit Driver Analysis v18 migration: {error}"))
 }
 
+fn migrate_driver_analysis_stats(connection: &mut Connection) -> Result<(), String> {
+    let has_stats = table_has_column(connection, "driver_analysis_sessions", "stats_json")?;
+    let transaction = connection.transaction().map_err(|error| {
+        format!("unable to start Driver Analysis statistics migration: {error}")
+    })?;
+    if !has_stats {
+        transaction
+            .execute(
+                "ALTER TABLE driver_analysis_sessions ADD COLUMN stats_json TEXT",
+                [],
+            )
+            .map_err(|error| format!("unable to add Driver Analysis statistics: {error}"))?;
+    }
+    transaction
+        .execute(
+            "UPDATE hud_schema_version SET version = ?1",
+            params![DRIVER_ANALYSIS_SCHEMA_VERSION],
+        )
+        .map_err(|error| {
+            format!("unable to update Driver Analysis statistics schema version: {error}")
+        })?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Driver Analysis statistics migration: {error}"))
+}
+
 fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), String> {
     connection
         .execute_batch(
@@ -1308,7 +1337,7 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
     }
     if version < DRIVER_ANALYSIS_INITIAL_SCHEMA_VERSION {
         migrate_driver_analysis_schema(connection)?;
-    } else if version < DRIVER_ANALYSIS_SCHEMA_VERSION {
+    } else if version < DRIVER_ANALYSIS_RESULTS_SCHEMA_VERSION {
         migrate_driver_analysis_v18(connection)?;
     } else {
         let transaction = connection
@@ -1318,6 +1347,9 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
         transaction
             .commit()
             .map_err(|error| format!("unable to commit Driver Analysis schema check: {error}"))?;
+    }
+    if version < DRIVER_ANALYSIS_SCHEMA_VERSION {
+        migrate_driver_analysis_stats(connection)?;
     }
     Ok(())
 }
@@ -1413,6 +1445,8 @@ struct DriverAnalysisFinalResultInput {
     detector_confidence: Option<f64>,
     attribution_confidence: Option<f64>,
     severity: Option<f64>,
+    #[serde(default)]
+    stats_json: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -1438,6 +1472,7 @@ struct DriverAnalysisHistoryRecord {
     storage_bytes: i64,
     algorithm_version: String,
     vehicle_identity: JsonValue,
+    stats: Option<JsonValue>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -1493,6 +1528,17 @@ fn validate_json_text(value: Option<&str>, field: &str) -> Result<String, String
         .map_err(|error| format!("Driver Analysis {field} must be valid JSON: {error}"))?;
     serde_json::to_string(&parsed)
         .map_err(|error| format!("Driver Analysis {field} cannot be serialized: {error}"))
+}
+
+fn validate_stats_json(value: &str) -> Result<String, String> {
+    let text = validate_json_text(Some(value), "statsJson")?;
+    if !text.starts_with('{') {
+        return Err("Driver Analysis statsJson must be an object".to_string());
+    }
+    if text.len() > DRIVER_ANALYSIS_STATS_MAX_BYTES {
+        return Err("Driver Analysis statsJson is too large".to_string());
+    }
+    Ok(text)
 }
 
 fn json_identity(value: &JsonValue) -> Result<String, String> {
@@ -1818,6 +1864,11 @@ fn save_driver_analysis_result_in_connection(
         None => None,
     };
     validate_final_result(result)?;
+    let stats_json = result
+        .stats_json
+        .as_deref()
+        .map(validate_stats_json)
+        .transpose()?;
     let mut maneuver_ids = HashSet::new();
     for opportunity in opportunities {
         if opportunity.maneuver_id.trim().is_empty() || opportunity.maneuver_id.len() > 120 {
@@ -1975,7 +2026,8 @@ fn save_driver_analysis_result_in_connection(
                  label = ?5, instruction = ?6, maneuver_count = ?7,
                  opportunity_count = ?8, evidence_count = ?9,
                  detector_confidence = ?10, attribution_confidence = ?11, severity = ?12,
-                 algorithm_version = COALESCE(?13, algorithm_version)
+                 algorithm_version = COALESCE(?13, algorithm_version),
+                 stats_json = COALESCE(?15, stats_json)
              WHERE id = ?14",
             params![
                 if algorithm_version.is_some() { None } else { Some(finished_at_ms) },
@@ -1992,6 +2044,7 @@ fn save_driver_analysis_result_in_connection(
                 result.severity,
                 algorithm_version,
                 session_id,
+                stats_json,
             ],
         )
         .map_err(|error| format!("unable to finalize Driver Analysis session: {error}"))?;
@@ -2026,6 +2079,10 @@ fn history_record_from_row(
     let vehicle_identity_text: String = row.get(17)?;
     let vehicle_identity = serde_json::from_str(&vehicle_identity_text)
         .unwrap_or(JsonValue::String(vehicle_identity_text));
+    let stats = row
+        .get::<_, Option<String>>(19)?
+        .and_then(|text| serde_json::from_str::<JsonValue>(&text).ok())
+        .filter(JsonValue::is_object);
     Ok(DriverAnalysisHistoryRecord {
         id: row.get(0)?,
         recorded_at: started_at,
@@ -2047,6 +2104,7 @@ fn history_record_from_row(
         storage_bytes: row.get(15)?,
         algorithm_version: row.get(16)?,
         vehicle_identity,
+        stats,
     })
 }
 
@@ -2054,7 +2112,7 @@ const DRIVER_ANALYSIS_HISTORY_SELECT: &str =
     "SELECT id, started_at_ms, finished_at_ms, status, result, main_kind, label, instruction,
             sample_count, maneuver_count, opportunity_count, evidence_count,
             detector_confidence, attribution_confidence, severity, storage_bytes,
-            algorithm_version, vehicle_identity, vehicle_ordinal
+            algorithm_version, vehicle_identity, vehicle_ordinal, stats_json
        FROM driver_analysis_sessions";
 
 fn load_driver_analysis_sessions_from_connection(
@@ -2101,6 +2159,28 @@ fn load_driver_analysis_session_from_connection(
             history_record_from_row,
         )
         .map_err(|error| format!("unable to load Driver Analysis session: {error}"))
+}
+
+fn save_driver_analysis_stats_in_connection(
+    connection: &Connection,
+    session_id: i64,
+    stats_json: &str,
+) -> Result<DriverAnalysisHistoryRecord, String> {
+    if session_id <= 0 {
+        return Err("Driver Analysis session id must be positive".to_string());
+    }
+    let stats_json = validate_stats_json(stats_json)?;
+    let changed = connection
+        .execute(
+            "UPDATE driver_analysis_sessions SET stats_json = ?1
+             WHERE id = ?2 AND status <> 'recording'",
+            params![stats_json, session_id],
+        )
+        .map_err(|error| format!("unable to save Driver Analysis statistics: {error}"))?;
+    if changed == 0 {
+        return Err("Driver Analysis session is not eligible for statistics".to_string());
+    }
+    load_driver_analysis_session_from_connection(connection, session_id)
 }
 
 fn delete_driver_analysis_session_in_connection(
@@ -2335,6 +2415,16 @@ fn reanalyze_driver_analysis_session(
         &result,
         Some(&algorithm_version),
     )
+}
+
+#[tauri::command]
+fn save_driver_analysis_stats(
+    app: AppHandle,
+    session_id: i64,
+    stats_json: String,
+) -> Result<DriverAnalysisHistoryRecord, String> {
+    let connection = open_shift_light_db(&app)?;
+    save_driver_analysis_stats_in_connection(&connection, session_id, &stats_json)
 }
 
 #[tauri::command]
@@ -4535,6 +4625,7 @@ fn main() {
             finalize_driver_analysis_session,
             load_driver_analysis_samples,
             reanalyze_driver_analysis_session,
+            save_driver_analysis_stats,
             load_driver_analysis_sessions,
             delete_driver_analysis_session,
             import_legacy_driver_analysis_history,
@@ -6152,6 +6243,7 @@ mod tests {
             detector_confidence: Some(0.9),
             attribution_confidence: Some(0.8),
             severity: Some(0.6),
+            stats_json: None,
         }
     }
 
@@ -6542,5 +6634,267 @@ mod tests {
                 .unwrap(),
             1
         );
+    }
+
+    #[test]
+    fn v19_migration_adds_driver_analysis_stats_column() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE hud_schema_version (version INTEGER NOT NULL);
+                 INSERT INTO hud_schema_version VALUES (18);
+                 CREATE TABLE driver_analysis_sessions (
+                   id INTEGER PRIMARY KEY,
+                   started_at_ms INTEGER NOT NULL CHECK (started_at_ms >= 0),
+                   finished_at_ms INTEGER CHECK (finished_at_ms IS NULL OR finished_at_ms >= started_at_ms),
+                   status TEXT NOT NULL CHECK (status IN ('recording', 'completed', 'insufficient', 'interrupted', 'error')),
+                   result TEXT CHECK (result IS NULL OR result IN ('issue', 'insufficient', 'ambiguous', 'no_recurring_problem', 'interrupted')),
+                   main_kind TEXT,
+                   label TEXT NOT NULL DEFAULT '',
+                   instruction TEXT NOT NULL DEFAULT '',
+                   sample_count INTEGER NOT NULL DEFAULT 0 CHECK (sample_count >= 0),
+                   maneuver_count INTEGER NOT NULL DEFAULT 0 CHECK (maneuver_count >= 0),
+                   opportunity_count INTEGER NOT NULL DEFAULT 0 CHECK (opportunity_count >= 0),
+                   evidence_count INTEGER NOT NULL DEFAULT 0 CHECK (evidence_count >= 0),
+                   detector_confidence REAL CHECK (detector_confidence IS NULL OR detector_confidence BETWEEN 0 AND 1),
+                   attribution_confidence REAL CHECK (attribution_confidence IS NULL OR attribution_confidence BETWEEN 0 AND 1),
+                   severity REAL CHECK (severity IS NULL OR severity BETWEEN 0 AND 1),
+                   storage_bytes INTEGER NOT NULL DEFAULT 0 CHECK (storage_bytes >= 0),
+                   algorithm_version TEXT NOT NULL CHECK (length(trim(algorithm_version)) > 0),
+                   vehicle_identity TEXT NOT NULL CHECK (length(trim(vehicle_identity)) > 0),
+                   vehicle_ordinal INTEGER,
+                   vehicle_pi INTEGER,
+                   vehicle_drivetrain INTEGER,
+                   vehicle_rpm_limit REAL
+                 );
+                 INSERT INTO driver_analysis_sessions
+                   (id, started_at_ms, status, algorithm_version, vehicle_identity)
+                 VALUES (1, 1000, 'recording', 'v1', '{}');",
+            )
+            .unwrap();
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        let version: i32 = connection
+            .query_row("SELECT version FROM hud_schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, HUD_SCHEMA_VERSION);
+        assert!(table_has_column(&connection, "driver_analysis_sessions", "stats_json").unwrap());
+        let stats: Option<String> = connection
+            .query_row(
+                "SELECT stats_json FROM driver_analysis_sessions WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stats, None);
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let version_after: i32 = connection
+            .query_row("SELECT version FROM hud_schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version_after, HUD_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn driver_analysis_finalization_saves_stats_json() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_sample(0)],
+        )
+        .unwrap();
+
+        let mut result = driver_analysis_result("issue");
+        result.stats_json = Some("{\"version\":1,\"distanceM\":1200.5}".to_string());
+
+        let record = finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &[],
+            &[],
+            &result,
+        )
+        .unwrap();
+
+        assert!(record.stats.is_some());
+        let stats_obj = record.stats.unwrap();
+        assert_eq!(stats_obj.get("version").and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(
+            stats_obj.get("distanceM").and_then(|v| v.as_f64()),
+            Some(1200.5)
+        );
+
+        let mut reanalysis_result = driver_analysis_result("no_recurring_problem");
+        reanalysis_result.stats_json = None;
+
+        let reanalyzed = save_driver_analysis_result_in_connection(
+            &mut connection,
+            session_id,
+            &[],
+            &[],
+            &reanalysis_result,
+            Some("driver-analysis-rules-v3"),
+        )
+        .unwrap();
+
+        assert!(reanalyzed.stats.is_some());
+        let stats_obj = reanalyzed.stats.unwrap();
+        assert_eq!(stats_obj.get("version").and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(
+            stats_obj.get("distanceM").and_then(|v| v.as_f64()),
+            Some(1200.5)
+        );
+    }
+
+    #[test]
+    fn driver_analysis_rejects_invalid_stats_json() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+
+        let mut result_non_json = driver_analysis_result("issue");
+        result_non_json.stats_json = Some("not json at all".to_string());
+
+        assert!(
+            finalize_driver_analysis_session_in_connection(
+                &mut connection,
+                session_id,
+                &[],
+                &[],
+                &result_non_json,
+            )
+            .is_err()
+        );
+        let status: String = connection
+            .query_row(
+                "SELECT status FROM driver_analysis_sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "recording");
+
+        let mut result_array = driver_analysis_result("issue");
+        result_array.stats_json = Some("[1,2,3]".to_string());
+
+        assert!(
+            finalize_driver_analysis_session_in_connection(
+                &mut connection,
+                session_id,
+                &[],
+                &[],
+                &result_array,
+            )
+            .is_err()
+        );
+        let status: String = connection
+            .query_row(
+                "SELECT status FROM driver_analysis_sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "recording");
+
+        let mut result_too_large = driver_analysis_result("issue");
+        let large_object = format!(
+            "{{\"data\":\"{}\"}}",
+            "x".repeat(DRIVER_ANALYSIS_STATS_MAX_BYTES)
+        );
+        result_too_large.stats_json = Some(large_object);
+
+        assert!(
+            finalize_driver_analysis_session_in_connection(
+                &mut connection,
+                session_id,
+                &[],
+                &[],
+                &result_too_large,
+            )
+            .is_err()
+        );
+        let status: String = connection
+            .query_row(
+                "SELECT status FROM driver_analysis_sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "recording");
+    }
+
+    #[test]
+    fn driver_analysis_stats_backfill_updates_only_finished_sessions() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+
+        // Saving stats on 'recording' session should fail
+        assert!(
+            save_driver_analysis_stats_in_connection(&connection, session_id, "{\"test\":1}")
+                .is_err()
+        );
+
+        // Saving stats on non-existent session should fail
+        assert!(
+            save_driver_analysis_stats_in_connection(&connection, 999, "{\"test\":1}").is_err()
+        );
+
+        // Finalize the session to mark it as completed with some data
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_sample(0)],
+        )
+        .unwrap();
+
+        let result = finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_opportunity()],
+            &[],
+            &driver_analysis_result("insufficient"),
+        )
+        .unwrap();
+        let opportunity_count_before = result.opportunity_count;
+        let result_before = result.result.clone();
+        let status_before = result.status.clone();
+
+        // Now saving stats on the finished session should succeed
+        let updated = save_driver_analysis_stats_in_connection(
+            &connection,
+            session_id,
+            "{\"version\":2,\"testData\":true}",
+        )
+        .unwrap();
+
+        assert!(updated.stats.is_some());
+        let stats_obj = updated.stats.unwrap();
+        assert_eq!(stats_obj.get("version").and_then(|v| v.as_i64()), Some(2));
+        assert_eq!(
+            stats_obj.get("testData").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        // Verify nothing else changed
+        assert_eq!(updated.result.as_deref(), result_before.as_deref());
+        assert_eq!(updated.status, status_before);
+        assert_eq!(updated.opportunity_count, opportunity_count_before);
     }
 }

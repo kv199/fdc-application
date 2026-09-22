@@ -115,12 +115,39 @@ RECURRING PROBLEM DETECTED`. An ambiguous result is reserved for a recurring
 candidate that the available evidence cannot reliably attribute to the driver,
 or for qualified candidates that are too close to prioritize.
 
+## Recording statistics
+
+Every saved recording also shows descriptive statistics of the telemetry that
+was collected, regardless of its result. They describe what happened in this
+recording only. There are no reference values, grades, scores, or
+recommendations. The statistics are computed by
+`overlay/driver-analysis-stats.js` from the same normalized samples and phases
+that feed the maneuver analysis. Samples separated by a telemetry gap do not
+contribute time or distance, and a braking event or corner interrupted by a gap
+is discarded.
+
+| Row | Content |
+| --- | --- |
+| `OVERVIEW` | Distance, average speed over moving time (at least 5 km/h), and maximum speed. Distance uses the game's distance delta when it is consistent with speed and falls back to integrated speed otherwise. The recording duration is shown in the card metadata. |
+| `PEDALS` | Share of moving time with full throttle (at least 95%), partial throttle, coasting, and braking. The brake share also shows the part with steering applied. |
+| `BRAKING` | Braking events that start at 40 km/h or more and last 0.3–15 s: median peak deceleration, duration, release time (from the last brake level at or above 80% of that event's peak until release), and the share of events with at least 150 ms of trail braking. |
+| `CORNERS` | Maneuvers of at least 0.3 s: median and maximum peak lateral acceleration, and the share of turning time in which the front slip angle exceeds the rear. |
+| `EXIT` | Corners where full throttle was reached: median time from the corner's minimum speed to full throttle and median peak longitudinal acceleration afterwards. |
+
+The `BRAKING`, `CORNERS`, and `EXIT` rows are hidden when fewer than three
+events were measured. Each row shows its event count, and hovering a row
+shows the 10th–90th percentile range. The statistics are stored as versioned
+JSON in the session's `stats_json` column. Finished recordings with saved samples
+but missing or outdated statistics are replayed locally once to compute them.
+Their results are not changed.
+
 ## Local persistence and deletion
 
 The native layer stores data in the application-data `fdc.sqlite` database:
 
 - `driver_analysis_sessions` stores lifecycle, vehicle identity, algorithm
-  version, counts, selected result, and approximate storage size;
+  version, counts, selected result, recording statistics, and approximate
+  storage size;
 - `driver_analysis_samples` stores the selected normalized telemetry needed to
   reproduce or improve analysis;
 - `driver_analysis_opportunities` stores eligible windows and their context;

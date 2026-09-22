@@ -225,7 +225,8 @@
       result: {
         result, mainKind: result === 'issue' ? main?.kind || null : null, label: result === 'issue' ? main?.label || '' : '', instruction: result === 'issue' ? main?.instruction || '' : '',
         detectorConfidence: result === 'issue' ? main?.detectorConfidence ?? null : null, attributionConfidence: result === 'issue' ? main?.attributionConfidence ?? null : null,
-        severity: result === 'issue' ? main?.severity ?? null : null
+        severity: result === 'issue' ? main?.severity ?? null : null,
+        statsJson: finalized.stats ? JSON.stringify(finalized.stats) : null
       }
     }
   }
@@ -395,16 +396,20 @@
       : globalScope.DriverAnalysisEngine?.createDriverAnalysisEngine
     const onResult = typeof options.onResult === 'function' ? options.onResult : () => undefined
     const onError = typeof options.onError === 'function' ? options.onError : () => undefined
+    const statsVersion = options.statsVersion ?? globalScope.DriverAnalysisStats?.STATS_VERSION ?? null
     if (!invoke || typeof createEngine !== 'function') return []
 
     const probe = createEngine()
     const algorithmVersion = probe?.snapshot?.().algorithmVersion
     if (!algorithmVersion) return []
     const history = await invoke('load_driver_analysis_sessions')
+    const needsReanalysis = entry => entry?.status === 'completed' && entry?.algorithmVersion !== algorithmVersion
+    const needsStats = entry => statsVersion !== null
+      && entry?.status !== 'recording'
+      && Number(entry?.storageBytes) > 0
+      && Number(entry?.stats?.version) !== Number(statsVersion)
     const candidates = (Array.isArray(history) ? history : []).filter(entry => (
-      entry?.status === 'completed'
-      && Number(entry?.sampleCount) > 0
-      && entry?.algorithmVersion !== algorithmVersion
+      Number(entry?.sampleCount) > 0 && (needsReanalysis(entry) || needsStats(entry))
     ))
     const updated = []
     for (const entry of candidates) {
@@ -430,12 +435,18 @@
           await new Promise(resolve => setTimeout(resolve, 0))
         }
         if (replayedSamples === 0) throw new Error(`Driver Analysis session ${entry.id} has no replay samples`)
-        const payload = persistencePayload(engine.finalize(), false)
-        const result = await invoke('reanalyze_driver_analysis_session', {
-          sessionId: Number(entry.id),
-          algorithmVersion,
-          ...payload
-        })
+        const finalized = engine.finalize()
+        if (!needsReanalysis(entry) && !finalized.stats) throw new Error(`Driver Analysis session ${entry.id} produced no statistics`)
+        const result = needsReanalysis(entry)
+          ? await invoke('reanalyze_driver_analysis_session', {
+            sessionId: Number(entry.id),
+            algorithmVersion,
+            ...persistencePayload(finalized, false)
+          })
+          : await invoke('save_driver_analysis_stats', {
+            sessionId: Number(entry.id),
+            statsJson: JSON.stringify(finalized.stats || {})
+          })
         updated.push(result)
         onResult(result)
       } catch (error) {

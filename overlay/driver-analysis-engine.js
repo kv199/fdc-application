@@ -7,10 +7,12 @@
     ? require('./driver-analysis-evidence.js') : globalScope.DriverAnalysisEvidence
   const scoringApi = typeof module !== 'undefined' && module.exports && typeof document === 'undefined'
     ? require('./driver-analysis-scoring.js') : globalScope.DriverAnalysisScoring
-  const api = factory(stateApi || {}, opportunitiesApi || {}, evidenceApi || {}, scoringApi || {})
+  const statsApi = typeof module !== 'undefined' && module.exports && typeof document === 'undefined'
+    ? require('./driver-analysis-stats.js') : globalScope.DriverAnalysisStats
+  const api = factory(stateApi || {}, opportunitiesApi || {}, evidenceApi || {}, scoringApi || {}, statsApi || {})
   if (typeof module !== 'undefined' && module.exports && typeof document === 'undefined') module.exports = api
   else globalScope.DriverAnalysisEngine = api
-}(typeof globalThis !== 'undefined' ? globalThis : this, (stateApi, opportunitiesApi, evidenceApi, scoringApi) => {
+}(typeof globalThis !== 'undefined' ? globalThis : this, (stateApi, opportunitiesApi, evidenceApi, scoringApi, statsApi) => {
   'use strict'
 
   const DRIVER_ANALYSIS_VERSION = 'driver-analysis-rules-v3'
@@ -20,6 +22,7 @@
     const thresholds = options.thresholds || {}
     const state = options.state || new stateApi.DriverAnalysisState({ thresholds })
     const opportunities = options.opportunities || new opportunitiesApi.DriverAnalysisOpportunities({ thresholds })
+    const stats = options.stats || statsApi.createDriverAnalysisStats?.() || null
     let sampleCount = 0
     let lastSnapshot = state.snapshot(null)
     let lastResult = null
@@ -27,6 +30,7 @@
     function reset(reason = null) {
       state.reset(reason)
       opportunities.reset()
+      stats?.reset()
       sampleCount = 0
       lastSnapshot = state.snapshot(null, reason)
       lastResult = null
@@ -36,6 +40,7 @@
     function resetTransient(reason = 'telemetry_gap') {
       state.resetTransient(reason)
       opportunities.resetTransient(reason)
+      stats?.resetTransient()
       lastSnapshot = state.snapshot(null, reason)
       return snapshot()
     }
@@ -43,6 +48,7 @@
     function update(telemetry) {
       const result = state.update(telemetry)
       lastSnapshot = result
+      stats?.update(result)
       if (result?.valid !== true) {
         if (result?.resetReason) opportunities.resetTransient(result.resetReason)
         return { ...snapshot(), state: result, finalizedOpportunities: [] }
@@ -71,6 +77,7 @@
         aggregates: summary.aggregates,
         maneuverCount: summary.maneuverCount,
         sampleCount,
+        stats: stats?.finalize() || null,
         algorithmVersion: DRIVER_ANALYSIS_VERSION
       }
       lastResult = result

@@ -1889,6 +1889,25 @@
         detail.textContent = copy.detail
         finding.append(detail)
       }
+      const statsRows = globalScope.DriverAnalysisStats?.formatStatsRows?.(entry.stats) || []
+      if (statsRows.length > 0) {
+        const stats = document.createElement('dl')
+        stats.className = 'driver-analysis-stats'
+        for (const statsRow of statsRows) {
+          const term = document.createElement('dt')
+          term.textContent = statsRow.label
+          if (statsRow.count !== null) {
+            const count = document.createElement('small')
+            count.textContent = `n=${statsRow.count}`
+            term.append(count)
+          }
+          const value = document.createElement('dd')
+          value.textContent = statsRow.text
+          if (statsRow.title) value.title = statsRow.title
+          stats.append(term, value)
+        }
+        finding.append(stats)
+      }
 
       const actions = document.createElement('div')
       actions.className = 'driver-analysis-history-row__actions'
