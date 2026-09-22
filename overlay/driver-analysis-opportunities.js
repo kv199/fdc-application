@@ -58,13 +58,20 @@
       && number(sample?.steerMagnitude, Math.abs(number(sample?.steer, 0))) >= thresholds.frontSteerMin
   }
 
+  function isTurningForFrontScrub(snapshot, thresholds) {
+    const sample = snapshot?.sample
+    return (snapshot?.phase === PHASES.TURN_IN || snapshot?.phase === PHASES.ROTATION || snapshot?.phase === PHASES.EXIT)
+      && number(sample?.speedKmh, 0) >= thresholds.minSpeedKmh
+      && number(sample?.steerMagnitude, Math.abs(number(sample?.steer, 0))) >= thresholds.frontSteerMin
+  }
+
   function eligible(type, snapshot, thresholds) {
     const sample = snapshot?.sample
     const previous = snapshot?.previousSample
     if (!sample || sample.surfaceDisturbed === true || sample.rumbleContact === true || number(sample.puddleDepth, 0) > 0 || sample.suspensionFullyExtended === true) return false
     const steer = number(sample.steerMagnitude, Math.abs(number(sample.steer, 0)))
     if (type === PROBLEM_TYPES.FRONT_SCRUB) {
-      return isTurning(snapshot, thresholds) && (
+      return isTurningForFrontScrub(snapshot, thresholds) && (
         steer >= thresholds.frontSteerMin
         && ((number(sample.steerRate, 0) >= thresholds.frontSteerGrowthMin) || number(sample.frontSlip, 0) >= 0.12)
       )
@@ -141,7 +148,8 @@
         const qualifies = eligible(type, snapshot, this.thresholds)
         const isBridgedGap = snapshot.phase === PHASES.STRAIGHT && snapshot.inManeuver === true
         const phaseRelevant = (type === PROBLEM_TYPES.EXIT_WHEELSPIN && snapshot.phase === PHASES.EXIT)
-          || (type !== PROBLEM_TYPES.EXIT_WHEELSPIN && (snapshot.phase === PHASES.TURN_IN || snapshot.phase === PHASES.ROTATION || isBridgedGap))
+          || (type === PROBLEM_TYPES.FRONT_SCRUB && (snapshot.phase === PHASES.TURN_IN || snapshot.phase === PHASES.ROTATION || snapshot.phase === PHASES.EXIT || isBridgedGap))
+          || (type !== PROBLEM_TYPES.EXIT_WHEELSPIN && type !== PROBLEM_TYPES.FRONT_SCRUB && (snapshot.phase === PHASES.TURN_IN || snapshot.phase === PHASES.ROTATION || isBridgedGap))
         const disturbed = sample.surfaceDisturbed === true || sample.rumbleContact === true || number(sample.puddleDepth, 0) > 0 || sample.suspensionFullyExtended === true
         if (disturbed && candidate !== undefined) {
           emitted.push(this.finish(candidate, 'incomplete', false, 'surface_disturbance'))
@@ -190,6 +198,7 @@
       let finalInvalidReason = invalidReason || null
       if (active.type === PROBLEM_TYPES.FRONT_SCRUB && finalValid && outcome === 'clean') {
         let sustainedSteerMs = 0
+        let hasThrottleRise = false
         for (let i = 1; i < active.samples.length; i += 1) {
           const prevSample = active.samples[i - 1]
           const currSample = active.samples[i]
@@ -199,8 +208,10 @@
             const deltaMs = number(currSample.timestampMs, 0) - number(prevSample.timestampMs, 0)
             if (deltaMs > 0) sustainedSteerMs += deltaMs
           }
+          if (number(currSample.throttle, 0) >= 0.2) hasThrottleRise = true
         }
         context.sustainedSteerMs = sustainedSteerMs
+        if (hasThrottleRise) context.onThrottle = true
         if (sustainedSteerMs < this.thresholds.frontSustainMs) {
           finalValid = false
           finalInvalidReason = 'steering_pulse'

@@ -15,7 +15,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, (stateApi, opportunitiesApi, evidenceApi, scoringApi, statsApi) => {
   'use strict'
 
-  const DRIVER_ANALYSIS_VERSION = 'driver-analysis-rules-v5'
+  const DRIVER_ANALYSIS_VERSION = 'driver-analysis-rules-v6'
   const PROBLEM_META = scoringApi.PROBLEM_META || {}
 
   function createDriverAnalysisEngine(options = {}) {

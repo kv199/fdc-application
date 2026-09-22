@@ -20,6 +20,7 @@
     frontSlipLimit: 0.9,
     frontLateralLoss: 0.5,
     frontYawLoss: 0.05,
+    frontThrottleRiseMax: 0.1,
     responseLoss: 0.02,
     wheelspinSlip: 0.12,
     wheelspinSlipRise: 0.04,
@@ -84,6 +85,8 @@
     const slipIndex = samples.findIndex(sample => n(sample.frontSlip, 0) - n(first.frontSlip, 0) >= thresholds.frontSlipRise)
     const ordered = actionIndex >= 0 && slipIndex >= 0 && actionIndex <= slipIndex
     const triggered = action && ordered && peakFrontSlip >= thresholds.frontSlipLimit && ((lateralLoss ?? -Infinity) >= thresholds.frontLateralLoss || (yawLoss ?? -Infinity) >= thresholds.frontYawLoss)
+    const throttleRise = slipIndex >= 0 ? max(samples.slice(0, slipIndex + 1).map(sample => n(sample.throttle, 0)), 0) - n(first.throttle, 0) : 0
+    const confounders = triggered && throttleRise >= thresholds.frontThrottleRiseMax ? ['throttle_rise'] : []
     const marginConfidence = average([
       clamp((steerGrowth - thresholds.frontSteerGrowth) / 0.15),
       clamp((peakFrontSlip - thresholds.frontSlipLimit) / 0.3),
@@ -96,7 +99,8 @@
       inputCausality: ordered && max([lateralLoss, yawLoss], 0) >= 0 ? 0.9 : 0.35,
       detectorConfidence: clamp(confidence),
       severity,
-      metrics: { steerGrowth, frontSlipRise, peakFrontSlip, lateralResponseLoss: lateralLoss, yawResponseLoss: yawLoss, responseLoss: max([lateralLoss, yawLoss], 0) }
+      confounders,
+      metrics: { steerGrowth, frontSlipRise, peakFrontSlip, lateralResponseLoss: lateralLoss, yawResponseLoss: yawLoss, responseLoss: max([lateralLoss, yawLoss], 0), throttleRise }
     }
   }
 
@@ -125,6 +129,7 @@
       inputCausality: ordered ? 0.9 : 0.35,
       detectorConfidence: clamp(confidence),
       severity: clamp(average([slipPeak / 0.35, Math.max(0, thresholds.wheelspinAccelerationMax - (accelerationPeak ?? thresholds.wheelspinAccelerationMax)) / 2], 0)),
+      confounders: [],
       metrics: { throttleGrowth, drivenSlipPeak: slipPeak, drivenSlipRise: slipRise, effectiveAccelerationPeak: accelerationPeak }
     }
   }
@@ -150,6 +155,7 @@
       inputCausality: overlap && responseLossValue >= 0 ? 0.88 : 0.35,
       detectorConfidence: clamp(confidence),
       severity: clamp(average([maxCombined / 1.2, responseLossValue / 0.3], 0)),
+      confounders: [],
       metrics: { maxBrake, maxSteer, maxFrontCombinedSlip: maxCombined, lateralResponseLoss: lateralLoss, yawResponseLoss: yawLoss, responseLoss: responseLossValue }
     }
   }
@@ -179,6 +185,7 @@
       inputCausality: releaseRate >= thresholds.releaseRate ? 0.92 : 0.3,
       detectorConfidence: clamp(confidence),
       severity: clamp(average([releaseRate / 4, (lateralLoss ?? 0) / 0.4, (yawLoss ?? 0) / 0.45, rearSlipRise / 0.25], 0)),
+      confounders: [],
       metrics: { releaseRate, previousBrake, lateralResponseLoss: lateralLoss, yawResponseLoss: yawLoss, rearSlipRise }
     }
   }
@@ -195,8 +202,9 @@
         : opportunity.type === TYPES.BRAKE_STEERING_OVERLOAD
           ? detectBrakeSteering(samples, thresholds)
           : detectAbruptRelease(opportunity, thresholds)
-    const confounders = samples.some(sample => sample.surfaceDisturbed === true || sample.rumbleContact === true || n(sample.puddleDepth, 0) > 0 || sample.suspensionFullyExtended === true)
+    const surfaceConfounders = samples.some(sample => sample.surfaceDisturbed === true || sample.rumbleContact === true || n(sample.puddleDepth, 0) > 0 || sample.suspensionFullyExtended === true)
       ? ['surface_disturbance'] : []
+    const confounders = [...(detection.confounders || []), ...surfaceConfounders]
     if (confounders.length) return { outcome: 'ambiguous', detectorConfidence: detection.detectorConfidence, attributionConfidence: 0.2, severity: detection.severity, metrics: finiteMetrics(detection.metrics), confounders }
     const cleanMatches = Array.isArray(options.cleanCounterexamples) ? options.cleanCounterexamples : []
     const sameContext = cleanMatches.filter(candidate => candidate.context?.carIdentity === opportunity.context?.carIdentity && candidate.context?.speedBin === opportunity.context?.speedBin && candidate.context?.gear === opportunity.context?.gear)

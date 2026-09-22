@@ -80,6 +80,13 @@ A front scrub opportunity needs at least 200 ms of sustained steering. Shorter
 steering pulses are stored as invalid `steering_pulse` opportunities and do not
 count toward recurrence.
 
+Front scrub is evaluated in turn-in, rotation, and exit, so corners taken on
+throttle are checked as well. Brake and steering overload and abrupt brake
+release remain limited to turn-in and rotation. When a front scrub trigger
+follows a throttle increase of at least 10% before the front slip rise, the
+slip may come from traction rather than steering, so the opportunity is marked
+`ambiguous` with the `throttle_rise` confounder.
+
 Each opportunity ends as `clean`, `problem`, `ambiguous`, or `incomplete` and
 has one evidence record. Evidence includes detector confidence, driver
 attribution confidence, severity, causal metrics, counterexample support, and
