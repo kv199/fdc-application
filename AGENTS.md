@@ -34,8 +34,7 @@
 - FDC receives Forza Horizon 6 Data Out on `127.0.0.1:5301`.
 - The native Tauri layer decodes packets into normalized telemetry.
 - The browser overlay consumes telemetry through `queueTelemetry`.
-- Current consumers are the Telemetry HUD, lap timing, Garage, Driver Analysis, and Shift Light.
-- Garage and Shift Light persistence belong to FDC-local `fdc.sqlite`.
+- Feature persistence belongs to FDC-local `fdc.sqlite`.
 - Preserve the local runtime boundary and do not add another telemetry transport.
 
 ## Documentation routing

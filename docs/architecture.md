@@ -43,8 +43,8 @@ The native layer emits one normalized telemetry payload for each valid FH6
 packet. The browser overlay receives it through the `direct_telemetry` Tauri
 event and passes it to `queueTelemetry`. That function fans the sample out to
 the HUD renderer, lap timing, Delta, Garage, Driver Analysis, Shift Light, and Events
-runtime. The feature branches keep their own state; Garage, Shift Light, and
-Events write to the local SQLite profile store.
+runtime. The feature branches keep their own state; Garage, Driver Analysis,
+Shift Light, and Events write to the local SQLite profile store.
 
 Events uses this same normalized sample rather than the game's result-screen
 UI. Its recording logic reads `isRaceOn`, `lap.current`, `lap.raceTime`,
@@ -76,7 +76,8 @@ the tray menu, Direct Data Out, and native persistence commands.
   application data directory and apply the versioned schema there.
 
 The native layer registers the Driver Analysis global recording hotkey (keyboard
-or game-controller button via Windows Raw Input) but does not analyze driving
+or game-controller button via Windows Raw Input) while Driver Analysis is
+enabled, and a refused binding does not stop startup. It does not analyze driving
 telemetry. The browser consumer operates on normalized telemetry after the IPC
 boundary.
 
@@ -127,7 +128,7 @@ Driver Analysis uses its own Tauri commands: `create_driver_analysis_session`,
 `append_driver_analysis_samples`, `finalize_driver_analysis_session`,
 `load_driver_analysis_samples`, `reanalyze_driver_analysis_session`,
 `save_driver_analysis_stats`, `load_driver_analysis_sessions`,
-`delete_driver_analysis_session`, and `import_legacy_driver_analysis_history`.
+and `delete_driver_analysis_session`.
 Each recording also stores versioned descriptive statistics of the collected
 telemetry next to its result.
 
@@ -192,16 +193,16 @@ the native window or Shift Light database cross the Tauri IPC boundary.
 `fdc.sqlite` is created in the FDC application-data directory, outside the
 repository. Its current schema contains the Garage car and configuration
 registries; four Shift Light tables for configuration identity, limiter
-samples, per-pair targets, and accepted comparisons; Events tables; and schema
-version metadata. Transactional native commands enforce Garage recency and
+samples, per-pair targets, and accepted comparisons; Events tables; Driver
+Analysis sessions, samples, opportunities, and evidence; and schema version
+metadata. Transactional native commands enforce Garage recency and
 Shift Light identity. Shift Light replaces one bounded compact calibration per
 configuration, skips writes for unchanged snapshots, and retries failed writes
 in memory with bounded backoff. Reset invalidates stale writers.
 
-The Driver Analysis calibration envelope, active findings, raw telemetry, lap
-timing state, and HUD telemetry history remain in memory. Driver Analysis
-preferences and compact completed results use versioned browser storage.
-Configuration and layout preferences use the versioned local browser storage
+Lap timing state and HUD telemetry history remain in memory. Driver Analysis
+keeps only its enable state and hotkey in versioned browser storage; its
+recordings and results live in `fdc.sqlite`. Configuration and layout preferences use the versioned local browser storage
 keys listed above. The Configuration window size and last valid on-screen
 position are stored separately in the FDC application-data directory so a
 user-resized and moved window is restored on the next launch. A saved position

@@ -52,10 +52,14 @@ OFF → READY → WAITING → RECORDING → FINALIZING → READY
   continue.
 - A vehicle-identity change ends the session as interrupted. Completed
   opportunities remain available in the saved recording.
-- An unfinished `recording` row found after restart is recovered as
-  `interrupted` when history is loaded.
+- An unfinished `recording` row is recovered as `interrupted` when FDC
+  starts.
 
-The default hotkey is `Ctrl+Shift+F9`. The binding can be a keyboard combination or a
+The default hotkey is `Ctrl+Shift+F9`. The hotkey is registered only while
+Driver Analysis is enabled and is released when it is disabled. If Windows
+refuses the binding, for example because another program holds it, FDC keeps
+running, shows the error in Configuration, and recording remains available
+from the `RECORD` control. The binding can be a keyboard combination or a
 game-controller button. Keyboard rules: Windows-key combinations, bare keys,
 `Alt+F4`, `Alt+Tab`, `Ctrl+Escape`, and `Ctrl+Shift+Escape` are rejected.
 Controller buttons are captured from any HID joystick, gamepad, or multi-axis
@@ -214,9 +218,7 @@ session, samples, opportunities, and evidence are removed together.
 
 Only enable state, hotkey, and optional controller device name remain in browser storage under
 `fdc.driver-analysis.settings.v1` (hotkeyLabel is trimmed to 80 characters and
-stored only when the binding is a controller button). Results created by the previous MVP are
-imported once from `fdc.driver-analysis.history.v1` into SQLite and the legacy
-browser history is then cleared.
+stored only when the binding is a controller button).
 
 When the analysis algorithm version changes, completed recordings with saved
 samples are replayed locally once. Their raw samples, timestamps, vehicle

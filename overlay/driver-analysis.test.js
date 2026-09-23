@@ -74,24 +74,6 @@ test('legacy settings without hotkeyLabel load unchanged', () => {
   assert.deepEqual(controllerSettings, { enabled: true, hotkey: 'Controller:346E:0006:116', hotkeyLabel: 'Device' })
 })
 
-test('history is durable, bounded and ordered newest first', () => {
-  const storage = memoryStorage()
-  analysis.appendHistory({ id: 'old', recordedAt: '2026-09-18T10:00:00.000Z', durationMs: 1000, result: 'insufficient' }, storage)
-  analysis.appendHistory({
-    id: 'new',
-    recordedAt: '2026-09-18T11:00:00.000Z',
-    durationMs: 2000,
-    sampleCount: 20,
-    evidenceCount: 3,
-    result: 'issue',
-    mainKind: 'front_scrub',
-    label: 'FRONT SCRUB',
-    instruction: 'Reduce steering'
-  }, storage)
-
-  assert.deepEqual(analysis.readHistory(storage).map(entry => entry.id), ['new', 'old'])
-})
-
 test('recorder waits for telemetry, batches samples and persists one final result', async () => {
   let currentTime = Date.parse('2026-09-18T12:00:00.000Z')
   const calls = []

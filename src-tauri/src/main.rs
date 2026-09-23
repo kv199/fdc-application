@@ -37,7 +37,6 @@ const DIRECT_UDP_BIND: &str = "127.0.0.1:5301";
 const DIRECT_TELEMETRY_EVENT: &str = "direct_telemetry";
 const DIRECT_STATUS_EVENT: &str = "direct_status";
 const DRIVER_ANALYSIS_HOTKEY_EVENT: &str = "driver_analysis_hotkey";
-const DEFAULT_DRIVER_ANALYSIS_HOTKEY: &str = "Ctrl+Shift+F9";
 
 #[derive(Default)]
 struct DirectSourceState {
@@ -51,7 +50,7 @@ struct DriverAnalysisHotkeyState {
 impl Default for DriverAnalysisHotkeyState {
     fn default() -> Self {
         Self {
-            current: Mutex::new(DEFAULT_DRIVER_ANALYSIS_HOTKEY.to_string()),
+            current: Mutex::new(String::new()),
         }
     }
 }
@@ -1477,27 +1476,6 @@ struct DriverAnalysisHistoryRecord {
     stats: Option<JsonValue>,
 }
 
-#[derive(Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DriverAnalysisLegacyHistoryInput {
-    id: Option<String>,
-    recorded_at: String,
-    duration_ms: Option<i64>,
-    sample_count: Option<i64>,
-    maneuver_count: Option<i64>,
-    opportunity_count: Option<i64>,
-    evidence_count: Option<i64>,
-    result: Option<String>,
-    main_kind: Option<String>,
-    label: Option<String>,
-    instruction: Option<String>,
-    detector_confidence: Option<f64>,
-    attribution_confidence: Option<f64>,
-    severity: Option<f64>,
-    algorithm_version: Option<String>,
-    vehicle_identity: Option<JsonValue>,
-}
-
 fn now_epoch_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -2204,153 +2182,6 @@ fn delete_driver_analysis_session_in_connection(
     Ok(())
 }
 
-fn parse_legacy_recorded_at(connection: &Connection, value: &str) -> Result<i64, String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err("legacy Driver Analysis history has no recordedAt".to_string());
-    }
-    if let Ok(number) = trimmed.parse::<i64>() {
-        if number >= 0 {
-            return Ok(number);
-        }
-    }
-    connection
-        .query_row(
-            "SELECT CAST(strftime('%s', ?1) AS INTEGER) * 1000",
-            params![trimmed],
-            |row| row.get::<_, Option<i64>>(0),
-        )
-        .optional()
-        .map_err(|error| format!("unable to parse legacy Driver Analysis timestamp: {error}"))?
-        .flatten()
-        .filter(|value| *value >= 0)
-        .ok_or_else(|| "legacy Driver Analysis recordedAt is invalid".to_string())
-}
-
-fn import_legacy_driver_analysis_history_in_connection(
-    connection: &mut Connection,
-    entries: &[DriverAnalysisLegacyHistoryInput],
-) -> Result<Vec<DriverAnalysisHistoryRecord>, String> {
-    let transaction = connection
-        .transaction()
-        .map_err(|error| format!("unable to start Driver Analysis legacy import: {error}"))?;
-    for entry in entries {
-        let recorded_at_ms = parse_legacy_recorded_at(&transaction, &entry.recorded_at)?;
-        let duration_ms = entry.duration_ms.unwrap_or(0);
-        if duration_ms < 0 {
-            return Err("legacy Driver Analysis duration must be non-negative".to_string());
-        }
-        let result = entry.result.as_deref().unwrap_or("insufficient");
-        if !matches!(
-            result,
-            "issue" | "insufficient" | "ambiguous" | "no_recurring_problem" | "interrupted"
-        ) {
-            return Err("unknown legacy Driver Analysis result".to_string());
-        }
-        validate_confidence(entry.detector_confidence, "detectorConfidence")?;
-        validate_confidence(entry.attribution_confidence, "attributionConfidence")?;
-        validate_confidence(entry.severity, "severity")?;
-        let main_kind = if result == "issue" {
-            entry
-                .main_kind
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-        } else {
-            None
-        };
-        if result == "issue"
-            && (main_kind.is_none()
-                || entry.label.as_deref().unwrap_or("").trim().is_empty()
-                || entry.instruction.as_deref().unwrap_or("").trim().is_empty())
-        {
-            return Err("legacy Driver Analysis issue is missing result text".to_string());
-        }
-        let legacy_id = entry
-            .id
-            .clone()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| {
-                format!(
-                    "legacy:{recorded_at_ms}:{}:{}:{}",
-                    duration_ms,
-                    main_kind.unwrap_or(""),
-                    entry.label.as_deref().unwrap_or("")
-                )
-            });
-        if legacy_id.len() > 240 {
-            return Err("legacy Driver Analysis id is too long".to_string());
-        }
-        let vehicle_identity = match entry.vehicle_identity.as_ref() {
-            Some(value) => json_identity(value)?,
-            None => "{\"legacy\":true}".to_string(),
-        };
-        let sample_count = entry.sample_count.unwrap_or(0);
-        let maneuver_count = entry.maneuver_count.unwrap_or(0);
-        let opportunity_count = entry.opportunity_count.unwrap_or(0);
-        let evidence_count = entry.evidence_count.unwrap_or(0);
-        if [
-            sample_count,
-            maneuver_count,
-            opportunity_count,
-            evidence_count,
-        ]
-        .iter()
-        .any(|value| *value < 0)
-        {
-            return Err("legacy Driver Analysis counts must be non-negative".to_string());
-        }
-        let algorithm_version = entry
-            .algorithm_version
-            .as_deref()
-            .unwrap_or("legacy-driver-analysis-v1")
-            .trim();
-        if algorithm_version.is_empty() || algorithm_version.len() > 120 {
-            return Err("legacy Driver Analysis algorithm version is invalid".to_string());
-        }
-        transaction
-            .execute(
-                "INSERT OR IGNORE INTO driver_analysis_sessions
-                   (legacy_id, started_at_ms, finished_at_ms, status, result, main_kind,
-                    label, instruction, sample_count, maneuver_count, opportunity_count,
-                    evidence_count, detector_confidence, attribution_confidence, severity,
-                    algorithm_version, vehicle_identity)
-                 VALUES (?1, ?2, ?3, 'completed', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
-                         ?12, ?13, ?14, ?15, ?16)",
-                params![
-                    legacy_id,
-                    recorded_at_ms,
-                    recorded_at_ms.saturating_add(duration_ms),
-                    result,
-                    main_kind,
-                    if result == "issue" {
-                        entry.label.as_deref().unwrap_or("")
-                    } else {
-                        ""
-                    },
-                    if result == "issue" {
-                        entry.instruction.as_deref().unwrap_or("")
-                    } else {
-                        ""
-                    },
-                    sample_count,
-                    maneuver_count,
-                    opportunity_count,
-                    evidence_count,
-                    entry.detector_confidence,
-                    entry.attribution_confidence,
-                    entry.severity,
-                    algorithm_version,
-                    vehicle_identity,
-                ],
-            )
-            .map_err(|error| format!("unable to import Driver Analysis history: {error}"))?;
-    }
-    transaction
-        .commit()
-        .map_err(|error| format!("unable to commit Driver Analysis legacy import: {error}"))?;
-    load_driver_analysis_sessions_from_connection(connection)
-}
-
 #[tauri::command]
 fn create_driver_analysis_session(
     app: AppHandle,
@@ -2441,15 +2272,6 @@ fn load_driver_analysis_sessions(
 fn delete_driver_analysis_session(app: AppHandle, session_id: i64) -> Result<(), String> {
     let connection = open_shift_light_db(&app)?;
     delete_driver_analysis_session_in_connection(&connection, session_id)
-}
-
-#[tauri::command]
-fn import_legacy_driver_analysis_history(
-    app: AppHandle,
-    entries: Vec<DriverAnalysisLegacyHistoryInput>,
-) -> Result<Vec<DriverAnalysisHistoryRecord>, String> {
-    let mut connection = open_shift_light_db(&app)?;
-    import_legacy_driver_analysis_history_in_connection(&mut connection, &entries)
 }
 
 const EVENT_CLASSES: [&str; 9] = ["Any", "D", "C", "B", "A", "S1", "S2", "R", "X"];
@@ -4464,6 +4286,31 @@ fn set_driver_analysis_hotkey(
     Ok(new_string)
 }
 
+#[tauri::command]
+fn clear_driver_analysis_hotkey(
+    app: AppHandle,
+    state: State<DriverAnalysisHotkeyState>,
+) -> Result<(), String> {
+    let mut current = state
+        .current
+        .lock()
+        .map_err(|_| "Driver Analysis hotkey state is unavailable".to_string())?;
+
+    if current.is_empty() {
+        return Ok(());
+    }
+
+    if let Ok(HotkeyBinding::Keyboard(keyboard)) = classify_hotkey_binding(&current) {
+        app.global_shortcut()
+            .unregister(keyboard.as_str())
+            .map_err(|error| format!("unable to release the Driver Analysis hotkey: {error}"))?;
+    }
+
+    controller_input::set_active_binding(None)?;
+    *current = String::new();
+    Ok(())
+}
+
 fn eval_main<R: Runtime>(app: &AppHandle<R>, script: &str) -> Result<(), String> {
     let Some(window) = app.get_webview_window("main") else {
         return Err("main HUD window is not available".to_string());
@@ -4683,6 +4530,7 @@ fn main() {
             set_configuration_always_on_top,
             set_settings_window_context,
             set_driver_analysis_hotkey,
+            clear_driver_analysis_hotkey,
             controller_input::start_controller_capture,
             controller_input::stop_controller_capture,
             create_driver_analysis_session,
@@ -4693,7 +4541,6 @@ fn main() {
             save_driver_analysis_stats,
             load_driver_analysis_sessions,
             delete_driver_analysis_session,
-            import_legacy_driver_analysis_history,
             sync_route_status,
             sync_shift_light_status,
             get_app_version,
@@ -4755,11 +4602,11 @@ fn main() {
                 .expect("settings window must exist");
 
             restore_settings_window_state(app.handle(), &settings)?;
-            let connection = open_shift_light_db(app.handle()).map_err(std::io::Error::other)?;
-            recover_driver_analysis_sessions_in_connection(&connection)
-                .map_err(std::io::Error::other)?;
-            app.global_shortcut()
-                .register(DEFAULT_DRIVER_ANALYSIS_HOTKEY)?;
+            if let Err(error) = open_shift_light_db(app.handle())
+                .and_then(|connection| recover_driver_analysis_sessions_in_connection(&connection))
+            {
+                eprintln!("unable to recover Driver Analysis sessions: {error}");
+            }
 
             if let Some(monitor) = app.primary_monitor()? {
                 let monitor_position = monitor.position();
@@ -6746,51 +6593,6 @@ mod tests {
                 )
                 .unwrap(),
             0
-        );
-    }
-
-    #[test]
-    fn driver_analysis_legacy_import_is_idempotent() {
-        let mut connection = driver_analysis_connection();
-        let entry = DriverAnalysisLegacyHistoryInput {
-            id: Some("legacy-1".to_string()),
-            recorded_at: "2026-09-18T10:00:00.000Z".to_string(),
-            duration_ms: Some(2_000),
-            sample_count: Some(20),
-            maneuver_count: Some(2),
-            opportunity_count: Some(2),
-            evidence_count: Some(1),
-            result: Some("issue".to_string()),
-            main_kind: Some("front_scrub".to_string()),
-            label: Some("Front Scrub".to_string()),
-            instruction: Some("Reduce steering".to_string()),
-            detector_confidence: None,
-            attribution_confidence: None,
-            severity: None,
-            algorithm_version: None,
-            vehicle_identity: None,
-        };
-        let first = import_legacy_driver_analysis_history_in_connection(
-            &mut connection,
-            std::slice::from_ref(&entry),
-        )
-        .unwrap();
-        let second = import_legacy_driver_analysis_history_in_connection(
-            &mut connection,
-            std::slice::from_ref(&entry),
-        )
-        .unwrap();
-        assert_eq!(first.len(), 1);
-        assert_eq!(second.len(), 1);
-        assert_eq!(
-            connection
-                .query_row(
-                    "SELECT COUNT(*) FROM driver_analysis_sessions WHERE legacy_id = 'legacy-1'",
-                    [],
-                    |row| row.get::<_, i64>(0),
-                )
-                .unwrap(),
-            1
         );
     }
 

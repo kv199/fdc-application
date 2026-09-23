@@ -1778,14 +1778,6 @@ h1 {
   line-height: 1.4;
 }
 
-.driver-analysis-history-row__detail {
-  display: block;
-  margin-top: 8px;
-  color: #71717a;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
 .driver-analysis-history-row__summary {
   margin-top: 8px;
   color: #d4d4d8;

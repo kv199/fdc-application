@@ -1811,44 +1811,36 @@
     if (entry?.status === 'recording') {
       return {
         label: 'RECORDING IN PROGRESS',
-        instruction: 'Press STOP to finish. The analysis and statistics appear here when the recording is saved.',
-        detail: ''
+        instruction: 'Press STOP to finish. The analysis and statistics appear here when the recording is saved.'
       }
     }
     if (entry?.result === 'issue' && entry.label) {
-      const eligible = Math.max(0, Number(entry.opportunityCount) || 0)
-      const evidence = Math.max(0, Number(entry.evidenceCount) || 0)
       return {
         label: entry.label,
-        instruction: entry.instruction || 'Repeat the session before changing another part of your technique.',
-        detail: eligible > 0 ? `Observed in ${evidence} of ${eligible} eligible opportunities.` : ''
+        instruction: entry.instruction || 'Repeat the session before changing another part of your technique.'
       }
     }
     if (entry?.result === 'ambiguous') {
       return {
         label: 'NO DRIVER-DOMINANT PATTERN DETECTED',
-        instruction: 'The recording could not separate driver input from vehicle behaviour.',
-        detail: ''
+        instruction: 'The recording could not separate driver input from vehicle behaviour.'
       }
     }
     if (entry?.result === 'no_recurring_problem') {
       return {
         label: 'NO RECURRING PROBLEM DETECTED',
-        instruction: 'No single technique problem repeated often enough in this recording.',
-        detail: ''
+        instruction: 'No single technique problem repeated often enough in this recording.'
       }
     }
     if (entry?.result === 'interrupted' || entry?.status === 'interrupted') {
       return {
         label: 'RECORDING INTERRUPTED',
-        instruction: 'Only completed maneuvers were kept. Record another asphalt session for a reliable result.',
-        detail: ''
+        instruction: 'Only completed maneuvers were kept. Record another asphalt session for a reliable result.'
       }
     }
     return {
       label: 'NOT ENOUGH ELIGIBLE MANEUVERS',
-      instruction: 'Record a longer asphalt session before changing technique.',
-      detail: ''
+      instruction: 'Record a longer asphalt session before changing technique.'
     }
   }
 
@@ -1923,14 +1915,6 @@
         }
       }
       finding.append(label, instruction)
-
-      const copy = driverAnalysisResultCopy(entry)
-      if (copy.detail && !isIssue && !patternSummary) {
-        const detail = document.createElement('span')
-        detail.className = 'driver-analysis-history-row__detail'
-        detail.textContent = copy.detail
-        finding.append(detail)
-      }
 
       const summaryLine = globalScope.DriverAnalysisStats?.formatSummaryLine?.(entry.stats)
       if (summaryLine) {
@@ -2015,17 +1999,8 @@
     }
   }
 
-  async function importLegacyDriverAnalysisHistory() {
-    const legacy = driverAnalysisApi?.readHistory?.() || []
-    if (!Array.isArray(legacy) || legacy.length === 0) return false
-    await call('import_legacy_driver_analysis_history', { entries: legacy })
-    driverAnalysisApi?.clearHistory?.()
-    return true
-  }
-
   async function loadDriverAnalysisHistory() {
     try {
-      await importLegacyDriverAnalysisHistory()
       const history = await call('load_driver_analysis_sessions')
       renderDriverAnalysisHistory(Array.isArray(history) ? history : [])
       return driverAnalysisHistory
@@ -2090,7 +2065,13 @@
     renderDriverAnalysisState({ ...driverAnalysisState, enabled })
     try {
       await emitDriverAnalysisConfig({ enabled, hotkey: driverAnalysisSettings.hotkey })
-      setStatus(`DRIVER ANALYSIS ${enabled ? 'ENABLED' : 'DISABLED'}`)
+      const hotkeyReady = enabled
+        ? await setDriverAnalysisHotkey(driverAnalysisSettings.hotkey, false, driverAnalysisSettings.hotkeyLabel)
+        : await call('clear_driver_analysis_hotkey').then(() => true, error => {
+          setStatus(error.message || 'Unable to clear Driver Analysis hotkey', true)
+          return false
+        })
+      if (hotkeyReady) setStatus(`DRIVER ANALYSIS ${enabled ? 'ENABLED' : 'DISABLED'}`)
     } catch (error) {
       driverAnalysisSettings = driverAnalysisApi.writeSettings({ ...driverAnalysisSettings, enabled: !enabled })
       renderDriverAnalysisState({ ...driverAnalysisState, enabled: !enabled })
@@ -2103,6 +2084,10 @@
     if (!normalized) {
       if (announce) setStatus('USE CTRL, ALT OR SHIFT WITH ONE KEY. WINDOWS KEY IS NOT ALLOWED.', true)
       return false
+    }
+    if (!driverAnalysisSettings.enabled) {
+      driverAnalysisSettings = driverAnalysisApi.writeSettings({ ...driverAnalysisSettings, hotkey: normalized, hotkeyLabel })
+      return true
     }
     try {
       const registered = await call('set_driver_analysis_hotkey', { hotkey: normalized })
@@ -2117,7 +2102,7 @@
       return true
     } catch (error) {
       renderDriverAnalysisState(driverAnalysisState)
-      if (announce) setStatus(error.message || 'Unable to register Driver Analysis hotkey', true)
+      setStatus(error.message || 'Unable to register Driver Analysis hotkey', true)
       return false
     }
   }
@@ -2994,7 +2979,7 @@
   renderDriverAnalysisState(driverAnalysisState)
   renderDriverAnalysisHistory()
   void loadDriverAnalysisHistory()
-  void setDriverAnalysisHotkey(driverAnalysisSettings.hotkey, false, driverAnalysisSettings.hotkeyLabel)
+  if (driverAnalysisSettings.enabled) void setDriverAnalysisHotkey(driverAnalysisSettings.hotkey, false, driverAnalysisSettings.hotkeyLabel)
   void listenShiftLightEvents()
   void listenRouteEvents()
   void listenGarageEvents()

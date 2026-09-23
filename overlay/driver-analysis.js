@@ -6,9 +6,7 @@
   'use strict'
 
   const SETTINGS_STORAGE_KEY = 'fdc.driver-analysis.settings.v1'
-  const HISTORY_STORAGE_KEY = 'fdc.driver-analysis.history.v1'
   const DEFAULT_HOTKEY = 'Ctrl+Shift+F9'
-  const HISTORY_LIMIT = 100
   const SAMPLE_BATCH_MS = 1000
   const REANALYSIS_PAGE_SIZE = 2000
   const BLOCKED_HOTKEYS = new Set(['Alt+F4', 'Alt+Tab', 'Ctrl+Escape', 'Ctrl+Shift+Escape'])
@@ -19,10 +17,6 @@
 
   function storageSet(storage, key, value) {
     try { storage?.setItem?.(key, value) } catch { /* restricted webview */ }
-  }
-
-  function storageRemove(storage, key) {
-    try { storage?.removeItem?.(key) } catch { /* restricted webview */ }
   }
 
   function normalizeSettings(value) {
@@ -108,51 +102,6 @@
     }
     return normalized.replaceAll('+', ' + ')
   }
-
-  function isoDate(value) {
-    const date = new Date(value)
-    return Number.isFinite(date.getTime()) ? date.toISOString() : null
-  }
-
-  function normalizeHistoryEntry(value) {
-    if (!value || typeof value !== 'object') return null
-    const recordedAt = isoDate(value.recordedAt ?? value.startedAt)
-    if (!recordedAt) return null
-    const result = ['issue', 'insufficient', 'ambiguous', 'no_recurring_problem', 'interrupted'].includes(value.result) ? value.result : 'insufficient'
-    const issue = result === 'issue' && typeof value.mainKind === 'string' && String(value.label || '').trim() && String(value.instruction || '').trim()
-    return {
-      id: String(value.id || Date.parse(recordedAt)), recordedAt,
-      durationMs: Math.max(0, Math.round(Number(value.durationMs) || 0)), sampleCount: Math.max(0, Math.round(Number(value.sampleCount) || 0)),
-      maneuverCount: Math.max(0, Math.round(Number(value.maneuverCount) || 0)), opportunityCount: Math.max(0, Math.round(Number(value.opportunityCount) || 0)),
-      evidenceCount: Math.max(0, Math.round(Number(value.evidenceCount) || 0)),
-      result: issue ? 'issue' : result === 'issue' ? 'insufficient' : result,
-      mainKind: issue ? value.mainKind : null, label: issue ? String(value.label).trim() : '', instruction: issue ? String(value.instruction).trim() : ''
-    }
-  }
-
-  function sortHistoryNewestFirst(entries) {
-    return entries.slice().sort((left, right) => Date.parse(right.recordedAt) - Date.parse(left.recordedAt) || String(right.id).localeCompare(String(left.id)))
-  }
-
-  function readHistory(storage = globalScope.localStorage) {
-    try {
-      const stored = JSON.parse(storageGet(storage, HISTORY_STORAGE_KEY) || '[]')
-      return Array.isArray(stored) ? sortHistoryNewestFirst(stored.map(normalizeHistoryEntry).filter(Boolean)).slice(0, HISTORY_LIMIT) : []
-    } catch { return [] }
-  }
-
-  function writeHistory(entries, storage = globalScope.localStorage) {
-    const history = sortHistoryNewestFirst((Array.isArray(entries) ? entries : []).map(normalizeHistoryEntry).filter(Boolean)).slice(0, HISTORY_LIMIT)
-    storageSet(storage, HISTORY_STORAGE_KEY, JSON.stringify(history))
-    return history
-  }
-
-  function appendHistory(entry, storage = globalScope.localStorage) {
-    const normalized = normalizeHistoryEntry(entry)
-    return normalized ? writeHistory([normalized, ...readHistory(storage)], storage) : readHistory(storage)
-  }
-
-  function clearHistory(storage = globalScope.localStorage) { storageRemove(storage, HISTORY_STORAGE_KEY) }
 
   function finite(value, fallback = 0) {
     const number = Number(value)
@@ -330,7 +279,7 @@
       phase = 'recording'
       publish()
       const input = {
-        algorithmVersion: engine.snapshot?.().algorithmVersion || 'driver-analysis-rules-v2',
+        algorithmVersion: engine.snapshot?.().algorithmVersion,
         vehicleIdentity: { ordinal: car.ordinal, pi: car.pi, drivetrain: car.drivetrain, rpmMax: car.rpmMax }, startedAtMs: startedAt,
         vehicleOrdinal: car.ordinal, vehiclePi: car.pi, vehicleDrivetrain: car.drivetrain, vehicleRpmLimit: car.rpmMax
       }
@@ -491,10 +440,10 @@
   }
 
   return {
-    DEFAULT_HOTKEY, HISTORY_LIMIT, HISTORY_STORAGE_KEY, SETTINGS_STORAGE_KEY,
-    appendHistory, clearHistory, createRecorder, formatHotkey, hotkeyFromKeyboardEvent,
-    isControllerHotkey, normalizeHistoryEntry, normalizeHotkey, normalizeSettings, persistedSample, persistencePayload,
-    readHistory, readSettings, reanalyzeStoredSessions, replayTelemetry, sortHistoryNewestFirst,
-    vehicleIdentity, writeHistory, writeSettings
+    DEFAULT_HOTKEY, SETTINGS_STORAGE_KEY,
+    createRecorder, formatHotkey, hotkeyFromKeyboardEvent,
+    isControllerHotkey, normalizeHotkey, normalizeSettings, persistedSample, persistencePayload,
+    readSettings, reanalyzeStoredSessions, replayTelemetry,
+    vehicleIdentity, writeSettings
   }
 }))

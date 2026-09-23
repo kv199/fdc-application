@@ -19,8 +19,7 @@ test('FDC uses only current versioned browser storage keys', () => {
     'fdc.display-preferences.v1',
     'fdc.hud-visibility.v1',
     'fdc.overlay-visibility.v1',
-    'fdc.driver-analysis.settings.v1',
-    'fdc.driver-analysis.history.v1'
+    'fdc.driver-analysis.settings.v1'
   ]) {
     assert.match(storageSources, new RegExp(key.replaceAll('.', '\\.'), 'u'))
   }

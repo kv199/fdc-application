@@ -408,13 +408,6 @@
     if (!stats || typeof stats !== 'object' || finite(stats.version) === null) return []
     const rows = []
 
-    // OVERVIEW row
-    const distanceKm = finite(stats.distanceM) === null ? null : stats.distanceM / 1000
-    const overview = join([
-      distanceKm === null || distanceKm <= 0 ? null : `${distanceKm.toFixed(1)} km`,
-      finite(stats.avgSpeedKmh) === null ? null : `avg ${Math.round(stats.avgSpeedKmh)} / max ${Math.round(finite(stats.maxSpeedKmh) ?? 0)} km/h`
-    ])
-
     // PEDALS row
     const pedals = stats.pedals || {}
     if (finite(stats.movingMs) > 0 && finite(pedals.brake) !== null) {
