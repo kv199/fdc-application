@@ -22,6 +22,8 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
+mod controller_input;
+
 const SETTINGS_WINDOW_STATE_FILE: &str = "settings-window-size.json";
 #[cfg(test)]
 const SETTINGS_DEFAULT_WIDTH: u32 = 820;
@@ -4305,6 +4307,11 @@ fn settings_window_title(context: &str) -> String {
     format!("FDC · {context} · v{}", get_app_version())
 }
 
+enum HotkeyBinding {
+    Keyboard(String),
+    Controller(controller_input::ControllerBinding),
+}
+
 fn normalize_driver_analysis_hotkey(value: &str) -> Result<String, String> {
     let mut ctrl = false;
     let mut alt = false;
@@ -4390,35 +4397,71 @@ fn normalize_driver_analysis_hotkey(value: &str) -> Result<String, String> {
     Ok(normalized)
 }
 
+fn classify_hotkey_binding(value: &str) -> Result<HotkeyBinding, String> {
+    // Try to parse as controller binding first
+    if let Some(binding) = controller_input::parse_controller_binding(value) {
+        return Ok(HotkeyBinding::Controller(binding));
+    }
+
+    // Otherwise try as keyboard
+    let normalized = normalize_driver_analysis_hotkey(value)?;
+    Ok(HotkeyBinding::Keyboard(normalized))
+}
+
 #[tauri::command]
 fn set_driver_analysis_hotkey(
     app: AppHandle,
     state: State<DriverAnalysisHotkeyState>,
     hotkey: String,
 ) -> Result<String, String> {
-    let normalized = normalize_driver_analysis_hotkey(&hotkey)?;
+    let new_binding = classify_hotkey_binding(&hotkey)?;
     let mut current = state
         .current
         .lock()
         .map_err(|_| "Driver Analysis hotkey state is unavailable".to_string())?;
-    if *current == normalized {
-        return Ok(normalized);
+
+    let new_string = match &new_binding {
+        HotkeyBinding::Keyboard(k) => k.clone(),
+        HotkeyBinding::Controller(c) => c.format(),
+    };
+
+    if *current == new_string {
+        return Ok(new_string);
     }
 
     let previous = current.clone();
-    app.global_shortcut()
-        .unregister(previous.as_str())
-        .map_err(|error| {
-            format!("unable to release the previous Driver Analysis hotkey: {error}")
-        })?;
-    if let Err(error) = app.global_shortcut().register(normalized.as_str()) {
-        let _ = app.global_shortcut().register(previous.as_str());
-        return Err(format!(
-            "unable to register {normalized}; choose another hotkey: {error}"
-        ));
+    let previous_binding = classify_hotkey_binding(&previous).ok();
+
+    // Unregister previous keyboard binding if it was keyboard
+    if let Some(HotkeyBinding::Keyboard(prev_kbd)) = &previous_binding {
+        app.global_shortcut()
+            .unregister(prev_kbd.as_str())
+            .map_err(|error| {
+                format!("unable to release the previous Driver Analysis hotkey: {error}")
+            })?;
     }
-    *current = normalized.clone();
-    Ok(normalized)
+
+    match (&previous_binding, &new_binding) {
+        (_, HotkeyBinding::Keyboard(new_kbd)) => {
+            // Register new keyboard binding
+            if let Err(error) = app.global_shortcut().register(new_kbd.as_str()) {
+                // Rollback to previous
+                if let Some(HotkeyBinding::Keyboard(prev_kbd)) = &previous_binding {
+                    let _ = app.global_shortcut().register(prev_kbd.as_str());
+                }
+                return Err(format!(
+                    "unable to register {new_kbd}; choose another hotkey: {error}"
+                ));
+            }
+            controller_input::set_active_binding(None)?;
+        }
+        (_, HotkeyBinding::Controller(new_ctrl)) => {
+            controller_input::set_active_binding(Some(*new_ctrl))?;
+        }
+    }
+
+    *current = new_string.clone();
+    Ok(new_string)
 }
 
 fn eval_main<R: Runtime>(app: &AppHandle<R>, script: &str) -> Result<(), String> {
@@ -4640,6 +4683,8 @@ fn main() {
             set_configuration_always_on_top,
             set_settings_window_context,
             set_driver_analysis_hotkey,
+            controller_input::start_controller_capture,
+            controller_input::stop_controller_capture,
             create_driver_analysis_session,
             append_driver_analysis_samples,
             finalize_driver_analysis_session,
@@ -4757,6 +4802,8 @@ fn main() {
 
             show_settings(app.handle())?;
 
+            controller_input::setup_controller_input(app.handle().clone());
+
             let _ = settings;
             Ok(())
         })
@@ -4826,6 +4873,33 @@ mod tests {
         assert!(normalize_driver_analysis_hotkey("F9").is_err());
         assert!(normalize_driver_analysis_hotkey("Win+R").is_err());
         assert!(normalize_driver_analysis_hotkey("Alt+F4").is_err());
+    }
+
+    #[test]
+    fn classify_hotkey_binding_recognizes_keyboard_and_controller() {
+        // Keyboard binding
+        match classify_hotkey_binding("Shift+Ctrl+f9") {
+            Ok(HotkeyBinding::Keyboard(k)) => {
+                assert_eq!(k, "Ctrl+Shift+F9");
+            }
+            _ => panic!("Expected keyboard binding"),
+        }
+
+        // Controller binding
+        match classify_hotkey_binding("Controller:346E:0006:116") {
+            Ok(HotkeyBinding::Controller(c)) => {
+                assert_eq!(c.vendor_id, 0x346E);
+                assert_eq!(c.product_id, 0x0006);
+                assert_eq!(c.button, 116);
+            }
+            _ => panic!("Expected controller binding"),
+        }
+
+        // Controller binding case insensitive prefix
+        match classify_hotkey_binding("controller:346e:0006:116") {
+            Ok(HotkeyBinding::Controller(_)) => {}
+            _ => panic!("Expected controller binding"),
+        }
     }
 
     #[test]

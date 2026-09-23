@@ -75,9 +75,10 @@ the tray menu, Direct Data Out, and native persistence commands.
 - Garage, Driver Analysis, Events, and Shift Light database commands open `fdc.sqlite` below the Tauri
   application data directory and apply the versioned schema there.
 
-The native layer registers the Driver Analysis global recording hotkey but does
-not analyze driving telemetry. The browser consumer operates on normalized
-telemetry after the IPC boundary.
+The native layer registers the Driver Analysis global recording hotkey (keyboard
+or game-controller button via Windows Raw Input) but does not analyze driving
+telemetry. The browser consumer operates on normalized telemetry after the IPC
+boundary.
 
 ## Browser overlay
 

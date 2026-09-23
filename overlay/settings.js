@@ -2058,8 +2058,8 @@
     driverAnalysisRecord.classList.toggle('driver-analysis-record--ready', enabled && !recording && !waiting && !busy)
     driverAnalysisHotkeyChange.disabled = !enabled || recording || waiting || busy
     driverAnalysisHotkeyValue.textContent = driverAnalysisHotkeyCapture
-      ? 'PRESS KEYS'
-      : driverAnalysisApi?.formatHotkey?.(hotkey) || hotkey
+      ? 'PRESS KEYS OR A BUTTON'
+      : driverAnalysisApi?.formatHotkey?.(hotkey, driverAnalysisSettings.hotkeyLabel) || hotkey
     driverAnalysisRecordingStatus.dataset.state = phase
     driverAnalysisRecordingStatus.textContent = phase.toUpperCase()
     driverAnalysisRecorderHint.textContent = busy
@@ -2098,7 +2098,7 @@
     }
   }
 
-  async function setDriverAnalysisHotkey(hotkey, announce = true) {
+  async function setDriverAnalysisHotkey(hotkey, announce = true, hotkeyLabel = '') {
     const normalized = driverAnalysisApi?.normalizeHotkey?.(hotkey)
     if (!normalized) {
       if (announce) setStatus('USE CTRL, ALT OR SHIFT WITH ONE KEY. WINDOWS KEY IS NOT ALLOWED.', true)
@@ -2106,11 +2106,14 @@
     }
     try {
       const registered = await call('set_driver_analysis_hotkey', { hotkey: normalized })
-      driverAnalysisSettings = driverAnalysisApi.writeSettings({ ...driverAnalysisSettings, hotkey: registered })
+      driverAnalysisSettings = driverAnalysisApi.writeSettings({ ...driverAnalysisSettings, hotkey: registered, hotkeyLabel })
       driverAnalysisState.hotkey = registered
       await emitDriverAnalysisConfig({ enabled: driverAnalysisSettings.enabled, hotkey: registered })
       renderDriverAnalysisState(driverAnalysisState)
-      if (announce) setStatus(`DRIVER ANALYSIS HOTKEY SET TO ${driverAnalysisApi.formatHotkey(registered).toUpperCase()}`)
+      if (announce) {
+        const formatted = driverAnalysisApi.formatHotkey(registered, driverAnalysisSettings.hotkeyLabel).toUpperCase()
+        setStatus(`DRIVER ANALYSIS HOTKEY SET TO ${formatted}`)
+      }
       return true
     } catch (error) {
       renderDriverAnalysisState(driverAnalysisState)
@@ -2137,11 +2140,24 @@
     }
   }
 
-  function setDriverAnalysisHotkeyCapture(active) {
+  async function setDriverAnalysisHotkeyCapture(active) {
+    const wasActive = driverAnalysisHotkeyCapture
     driverAnalysisHotkeyCapture = active === true
     driverAnalysisHotkeyChange.textContent = driverAnalysisHotkeyCapture ? 'CANCEL' : 'CHANGE'
     renderDriverAnalysisState(driverAnalysisState)
-    if (driverAnalysisHotkeyCapture) setStatus('PRESS A NEW DRIVER ANALYSIS HOTKEY')
+    if (driverAnalysisHotkeyCapture) {
+      setStatus('PRESS A KEY COMBINATION OR A CONTROLLER BUTTON')
+      try {
+        await call('start_controller_capture')
+      } catch {
+        setStatus('CONTROLLER CAPTURE UNAVAILABLE. PRESS A KEY COMBINATION.', true)
+      }
+    } else if (wasActive) {
+      try {
+        await call('stop_controller_capture')
+      } catch {
+      }
+    }
   }
 
   async function listenDriverAnalysisEvents() {
@@ -2157,6 +2173,14 @@
           ? 'ANALYSIS SAVED · NO RECURRING PROBLEM'
           : 'ANALYSIS SAVED · MORE EVIDENCE NEEDED')
       void loadDriverAnalysisHistory()
+    })
+    await eventApi.listen('driver_analysis_controller_captured', async event => {
+      if (!driverAnalysisHotkeyCapture) return
+      const binding = event?.payload?.binding
+      const deviceName = event?.payload?.deviceName || ''
+      if (!binding) return
+      await setDriverAnalysisHotkeyCapture(false)
+      await setDriverAnalysisHotkey(binding, true, deviceName)
     })
     await eventApi.emit('driver_analysis_status_request')
   }
@@ -2901,14 +2925,17 @@
     void sendDriverAnalysisAction(driverAnalysisState.recording ? 'stop' : 'record')
   })
   driverAnalysisHotkeyChange?.addEventListener('click', () => {
-    setDriverAnalysisHotkeyCapture(!driverAnalysisHotkeyCapture)
+    void setDriverAnalysisHotkeyCapture(!driverAnalysisHotkeyCapture)
+  })
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && driverAnalysisHotkeyCapture) void setDriverAnalysisHotkeyCapture(false)
   })
   document.addEventListener('keydown', event => {
     if (!driverAnalysisHotkeyCapture) return
     event.preventDefault()
     event.stopImmediatePropagation()
     if (event.key === 'Escape') {
-      setDriverAnalysisHotkeyCapture(false)
+      void setDriverAnalysisHotkeyCapture(false)
       setStatus('DRIVER ANALYSIS HOTKEY UNCHANGED')
       return
     }
@@ -2919,7 +2946,7 @@
       }
       return
     }
-    setDriverAnalysisHotkeyCapture(false)
+    void setDriverAnalysisHotkeyCapture(false)
     void setDriverAnalysisHotkey(hotkey)
   })
   garageCurrentVariantsToggle?.addEventListener('click', toggleGarageVariants)
@@ -2967,7 +2994,7 @@
   renderDriverAnalysisState(driverAnalysisState)
   renderDriverAnalysisHistory()
   void loadDriverAnalysisHistory()
-  void setDriverAnalysisHotkey(driverAnalysisSettings.hotkey, false)
+  void setDriverAnalysisHotkey(driverAnalysisSettings.hotkey, false, driverAnalysisSettings.hotkeyLabel)
   void listenShiftLightEvents()
   void listenRouteEvents()
   void listenGarageEvents()

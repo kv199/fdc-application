@@ -1,6 +1,6 @@
 [package]
 name = "fdc-application"
-version = "7.15.45"
+version = "7.16.45"
 description = "Feedback-Driven Companion (FDC), an unofficial telemetry HUD app compatible with Forza Horizon 6"
 license = "MIT"
 edition = "2024"
@@ -15,6 +15,9 @@ serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-global-shortcut = "2"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Input", "Win32_UI_WindowsAndMessaging", "Win32_Devices_HumanInterfaceDevice", "Win32_System_LibraryLoader", "Win32_Storage_FileSystem", "Win32_Security"] }
 
 [profile.release]
 codegen-units = 1

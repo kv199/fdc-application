@@ -28,6 +28,52 @@ test('keyboard capture requires a non-Windows modifier combination', () => {
   assert.equal(analysis.hotkeyFromKeyboardEvent({ key: 'r', ctrlKey: false, altKey: false, shiftKey: false, metaKey: true }), null)
 })
 
+test('controller bindings are normalized and validated', () => {
+  assert.equal(analysis.normalizeHotkey('Controller:346E:0006:116'), 'Controller:346E:0006:116')
+  assert.equal(analysis.normalizeHotkey('controller:346e:0006:116'), 'Controller:346E:0006:116')
+  assert.equal(analysis.normalizeHotkey('Controller:346E:0006:0'), null)
+  assert.equal(analysis.normalizeHotkey('Controller:346E:0006:1025'), null)
+  assert.equal(analysis.normalizeHotkey('Controller:346E:0006:01'), null)
+  assert.equal(analysis.normalizeHotkey('Controller:GGGG:0006:116'), null)
+  assert.equal(analysis.normalizeHotkey('Controller:346E:0006'), null)
+})
+
+test('isControllerHotkey distinguishes controller from keyboard hotkeys', () => {
+  assert.equal(analysis.isControllerHotkey('Controller:346E:0006:116'), true)
+  assert.equal(analysis.isControllerHotkey('controller:346e:0006:116'), false)
+  assert.equal(analysis.isControllerHotkey('Ctrl+Shift+F9'), false)
+  assert.equal(analysis.isControllerHotkey('Ctrl+Alt+R'), false)
+  assert.equal(analysis.isControllerHotkey(''), false)
+})
+
+test('formatHotkey displays keyboard and controller hotkeys correctly', () => {
+  assert.equal(analysis.formatHotkey('Ctrl+Shift+F9'), 'Ctrl + Shift + F9')
+  assert.equal(analysis.formatHotkey('Ctrl+Alt+R'), 'Ctrl + Alt + R')
+  assert.equal(analysis.formatHotkey('Controller:346E:0006:116'), 'Controller 346E:0006 · Button 116')
+  assert.equal(analysis.formatHotkey('Controller:346E:0006:116', 'MOZA SR Shifter'), 'MOZA SR Shifter · Button 116')
+  assert.equal(analysis.formatHotkey('Controller:346E:0006:116', ''), 'Controller 346E:0006 · Button 116')
+})
+
+test('normalizeSettings preserves hotkeyLabel for controller bindings only', () => {
+  const keyboardSettings = analysis.normalizeSettings({ hotkey: 'Ctrl+Shift+F9', hotkeyLabel: 'Some Label' })
+  assert.equal(keyboardSettings.hotkeyLabel, undefined)
+  const controllerSettings = analysis.normalizeSettings({ hotkey: 'Controller:346E:0006:116', hotkeyLabel: 'MOZA Shifter' })
+  assert.equal(controllerSettings.hotkeyLabel, 'MOZA Shifter')
+  const trimmedSettings = analysis.normalizeSettings({ hotkey: 'Controller:346E:0006:116', hotkeyLabel: '  Device Name  ' })
+  assert.equal(trimmedSettings.hotkeyLabel, 'Device Name')
+  const longSettings = analysis.normalizeSettings({ hotkey: 'Controller:346E:0006:116', hotkeyLabel: 'A'.repeat(100) })
+  assert.equal(longSettings.hotkeyLabel.length, 80)
+})
+
+test('legacy settings without hotkeyLabel load unchanged', () => {
+  const storage = memoryStorage({ 'fdc.driver-analysis.settings.v1': JSON.stringify({ enabled: true, hotkey: 'Ctrl+Shift+F9' }) })
+  const settings = analysis.readSettings(storage)
+  assert.deepEqual(settings, { enabled: true, hotkey: 'Ctrl+Shift+F9' })
+  const controllerStorage = memoryStorage({ 'fdc.driver-analysis.settings.v1': JSON.stringify({ enabled: true, hotkey: 'Controller:346E:0006:116', hotkeyLabel: 'Device' }) })
+  const controllerSettings = analysis.readSettings(controllerStorage)
+  assert.deepEqual(controllerSettings, { enabled: true, hotkey: 'Controller:346E:0006:116', hotkeyLabel: 'Device' })
+})
+
 test('history is durable, bounded and ordered newest first', () => {
   const storage = memoryStorage()
   analysis.appendHistory({ id: 'old', recordedAt: '2026-09-18T10:00:00.000Z', durationMs: 1000, result: 'insufficient' }, storage)

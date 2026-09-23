@@ -27,7 +27,10 @@
 
   function normalizeSettings(value) {
     const source = value && typeof value === 'object' ? value : {}
-    return { enabled: source.enabled === true, hotkey: normalizeHotkey(source.hotkey) || DEFAULT_HOTKEY }
+    const normalized = { enabled: source.enabled === true, hotkey: normalizeHotkey(source.hotkey) || DEFAULT_HOTKEY }
+    const label = typeof source.hotkeyLabel === 'string' ? source.hotkeyLabel.trim().slice(0, 80) : ''
+    if (label && isControllerHotkey(normalized.hotkey)) normalized.hotkeyLabel = label
+    return normalized
   }
 
   function readSettings(storage = globalScope.localStorage) {
@@ -49,8 +52,24 @@
     return aliases[raw.toLowerCase()] || null
   }
 
+  function isControllerHotkey(value) {
+    const str = String(value || '').trim()
+    return /^Controller:[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}:\d+$/.test(str)
+  }
+
   function normalizeHotkey(value) {
-    const tokens = String(value || '').split('+').map(token => token.trim()).filter(Boolean)
+    const str = String(value || '').trim()
+    if (!str) return null
+    if (/^controller:/i.test(str)) {
+      const match = /^Controller:([0-9A-Fa-f]{4}):([0-9A-Fa-f]{4}):(\d+)$/i.exec(str)
+      if (!match) return null
+      const [, vendor, product, buttonStr] = match
+      const button = Number(buttonStr)
+      if (!Number.isInteger(button) || button < 1 || button > 1024) return null
+      if (String(button) !== buttonStr) return null
+      return `Controller:${vendor.toUpperCase()}:${product.toUpperCase()}:${button}`
+    }
+    const tokens = str.split('+').map(token => token.trim()).filter(Boolean)
     if (tokens.length < 2) return null
     const modifiers = new Set()
     let mainKey = null
@@ -77,8 +96,17 @@
     return normalizeHotkey([event.ctrlKey ? 'Ctrl' : '', event.altKey ? 'Alt' : '', event.shiftKey ? 'Shift' : '', mainKey].filter(Boolean).join('+'))
   }
 
-  function formatHotkey(value) {
-    return (normalizeHotkey(value) || DEFAULT_HOTKEY).replaceAll('+', ' + ')
+  function formatHotkey(value, label) {
+    const normalized = normalizeHotkey(value) || DEFAULT_HOTKEY
+    if (isControllerHotkey(normalized)) {
+      const match = /^Controller:([0-9A-F]{4}):([0-9A-F]{4}):(\d+)$/.exec(normalized)
+      if (match) {
+        const [, vendor, product, button] = match
+        const deviceName = typeof label === 'string' && label.trim() ? label.trim() : `Controller ${vendor}:${product}`
+        return `${deviceName} · Button ${button}`
+      }
+    }
+    return normalized.replaceAll('+', ' + ')
   }
 
   function isoDate(value) {
@@ -465,7 +493,7 @@
   return {
     DEFAULT_HOTKEY, HISTORY_LIMIT, HISTORY_STORAGE_KEY, SETTINGS_STORAGE_KEY,
     appendHistory, clearHistory, createRecorder, formatHotkey, hotkeyFromKeyboardEvent,
-    normalizeHistoryEntry, normalizeHotkey, normalizeSettings, persistedSample, persistencePayload,
+    isControllerHotkey, normalizeHistoryEntry, normalizeHotkey, normalizeSettings, persistedSample, persistencePayload,
     readHistory, readSettings, reanalyzeStoredSessions, replayTelemetry, sortHistoryNewestFirst,
     vehicleIdentity, writeHistory, writeSettings
   }
