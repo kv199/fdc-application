@@ -388,6 +388,7 @@
   }
 
   function renderGarage() {
+    if (latestShiftLightState) renderShiftLightState(latestShiftLightState)
     if (!garageGrid) return
     garageGrid.replaceChildren()
     const vehicles = [...garageVehicles.values()].sort((left, right) => {
@@ -2404,6 +2405,23 @@
     }
   }
 
+  // The Shift Light car key is fh6:<ordinal>:<class>:<pi>:..., so the class
+  // is read from it and falls back to the Garage variant with the same PI.
+  function renderShiftLightCarClass(state, vehicle) {
+    shiftLightCarPi.replaceChildren()
+    const pi = state.pi
+    const keyClass = typeof state.carKey === 'string' ? state.carKey.split(':')[2] : ''
+    const variant = garageVariantsFor(vehicle).find(candidate => candidate?.pi === pi)
+    const classLabel = (/^\d+$/.test(keyClass) ? garageApi?.classLabel?.(Number(keyClass)) : null)
+      || variant?.classLabel
+      || (variant?.class !== null && variant?.class !== undefined ? garageApi?.classLabel?.(variant.class) : null)
+    if (!classLabel && !pi) {
+      shiftLightCarPi.textContent = '—'
+      return
+    }
+    appendGaragePerformance(shiftLightCarPi, { classLabel, pi })
+  }
+
   function renderShiftLightState(value) {
     const state = typeof normalizeShiftLightState === 'function'
       ? normalizeShiftLightState(value)
@@ -2415,10 +2433,10 @@
     shiftLightReset.disabled = !hasProfile || shiftLightResetPending
     if (!hasProfile) return
 
-    shiftLightCarKey.textContent = state.gameId === 'fh6' && state.carOrdinal
-      ? `FH6 CAR #${state.carOrdinal}`
-      : '—'
-    shiftLightCarPi.textContent = state.pi ? `PI ${state.pi}` : '—'
+    const garageVehicle = state.gameId === 'fh6' && state.carOrdinal ? garageVehicles.get(state.carOrdinal) : null
+    shiftLightCarKey.textContent = garageVehicle?.name
+      || (state.gameId === 'fh6' && state.carOrdinal ? `FH6 CAR #${state.carOrdinal}` : '—')
+    renderShiftLightCarClass(state, garageVehicle)
     shiftLightCarRpmMax.textContent = state.rpmMax ? `${state.rpmMax} RPM` : '—'
     shiftLightUsableCeiling.textContent = state.usableCeiling
       ? `${state.usableCeiling} RPM · ${state.ceilingSampleCount}/3`
