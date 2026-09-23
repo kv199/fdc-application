@@ -3060,6 +3060,8 @@ fn load_event_runs_from_connection(
         .collect()
 }
 
+const EVENT_REFERENCE_DISTANCE_RATIO: f64 = 0.97;
+
 fn load_event_absolute_best_from_connection(
     connection: &Connection,
     event_id: i64,
@@ -3084,10 +3086,21 @@ fn load_event_absolute_best_from_connection(
 
     // A circuit candidate is each saved completed lap. A sprint candidate is
     // its confirmed final result; MIN(lap_number) is used only to locate the
-    // optional synthetic sprint trace row.
+    // optional synthetic sprint trace row. When the Event has traces, a
+    // candidate must cover nearly the longest traced distance, so an abandoned
+    // attempt saved with a short time never becomes the reference.
     let candidate = connection
         .query_row(
-            "WITH candidates AS (
+            "WITH spans AS (
+                SELECT points.run_id AS run_id,
+                       points.lap_number AS lap_number,
+                       MAX(points.distance) - MIN(points.distance) AS span
+                FROM event_run_lap_trace_points AS points
+                JOIN event_runs ON event_runs.id = points.run_id
+                WHERE event_runs.event_id = ?1
+                GROUP BY points.run_id, points.lap_number
+            ),
+            candidates AS (
                 SELECT event_runs.id AS run_id,
                        event_runs.event_id AS event_id,
                        event_runs.run_type AS run_type,
@@ -3113,11 +3126,18 @@ fn load_event_absolute_best_from_connection(
                   AND event_runs.result_time_ms > 0
                 GROUP BY event_runs.id
             )
-            SELECT event_id, run_id, run_type, lap_number, time_ms
+            SELECT candidates.event_id, candidates.run_id, candidates.run_type,
+                   candidates.lap_number, candidates.time_ms
             FROM candidates
-            ORDER BY time_ms ASC, run_id DESC, lap_number ASC
+            LEFT JOIN spans
+              ON spans.run_id = candidates.run_id
+             AND spans.lap_number = candidates.lap_number
+            WHERE (SELECT MAX(span) FROM spans) IS NULL
+               OR spans.span >= (SELECT MAX(span) FROM spans) * ?2
+            ORDER BY candidates.time_ms ASC, candidates.run_id DESC,
+                     candidates.lap_number ASC
             LIMIT 1",
-            params![event_id],
+            params![event_id, EVENT_REFERENCE_DISTANCE_RATIO],
             |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
@@ -5617,6 +5637,70 @@ mod tests {
         assert_eq!(circuit_best.trace_points.len(), 1);
         assert_eq!(circuit_best.trace_points[0].distance, 200.0);
         assert_ne!(circuit_best.run_id, circuit.id);
+    }
+
+    #[test]
+    fn event_absolute_best_ignores_results_that_cover_a_partial_distance() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Partial best", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+
+        let trace = |end_distance: f64| {
+            vec![0.0, end_distance]
+                .into_iter()
+                .enumerate()
+                .map(|(index, distance)| EventRunTracePointInput {
+                    sample_index: index as i32,
+                    elapsed_ms: index as i64 * 1000,
+                    distance,
+                    position_x: 1.0,
+                    position_y: 2.0,
+                    position_z: 3.0,
+                    throttle: 0.75,
+                    brake: 0.0,
+                })
+                .collect::<Vec<_>>()
+        };
+        let lap = |lap_time_ms: i64, end_distance: f64| EventRunLapInput {
+            lap_number: 1,
+            lap_time_ms,
+            sector_1_time_ms: None,
+            sector_2_time_ms: None,
+            sector_3_time_ms: None,
+            trace_points: trace(end_distance),
+        };
+        let full = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![lap(139_155, 5_948.0)],
+            ),
+        )
+        .unwrap();
+        record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "sprint",
+                "confirmed",
+                Some(29_350),
+                vec![lap(29_350, 1_236.0)],
+            ),
+        )
+        .unwrap();
+
+        let best = load_event_absolute_best_from_connection(&connection, event.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(best.run_id, full.id);
+        assert_eq!(best.time_ms, 139_155);
     }
 
     #[test]

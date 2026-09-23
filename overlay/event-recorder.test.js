@@ -325,6 +325,58 @@ test('a zeroed sprint packet automatically falls back and restarts on the next c
   assert.notEqual(instance.snapshot().run.runId, previousRunId)
 })
 
+test('an abandoned attempt restarted from the menu is not saved as a short sprint', async () => {
+  const saved = []
+  const candidates = []
+  const results = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    referenceDistanceM: () => 5948,
+    onReferenceCandidate: candidate => candidates.push(candidate),
+    onResult: payload => results.push(payload),
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  instance.arm(75)
+  instance.update(telemetry({ throttle: 0.7, brake: 0, position: { x: 1, y: 2, z: 3 } }))
+  instance.update(telemetry({
+    throttle: 0.7,
+    brake: 0,
+    position: { x: 2, y: 2, z: 4 },
+    lap: { number: 0, current: 29.35, last: 0, raceTime: 29.35, distance: 1236 }
+  }))
+  instance.update(telemetry({ isRaceOn: false, lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 } }))
+  const abandonedRunId = instance.snapshot().run.runId
+  instance.update(telemetry({ throttle: 0.7, brake: 0, position: { x: 3, y: 2, z: 5 } }))
+
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(saved.length, 0)
+  assert.equal(candidates.length, 0)
+  assert.equal(results.at(-1).outcome, 'discarded')
+  assert.equal(instance.snapshot().armed, true)
+  assert.notEqual(instance.snapshot().run.runId, abandonedRunId)
+})
+
+test('a sprint that covers the reference distance is saved through the fallback', async () => {
+  const saved = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    referenceDistanceM: () => 5948,
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  instance.arm(76)
+  instance.update(telemetry())
+  instance.update(telemetry({ lap: { number: 0, current: 139.7, last: 0, raceTime: 139.7, distance: 5946 } }))
+  instance.update(telemetry({ isRaceOn: false, lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 } }))
+  instance.update(telemetry())
+
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(saved.length, 1)
+  assert.equal(saved[0].run.runType, 'sprint')
+  assert.equal(saved[0].run.resultTimeMs, 139700)
+})
+
 test('a sprint LastLap equal to the live clock is persisted before stop', async () => {
   const saved = []
   const instance = recorder.createEventRecorder({

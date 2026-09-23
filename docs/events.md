@@ -33,7 +33,9 @@ available as the Events tab in Configuration, directly after Garage.
   row starts with the event's database ID as `#ID`. Notes, when supplied,
   appear in their own framed area directly beneath that row. The page also
   shows a purple **Absolute Best**: the quickest actual saved circuit lap or
-  confirmed Sprint result across that Event. The top-left **BACK** action and
+  confirmed Sprint result across that Event. When the Event has saved traces,
+  only results whose trace covers at least 97% of the Event's longest traced
+  distance are eligible. The top-left **BACK** action and
   Escape both return to the Events list.
 - Selecting the event title starts inline renaming. Enter or leaving the input
   saves a non-empty name; Escape cancels that rename without leaving the page.
@@ -115,7 +117,10 @@ Delta widget loads that Event's exact fastest saved result as its reference. A
 new Event has no Delta during its first circuit lap or Sprint attempt. As soon
 as a completed lap or confirmed Sprint provides a faster usable trace, that
 trace becomes the in-memory reference before the next lap or attempt is
-processed; a slower result leaves the reference unchanged. Circuit rows remain
+processed; a slower result leaves the reference unchanged. A trace that covers
+less than 97% of the active reference distance never replaces it, and a trace
+that covers noticeably more distance replaces a partial reference regardless
+of time. Circuit rows remain
 part of the active unsaved run until **STOP** or a confirmed restart.
 
 In a live race Delta interpolates the active reference trace's elapsed time at
@@ -132,7 +137,7 @@ clears its reference.
 | `IsRaceOn` | Identifies live racing and non-live transitions. |
 | `CurrentLap` | Validates the clean start window and can confirm a sprint result when its non-live final value repeats. |
 | `CurrentRaceTime` | Validates the clean start window and provides the manual sprint fallback time. |
-| `DistanceTraveled` | Validates the clean start window. |
+| `DistanceTraveled` | Validates the clean start window and the distance a Sprint result covered. |
 | `LapNumber` | Detects circuit-lap boundaries and a confirmed clean restart. |
 | `LastLap` | Stores a game-reported completed circuit lap and is the preferred sprint finish evidence. |
 | `Position X`, `Position Y`, `Position Z` | Saves a compact per-lap vehicle trace; the detail map renders the top-down X/Z projection while retaining Y. |
@@ -178,6 +183,11 @@ saved laps are not backfilled because the source telemetry no longer exists.
 - After a zeroed non-live Sprint result, the next clean live start confirms the
   previous attempt with its last live race time when no exact result arrived.
   FDC saves that fallback Sprint and starts the next attempt automatically.
+- An attempt abandoned through the in-game restart menu produces the same
+  zeroed transition, so every Sprint result is compared with the active Delta
+  reference distance. A Sprint whose live travelled distance is less than 97%
+  of that reference is discarded and never becomes the reference. Without an
+  active reference, the Sprint is kept.
 
 ### Result reset and precision
 

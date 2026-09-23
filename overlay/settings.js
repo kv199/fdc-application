@@ -138,6 +138,7 @@
   const eventRunsCount = document.getElementById('event-runs-count')
   const eventsById = new Map()
   let currentEventRuns = []
+  let currentEventAbsoluteBestMs = null
   let currentEventRun = null
   let recorderState = { eventId: null, recording: false, state: 'stopped', lapCount: 0 }
   let eventsView = 'library'
@@ -525,6 +526,7 @@
       currentEventRuns = [run, ...currentEventRuns.filter(existing => existing.id !== run.id)]
       if (updateEventLastRecordedAt(run)) renderEventsLibrary()
       renderEventRuns()
+      void loadEventAbsoluteBest()
     })
     await eventApi.listen('event_recorder_result', event => {
       const payload = event?.payload
@@ -1022,16 +1024,27 @@
     return run?.laps?.reduce((best, lap) => !best || lap.timeMs < best ? lap.timeMs : best, null)
   }
 
-  function eventAbsoluteBestTimeMs(runs = currentEventRuns) {
-    return runs.reduce((best, run) => {
-      const time = runBestTimeMs(run)
-      return Number.isFinite(time) && (best === null || time < best) ? time : best
-    }, null)
+  // The native loader owns eligibility (including the distance check that
+  // rejects abandoned attempts), so the page shows the same result as Delta.
+  async function loadEventAbsoluteBest(eventId = currentEventId) {
+    const key = eventKey(eventId)
+    if (!key) return
+    try {
+      const nativeEventId = Number.isFinite(Number(key)) ? Math.round(Number(key)) : key
+      const reference = await call('load_event_absolute_best', { eventId: nativeEventId })
+      if (eventKey(currentEventId) !== key) return
+      const time = Number(reference?.timeMs)
+      currentEventAbsoluteBestMs = Number.isFinite(time) ? time : null
+    } catch {
+      if (eventKey(currentEventId) !== key) return
+      currentEventAbsoluteBestMs = null
+    }
+    renderEventAbsoluteBest()
   }
 
   function renderEventAbsoluteBest() {
     if (!eventsDetailAbsoluteBest) return
-    eventsDetailAbsoluteBest.textContent = formatRunTime(eventAbsoluteBestTimeMs())
+    eventsDetailAbsoluteBest.textContent = formatRunTime(currentEventAbsoluteBestMs)
   }
 
   function distinctTimeRanks(values) {
@@ -1504,6 +1517,7 @@
       currentEventRuns = normalizeEventRunsPayload(await call('load_event_runs', { eventId: nativeEventId }))
       if (currentEventRuns.some(updateEventLastRecordedAt)) renderEventsLibrary()
       renderEventRuns()
+      void loadEventAbsoluteBest(key)
       if (eventsView === 'run' && currentEventRun) {
         const refreshed = currentEventRuns.find(run => run.id === currentEventRun.id)
         if (refreshed) {
@@ -1586,6 +1600,7 @@
     }
     if (!event) return false
     currentEventId = event.id
+    currentEventAbsoluteBestMs = null
     currentEventRun = null
     clearEventRecorderFeedback()
     setEventsCreateOpen(false)
@@ -1610,6 +1625,7 @@
     if (eventsDetailNotes) eventsDetailNotes.hidden = true
     if (eventsDetailNotesValue) eventsDetailNotesValue.textContent = ''
     currentEventRuns = []
+    currentEventAbsoluteBestMs = null
     currentEventRun = null
     setEventsView('library')
     renderEventsLibrary()

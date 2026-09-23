@@ -9,6 +9,11 @@
   const POST_FINISH_WAIT_MS = 1000
   const TRACE_SAMPLE_INTERVAL_MS = 100
   const TRACE_MAX_POINTS = 1200
+  // An abandoned attempt that is restarted from the menu looks exactly like a
+  // sprint whose finish was hidden by a telemetry reset. Only the covered
+  // distance separates them, so a sprint must cover nearly the full distance
+  // of the Event reference to be kept.
+  const SPRINT_MIN_REFERENCE_DISTANCE_RATIO = 0.97
 
   function finite(value) {
     if (value === null || value === undefined || value === '') return null
@@ -210,6 +215,8 @@
       runType: 'circuit',
       result: 'completed',
       lastLiveRaceTimeMs: null,
+      startDistanceM: null,
+      lastLiveDistanceM: null,
       sawZeroedRaceExit: false,
       car: carSnapshot(telemetry)
     }
@@ -232,6 +239,9 @@
     const onReferenceCandidate = typeof options.onReferenceCandidate === 'function'
       ? options.onReferenceCandidate
       : () => {}
+    const referenceDistanceM = typeof options.referenceDistanceM === 'function'
+      ? options.referenceDistanceM
+      : () => null
     const schedule = typeof options.setTimeout === 'function' ? options.setTimeout : setTimeout
     const cancelSchedule = typeof options.clearTimeout === 'function' ? options.clearTimeout : clearTimeout
     let state = createState()
@@ -419,8 +429,30 @@
       return run.laps.length > 0 || run.finalTimeMs !== null
     }
 
+    function currentReferenceDistanceM() {
+      try {
+        const distance = finite(referenceDistanceM())
+        return distance !== null && distance > 0 ? distance : null
+      } catch (_) {
+        return null
+      }
+    }
+
+    function isShortSprint(run) {
+      if (!run || run.runType !== 'sprint') return false
+      const reference = currentReferenceDistanceM()
+      if (reference === null) return false
+      const start = finite(run.startDistanceM)
+      const end = finite(run.lastLiveDistanceM)
+      const covered = start === null || end === null ? 0 : end - start
+      return covered < reference * SPRINT_MIN_REFERENCE_DISTANCE_RATIO
+    }
+
     function persist(run, reason) {
       if (!run) return Promise.resolve(result(null, 'discarded', 'There is no active run to save.'))
+      if (run.shortSprint) {
+        return Promise.resolve(result(run, 'discarded', 'The sprint did not cover the Event reference distance.'))
+      }
       if (!hasPersistableResult(run)) {
         return Promise.resolve(result(run, 'discarded', 'The run has no completed laps or confirmed result.'))
       }
@@ -482,7 +514,8 @@
       if (finalTimeMs !== null) run.finalTimeMs = finalTimeMs
       if (finalTimeSource !== null) run.finalTimeSource = finalTimeSource
       ensureSprintLap(run)
-      if (run.runType === 'sprint') notifyReferenceCandidate(run, run.laps.at(-1))
+      run.shortSprint = isShortSprint(run)
+      if (run.runType === 'sprint' && !run.shortSprint) notifyReferenceCandidate(run, run.laps.at(-1))
       state.lastRunResult = run
       state.run = null
       lastPersistence = persist(run, reason)
@@ -580,6 +613,11 @@
       if (state.run) {
         const liveRaceTime = telemetry.isRaceOn === true ? raceTimeMs(telemetry) : null
         if (liveRaceTime !== null) state.run.lastLiveRaceTimeMs = liveRaceTime
+        const liveDistance = telemetry.isRaceOn === true ? finite(telemetry.lap?.distance) : null
+        if (liveDistance !== null && liveDistance >= 0) {
+          if (state.run.startDistanceM === null) state.run.startDistanceM = liveDistance
+          state.run.lastLiveDistanceM = liveDistance
+        }
         if (isZeroedNonLiveRacePacket(telemetry) && state.run.lastLiveRaceTimeMs !== null) {
           state.run.sawZeroedRaceExit = true
         }
@@ -631,6 +669,7 @@
     POST_FINISH_WAIT_MS,
     TRACE_SAMPLE_INTERVAL_MS,
     TRACE_MAX_POINTS,
+    SPRINT_MIN_REFERENCE_DISTANCE_RATIO,
     createState,
     createEventRecorder,
     carSnapshot,

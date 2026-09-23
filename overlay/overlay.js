@@ -87,7 +87,8 @@ const eventRecorder = window.HudEventRecorder?.createEventRecorder?.({
   emit: payload => emitRecorderEvent('event_recorder_status', payload),
   onSaved: payload => emitRecorderEvent('event_recorder_run_saved', payload),
   onResult: payload => emitRecorderEvent('event_recorder_result', payload),
-  onReferenceCandidate: candidate => installBetterDeltaReference(candidate)
+  onReferenceCandidate: candidate => installBetterDeltaReference(candidate),
+  referenceDistanceM: () => deltaRuntime?.getState?.().reference?.endDistanceM ?? null
 }) || null
 const driverAnalysisSettings = window.DriverAnalysis?.readSettings?.() || {
   enabled: false,

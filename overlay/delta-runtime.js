@@ -5,6 +5,7 @@
   else globalScope.HudDelta = api
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   const DEFAULT_LIMIT_SECONDS = 1
+  const REFERENCE_DISTANCE_RATIO = 0.97
 
   function finite(value) {
     if (value === null || value === undefined || value === '') return null
@@ -178,6 +179,15 @@
   function isBetterReference(candidate, current) {
     if (!candidate) return false
     if (!current || String(candidate.eventId) !== String(current.eventId)) return true
+    // A reference that covers noticeably less distance is a partial attempt,
+    // so it never replaces a full one regardless of its time, and a full
+    // reference always replaces a partial one.
+    const candidateDistanceM = finite(candidate.endDistanceM)
+    const currentDistanceM = finite(current.endDistanceM)
+    if (candidateDistanceM !== null && currentDistanceM !== null && currentDistanceM > 0) {
+      if (candidateDistanceM < currentDistanceM * REFERENCE_DISTANCE_RATIO) return false
+      if (candidateDistanceM * REFERENCE_DISTANCE_RATIO > currentDistanceM) return true
+    }
     const candidateTimeMs = finite(candidate.timeMs)
     const currentTimeMs = finite(current.timeMs)
     if (candidateTimeMs === null) return false
@@ -376,6 +386,7 @@
 
   return {
     DEFAULT_LIMIT_SECONDS,
+    REFERENCE_DISTANCE_RATIO,
     calculateDelta,
     currentDistanceM,
     currentElapsedMs,

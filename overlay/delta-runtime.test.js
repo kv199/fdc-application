@@ -92,6 +92,17 @@ test('selects only a faster reference for the active Event', () => {
   assert.equal(isBetterReference(otherEvent, current), true)
 })
 
+test('a partial-distance reference never replaces a full one and a full one replaces it', () => {
+  const trace = distanceM => [{ distanceM: 0, elapsedMs: 0 }, { distanceM, elapsedMs: 29000 }]
+  const full = normalizeReference({ eventId: 42, timeMs: 139155, tracePoints: trace(5948) })
+  const partial = normalizeReference({ eventId: 42, timeMs: 29350, tracePoints: trace(1236) })
+  const nearFullFaster = normalizeReference({ eventId: 42, timeMs: 139000, tracePoints: trace(5940) })
+
+  assert.equal(isBetterReference(partial, full), false)
+  assert.equal(isBetterReference(full, partial), true)
+  assert.equal(isBetterReference(nearFullFaster, full), true)
+})
+
 test('rebases cumulative reference distance to the first trace sample', () => {
   const reference = normalizeReference([
     { distanceM: 5950, elapsedMs: 0 },
