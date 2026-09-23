@@ -3,7 +3,7 @@
 ## Purpose and product boundary
 
 Driver Analysis is a local, zero-reference review tool for asphalt driving in
-Forza Horizon 6. It is an MVP/beta feature. The driver enables it and explicitly
+Forza Horizon 6. It is a beta feature. The driver enables it and explicitly
 starts and stops each recording from Configuration or with the global hotkey.
 
 The feature does not identify the road surface, track, ideal line, apex, or
@@ -217,7 +217,7 @@ evidence, and the summary result are replaced transactionally.
 
 ## Current limitations
 
-- Results are beta/MVP and may be inaccurate.
+- Results are beta and may be inaccurate.
 - The feature is asphalt-only by product boundary; telemetry does not prove the
   surface type.
 - Short or inconsistent recordings commonly produce insufficient or ambiguous

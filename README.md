@@ -236,7 +236,7 @@ as tag `vX.Y.Z`.
 ## Current limitations
 
 - FDC currently supports Forza Horizon 6 Direct Data Out on Windows.
-- Driver Analysis is beta/MVP, asphalt-only, and zero-reference. It does not
+- Driver Analysis is beta, asphalt-only, and zero-reference. It does not
   identify track surface, track identity, an ideal line, a driving score, exact
   time loss, or optimal gear advice.
 - Driver Analysis evaluates steering that is held for at least 200 ms, so short
