@@ -34,7 +34,7 @@
 - FDC receives Forza Horizon 6 Data Out on `127.0.0.1:5301`.
 - The native Tauri layer decodes packets into normalized telemetry.
 - The browser overlay consumes telemetry through `queueTelemetry`.
-- Current consumers are the Telemetry HUD, lap timing, Garage, Asphalt Coach, and Shift Light.
+- Current consumers are the Telemetry HUD, lap timing, Garage, Driver Analysis, and Shift Light.
 - Garage and Shift Light persistence belong to FDC-local `fdc.sqlite`.
 - Preserve the local runtime boundary and do not add another telemetry transport.
 
@@ -44,7 +44,7 @@ Read only the source relevant to the current task:
 
 - Current system data flow: `docs/architecture.md`
 - Garage behavior and contracts: `docs/garage.md`
-- Asphalt Coach behavior: `docs/asphalt-coach.md`
+- Driver Analysis behavior and contracts: `docs/driver-analysis.md`
 - Shift Light behavior and contracts: `docs/shift-light.md`
 - Specific decision record relevant to the current task: `ADR/`
 
@@ -105,7 +105,7 @@ Do not repeat checks that already passed for the same final state.
   or task scope, stop and ask for clarification.
 - Preserve the Direct Data Out packet contract and normalized `queueTelemetry`
   path.
-- Keep Asphalt Coach asphalt-only, current-run, and zero-reference.
+- Keep Driver Analysis asphalt-only and zero-reference.
 - Do not add track identity, ideal-line guidance, driving scores, exact
   time-loss claims, or unsupported findings without an explicit product
   decision.

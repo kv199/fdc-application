@@ -496,6 +496,7 @@ test('Driver Analysis history cards expose collapsible details with summary line
   assert.match(settingsJs, /driver-analysis-history-row__details-section/)
   assert.match(settingsJs, /driver-analysis-history-row__details-list/)
   assert.match(settingsJs, /driver-analysis-history-row__details-item/)
+  assert.match(settingsJs, /section\.title = statsRow\.title/)
   assert.match(settingsCss, /\.driver-analysis-history-row__details-toggle[\s\S]*min-width:\s*78px/)
   assert.match(settingsCss, /\.driver-analysis-history-row__details-panel\s*\{[\s\S]*margin-top:\s*12px/)
   assert.match(settingsCss, /\.driver-analysis-history-row__details-item\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) auto/)

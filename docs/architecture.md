@@ -122,8 +122,16 @@ browser batches selected normalized samples to native commands; sessions,
 samples, opportunities, evidence, and the single selected result are kept in
 the local `fdc.sqlite` database until the user deletes that recording.
 
+Driver Analysis uses its own Tauri commands: `create_driver_analysis_session`,
+`append_driver_analysis_samples`, `finalize_driver_analysis_session`,
+`load_driver_analysis_samples`, `reanalyze_driver_analysis_session`,
+`save_driver_analysis_stats`, `load_driver_analysis_sessions`,
+`delete_driver_analysis_session`, and `import_legacy_driver_analysis_history`.
+Each recording also stores versioned descriptive statistics of the collected
+telemetry next to its result.
+
 The full state machine, evidence gates, supported findings, recording controls,
-history contract, and known limitations are documented in
+card layout, history contract, and known limitations are documented in
 [Driver Analysis](driver-analysis.md).
 
 ## Shift Light boundary

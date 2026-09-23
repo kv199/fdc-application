@@ -1958,6 +1958,7 @@
           sectionTitle.textContent = statsRow.count !== null && Number.isFinite(statsRow.count)
             ? `${statsRow.label} (${statsRow.count})`
             : statsRow.label
+          if (statsRow.title) section.title = statsRow.title
           section.append(sectionTitle)
           if (Array.isArray(statsRow.items) && statsRow.items.length > 0) {
             const list = document.createElement('div')

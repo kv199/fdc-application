@@ -36,8 +36,9 @@ overlay consumes the normalized telemetry through one local runtime path.
 
 Driver Analysis is an explicit-recording, zero-reference review tool for
 asphalt driving. It saves the selected telemetry and analysis locally in
-`fdc.sqlite`, shows at most one dominant recurring problem per recording, and
-lists recordings newest-first in Configuration. Recordings remain local until
+`fdc.sqlite` and lists recordings newest-first in Configuration. A recording
+shows at most one dominant recurring problem, the statistics of what was
+recorded, and, when no problem qualifies, the most frequent pattern it checked. Recordings remain local until
 the user deletes them. It does not require a track database.
 
 Technical details: [docs/driver-analysis.md](docs/driver-analysis.md).
@@ -130,10 +131,11 @@ Settings are applied locally and do not add another telemetry source.
 FDC is local-first. Direct Data Out is received from the local game session.
 The application keeps runtime data local to the machine.
 
-Garage and Shift Light data are stored in the FDC application-data directory as
-`fdc.sqlite`. Driver Analysis stores compact recording results and preferences
-in versioned local webview storage; its raw telemetry, calibration, and live
-evidence remain in memory. Layout, visibility, speed-unit, and display
+Garage, Events, Driver Analysis, and Shift Light data are stored in the FDC
+application-data directory as `fdc.sqlite`. A Driver Analysis recording keeps
+its selected telemetry samples, opportunities, evidence, statistics, and result
+in that database until the user deletes the recording; only the enable state and
+the hotkey stay in local webview storage. Layout, visibility, speed-unit, and display
 preferences are also stored in the local application webview.
 
 ## Browser demo
@@ -237,8 +239,8 @@ as tag `vX.Y.Z`.
 - Driver Analysis is beta/MVP, asphalt-only, and zero-reference. It does not
   identify track surface, track identity, an ideal line, a driving score, exact
   time loss, or optimal gear advice.
-- Driver Analysis saves only compact results; raw telemetry, calibration, and
-  finding candidates are not persisted.
+- Driver Analysis evaluates steering that is held for at least 200 ms, so short
+  steering pulses are recorded but not checked.
 - Shift Light learns from live telemetry and has no manual target-entry flow or
   car-name database.
 - Garage has image placeholders only; it does not download car images or names.

@@ -9,7 +9,8 @@ starts and stops each recording from Configuration or with the global hotkey.
 The feature does not identify the road surface, track, ideal line, apex, or
 optimal gear. It does not produce a driving score or an exact time-loss claim.
 The driver must record on asphalt. Each completed recording shows at most one
-dominant, recurring technique problem.
+dominant, recurring technique problem. When no problem qualifies, the recording
+shows the most frequent checked pattern as an observation instead.
 
 ## Runtime data flow
 
@@ -60,13 +61,7 @@ The default hotkey is `Ctrl+Shift+F9`. Windows-key combinations, bare keys,
 ## Opportunity and evidence model
 
 The map-free state engine segments telemetry into straight, braking, turn-in,
-rotation, and exit phases. A maneuver survives short steering gaps: when the
-steering returns within 1 s in the same direction and lateral acceleration
-stays at 3 m/s² or more throughout the gap, the same maneuver continues. This
-keeps pulsed gamepad steering inside one corner. The maneuver ends when the gap
-fails, when the brake is applied during the gap, or when steering resumes in
-the opposite direction, which starts a new maneuver. Opportunities other than
-exit wheelspin stay open across a bridged gap. It creates bounded opportunities for four supported
+rotation, and exit phases, and creates bounded opportunities for four supported
 problem types:
 
 | Problem | Driver input and observed response | User instruction |
@@ -75,6 +70,14 @@ problem types:
 | `EXIT WHEELSPIN` | More throttle/driven-wheel slip with weak acceleration response | Build throttle after the car is settled |
 | `BRAKE + STEERING OVERLOAD` | Brake and steering overlap with high combined front slip and stalled response | Release brake as steering builds |
 | `ABRUPT BRAKE RELEASE` | Sharp brake release followed by response/yaw loss or rear-slip growth | Release brake smoothly through rotation |
+
+A maneuver survives short steering gaps: when the steering returns within 1 s
+in the same direction and lateral acceleration stays at 3 m/s² or more
+throughout the gap, the same maneuver continues. This keeps pulsed gamepad
+steering inside one corner. The maneuver ends when the gap fails, when the
+brake is applied during the gap, or when steering resumes in the opposite
+direction, which starts a new maneuver. Opportunities other than exit wheelspin
+stay open across a bridged gap.
 
 A front scrub opportunity needs at least 200 ms of sustained steering. Shorter
 steering pulses are stored as invalid `steering_pulse` opportunities and do not
@@ -149,23 +152,41 @@ such as curb or contact impacts do not dominate the result.
 
 | Row | Content |
 | --- | --- |
-| `OVERVIEW` | Distance, average speed over moving time (at least 5 km/h), and maximum speed. Distance uses the game's distance delta when it is consistent with speed and falls back to integrated speed otherwise. The recording duration is shown in the card metadata. |
 | `PEDALS` | Share of moving time with full throttle (at least 95%), partial throttle, coasting, and braking. The brake share also shows the part with steering applied. |
 | `STEERING` | Share of steering time (moving, steering input at least 12%) spent at full lock (at least 99%) and the median number of full-lock entries per corner. |
 | `BRAKING` | Braking events that start at 40 km/h or more and last 0.3–15 s: median peak deceleration, duration, release time (from the last brake level at or above 80% of that event's peak until release), and trail braking. An event counts as trail braking when it starts without steering and the brake stays at 30% or more while steering is applied for at least 250 ms. The share is taken over events that start without steering, and the median brake-and-steering overlap of those events is shown in parentheses. |
-| `CHECKED` | How many opportunities of each supported pattern were evaluated and how many ended as a problem. |
 | `CORNERS` | Maneuvers that last at least 0.7 s and reach a peak lateral acceleration of 4 m/s², so brief steering corrections are not counted as corners: median and 90th-percentile peak lateral acceleration, the share of turning time in which the front slip angle exceeds the rear, and how many corners were taken flat-out (full throttle and no brake throughout the turning phases). |
 | `ON POWER` | How many corners were already at full throttle at their minimum-speed sample, and, for the corners that lifted and returned to full throttle later, the median delay after the minimum speed and the median peak longitudinal acceleration. |
+| `CHECKED` | How many opportunities of each supported pattern were evaluated and how many ended as a problem. |
 
 The `BRAKING`, `CORNERS`, and `ON POWER` rows are hidden when fewer than three
-events were measured. The card shows the recording summary and, when no
-finding qualifies, the most frequent pattern with its share of checked
-opportunities and the share a reported problem requires. The remaining rows
-are collapsed behind a `DETAILS` control. Each row shows its event count, and hovering a row
-shows the 10th–90th percentile range. The statistics are stored as versioned
-JSON in the session's `stats_json` column. Finished recordings with saved samples
-but missing or outdated statistics are replayed locally once to compute them.
-Their results are not changed.
+events were measured. Each of those rows shows its event count, and hovering a
+row shows the 10th–90th percentile range of its values.
+
+The statistics are stored as versioned JSON in the session's `stats_json`
+column, together with a `patterns` entry per supported problem type holding the
+checked, problem, and ambiguous counts of that recording. Finished recordings
+with saved samples but missing or outdated statistics are replayed locally once
+through `save_driver_analysis_stats`, which writes only the statistics; the
+saved result, opportunities, and evidence of those recordings are not changed.
+
+## Card layout
+
+A history card is collapsed by default and shows the recording date, duration,
+storage size, a headline block, and a one-line recording summary with distance,
+average speed, top speed, and corner count.
+
+The headline block shows the qualified problem and its instruction when the
+recording has one. Otherwise it shows `MOST FREQUENT` with the pattern that has
+the highest share of problems among the patterns with at least 10 checked
+opportunities and at least 3 problems, for example `Front scrub — steering more
+than the front tyres can take — in 18 of 133 checks (14%). Becomes a reported
+problem above 40%.` When no pattern reaches that support, the card keeps the
+result copy of the recording, such as `NOT ENOUGH ELIGIBLE MANEUVERS`.
+
+A `DETAILS` control expands the statistics rows below the summary and switches
+to `HIDE`. The expanded state is kept per recording while Configuration stays
+open. The control is absent when the recording has no statistics.
 
 ## Local persistence and deletion
 
@@ -201,6 +222,9 @@ evidence, and the summary result are replaced transactionally.
   surface type.
 - Short or inconsistent recordings commonly produce insufficient or ambiguous
   results.
+- Steering that is not held for at least 200 ms is recorded but not checked for
+  front scrub, so a driver who steers in short pulses has fewer checked
+  opportunities than corners driven.
 - The supported findings are bounded technique patterns, not a complete
   driving assessment.
 - There is no map, track identity, reference lap, ideal line, score, exact time
