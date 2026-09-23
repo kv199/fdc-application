@@ -222,9 +222,16 @@ function setRpmSignal(signal) {
   hud.dataset.signal = signal
 }
 
+// Forza keeps sending Data Out packets in the pause menu, garage, and other
+// menus, but clears IsRaceOn there. The HUD follows live driving only, and a
+// short hold keeps a single non-live packet from blinking it.
+const TELEMETRY_HIDE_DELAY_MS = 500
+let lastLiveTelemetryAt = null
+
 function hasTelemetryPresentation() {
-  return displayPreferences.showHudWithTelemetry === false
-    || (forzaConnected && latestTelemetry !== null)
+  if (displayPreferences.showHudWithTelemetry === false) return true
+  if (!forzaConnected || latestTelemetry === null || lastLiveTelemetryAt === null) return false
+  return performance.now() - lastLiveTelemetryAt < TELEMETRY_HIDE_DELAY_MS
 }
 
 function applyTelemetryVisibility() {
@@ -437,6 +444,7 @@ function queueTelemetry(telemetry) {
 
   latestTelemetry = telemetry
   forzaConnected = true
+  if (telemetry.isRaceOn === true) lastLiveTelemetryAt = performance.now()
   applyTelemetryVisibility()
   if (renderScheduled) return true
   renderScheduled = true
@@ -452,6 +460,7 @@ function scheduleTelemetryRender() {
 
 function resetDirectPresentation() {
   latestTelemetry = null
+  lastLiveTelemetryAt = null
   applyTelemetryVisibility()
   deltaRuntime?.update?.(null)
   driverAnalysisRecorder?.resetTransient?.('direct_restart')

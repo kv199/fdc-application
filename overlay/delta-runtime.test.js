@@ -185,6 +185,13 @@ test('runtime accepts an active Event reference and updates its presentation sta
   assert.equal(bestContainer.hidden, true)
 })
 
+test('HUD and Delta telemetry visibility follows live IsRaceOn samples only', () => {
+  const overlaySource = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
+  assert.match(overlaySource, /const TELEMETRY_HIDE_DELAY_MS = 500/)
+  assert.match(overlaySource, /if \(telemetry\.isRaceOn === true\) lastLiveTelemetryAt = performance\.now\(\)/)
+  assert.match(overlaySource, /performance\.now\(\) - lastLiveTelemetryAt < TELEMETRY_HIDE_DELAY_MS/)
+})
+
 test('the shared telemetry path loads and clears the Event reference with recording', () => {
   const overlaySource = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
   assert.match(overlaySource, /deltaRuntime\?\.update\?\.\(telemetry\)/)

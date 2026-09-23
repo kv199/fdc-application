@@ -163,8 +163,10 @@ telemetry path. It provides:
   arrangement. Reset returns a target to its active-mode default size and
   position;
 - visibility controls for the top-level overlay and HUD components, plus a
-  `SHOW HUD WITH TELEMETRY` preference that defaults to enabled and hides the
-  HUD and Delta until a live telemetry sample is received;
+  `SHOW HUD WITH TELEMETRY` preference that defaults to enabled and shows the
+  HUD and Delta only while live samples (`IsRaceOn`) arrive. Forza keeps
+  sending non-live samples in the pause menu, garage, and other menus, so the
+  HUD and Delta hide 500 ms after the last live sample;
 - a Driver Analysis tab with an enable toggle, explicit record/stop control,
   editable global hotkey, beta/asphalt warning, and newest-first history;
 - speed-unit selection and separate Redline and FDC Shift Light brightness;
