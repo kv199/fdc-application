@@ -164,9 +164,10 @@ telemetry path. It provides:
   position;
 - visibility controls for the top-level overlay and HUD components, plus a
   `SHOW HUD WITH TELEMETRY` preference that defaults to enabled and shows the
-  HUD and Delta only while live samples (`IsRaceOn`) arrive. Forza keeps
-  sending non-live samples in the pause menu, garage, and other menus, so the
-  HUD and Delta hide 500 ms after the last live sample;
+  HUD and Delta only while live samples (`IsRaceOn`) arrive, and hides them
+  500 ms after the last live sample. Forza keeps sending samples in menus, and
+  some menu states, such as the garage, can still report `IsRaceOn`, so the HUD
+  and Delta can briefly or intermittently appear there;
 - a Driver Analysis tab with an enable toggle, explicit record/stop control,
   editable global hotkey, beta/asphalt warning, and newest-first history;
 - speed-unit selection and separate Redline and FDC Shift Light brightness;
