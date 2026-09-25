@@ -147,7 +147,7 @@ application webview.
 
 ## Build from source
 
-With Node.js, npm, and Rust 1.85 or later (Windows x64, MSVC toolchain):
+With Node.js, npm, and Rust 1.88 or later (Windows x64, MSVC toolchain):
 
 ```powershell
 npm ci

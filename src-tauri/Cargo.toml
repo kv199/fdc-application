@@ -1,10 +1,10 @@
 [package]
 name = "fdc-application"
-version = "7.16.46"
+version = "7.16.47"
 description = "Feedback-Driven Companion (FDC), an unofficial telemetry HUD app compatible with Forza Horizon 6"
 license = "MIT"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
