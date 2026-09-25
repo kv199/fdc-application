@@ -13,11 +13,10 @@
 ## Install
 
 1. Download `FDC-setup.exe` or `FDC_{{VERSION}}_x64-setup.exe` from this release.
-2. Verify the installer with:
+2. Download `FDC-setup.exe.sha256` into the same folder, type `powershell` in File Explorer's address bar to open PowerShell there, and run the check. It prints `True` when the installer matches:
    ```powershell
-   Get-FileHash .\FDC-setup.exe -Algorithm SHA256
+   (Get-FileHash .\FDC-setup.exe).Hash.ToLower() -eq (Get-Content .\FDC-setup.exe.sha256).Split(' ')[0]
    ```
-   Compare the output against the matching `.sha256` file in this release.
 3. Run the installer. SmartScreen may show "Windows protected your PC" — click **More info** → **Run anyway** after the checksum matches.
 4. Administrator approval is required. The installer shows "Unknown publisher".
 5. Installation is available to all Windows users and defaults to `C:\Program Files\FDC`.

@@ -92,10 +92,12 @@ first. [More about Garage](docs/garage.md)
 
 1. Download [`FDC-setup.exe`](https://github.com/kv199/fdc-application/releases/latest/download/FDC-setup.exe)
    from the latest release.
-2. Check that its SHA-256 matches the `.sha256` file on the same release:
+2. Download `FDC-setup.exe.sha256` from the same release into the same
+   folder. Type `powershell` in File Explorer's address bar to open PowerShell
+   there, then run the check; it prints `True` when the installer matches:
 
    ```powershell
-   Get-FileHash .\FDC-setup.exe -Algorithm SHA256
+   (Get-FileHash .\FDC-setup.exe).Hash.ToLower() -eq (Get-Content .\FDC-setup.exe.sha256).Split(' ')[0]
    ```
 
 3. Run the installer. It is **unsigned**, so Microsoft Defender SmartScreen may
