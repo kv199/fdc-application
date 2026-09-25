@@ -5,7 +5,7 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
-## 7.16.47 - 2026-09-25
+## 7.16.48 - 2026-09-25
 
 First public release of FDC.
 

@@ -174,7 +174,7 @@ telemetry path. It provides:
   editable global hotkey, beta/asphalt warning, and newest-first history;
 - speed-unit selection and separate Redline and FDC Shift Light brightness;
 - standard minimize and maximize controls, a persisted Configuration
-  always-on-top preference that defaults to enabled, and a persisted window
+  always-on-top preference that defaults to disabled, and a persisted window
   size (default `820 × 620` logical pixels) and last valid on-screen position;
 - Garage current-car and saved-car views, including local name editing and the
   current car's configuration list;

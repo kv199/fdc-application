@@ -95,7 +95,7 @@ to 100%. The default is 80%, and **RESET** restores it.
 
 Configuration → **Settings** contains:
 
-- **Configuration always on top**;
+- **Configuration always on top**, off by default;
 - **Show HUD with telemetry**, described above;
 - **Speed unit**: `km/h` or `mph` for the HUD speed value.
 

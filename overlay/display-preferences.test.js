@@ -26,7 +26,7 @@ test('uses the split display defaults and enables the telemetry-driven displays 
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
     hudOpacity: 80,
-    configurationAlwaysOnTop: true
+    configurationAlwaysOnTop: false
   })
 })
 
@@ -38,7 +38,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
     hudOpacity: 80,
-    configurationAlwaysOnTop: true
+    configurationAlwaysOnTop: false
   })
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'knots', shiftLightBrightness: -4 }), {
     speedUnit: 'kmh',
@@ -47,7 +47,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
     hudOpacity: 80,
-    configurationAlwaysOnTop: true
+    configurationAlwaysOnTop: false
   })
   assert.deepEqual(DisplayPreferences.normalize({ redlineBrightness: '64.6', shiftLightBrightness: '44.4', fdcShiftLightEnabled: false, showHudWithTelemetry: false }), {
     speedUnit: 'kmh',
@@ -56,7 +56,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
     fdcShiftLightEnabled: false,
     showHudWithTelemetry: false,
     hudOpacity: 80,
-    configurationAlwaysOnTop: true
+    configurationAlwaysOnTop: false
   })
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'mph', shiftLightBrightness: null }), {
     speedUnit: 'mph',
@@ -65,7 +65,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
     hudOpacity: 80,
-    configurationAlwaysOnTop: true
+    configurationAlwaysOnTop: false
   })
   assert.deepEqual(DisplayPreferences.normalize({ hudOpacity: 0 }), {
     speedUnit: 'kmh',
@@ -74,7 +74,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
     hudOpacity: 1,
-    configurationAlwaysOnTop: true
+    configurationAlwaysOnTop: false
   })
   assert.deepEqual(DisplayPreferences.normalize({ hudOpacity: 101.4 }), {
     speedUnit: 'kmh',
@@ -83,7 +83,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
     hudOpacity: 100,
-    configurationAlwaysOnTop: true
+    configurationAlwaysOnTop: false
   })
   assert.deepEqual(DisplayPreferences.normalize({ redlineBrightness: -1, shiftLightBrightness: 101 }), {
     speedUnit: 'kmh',
@@ -92,8 +92,15 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
     hudOpacity: 80,
-    configurationAlwaysOnTop: true
+    configurationAlwaysOnTop: false
   })
+})
+
+test('keeps Configuration always on top only when it was explicitly enabled', () => {
+  assert.equal(DisplayPreferences.DEFAULTS.configurationAlwaysOnTop, false)
+  assert.equal(DisplayPreferences.normalize({ configurationAlwaysOnTop: true }).configurationAlwaysOnTop, true)
+  assert.equal(DisplayPreferences.normalize({ configurationAlwaysOnTop: 'true' }).configurationAlwaysOnTop, false)
+  assert.equal(DisplayPreferences.read(createStorage(JSON.stringify({ configurationAlwaysOnTop: true }))).configurationAlwaysOnTop, true)
 })
 
 test('falls back safely when persisted data is malformed', () => {

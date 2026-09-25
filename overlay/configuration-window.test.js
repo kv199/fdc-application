@@ -349,7 +349,7 @@ test('Settings exposes Configuration priority and speed unit preferences', () =>
   assert.doesNotMatch(settingsHtml, /DISPLAY SETTINGS|WINDOW \+ SPEED FORMAT/u)
   assert.match(settingsHtml, /name="speed-unit" value="kmh"/)
   assert.match(settingsHtml, /name="speed-unit" value="mph"/)
-  assert.match(settingsHtml, /id="configuration-always-on-top" class="visibility-toggle" type="button"/)
+  assert.match(settingsHtml, /id="configuration-always-on-top" class="visibility-toggle" type="button"[^>]*aria-pressed="false"/)
   assert.match(settingsHtml, /<strong>SHOW HUD WITH TELEMETRY<\/strong>/)
   assert.match(settingsHtml, /id="show-hud-with-telemetry" class="visibility-toggle" type="button"[^>]*aria-pressed="true"/)
   assert.ok(settingsHtml.indexOf('id="show-hud-with-telemetry"') > settingsPanelIndex)
@@ -437,7 +437,7 @@ test('Configuration persists and applies display preferences through the shared 
   assert.match(settingsJs, /redlineBrightness: DEFAULT_REDLINE_BRIGHTNESS/)
   assert.match(settingsJs, /fdcShiftLightEnabled: true/)
   assert.match(settingsJs, /showHudWithTelemetry: true/)
-  assert.match(settingsJs, /configurationAlwaysOnTop: true/)
+  assert.match(settingsJs, /configurationAlwaysOnTop: false/)
 })
 
 test('Configuration keeps its default size and exposes standard Windows controls', () => {
@@ -446,7 +446,7 @@ test('Configuration keeps its default size and exposes standard Windows controls
   assert.deepEqual({ width: settingsWindow.width, height: settingsWindow.height }, { width: 820, height: 620 })
   assert.equal(settingsWindow.minimizable, true)
   assert.equal(settingsWindow.maximizable, true)
-  assert.equal(settingsWindow.alwaysOnTop, true)
+  assert.equal(settingsWindow.alwaysOnTop, false)
 })
 
 test('Configuration restores its last on-screen position with its size', () => {

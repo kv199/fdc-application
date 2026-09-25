@@ -160,7 +160,7 @@
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
     hudOpacity: DEFAULT_HUD_OPACITY,
-    configurationAlwaysOnTop: true
+    configurationAlwaysOnTop: false
   }
   let latestShiftLightState = null
   let latestRouteRevision = -1
@@ -2189,7 +2189,7 @@
     renderRedlineBrightness(preferences.redlineBrightness)
     renderShiftLightBrightness(preferences.shiftLightBrightness)
     renderHudOpacity(preferences.hudOpacity)
-    if (configurationAlwaysOnTop) updateOverlayToggle(configurationAlwaysOnTop, preferences.configurationAlwaysOnTop !== false)
+    if (configurationAlwaysOnTop) updateOverlayToggle(configurationAlwaysOnTop, preferences.configurationAlwaysOnTop === true)
     if (showHudWithTelemetry) updateOverlayToggle(showHudWithTelemetry, preferences.showHudWithTelemetry !== false)
     if (fdcShiftLightEnabled) updateOverlayToggle(fdcShiftLightEnabled, preferences.fdcShiftLightEnabled !== false)
   }

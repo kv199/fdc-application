@@ -12,7 +12,7 @@
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
     hudOpacity: 80,
-    configurationAlwaysOnTop: true
+    configurationAlwaysOnTop: false
   })
   const MPH_PER_KMH = 0.621371
   const REDLINE_BRIGHTNESS_STOPS = Object.freeze([
@@ -56,7 +56,7 @@
       fdcShiftLightEnabled: candidate.fdcShiftLightEnabled !== false,
       showHudWithTelemetry: candidate.showHudWithTelemetry !== false,
       hudOpacity,
-      configurationAlwaysOnTop: candidate.configurationAlwaysOnTop !== false
+      configurationAlwaysOnTop: candidate.configurationAlwaysOnTop === true
     }
   }
 
