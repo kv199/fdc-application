@@ -32,7 +32,7 @@ test('local build workflow targets the checked-in overlay bundle', () => {
   const buildScript = read('tools/build-shift-light.mjs')
 
   assert.match(packageJson, /"build:shift-light": "node tools\/build-shift-light\.mjs"/u)
-  assert.match(packageJson, /"esbuild": "0\.27\.7"/u)
+  assert.match(packageJson, /"esbuild": "0\.28\.2"/u)
   assert.match(buildScript, /src\/shift-light\/shift-light\.ts/u)
   assert.match(buildScript, /overlay\/shift-light-engine\.js/u)
   assert.doesNotMatch(buildScript, /tools[\\/]shift-light[\\/]/u)
