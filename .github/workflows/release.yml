@@ -1,0 +1,188 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*.*.*
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to build, for example v7.16.46
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    environment: release
+    permissions:
+      contents: write
+
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate and extract metadata
+        id: meta
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # Validate tag format
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Invalid RELEASE_TAG format: $env:RELEASE_TAG must look like vX.Y.Z"
+          }
+
+          # Read version from Cargo.toml
+          $cargoContent = Get-Content -Path 'src-tauri/Cargo.toml' -Raw
+          if ($cargoContent -match '(?ms)^\[package\]\s*$.*?^version\s*=\s*"([^"]+)"') {
+            $version = $matches[1]
+          } else {
+            throw "Could not parse version from src-tauri/Cargo.toml"
+          }
+
+          # Verify tag matches version
+          if ("v$version" -ne $env:RELEASE_TAG) {
+            throw "Tag mismatch: $env:RELEASE_TAG does not match version v$version from Cargo.toml"
+          }
+
+          # Resolve tag commit
+          $commit = git rev-parse "$env:RELEASE_TAG^{commit}" 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not resolve commit for tag $env:RELEASE_TAG"
+          }
+
+          # Verify commit is ancestor of origin/main
+          git merge-base --is-ancestor $commit origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Commit $commit is not an ancestor of origin/main"
+          }
+
+          # Get previous tag
+          $previousTag = git describe --tags --abbrev=0 --match 'v*.*.*' "$commit^" 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            $previousTag = ""
+          }
+          # The runner exits with $LASTEXITCODE; a missing previous tag is not a failure.
+          $global:LASTEXITCODE = 0
+
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "previous_tag=$previousTag"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check JavaScript syntax
+        run: node --check overlay/overlay.js
+
+      - name: Run tests
+        run: |
+          $testFiles = @(Get-ChildItem -LiteralPath overlay,tools -Recurse -File | Where-Object { $_.Name -match '\.test\.(js|mjs)$' } | ForEach-Object { $_.FullName })
+          if ($testFiles.Count -eq 0) {
+            Write-Error "No test files found"
+          }
+          node --test $testFiles
+
+      - name: Check Rust formatting
+        run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
+
+      - name: Run Rust tests
+        run: cargo test --release --locked --manifest-path src-tauri/Cargo.toml
+
+      - name: Build installer
+        run: npm run build:installer
+
+      - name: Stage release assets
+        run: |
+          $version = '${{ steps.meta.outputs.version }}'
+          $assetDir = Join-Path $env:RUNNER_TEMP 'release-assets'
+          New-Item -ItemType Directory -Force -Path $assetDir > $null
+
+          # Verify installer exists
+          $installerPath = "src-tauri\target\release\bundle\nsis\FDC_${version}_x64-setup.exe"
+          if (-not (Test-Path $installerPath)) {
+            throw "Installer not found: $installerPath"
+          }
+
+          # Copy installer
+          Copy-Item $installerPath (Join-Path $assetDir "FDC_${version}_x64-setup.exe")
+          Copy-Item $installerPath (Join-Path $assetDir "FDC-setup.exe")
+
+          # Compute and write SHA256 checksums
+          foreach ($filename in "FDC_${version}_x64-setup.exe", "FDC-setup.exe") {
+            $filePath = Join-Path $assetDir $filename
+            $hash = (Get-FileHash -Path $filePath -Algorithm SHA256).Hash.ToLower()
+            $checksumContent = "$hash  $filename`n"
+            [System.IO.File]::WriteAllText(
+              (Join-Path $assetDir "$filename.sha256"),
+              $checksumContent,
+              (New-Object System.Text.UTF8Encoding($false))
+            )
+          }
+
+      - name: Render release notes
+        run: |
+          $version = '${{ steps.meta.outputs.version }}'
+          $previousTag = '${{ steps.meta.outputs.previous_tag }}'
+          $notesDir = $env:RUNNER_TEMP
+
+          $template = Get-Content -Path 'docs/release-notes-template.md' -Raw
+          if ($previousTag -eq '') {
+            $previousTag = "v$version"
+          }
+          $notes = $template.Replace('{{VERSION}}', $version).Replace('{{PREVIOUS_TAG}}', $previousTag)
+
+          [System.IO.File]::WriteAllText(
+            (Join-Path $notesDir 'release-notes.md'),
+            $notes,
+            (New-Object System.Text.UTF8Encoding($false))
+          )
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ steps.meta.outputs.version }}'
+          $assetDir = Join-Path $env:RUNNER_TEMP 'release-assets'
+          $notesFile = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+
+          # Check if release already exists
+          gh release view $env:RELEASE_TAG 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            throw "A release for $env:RELEASE_TAG already exists."
+          }
+
+          # Create draft release
+          gh release create $env:RELEASE_TAG `
+            --draft `
+            --verify-tag `
+            --title "FDC $version" `
+            --notes-file $notesFile `
+            (Join-Path $assetDir "FDC_${version}_x64-setup.exe") `
+            (Join-Path $assetDir "FDC_${version}_x64-setup.exe.sha256") `
+            (Join-Path $assetDir "FDC-setup.exe") `
+            (Join-Path $assetDir "FDC-setup.exe.sha256")

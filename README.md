@@ -1,9 +1,21 @@
-# Feedback-Driven Companion (FDC)
+<div align="center">
+  <img src="src-tauri/icons/icon.png" width="128" alt="FDC app icon">
+  <h1>FDC</h1>
+  <p><strong>Feedback-Driven Companion — a local-first telemetry HUD compatible with Forza Horizon 6 on Windows.</strong></p>
+  <p><a href="https://github.com/kv199/fdc-application/releases/latest/download/FDC-setup.exe">Download</a> · <a href="https://github.com/kv199/fdc-application/releases">Releases</a> · <a href="SECURITY.md">Security</a></p>
+  <p>
+    <a href="https://github.com/kv199/fdc-application/actions/workflows/ci.yml"><img src="https://github.com/kv199/fdc-application/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/kv199/fdc-application" alt="License: MIT"></a>
+    <img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D6" alt="Platform: Windows 10/11 x64">
+  </p>
+</div>
 
 Feedback-Driven Companion (FDC) is a local-first, always-on-top telemetry HUD
 app compatible with Forza Horizon 6. It receives Forza Horizon 6 Data Out
 directly, renders essential driving telemetry, and keeps the feedback path on
 the local machine.
+
+<!-- Screenshot: add a HUD screenshot here (for example docs/images/hud.png). -->
 
 ## Unofficial project notice
 
@@ -65,12 +77,67 @@ Technical details: [docs/garage.md](docs/garage.md).
 
 To run FDC:
 
-- Windows PC;
-- Forza Horizon 6;
-- Forza Horizon 6 Data Out enabled.
+- Windows 10 or 11 x64;
+- Forza Horizon 6 with Data Out enabled.
 
-To build FDC from source, also install Node.js with npm and Rust 1.85 or later
-with Cargo.
+## Install
+
+### Download and verify
+
+Download the latest installer from the [Releases](https://github.com/kv199/fdc-application/releases) page:
+
+- Use `FDC-setup.exe` (stable name) or `FDC_<version>_x64-setup.exe` (versioned).
+- Each installer has a matching `.sha256` file on the same release.
+
+Verify the checksum on Windows:
+
+```powershell
+Get-FileHash .\FDC-setup.exe -Algorithm SHA256
+```
+
+Compare the output with the hash in the `.sha256` file for your release.
+
+### Unsigned installer
+
+The installer is unsigned. Microsoft Defender SmartScreen may show:
+
+> "Windows protected your PC"
+
+Select **More info**, then **Run anyway**. The message appears because the
+installer does not have an Authenticode signature. Verify the SHA-256 checksum
+matches before running.
+
+During installation, Windows will prompt for administrator approval, showing
+"Unknown publisher" for the same reason. This is expected and normal for
+unsigned software.
+
+### Installation details
+
+- Installation is available to all Windows users and requires administrator approval.
+- Default installation path: `C:\Program Files\FDC`.
+- Scope: per-machine installation.
+- WebView2 Runtime: if missing, setup downloads and installs it (requires internet connection).
+
+### If your antivirus blocks the installer
+
+1. Confirm the installer file came from the official [Releases](https://github.com/kv199/fdc-application/releases) page.
+2. Verify the SHA-256 checksum matches the `.sha256` file on that same release.
+3. If your antivirus still blocks it, open a [GitHub issue](https://github.com/kv199/fdc-application/issues) with:
+   - your antivirus product name;
+   - the detection name it reports.
+
+**Do not attach** `fdc.sqlite`, telemetry recordings, or files containing personal data.
+
+### Uninstall
+
+Uninstall FDC from Windows Settings:
+
+1. **Settings** > **Apps** > **Installed apps**
+2. Search for **FDC**
+3. Select **Uninstall**
+
+The FDC database, `fdc.sqlite`, is stored in `%APPDATA%\FDC`. See
+[Local data and privacy](#local-data-and-privacy).
 
 ## Configure Forza Horizon 6 Data Out
 
@@ -85,27 +152,10 @@ FDC listens on this local endpoint when it starts. The Configuration window
 shows whether the receiver is waiting, live, stale, offline, or unable to
 start.
 
-## Run FDC
+## First launch
 
-Run the Windows x64 `FDC_<version>_x64-setup.exe` installer, then launch FDC
-from the Start menu. Installation is available to all Windows users, requires
-administrator approval, and defaults to `C:\Program Files\FDC` on Windows x64.
-Each user's database and preferences remain in their own application-data storage.
-If Microsoft Edge WebView2 Runtime is missing, setup downloads and installs it;
-that step requires an internet connection.
-
-The installer is currently unsigned.
-
-For a source build:
-
-Build the release executable, then launch:
-
-```powershell
-src-tauri/target/release/fdc-application.exe
-```
-
-On first launch, FDC opens Configuration. After that, open Configuration from
-the FDC tray icon.
+On first launch, Configuration opens automatically. Afterward, you can access
+Configuration from the FDC tray icon in the Windows system tray.
 
 ## Configuration
 
@@ -132,106 +182,12 @@ FDC is local-first. Direct Data Out is received from the local game session.
 The application keeps runtime data local to the machine.
 
 Garage, Events, Driver Analysis, and Shift Light data are stored in the FDC
-application-data directory as `fdc.sqlite`. A Driver Analysis recording keeps
-its selected telemetry samples, opportunities, evidence, statistics, and result
-in that database until the user deletes the recording; only the enable state and
-the hotkey stay in local webview storage. Layout, visibility, speed-unit, and display
-preferences are also stored in the local application webview.
-
-## Browser demo
-
-The overlay can be previewed without Forza by serving the `overlay/` directory
-with a local static HTTP server and opening:
-
-```text
-http://127.0.0.1:8765/index.html?demo=1
-```
-
-Use `?demo=1&signal=shift` to preview the Shift Light state.
-
-Demo mode is for offline visual checks. Omit `demo=1` when checking live
-telemetry in the native application.
-
-## Development
-
-The repository is organized around the current runtime boundaries:
-
-```text
-src-tauri/                 Native Tauri runtime and Direct Data Out decoder
-overlay/                   Static browser HUD and feature runtime modules
-src/shift-light/           Canonical Shift Light TypeScript source
-tools/                     Shift Light build and integrity test tooling
-docs/                      Current architecture and feature documentation
-```
-
-Install JavaScript dependencies before working on the browser or Shift Light
-code:
-
-```powershell
-npm ci
-```
-
-When changing Shift Light source, rebuild the checked-in browser bundle before
-running the application.
-
-## Build and verify
-
-Verification is cumulative for the current change set and is performed once
-after all changes for a completed task. Documentation-only changes require
-changed-link and claim checks plus `git diff --check`.
-
-When Shift Light source or build tooling changes, rebuild the generated bundle
-before the final test run:
-
-```powershell
-npm run build:shift-light
-```
-
-For a completed runtime code task, run the release verification cycle from the
-repository root:
-
-```powershell
-node --check overlay/overlay.js
-$testFiles = @(Get-ChildItem -LiteralPath overlay,tools -Recurse -File | Where-Object { $_.Name -match '\.test\.(js|mjs)$' } | ForEach-Object { $_.FullName })
-node --test $testFiles
-cargo fmt --check --manifest-path src-tauri/Cargo.toml
-cargo test --release --locked --manifest-path src-tauri/Cargo.toml
-cargo build --release --locked --manifest-path src-tauri/Cargo.toml
-```
-
-The runnable output is `src-tauri/target/release/fdc-application.exe`. Before
-handing off a release build, launch it and confirm that it stays alive for at
-least five seconds. Do not repeat checks that already passed for the same
-final state. Run `npm ci` only when dependencies are not installed or
-dependency manifests have changed.
-
-### Windows EXE installer
-
-On Windows x64 with the Rust MSVC toolchain and Visual Studio C++ Build Tools,
-install the locked JavaScript dependencies with `npm ci` when needed, then run:
-
-```powershell
-npm run build:installer
-```
-
-This uses the project-pinned Tauri CLI to build with Cargo in release mode and
-package an NSIS installer. The version comes from `src-tauri/Cargo.toml`.
-The output is
-`src-tauri/target/release/bundle/nsis/FDC_<version>_x64-setup.exe`.
-The first packaging run may download NSIS tooling. Keep installer artifacts
-out of Git and perform the release verification cycle before distribution.
-
-## Release versioning
-
-`src-tauri/Cargo.toml` is the canonical application version. FDC increases the
-version component that matches the user impact—major for breaking changes,
-minor for new user-facing runtime features, and patch for fixes or safe UI and
-behavior improvements—without resetting the other components. For example, a
-feature changes `1.1.14` to `1.2.14`; a following fix changes it to `1.2.15`.
-
-Every runtime version bump also updates `src-tauri/Cargo.lock`, passes the
-release verification cycle, and is committed, pushed to `main`, and annotated
-as tag `vX.Y.Z`.
+application-data directory as `fdc.sqlite` (`%APPDATA%\FDC\fdc.sqlite`). A
+Driver Analysis recording keeps its selected telemetry samples, opportunities,
+evidence, statistics, and result in that database until the user deletes the
+recording; only the enable state and the hotkey stay in local webview storage.
+Layout, visibility, speed-unit, and display preferences are also stored in the
+local application webview.
 
 ## Current limitations
 
@@ -247,18 +203,43 @@ as tag `vX.Y.Z`.
 - Browser demo mode previews the overlay but does not emulate a live Forza
   Data Out connection.
 
+## Build from source
+
+Requirements:
+
+- Node.js with npm;
+- Rust 1.85 or later with Cargo (Windows x64, MSVC toolchain).
+
+Build the release executable:
+
+```powershell
+npm ci
+cargo build --release --locked --manifest-path src-tauri/Cargo.toml
+```
+
+The runnable output is `src-tauri/target/release/fdc-application.exe`.
+
+Day-to-day work happens on the `develop` branch; the `main` branch holds only
+released source. See [Development](docs/development.md) for the full developer
+workflow and [Releasing FDC](docs/releasing.md) for versioning and the release
+procedure.
+
+## Reporting issues
+
+Found a bug or have a feature idea? Open a [GitHub issue](https://github.com/kv199/fdc-application/issues).
+
+For security vulnerabilities, see [SECURITY.md](SECURITY.md) — never open a
+public issue for an unpatched vulnerability.
+
 ## Technical documentation
 
-- [FDC Architecture](docs/architecture.md) — system boundary and runtime data
-  flow.
-- [Events](docs/events.md) — local event library, its lifecycle, and Mode
-  colors.
-- [Garage](docs/garage.md) — vehicle identity, local persistence, and
-  Configuration behavior.
-- [Driver Analysis](docs/driver-analysis.md) — recording, analysis, history, and
-  verification boundaries.
-- [Shift Light](docs/shift-light.md) — current learner, presentation,
-  persistence, and compatibility contracts.
+- [FDC Architecture](docs/architecture.md) — system boundary and runtime data flow.
+- [Development](docs/development.md) — developer setup, build, and verification.
+- [Releasing FDC](docs/releasing.md) — branches, versioning, and release procedure.
+- [Events](docs/events.md) — local event library, its lifecycle, and Mode colors.
+- [Garage](docs/garage.md) — vehicle identity, local persistence, and Configuration behavior.
+- [Driver Analysis](docs/driver-analysis.md) — recording, analysis, history, and verification boundaries.
+- [Shift Light](docs/shift-light.md) — current learner, presentation, persistence, and compatibility contracts.
 
 ## License
 

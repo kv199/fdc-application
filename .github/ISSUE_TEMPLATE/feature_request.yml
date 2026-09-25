@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest an idea for FDC
+labels: ["enhancement"]
+
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem you're trying to solve
+      description: "Is there a problem or workflow challenge FDC doesn't currently address?"
+      placeholder: "Describe the problem..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_idea
+    attributes:
+      label: Proposed idea
+      description: "What would you like FDC to do?"
+      placeholder: "Describe your feature idea..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative approaches (optional)
+      description: "Any other ways this could work?"
+      placeholder: "Describe alternatives..."
+    validations:
+      required: false

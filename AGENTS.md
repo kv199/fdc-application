@@ -4,11 +4,15 @@
 
 - Product: FDC (`Feedback-Driven Companion`).
 - Application: standalone Windows Tauri application compatible with Forza Horizon 6.
-- `main` is the only supported permanent branch.
-- The supported runnable build is the Cargo `release` build.
-- While working on `main`, commit each logically complete and locally verified
-  in-scope change and push it to the configured GitHub `origin/main`; do not
+- `main` is the release branch. It contains only released source and changes
+  only by fast-forwarding to `develop` during a release that the user
+  explicitly requests. Never commit directly to `main`.
+- `develop` is the working branch. Commit each logically complete and locally
+  verified in-scope change to `develop` and push it to `origin/develop`; do not
   leave completed work only locally.
+- Treat the repository as public. Never commit personal data, absolute user
+  paths, credentials, signing material, telemetry captures, or databases.
+- The supported runnable build is the Cargo `release` build.
 
 ## Release versioning policy
 
@@ -25,9 +29,12 @@
   convention.
 - Documentation-only changes, tests-only changes, and nonbehavioral refactors
   do not bump the release version.
-- Every version bump must update `src-tauri/Cargo.toml`, be reflected in
-  `Cargo.lock`, pass the final release verification cycle, be committed and
-  pushed to `main`, and have an annotated tag `vX.Y.Z` created and pushed.
+- Every version bump happens on `develop`, must update `src-tauri/Cargo.toml`,
+  be reflected in `Cargo.lock`, pass the final release verification cycle, and
+  be committed and pushed to `develop`. Do not create tags on `develop`.
+- Releases follow `docs/releasing.md`: fast-forward `main` to `develop`, then
+  create and push the annotated tag `vX.Y.Z` on `main` only when the user
+  explicitly requests a release.
 
 ## Current system boundary
 
@@ -45,6 +52,8 @@ Read only the source relevant to the current task:
 - Garage behavior and contracts: `docs/garage.md`
 - Driver Analysis behavior and contracts: `docs/driver-analysis.md`
 - Shift Light behavior and contracts: `docs/shift-light.md`
+- Development workflow and verification commands: `docs/development.md`
+- Branches, versioning, and release procedure: `docs/releasing.md`
 - Specific decision record relevant to the current task: `ADR/`
 
 Do not load all documentation or the entire `ADR/` directory by default.

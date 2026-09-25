@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a bug to help us improve FDC
+labels: ["bug"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Warning:** Do not attach `fdc.sqlite`, telemetry recordings, or files containing personal data or user paths.
+
+        For security vulnerabilities, see the [security policy](https://github.com/kv199/fdc-application/security/policy) instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: FDC version
+      description: "Version of FDC you're running (check the installer file name or Windows Settings > Apps)"
+      placeholder: "e.g., 7.16.46 or FDC_7.16.46_x64-setup.exe"
+    validations:
+      required: true
+
+  - type: input
+    id: windows_version
+    attributes:
+      label: Windows version
+      description: "Your Windows version"
+      placeholder: "e.g., Windows 11 23H2 or Windows 10 22H2"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: "Clear description of the bug"
+      placeholder: "Describe what went wrong..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+      description: "What you expected to happen instead"
+      placeholder: "Describe what should have happened..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: Steps to reproduce
+      description: "Numbered steps to reproduce the bug"
+      placeholder: |
+        1. Start FDC
+        2. Open Configuration
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots (optional)
+      description: "Add screenshots if helpful. Please crop out personal information."
+      placeholder: "Paste screenshots here..."
+    validations:
+      required: false
