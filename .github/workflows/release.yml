@@ -145,12 +145,20 @@ jobs:
           }
 
       - name: Render release notes
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
         run: |
           $version = '${{ steps.meta.outputs.version }}'
           $previousTag = '${{ steps.meta.outputs.previous_tag }}'
           $notesDir = $env:RUNNER_TEMP
 
-          $template = Get-Content -Path 'docs/release-notes-template.md' -Raw
+          # Read the template from the workflow's commit: a tag published by
+          # manual dispatch can predate the template.
+          git checkout $env:WORKFLOW_SHA -- docs/release-notes-template.md
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not read docs/release-notes-template.md from $env:WORKFLOW_SHA"
+          }
+          $template = Get-Content -Path 'docs/release-notes-template.md' -Raw -Encoding utf8
           if ($previousTag -eq '') {
             $previousTag = "v$version"
           }

@@ -6,7 +6,9 @@
   verified change is committed to `develop` and pushed to `origin/develop`.
 - `main` is the release branch and the default GitHub branch. It contains only
   released source and changes only by fast-forwarding to `develop` during a
-  release. Nothing is committed directly to `main`; fixes also go through
+  release or a
+  [documentation-only publication](#publishing-documentation-without-a-release).
+  Nothing is committed directly to `main`; fixes also go through
   `develop`, so the two branches never carry different versions.
 
 ## Versioning
@@ -93,6 +95,26 @@ The workflow fails if a release for the tag already exists.
 Open the draft release, replace the `TODO` items in the notes with all
 user-facing changes since the previous release, optionally download and check
 the installer, then publish the release.
+
+### Publishing documentation without a release
+
+When `develop` has no version bump since the latest release tag, its changes
+are documentation, tests, or CI only. On the owner's request, `main` may then
+be fast-forwarded to `develop` without creating a tag, so the default branch
+shows current documentation:
+
+```powershell
+git diff --quiet vX.Y.Z develop -- src-tauri/Cargo.toml
+git switch main
+git pull --ff-only origin main
+git merge --ff-only develop
+git push origin main
+git switch develop
+```
+
+Replace `vX.Y.Z` with the latest release tag. The first command must succeed:
+if `src-tauri/Cargo.toml` changed since that tag, the changes need a regular
+release instead.
 
 ### Publishing an existing tag
 

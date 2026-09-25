@@ -2,8 +2,8 @@
 
 ## Branches
 
-Day-to-day work happens on the `develop` branch. The `main` branch changes only
-at a release and holds the latest released source. See [Releasing FDC](releasing.md)
+Day-to-day work happens on the `develop` branch. The `main` branch holds the
+latest released source and changes only by fast-forwarding to `develop`. See [Releasing FDC](releasing.md)
 for versioning and the release procedure.
 
 The CI workflow (`.github/workflows/ci.yml`) runs the Node tests, Cargo format

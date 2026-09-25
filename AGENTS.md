@@ -35,6 +35,10 @@
 - Releases follow `docs/releasing.md`: fast-forward `main` to `develop`, then
   create and push the annotated tag `vX.Y.Z` on `main` only when the user
   explicitly requests a release.
+- When `src-tauri/Cargo.toml` is unchanged since the latest release tag, the
+  user may request fast-forwarding `main` to `develop` without a tag to
+  publish documentation, tests, or CI changes, as described in
+  `docs/releasing.md`.
 
 ## Current system boundary
 
@@ -49,6 +53,7 @@
 Read only the source relevant to the current task:
 
 - Current system data flow: `docs/architecture.md`
+- HUD behavior, layout, and visibility: `docs/hud.md`
 - Garage behavior and contracts: `docs/garage.md`
 - Driver Analysis behavior and contracts: `docs/driver-analysis.md`
 - Shift Light behavior and contracts: `docs/shift-light.md`
