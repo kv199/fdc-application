@@ -61,17 +61,29 @@ git log -p src-tauri/Cargo.toml
 
 ### Steps
 
-Replace `X.Y.Z` with the version in `src-tauri/Cargo.toml`:
+Replace `X.Y.Z` with the version in `src-tauri/Cargo.toml`.
 
-```powershell
-git switch main
-git pull --ff-only origin main
-git merge --ff-only develop
-git push origin main
-git tag -a vX.Y.Z -m "FDC X.Y.Z"
-git push origin vX.Y.Z
-git switch develop
-```
+1. On `develop`, finalize the [changelog](#changelog): rename `## Unreleased`
+   to `## X.Y.Z - YYYY-MM-DD` with today's date, add a new empty
+   `## Unreleased` above it, then commit and push:
+
+   ```powershell
+   git commit -am "docs: finalize the X.Y.Z changelog"
+   git push origin develop
+   ```
+
+2. After CI passes for that commit, fast-forward `main`, tag the release, and
+   return to `develop`:
+
+   ```powershell
+   git switch main
+   git pull --ff-only origin main
+   git merge --ff-only develop
+   git push origin main
+   git tag -a vX.Y.Z -m "FDC X.Y.Z"
+   git push origin vX.Y.Z
+   git switch develop
+   ```
 
 ### What the Release workflow does
 
@@ -81,20 +93,23 @@ The workflow:
 
 1. validates that the tag has the form `vX.Y.Z`, equals the
    `src-tauri/Cargo.toml` version, and points to a commit contained in `main`;
-2. runs the Node tests, `cargo fmt --check`, and the release Rust tests;
-3. builds the NSIS installer with `npm run build:installer`;
-4. prepares the release assets and their SHA-256 files;
-5. renders the release notes from
-   [release-notes-template.md](release-notes-template.md);
+2. renders the [release notes](#release-notes) from the `X.Y.Z` section of
+   `CHANGELOG.md`, and fails immediately if that section is missing or the
+   changelog format is invalid;
+3. runs the Node tests, `cargo fmt --check`, and the release Rust tests;
+4. builds the NSIS installer with `npm run build:installer`;
+5. prepares the release assets and their SHA-256 files;
 6. creates a draft GitHub release titled `FDC X.Y.Z`.
 
-The workflow fails if a release for the tag already exists.
+The workflow fails if a release for the tag already exists. Its runs are named
+`Release vX.Y.Z` in the Actions list.
 
 ### Review and publish
 
-Open the draft release, replace the `TODO` items in the notes with all
-user-facing changes since the previous release, optionally download and check
-the installer, then publish the release.
+Open the draft from the
+[Releases](https://github.com/kv199/fdc-application/releases) page, review the
+notes, optionally download and check the installer from **Assets**, then
+select **Edit → Publish release**.
 
 ### Publishing documentation without a release
 
@@ -121,7 +136,8 @@ release instead.
 A tag that was pushed before the workflow existed, such as `v7.16.46`, is
 released manually: open **Actions → Release → Run workflow**, enter the tag,
 and run it. The workflow file comes from `main`, but it builds the tag's
-commit.
+commit. The release notes come from `main` as well, so `CHANGELOG.md` on
+`main` must contain the tag's section.
 
 ## Release assets
 
@@ -137,10 +153,42 @@ name makes
 `https://github.com/kv199/fdc-application/releases/latest/download/FDC-setup.exe`
 always download the latest published installer.
 
+## Changelog
+
+[`CHANGELOG.md`](../CHANGELOG.md) lists user-facing changes, newest release
+first. The `## Unreleased` section collects changes on `develop` until the next
+release.
+
+Every user-facing change adds one entry under `## Unreleased` in the same
+commit, in the category that matches its version bump:
+
+| Category | Use for | Version bump |
+| --- | --- | --- |
+| `### Breaking` | Incompatible data, settings, or behavior changes | major |
+| `### Fixed` | Bug fixes | patch |
+| `### Added` | New features | minor |
+| `### Improved` | Safe UI or behavior improvements | patch |
+
+Rules:
+
+- categories appear in the order Breaking, Fixed, Added, Improved, and a
+  category is added only when it has an entry;
+- each entry is one `- ` bullet written for users: what changed for them, not
+  how the code changed;
+- documentation-only, tests-only, CI, and nonbehavioral refactor changes get no
+  entry;
+- a release section is headed `## X.Y.Z - YYYY-MM-DD` and is never empty.
+
+The Node test suite validates this format, so CI fails on an unknown or
+misordered category, an empty category or release, or a release listed out of
+order.
+
 ## Release notes
 
-The workflow copies [release-notes-template.md](release-notes-template.md) into
-the draft and replaces:
+`tools/release-notes.mjs` renders
+[release-notes-template.md](release-notes-template.md) into the draft and
+replaces:
 
+- `{{CHANGES}}` with the body of the `X.Y.Z` section of `CHANGELOG.md`;
 - `{{VERSION}}` with the version, for example `7.16.46`;
 - `{{PREVIOUS_TAG}}` with the previous version tag, for example `v7.16.45`.

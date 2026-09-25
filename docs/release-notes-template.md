@@ -1,4 +1,8 @@
-<!-- Replace TODO items before publishing. List all user-facing changes since {{PREVIOUS_TAG}}. -->
+<!-- Generated from CHANGELOG.md. Review before publishing. -->
+
+## Changes
+
+{{CHANGES}}
 
 ## Requirements
 
@@ -21,13 +25,5 @@
 ## Privacy
 
 FDC receives Data Out from the local game session and keeps runtime data local. Garage, Events, Driver Analysis, and Shift Light data are stored in `fdc.sqlite` under `%APPDATA%\FDC`.
-
-## Changes
-
-- TODO: list user-facing changes since {{PREVIOUS_TAG}}.
-
-## Compatibility
-
-- TODO: note data or settings compatibility.
 
 **Full Changelog**: https://github.com/kv199/fdc-application/compare/{{PREVIOUS_TAG}}...v{{VERSION}}

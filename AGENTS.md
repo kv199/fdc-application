@@ -35,6 +35,11 @@
 - Releases follow `docs/releasing.md`: fast-forward `main` to `develop`, then
   create and push the annotated tag `vX.Y.Z` on `main` only when the user
   explicitly requests a release.
+- Every user-facing change adds one user-facing entry under `## Unreleased`
+  in `CHANGELOG.md` in the same commit. Use the category that matches the
+  version bump — `Breaking` (major), `Fixed` (patch), `Added` (minor),
+  `Improved` (patch) — in that order, as described in `docs/releasing.md`.
+  Documentation, tests, CI, and nonbehavioral refactors get no entry.
 - When `src-tauri/Cargo.toml` is unchanged since the latest release tag, the
   user may request fast-forwarding `main` to `develop` without a tag to
   publish documentation, tests, or CI changes, as described in

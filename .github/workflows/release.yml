@@ -1,4 +1,5 @@
 name: Release
+run-name: Release ${{ inputs.tag || github.ref_name }}
 
 on:
   push:
@@ -93,6 +94,29 @@ jobs:
           node-version: 24
           cache: npm
 
+      # Render the notes before the long build so a missing CHANGELOG entry
+      # fails fast. The changelog, template, and renderer come from the
+      # workflow's commit: a tag published by manual dispatch can predate them.
+      - name: Render release notes
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          PREVIOUS_TAG: ${{ steps.meta.outputs.previous_tag }}
+        run: |
+          $sourceDir = Join-Path $env:RUNNER_TEMP 'release-notes-source'
+          New-Item -ItemType Directory -Force -Path $sourceDir > $null
+          git --work-tree="$sourceDir" restore --source=$env:WORKFLOW_SHA -- CHANGELOG.md docs/release-notes-template.md tools/release-notes.mjs
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not read the release notes sources from $env:WORKFLOW_SHA"
+          }
+          $previousTag = if ($env:PREVIOUS_TAG) { $env:PREVIOUS_TAG } else { "v$env:VERSION" }
+          node (Join-Path $sourceDir 'tools/release-notes.mjs') `
+            --version $env:VERSION `
+            --previous-tag $previousTag `
+            --changelog (Join-Path $sourceDir 'CHANGELOG.md') `
+            --template (Join-Path $sourceDir 'docs/release-notes-template.md') `
+            --out (Join-Path $env:RUNNER_TEMP 'release-notes.md')
+
       - name: Install dependencies
         run: npm ci
 
@@ -143,32 +167,6 @@ jobs:
               (New-Object System.Text.UTF8Encoding($false))
             )
           }
-
-      - name: Render release notes
-        env:
-          WORKFLOW_SHA: ${{ github.sha }}
-        run: |
-          $version = '${{ steps.meta.outputs.version }}'
-          $previousTag = '${{ steps.meta.outputs.previous_tag }}'
-          $notesDir = $env:RUNNER_TEMP
-
-          # Read the template from the workflow's commit: a tag published by
-          # manual dispatch can predate the template.
-          git checkout $env:WORKFLOW_SHA -- docs/release-notes-template.md
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not read docs/release-notes-template.md from $env:WORKFLOW_SHA"
-          }
-          $template = Get-Content -Path 'docs/release-notes-template.md' -Raw -Encoding utf8
-          if ($previousTag -eq '') {
-            $previousTag = "v$version"
-          }
-          $notes = $template.Replace('{{VERSION}}', $version).Replace('{{PREVIOUS_TAG}}', $previousTag)
-
-          [System.IO.File]::WriteAllText(
-            (Join-Path $notesDir 'release-notes.md'),
-            $notes,
-            (New-Object System.Text.UTF8Encoding($false))
-          )
 
       - name: Create release
         env:

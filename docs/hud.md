@@ -4,6 +4,8 @@ The HUD is FDC's in-game telemetry overlay. It renders the normalized Direct
 Data Out telemetry that the native layer delivers through `queueTelemetry`; it
 has no other data source.
 
+![Grouped HUD while driving](images/hud-in-game.png)
+
 ## Overlay window
 
 - The HUD window is transparent, always on top, frameless, and never takes
@@ -67,6 +69,10 @@ Configuration → **HUD** offers two layout modes:
   switch, so every block can be placed and sized independently.
 
 Delta is positioned independently in both modes.
+
+| Grouped | Freeform |
+| --- | --- |
+| ![Grouped layout settings](images/configuration-hud-grouped.png) | ![Freeform layout settings](images/configuration-hud-freeform.png) |
 
 **EDIT** starts an on-screen edit of the selected target:
 

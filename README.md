@@ -10,7 +10,7 @@
   </p>
 </div>
 
-![FDC HUD while driving](docs/images/hud-in-game.png)
+![FDC HUD while driving](docs/images/hud-in-game.gif)
 
 FDC receives Forza Horizon 6 Data Out directly on your PC and turns it into an
 always-on-top driving HUD, learned shift cues, and local review tools. No
@@ -160,6 +160,7 @@ branch holds the latest release and `develop` holds ongoing work. See
 
 ## Documentation
 
+- [Changelog](CHANGELOG.md) — user-facing changes in every release.
 - [HUD](docs/hud.md) — blocks, shift cue, visibility, layout, and opacity.
 - [Shift Light](docs/shift-light.md) — learner, presentation, and persistence.
 - [Events](docs/events.md) — event library, run recording, and Delta.
