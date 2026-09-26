@@ -1,8 +1,10 @@
 (function (globalScope, factory) {
-  const api = factory(globalScope)
+  const drivesApi = typeof module !== 'undefined' && module.exports && typeof document === 'undefined'
+    ? require('./driver-analysis-drives.js') : globalScope.DriverAnalysisDrives
+  const api = factory(globalScope, drivesApi)
   if (typeof module !== 'undefined' && module.exports && typeof document === 'undefined') module.exports = api
   else globalScope.DriverAnalysis = api
-}(typeof globalThis !== 'undefined' ? globalThis : this, globalScope => {
+}(typeof globalThis !== 'undefined' ? globalThis : this, (globalScope, drivesApi) => {
   'use strict'
 
   const SETTINGS_STORAGE_KEY = 'fdc.driver-analysis.settings.v1'
@@ -119,9 +121,16 @@
     return { key: `${ordinal}:${pi}:${rpmMax}:${drivetrain}`, ordinal, pi, drivetrain, rpmMax }
   }
 
+  function persistedPosition(telemetry) {
+    const values = [telemetry?.position?.x, telemetry?.position?.y, telemetry?.position?.z].map(Number)
+    return values.every(Number.isFinite) ? values : null
+  }
+
   function persistedSample(telemetry, sequence) {
     if (!telemetry || telemetry.isRaceOn === false || !Number.isFinite(Number(telemetry.timestampMs)) || !Number.isFinite(Number(telemetry.speedKmh))) return null
+    const position = persistedPosition(telemetry)
     return {
+      ...(position ? { position } : {}),
       sequence, timestampMs: Math.max(0, Math.round(finite(telemetry.timestampMs))), speedKmh: Math.max(0, finite(telemetry.speedKmh)),
       throttle: finite(telemetry.throttle), brake: finite(telemetry.brake), steer: finite(telemetry.steer),
       gear: Math.max(0, Math.trunc(finite(telemetry.gear))), rpm: Math.max(0, finite(telemetry.rpm)), rpmMax: Math.max(0, finite(telemetry.rpmMax)),
@@ -208,29 +217,41 @@
     }
   }
 
+  // One recording (RECORD to STOP) holds one analysis session per continuous stint with a single car. A car change
+  // finishes the current car's session and starts the next one in the same recording.
   function createRecorder(options = {}) {
     const engine = options.engine || globalScope.DriverAnalysisEngine?.createDriverAnalysisEngine?.()
     const invoke = typeof options.invoke === 'function' ? options.invoke : null
     const emit = typeof options.emit === 'function' ? options.emit : () => Promise.resolve()
     const onResult = typeof options.onResult === 'function' ? options.onResult : () => Promise.resolve()
     const now = typeof options.now === 'function' ? options.now : () => Date.now()
+    const createSegmenter = typeof options.createSegmenter === 'function'
+      ? options.createSegmenter
+      : () => drivesApi?.createDriveSegmenter?.({ now }) || null
     if (!engine || !invoke) return null
 
     let enabled = options.enabled === true
     let phase = enabled ? 'ready' : 'off'
     let startedAt = null
-    let sessionId = null
-    let sessionPromise = null
-    let identity = null
-    let sequence = 0
-    let samples = []
-    let lastFlushAt = 0
+    let recordingId = null
+    let recordingPromise = null
+    let car = createCarState()
     let lastError = null
     let persistence = Promise.resolve()
 
+    function createCarState() {
+      return {
+        sessionId: null, sessionPromise: null, identity: null, sequence: 0, samples: [],
+        lastFlushAt: 0, lastTimestampMs: null, segmenter: createSegmenter()
+      }
+    }
+
     function snapshot() {
       const engineState = engine.snapshot?.() || {}
-      return { enabled, phase, startedAt, sessionId, sampleCount: sequence, lastError, ...engineState, recording: phase === 'waiting' || phase === 'recording' }
+      return {
+        enabled, phase, startedAt, recordingId, sessionId: car.sessionId, sampleCount: car.sequence, lastError,
+        ...engineState, recording: phase === 'waiting' || phase === 'recording'
+      }
     }
 
     function publish() { void Promise.resolve(emit(snapshot())).catch(() => undefined) }
@@ -250,45 +271,73 @@
     function resetRuntime(reason) {
       engine.reset?.(reason)
       startedAt = null
-      sessionId = null
-      sessionPromise = null
-      identity = null
-      sequence = 0
-      samples = []
-      lastFlushAt = 0
+      recordingId = null
+      recordingPromise = null
+      car = createCarState()
       lastError = null
     }
 
-    function flushSamples() {
-      if (!sessionId || samples.length === 0) return Promise.resolve(0)
-      const batch = samples
-      samples = []
-      lastFlushAt = now()
-      return enqueue(() => invoke('append_driver_analysis_samples', { sessionId, samples: batch })).catch(error => {
-        samples = [...batch, ...samples]
+    function flushSamples(state = car) {
+      if (!state.sessionId || state.samples.length === 0) return Promise.resolve(0)
+      const batch = state.samples
+      state.samples = []
+      state.lastFlushAt = now()
+      return enqueue(() => invoke('append_driver_analysis_samples', { sessionId: state.sessionId, samples: batch })).catch(error => {
+        state.samples = [...batch, ...state.samples]
         throw error
       })
     }
 
-    function ensureSession(car) {
-      if (sessionId) return Promise.resolve(sessionId)
-      if (sessionPromise) return sessionPromise
+    function ensureRecording() {
+      if (recordingPromise) return recordingPromise
       startedAt = now()
-      lastFlushAt = startedAt
-      identity = car
+      recordingPromise = enqueue(() => invoke('create_driver_analysis_recording', { startedAtMs: startedAt })).then(id => {
+        recordingId = Number(id)
+        if (!Number.isSafeInteger(recordingId) || recordingId <= 0) throw new Error('Driver Analysis recording was not created')
+        return recordingId
+      })
+      return recordingPromise
+    }
+
+    function ensureSession(identity) {
+      const state = car
+      if (state.sessionPromise) return state.sessionPromise
+      const recording = ensureRecording()
+      state.lastFlushAt = now()
+      state.identity = identity
       phase = 'recording'
       publish()
       const input = {
         algorithmVersion: engine.snapshot?.().algorithmVersion,
-        vehicleIdentity: { ordinal: car.ordinal, pi: car.pi, drivetrain: car.drivetrain, rpmMax: car.rpmMax }, startedAtMs: startedAt,
-        vehicleOrdinal: car.ordinal, vehiclePi: car.pi, vehicleDrivetrain: car.drivetrain, vehicleRpmLimit: car.rpmMax
+        vehicleIdentity: { ordinal: identity.ordinal, pi: identity.pi, drivetrain: identity.drivetrain, rpmMax: identity.rpmMax },
+        startedAtMs: now(),
+        vehicleOrdinal: identity.ordinal, vehiclePi: identity.pi, vehicleDrivetrain: identity.drivetrain, vehicleRpmLimit: identity.rpmMax
       }
-      sessionPromise = enqueue(() => invoke('create_driver_analysis_session', { input })).then(id => {
-        sessionId = Number(id)
-        if (!Number.isSafeInteger(sessionId) || sessionId <= 0) throw new Error('Driver Analysis session was not created')
-        return sessionId
-      })
-      return sessionPromise
+      state.sessionPromise = recording
+        .then(id => enqueue(() => invoke('create_driver_analysis_session', { input: { ...input, recordingId: id } })))
+        .then(id => {
+          state.sessionId = Number(id)
+          if (!Number.isSafeInteger(state.sessionId) || state.sessionId <= 0) throw new Error('Driver Analysis session was not created')
+          return state.sessionId
+        })
+      return state.sessionPromise
+    }
+
+    // Finishes the current car's session and leaves a fresh car state for the next stint.
+    async function finishCar(interrupted) {
+      const state = car
+      car = createCarState()
+      if (!state.sessionPromise) return null
+      const finalized = engine.finalize()
+      engine.reset?.('car_finished')
+      const drives = state.segmenter?.finalize?.() || []
+      await state.sessionPromise
+      await flushSamples(state)
+      await persistence
+      const payload = persistencePayload(finalized, interrupted)
+      const entry = await enqueue(() => invoke('finalize_driver_analysis_session', { sessionId: state.sessionId, ...payload, drives }))
+      void Promise.resolve(onResult(entry)).catch(() => undefined)
+      return entry
     }
 
     function start() {
@@ -301,23 +350,18 @@
 
     async function stop(interrupted = false) {
       if (phase !== 'waiting' && phase !== 'recording') return { status: snapshot(), entry: null }
-      const hadSession = sessionPromise !== null
+      const hadRecording = recordingPromise !== null
       phase = 'finalizing'
       publish()
-      if (!hadSession) {
+      if (!hadRecording) {
         resetRuntime('recording_stopped_without_telemetry')
         phase = enabled ? 'ready' : 'off'
         publish()
         return { status: snapshot(), entry: null }
       }
       try {
-        await sessionPromise
-        await flushSamples()
+        const entry = await finishCar(interrupted)
         await persistence
-        const finalized = engine.finalize()
-        const payload = persistencePayload(finalized, interrupted)
-        const entry = await enqueue(() => invoke('finalize_driver_analysis_session', { sessionId, ...payload }))
-        void Promise.resolve(onResult(entry)).catch(() => undefined)
         resetRuntime('recording_stop')
         phase = enabled ? 'ready' : 'off'
         publish()
@@ -340,11 +384,14 @@
 
     function update(telemetry) {
       if (!enabled || (phase !== 'waiting' && phase !== 'recording')) return snapshot()
-      const car = vehicleIdentity(telemetry)
-      const sample = persistedSample(telemetry, sequence)
-      if (!car || !sample) return snapshot()
-      if (identity && car.key !== identity.key) {
-        void stop(true)
+      const identity = vehicleIdentity(telemetry)
+      if (identity && car.identity && identity.key !== car.identity.key) {
+        void finishCar(false).catch(error => fail(error))
+      }
+      const sample = persistedSample(telemetry, car.sequence)
+      if (!identity || !sample) {
+        // Result screens and pauses are not stored, but they carry the finish line for drive detection.
+        if (car.identity) car.segmenter?.update?.(telemetry, null)
         return snapshot()
       }
       try {
@@ -354,10 +401,17 @@
         fail(error)
         return snapshot()
       }
-      sequence += 1
-      samples.push(sample)
-      void ensureSession(car).then(() => {
-        if (samples.length > 0 && now() - lastFlushAt >= SAMPLE_BATCH_MS) void flushSamples()
+      // Forza sends packets in pairs with one timestamp; the analysis ignores the second, so it is not stored.
+      const duplicate = car.lastTimestampMs !== null && sample.timestampMs === car.lastTimestampMs
+      if (!duplicate) {
+        car.sequence += 1
+        car.lastTimestampMs = sample.timestampMs
+        car.samples.push(sample)
+      }
+      car.segmenter?.update?.(telemetry, duplicate ? null : sample)
+      const state = car
+      void ensureSession(identity).then(() => {
+        if (state === car && state.samples.length > 0 && now() - state.lastFlushAt >= SAMPLE_BATCH_MS) void flushSamples(state)
       }).catch(() => undefined)
       return snapshot()
     }

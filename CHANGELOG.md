@@ -21,6 +21,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   steering, acceleration, and per-wheel slip, tire temperature, suspension
   travel, curb, and puddle values at that point. Laps recorded before this
   version show the pedal layers only.
+- **Driver Analysis**: a recording now keeps going when you change cars and
+  shows one card per recording with a line for each car. DETAILS lists the cars;
+  each car has its own result, statistics, and a table of its races with type
+  (circuit laps or sprint), duration, start time, and error count. Recordings
+  also use about half the disk space.
 
 ### Improved
 

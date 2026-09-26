@@ -8,9 +8,10 @@ starts and stops each recording from Configuration or with the global hotkey.
 
 The feature does not identify the road surface, track, ideal line, apex, or
 optimal gear. It does not produce a driving score or an exact time-loss claim.
-The driver must record on asphalt. Each completed recording shows at most one
-dominant, recurring technique problem. When no problem qualifies, the recording
-shows the most frequent checked pattern as an observation instead.
+The driver must record on asphalt. A recording is analyzed separately for each
+car driven in it. Each car shows at most one dominant, recurring technique
+problem. When no problem qualifies, the car shows the most frequent checked
+pattern as an observation instead.
 
 ## Runtime data flow
 
@@ -40,20 +41,51 @@ OFF → READY → WAITING → RECORDING → FINALIZING → READY
 ```
 
 - `WAITING` means recording is armed but valid telemetry has not arrived. No
-  empty database session is created.
-- The first valid sample creates the local session and enters `RECORDING`.
-  While it records, the history shows the session as `RECORDING IN PROGRESS`
-  with a `LIVE` duration and a disabled `DELETE` control.
+  empty database recording or session is created.
+- The first valid sample creates the local recording and the session of the
+  current car and enters `RECORDING`. While it records, the history shows the
+  recording as `RECORDING IN PROGRESS` with a `LIVE` duration and a disabled
+  `DELETE` control.
 - Samples are appended to SQLite in ordered batches rather than one command per
-  packet.
-- Raw packets that share a game timestamp are retained for reproducibility, but
-  only the first packet at that timestamp advances the maneuver analysis.
+  packet. Forza sends packets in pairs that share a game timestamp; only the
+  first packet at a timestamp is analyzed and stored. Each stored sample also
+  keeps the car position.
 - A telemetry gap invalidates the active maneuver evidence and recording can
   continue.
-- A vehicle-identity change ends the session as interrupted. Completed
-  opportunities remain available in the saved recording.
-- An unfinished `recording` row is recovered as `interrupted` when FDC
+- A vehicle-identity change finishes and saves the analysis session of the
+  previous car and starts a new session for the new car in the same recording.
+  Switching back to an earlier car starts another session for it.
+- An unfinished `recording` session is recovered as `interrupted` when FDC
   starts.
+
+### Drives
+
+While recording, each car's telemetry is split into drives, one per race. A
+drive starts at a clean race start: live telemetry with Current Lap and Current
+Race Time of at most two seconds and a travelled distance of at most 25 metres,
+the same start that Events use. It ends at another clean start, when driving
+continues after the finish line, when the travelled distance falls back by more
+than 100 metres together with a lap change or a reset lap clock, at a car
+change, or when recording stops. A smaller fall back without those signals is
+an in-race rewind and the drive continues; pauses continue the drive too.
+
+Telemetry does not identify the race type, so a drive is classified from its
+laps:
+
+- a higher Lap Number seen while racing
+  becomes a completed circuit lap once the car travels another 100 metres;
+- a higher Lap Number or a new Last Lap on the non-live result packets, or a
+  lap boundary that the car does
+  not travel past, is the finish line;
+- a drive with at least one completed circuit lap is a circuit whose lap count
+  includes the finish lap when it was reached; any other drive is a sprint, so
+  a one-lap circuit appears as a sprint;
+- a drive without a finish line is unfinished.
+
+Driving outside races is analyzed exactly as before and counts toward the
+car's result, but it is not a drive. Drives are saved with the car's session
+when it is finalized and are not recomputed by later reanalysis, because the
+non-live packets they depend on are not stored.
 
 The default hotkey is `Ctrl+Shift+F9`. The hotkey is registered only while
 Driver Analysis is enabled and is released when it is disabled. If Windows
@@ -183,38 +215,59 @@ saved result, opportunities, and evidence of those recordings are not changed.
 
 ## Card layout
 
-A history card is collapsed by default and shows the recording date, duration,
-storage size, a headline block, and a one-line recording summary with distance,
-average speed, top speed, and corner count.
+The history shows one card per recording, newest first. A collapsed card shows
+the recording date, its duration from the first car's start to the last car's
+finish (`LIVE` while recording), storage size, and the number of cars and
+drives. Its finding column has one line per car, in the order driven, with the
+car's Garage name (or `CAR #` and the ordinal) and the headline of that car.
+A one-line summary below adds up every car: distance, average speed, top
+speed, and corner count.
 
-The headline block shows the qualified problem and its instruction when the
-recording has one. Otherwise it shows `MOST FREQUENT` with the pattern that has
+`DETAILS` switches to `HIDE` and opens the `CARS` list. A car row shows the
+car, its PI and drivetrain, its drive count, duration, and headline; selecting
+it expands that car.
+
+An expanded car shows its headline block: the qualified problem and its
+instruction when the car has one. Otherwise it shows `MOST FREQUENT` with the pattern that has
 the highest share of problems among the patterns with at least 10 checked
 opportunities and at least 3 problems, for example `Front scrub — steering more
 than the front tires can take — in 18 of 133 checks (14%). Becomes a reported
-problem above 40%.` When no pattern reaches that support, the card keeps the
-result copy of the recording, such as `NOT ENOUGH ELIGIBLE MANEUVERS`.
+problem above 40%.` When no pattern reaches that support, the car keeps its
+result copy, such as `NOT ENOUGH ELIGIBLE MANEUVERS`.
 
-A `DETAILS` control expands the statistics rows below the summary and switches
-to `HIDE`. The expanded state is kept per recording while Configuration stays
-open. The control is absent when the recording has no statistics.
+Below the headline block, the car's recording summary line is followed by a
+`STATS` control that reveals the statistics rows, and by the drives table
+with `ID`, `TYPE` (`CIRCUIT · N LAPS`, `SPRINT`, with ` · UNFINISHED` when no
+finish line was seen), `DURATION`, `START` (local time), and `ERRORS`, the
+number of checks inside the drive that ended as a problem. A car recorded
+before drives existed shows `RECORDED BEFORE DRIVES`; a car without races
+shows `NO RACES IN THIS RECORDING`. Drive rows do not open a detail view yet.
+
+The expanded recordings and cars are kept while Configuration stays open.
 
 ## Local persistence and deletion
 
 The native layer stores data in the application-data `fdc.sqlite` database:
 
-- `driver_analysis_sessions` stores lifecycle, vehicle identity, algorithm
-  version, counts, selected result, recording statistics, and approximate
-  storage size;
+- `driver_analysis_recordings` stores one row per recording; each session
+  belongs to one recording;
+- `driver_analysis_sessions` stores one car's lifecycle, vehicle identity,
+  algorithm version, counts, selected result, recording statistics, and
+  approximate storage size;
 - `driver_analysis_samples` stores the selected normalized telemetry needed to
-  reproduce or improve analysis;
+  reproduce or improve analysis, including the car position for recordings
+  made from schema version 21;
+- `driver_analysis_drives` stores each drive's type, finish state, lap count,
+  sample range, telemetry-clock time range, start time, and distance;
 - `driver_analysis_opportunities` stores eligible windows and their context;
 - `driver_analysis_evidence` stores detector, attribution, severity, and causal
   metrics.
 
 Foreign keys use cascading deletion. There is no automatic retention limit.
-The user deletes an individual recording with `DELETE`; after confirmation the
-session, samples, opportunities, and evidence are removed together.
+The user deletes a recording with `DELETE`; after confirmation all of its
+sessions, samples, opportunities, evidence, and drives are removed together.
+Schema version 21 moves every earlier session into its own recording; those
+sessions have no drives and no positions.
 
 Only enable state, hotkey, and optional controller device name remain in browser storage under
 `fdc.driver-analysis.settings.v1` (hotkeyLabel is trimmed to 80 characters and
@@ -222,8 +275,8 @@ stored only when the binding is a controller button).
 
 When the analysis algorithm version changes, completed recordings with saved
 samples are replayed locally once. Their raw samples, timestamps, vehicle
-identity, and storage metadata are preserved; only derived opportunities,
-evidence, and the summary result are replaced transactionally.
+identity, drives, and storage metadata are preserved; only derived
+opportunities, evidence, and the summary result are replaced transactionally.
 
 ## Current limitations
 

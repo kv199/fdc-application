@@ -797,7 +797,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "fdc-application"
-version = "7.17.49"
+version = "7.18.49"
 dependencies = [
  "rusqlite",
  "serde",

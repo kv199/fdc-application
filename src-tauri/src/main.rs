@@ -376,7 +376,7 @@ struct ShiftLightVariantResolution {
 }
 
 const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 4;
-const HUD_SCHEMA_VERSION: i32 = 20;
+const HUD_SCHEMA_VERSION: i32 = 21;
 const MAX_SHIFT_LIGHT_CEILING_SAMPLES: usize = 3;
 const MAX_SHIFT_LIGHT_GEAR_TARGETS: usize = 9;
 const MAX_SHIFT_LIGHT_SHIFT_SAMPLES: usize = 64;
@@ -1237,6 +1237,117 @@ fn migrate_driver_analysis_stats(connection: &mut Connection) -> Result<(), Stri
         .map_err(|error| format!("unable to commit Driver Analysis statistics migration: {error}"))
 }
 
+fn migrate_driver_analysis_recordings(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection.transaction().map_err(|error| {
+        format!("unable to start Driver Analysis recordings migration: {error}")
+    })?;
+
+    transaction
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS driver_analysis_recordings (
+               id INTEGER PRIMARY KEY,
+               started_at_ms INTEGER NOT NULL CHECK (started_at_ms >= 0),
+               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+             );
+             CREATE TABLE IF NOT EXISTS driver_analysis_drives (
+               id INTEGER PRIMARY KEY,
+               session_id INTEGER NOT NULL REFERENCES driver_analysis_sessions(id) ON DELETE CASCADE,
+               drive_index INTEGER NOT NULL CHECK (drive_index >= 0),
+               kind TEXT NOT NULL CHECK (kind IN ('circuit','sprint')),
+               finished INTEGER NOT NULL CHECK (finished IN (0,1)),
+               lap_count INTEGER CHECK (lap_count IS NULL OR lap_count >= 1),
+               first_sequence INTEGER NOT NULL CHECK (first_sequence >= 0),
+               last_sequence INTEGER NOT NULL CHECK (last_sequence >= first_sequence),
+               started_at_ms INTEGER NOT NULL CHECK (started_at_ms >= 0),
+               finished_at_ms INTEGER NOT NULL CHECK (finished_at_ms >= started_at_ms),
+               started_wall_ms INTEGER NOT NULL CHECK (started_wall_ms >= 0),
+               distance_m REAL NOT NULL CHECK (distance_m >= 0),
+               UNIQUE (session_id, drive_index)
+             );
+             CREATE INDEX IF NOT EXISTS idx_driver_analysis_drives_session
+               ON driver_analysis_drives(session_id, drive_index);",
+        )
+        .map_err(|error| format!("unable to create Driver Analysis recording tables: {error}"))?;
+
+    for (table, column, definition) in [
+        ("driver_analysis_sessions", "recording_id", "INTEGER"),
+        (
+            "driver_analysis_sessions",
+            "drives_recorded",
+            "INTEGER NOT NULL DEFAULT 0",
+        ),
+        ("driver_analysis_samples", "position_x", "REAL"),
+        ("driver_analysis_samples", "position_y", "REAL"),
+        ("driver_analysis_samples", "position_z", "REAL"),
+    ] {
+        // Partial databases from early development versions can lack a table; there is nothing to extend then.
+        let table_exists: bool = transaction
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                params![table],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("unable to inspect Driver Analysis {table}: {error}"))?;
+        if table_exists && !table_has_column(&transaction, table, column)? {
+            transaction
+                .execute(
+                    &format!("ALTER TABLE {table} ADD COLUMN {column} {definition}"),
+                    [],
+                )
+                .map_err(|error| format!("unable to add Driver Analysis {column} data: {error}"))?;
+        }
+    }
+
+    // Every earlier session becomes its own recording.
+    let started_column =
+        if table_has_column(&transaction, "driver_analysis_sessions", "started_at_ms")? {
+            "started_at_ms"
+        } else {
+            "0"
+        };
+    let unlinked = {
+        let mut statement = transaction
+            .prepare(&format!(
+                "SELECT id, {started_column} FROM driver_analysis_sessions
+                 WHERE recording_id IS NULL ORDER BY id"
+            ))
+            .map_err(|error| {
+                format!("unable to read unlinked Driver Analysis sessions: {error}")
+            })?;
+        statement
+            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))
+            .map_err(|error| format!("unable to read unlinked Driver Analysis sessions: {error}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("unable to read unlinked Driver Analysis sessions: {error}"))?
+    };
+    for (session_id, started_at_ms) in unlinked {
+        transaction
+            .execute(
+                "INSERT INTO driver_analysis_recordings (started_at_ms) VALUES (?1)",
+                params![started_at_ms.max(0)],
+            )
+            .map_err(|error| format!("unable to create Driver Analysis recording: {error}"))?;
+        transaction
+            .execute(
+                "UPDATE driver_analysis_sessions SET recording_id = ?1 WHERE id = ?2",
+                params![transaction.last_insert_rowid(), session_id],
+            )
+            .map_err(|error| format!("unable to link Driver Analysis session: {error}"))?;
+    }
+
+    transaction
+        .execute(
+            "UPDATE hud_schema_version SET version = ?1",
+            params![HUD_SCHEMA_VERSION],
+        )
+        .map_err(|error| {
+            format!("unable to update Driver Analysis recordings schema version: {error}")
+        })?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Driver Analysis recordings migration: {error}"))
+}
+
 const EVENT_TRACE_TELEMETRY_COLUMNS: [(&str, &str); 36] = [
     ("speed_kmh", "REAL"),
     ("gear", "INTEGER"),
@@ -1427,6 +1538,9 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
     if version < 20 {
         migrate_event_trace_telemetry_schema(connection)?;
     }
+    if version < 21 {
+        migrate_driver_analysis_recordings(connection)?;
+    }
     Ok(())
 }
 
@@ -1454,6 +1568,8 @@ struct DriverAnalysisSessionInput {
     vehicle_pi: Option<i32>,
     vehicle_drivetrain: Option<i32>,
     vehicle_rpm_limit: Option<f64>,
+    #[serde(default)]
+    recording_id: Option<i64>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -1482,6 +1598,8 @@ struct DriverAnalysisSampleInput {
     lap_time: f64,
     lap_number: i32,
     lap_distance: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    position: Option<[f64; 3]>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -1525,6 +1643,38 @@ struct DriverAnalysisFinalResultInput {
     stats_json: Option<String>,
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DriverAnalysisDriveInput {
+    kind: String,
+    finished: bool,
+    lap_count: Option<i32>,
+    first_sequence: i64,
+    last_sequence: i64,
+    started_at_ms: i64,
+    finished_at_ms: i64,
+    started_wall_ms: i64,
+    distance_m: f64,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DriverAnalysisDriveRecord {
+    id: i64,
+    drive_index: i32,
+    kind: String,
+    finished: bool,
+    lap_count: Option<i32>,
+    started_at_ms: i64,
+    finished_at_ms: i64,
+    started_wall_ms: i64,
+    duration_ms: i64,
+    distance_m: f64,
+    first_sequence: i64,
+    last_sequence: i64,
+    problem_counts: JsonValue,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DriverAnalysisHistoryRecord {
@@ -1549,6 +1699,10 @@ struct DriverAnalysisHistoryRecord {
     algorithm_version: String,
     vehicle_identity: JsonValue,
     stats: Option<JsonValue>,
+    recording_id: i64,
+    vehicle_name: Option<String>,
+    drives_recorded: bool,
+    drives: Vec<DriverAnalysisDriveRecord>,
 }
 
 fn now_epoch_ms() -> i64 {
@@ -1645,6 +1799,11 @@ fn validate_sample(sample: &DriverAnalysisSampleInput) -> Result<(), String> {
             validate_finite(*value, name)?;
         }
     }
+    if let Some([x, y, z]) = sample.position {
+        validate_finite(x, "position[0]")?;
+        validate_finite(y, "position[1]")?;
+        validate_finite(z, "position[2]")?;
+    }
     Ok(())
 }
 
@@ -1677,12 +1836,37 @@ fn create_driver_analysis_session_in_connection(
     input: &DriverAnalysisSessionInput,
 ) -> Result<i64, String> {
     let algorithm_version = validate_session_input(input)?;
+    let recording_id = if let Some(id) = input.recording_id {
+        if id <= 0 {
+            return Err("Driver Analysis recording id must be positive".to_string());
+        }
+        let exists: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM driver_analysis_recordings WHERE id = ?1)",
+                params![id],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("unable to verify Driver Analysis recording: {error}"))?;
+        if !exists {
+            return Err("Driver Analysis recording does not exist".to_string());
+        }
+        id
+    } else {
+        let now = now_epoch_ms();
+        connection
+            .execute(
+                "INSERT INTO driver_analysis_recordings (started_at_ms) VALUES (?1)",
+                params![now],
+            )
+            .map_err(|error| format!("unable to create Driver Analysis recording: {error}"))?;
+        connection.last_insert_rowid()
+    };
     connection
         .execute(
             "INSERT INTO driver_analysis_sessions
                (started_at_ms, status, algorithm_version, vehicle_identity,
-                vehicle_ordinal, vehicle_pi, vehicle_drivetrain, vehicle_rpm_limit)
-             VALUES (?1, 'recording', ?2, ?3, ?4, ?5, ?6, ?7)",
+                vehicle_ordinal, vehicle_pi, vehicle_drivetrain, vehicle_rpm_limit, recording_id)
+             VALUES (?1, 'recording', ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 input.started_at_ms,
                 algorithm_version,
@@ -1691,6 +1875,7 @@ fn create_driver_analysis_session_in_connection(
                 input.vehicle_pi,
                 input.vehicle_drivetrain,
                 input.vehicle_rpm_limit,
+                recording_id,
             ],
         )
         .map_err(|error| format!("unable to create Driver Analysis session: {error}"))?;
@@ -1726,6 +1911,10 @@ fn append_driver_analysis_samples_in_connection(
         .transaction()
         .map_err(|error| format!("unable to start Driver Analysis sample batch: {error}"))?;
     for sample in samples {
+        let (position_x, position_y, position_z) = sample
+            .position
+            .map(|[x, y, z]| (Some(x), Some(y), Some(z)))
+            .unwrap_or((None, None, None));
         transaction
             .execute(
                 "INSERT INTO driver_analysis_samples
@@ -1738,11 +1927,11 @@ fn append_driver_analysis_samples_in_connection(
                     suspension_fl, suspension_fr, suspension_rl, suspension_rr,
                     rumble_fl, rumble_fr, rumble_rl, rumble_rr,
                     puddle_fl, puddle_fr, puddle_rl, puddle_rr,
-                    lap_time, lap_number, lap_distance)
+                    lap_time, lap_number, lap_distance, position_x, position_y, position_z)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
                          ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
                          ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38,
-                         ?39, ?40, ?41, ?42, ?43, ?44, ?45)",
+                         ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48)",
                 params![
                     session_id,
                     sample.sequence,
@@ -1789,6 +1978,9 @@ fn append_driver_analysis_samples_in_connection(
                     sample.lap_time,
                     sample.lap_number,
                     sample.lap_distance,
+                    position_x,
+                    position_y,
+                    position_z,
                 ],
             )
             .map_err(|error| format!("unable to append Driver Analysis samples: {error}"))?;
@@ -1829,7 +2021,7 @@ fn load_driver_analysis_samples_in_connection(
                     suspension_fl, suspension_fr, suspension_rl, suspension_rr,
                     rumble_fl, rumble_fr, rumble_rl, rumble_rr,
                     puddle_fl, puddle_fr, puddle_rl, puddle_rr,
-                    lap_time, lap_number, lap_distance
+                    lap_time, lap_number, lap_distance, position_x, position_y, position_z
                FROM driver_analysis_samples
               WHERE session_id = ?1 AND sequence > ?2
               ORDER BY sequence
@@ -1838,6 +2030,9 @@ fn load_driver_analysis_samples_in_connection(
         .map_err(|error| format!("unable to prepare Driver Analysis sample replay: {error}"))?;
     let rows = statement
         .query_map(params![session_id, after_sequence, limit], |row| {
+            let x: Option<f64> = row.get(44)?;
+            let y: Option<f64> = row.get(45)?;
+            let z: Option<f64> = row.get(46)?;
             Ok(DriverAnalysisSampleInput {
                 sequence: row.get(0)?,
                 timestamp_ms: row.get(1)?,
@@ -1862,6 +2057,10 @@ fn load_driver_analysis_samples_in_connection(
                 lap_time: row.get(41)?,
                 lap_number: row.get(42)?,
                 lap_distance: row.get(43)?,
+                position: match (x, y, z) {
+                    (Some(x), Some(y), Some(z)) => Some([x, y, z]),
+                    _ => None,
+                },
             })
         })
         .map_err(|error| format!("unable to load Driver Analysis sample replay: {error}"))?;
@@ -1897,6 +2096,34 @@ fn validate_final_result(input: &DriverAnalysisFinalResultInput) -> Result<(), S
     Ok(())
 }
 
+fn validate_drives(drives: &[DriverAnalysisDriveInput]) -> Result<(), String> {
+    for (idx, drive) in drives.iter().enumerate() {
+        if !matches!(drive.kind.as_str(), "circuit" | "sprint") {
+            return Err(format!(
+                "Driver Analysis drive {idx} kind must be 'circuit' or 'sprint'"
+            ));
+        }
+        if let Some(lap_count) = drive.lap_count {
+            if lap_count < 1 {
+                return Err(format!("Driver Analysis drive {idx} lapCount must be >= 1"));
+            }
+        }
+        if drive.first_sequence < 0 || drive.last_sequence < drive.first_sequence {
+            return Err(format!(
+                "Driver Analysis drive {idx} sequences must be non-negative and ordered"
+            ));
+        }
+        if drive.started_at_ms < 0 || drive.finished_at_ms < drive.started_at_ms {
+            return Err(format!("Driver Analysis drive {idx} times must be ordered"));
+        }
+        validate_finite(drive.distance_m, "distanceM")?;
+        if drive.distance_m < 0.0 {
+            return Err(format!("Driver Analysis drive {idx} distance must be >= 0"));
+        }
+    }
+    Ok(())
+}
+
 fn save_driver_analysis_result_in_connection(
     connection: &mut Connection,
     session_id: i64,
@@ -1904,6 +2131,7 @@ fn save_driver_analysis_result_in_connection(
     evidence: &[DriverAnalysisEvidenceInput],
     result: &DriverAnalysisFinalResultInput,
     algorithm_version: Option<&str>,
+    drives: Option<&[DriverAnalysisDriveInput]>,
 ) -> Result<DriverAnalysisHistoryRecord, String> {
     if session_id <= 0 {
         return Err("Driver Analysis session id must be positive".to_string());
@@ -1924,6 +2152,9 @@ fn save_driver_analysis_result_in_connection(
         .as_deref()
         .map(validate_stats_json)
         .transpose()?;
+    if let Some(drives_list) = drives {
+        validate_drives(drives_list)?;
+    }
     let mut maneuver_ids = HashSet::new();
     for opportunity in opportunities {
         if opportunity.maneuver_id.trim().is_empty() || opportunity.maneuver_id.len() > 120 {
@@ -2006,6 +2237,40 @@ fn save_driver_analysis_result_in_connection(
     } else if current_status != "recording" {
         return Err("Driver Analysis session is not recording".to_string());
     }
+
+    // Delete existing drives if reanalyzing or if new drives are provided
+    if let Some(drives_list) = drives {
+        transaction
+            .execute(
+                "DELETE FROM driver_analysis_drives WHERE session_id = ?1",
+                params![session_id],
+            )
+            .map_err(|error| format!("unable to replace Driver Analysis drives: {error}"))?;
+        for (drive_index, drive) in drives_list.iter().enumerate() {
+            transaction
+                .execute(
+                    "INSERT INTO driver_analysis_drives
+                       (session_id, drive_index, kind, finished, lap_count, first_sequence, last_sequence,
+                        started_at_ms, finished_at_ms, started_wall_ms, distance_m)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    params![
+                        session_id,
+                        drive_index as i32,
+                        drive.kind,
+                        drive.finished as i32,
+                        drive.lap_count,
+                        drive.first_sequence,
+                        drive.last_sequence,
+                        drive.started_at_ms,
+                        drive.finished_at_ms,
+                        drive.started_wall_ms,
+                        drive.distance_m,
+                    ],
+                )
+                .map_err(|error| format!("unable to save Driver Analysis drive: {error}"))?;
+        }
+    }
+
     let mut opportunity_ids = Vec::with_capacity(opportunities.len());
     for opportunity in opportunities {
         let context_json = validate_json_text(opportunity.context_json.as_deref(), "contextJson")?;
@@ -2074,6 +2339,7 @@ fn save_driver_analysis_result_in_connection(
     } else {
         ""
     };
+    let drives_recorded_flag = if drives.is_some() { 1 } else { 0 };
     transaction
         .execute(
             "UPDATE driver_analysis_sessions
@@ -2082,7 +2348,8 @@ fn save_driver_analysis_result_in_connection(
                  opportunity_count = ?8, evidence_count = ?9,
                  detector_confidence = ?10, attribution_confidence = ?11, severity = ?12,
                  algorithm_version = COALESCE(?13, algorithm_version),
-                 stats_json = COALESCE(?15, stats_json)
+                 stats_json = COALESCE(?15, stats_json),
+                 drives_recorded = CASE WHEN ?16 = 1 THEN 1 ELSE drives_recorded END
              WHERE id = ?14",
             params![
                 if algorithm_version.is_some() { None } else { Some(finished_at_ms) },
@@ -2100,6 +2367,7 @@ fn save_driver_analysis_result_in_connection(
                 algorithm_version,
                 session_id,
                 stats_json,
+                drives_recorded_flag,
             ],
         )
         .map_err(|error| format!("unable to finalize Driver Analysis session: {error}"))?;
@@ -2115,6 +2383,7 @@ fn finalize_driver_analysis_session_in_connection(
     opportunities: &[DriverAnalysisOpportunityInput],
     evidence: &[DriverAnalysisEvidenceInput],
     result: &DriverAnalysisFinalResultInput,
+    drives: Option<&[DriverAnalysisDriveInput]>,
 ) -> Result<DriverAnalysisHistoryRecord, String> {
     save_driver_analysis_result_in_connection(
         connection,
@@ -2123,6 +2392,7 @@ fn finalize_driver_analysis_session_in_connection(
         evidence,
         result,
         None,
+        drives,
     )
 }
 
@@ -2138,6 +2408,9 @@ fn history_record_from_row(
         .get::<_, Option<String>>(19)?
         .and_then(|text| serde_json::from_str::<JsonValue>(&text).ok())
         .filter(JsonValue::is_object);
+    let recording_id: i64 = row.get(20)?;
+    let vehicle_name: Option<String> = row.get(21)?;
+    let drives_recorded: i32 = row.get(22)?;
     Ok(DriverAnalysisHistoryRecord {
         id: row.get(0)?,
         recorded_at: started_at,
@@ -2160,6 +2433,10 @@ fn history_record_from_row(
         algorithm_version: row.get(16)?,
         vehicle_identity,
         stats,
+        recording_id,
+        vehicle_name,
+        drives_recorded: drives_recorded != 0,
+        drives: Vec::new(),
     })
 }
 
@@ -2167,8 +2444,89 @@ const DRIVER_ANALYSIS_HISTORY_SELECT: &str =
     "SELECT id, started_at_ms, finished_at_ms, status, result, main_kind, label, instruction,
             sample_count, maneuver_count, opportunity_count, evidence_count,
             detector_confidence, attribution_confidence, severity, storage_bytes,
-            algorithm_version, vehicle_identity, vehicle_ordinal, stats_json
-       FROM driver_analysis_sessions";
+            algorithm_version, vehicle_identity, vehicle_ordinal, stats_json,
+            recording_id, garage_cars.display_name, drives_recorded
+       FROM driver_analysis_sessions
+       LEFT JOIN garage_cars
+         ON garage_cars.game_id = 'fh6'
+        AND garage_cars.car_ordinal = driver_analysis_sessions.vehicle_ordinal";
+
+fn load_drives_for_session(
+    connection: &Connection,
+    session_id: i64,
+) -> Result<Vec<DriverAnalysisDriveRecord>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT id, drive_index, kind, finished, lap_count, started_at_ms, finished_at_ms,
+                    started_wall_ms, distance_m, first_sequence, last_sequence
+               FROM driver_analysis_drives
+              WHERE session_id = ?1
+              ORDER BY drive_index",
+        )
+        .map_err(|error| format!("unable to prepare Driver Analysis drives query: {error}"))?;
+    let rows = statement
+        .query_map(params![session_id], |row| {
+            let started: i64 = row.get(5)?;
+            let finished: i64 = row.get(6)?;
+            Ok(DriverAnalysisDriveRecord {
+                id: row.get(0)?,
+                drive_index: row.get(1)?,
+                kind: row.get(2)?,
+                finished: row.get::<_, i32>(3)? != 0,
+                lap_count: row.get(4)?,
+                started_at_ms: started,
+                finished_at_ms: finished,
+                started_wall_ms: row.get(7)?,
+                duration_ms: finished.saturating_sub(started),
+                distance_m: row.get(8)?,
+                first_sequence: row.get(9)?,
+                last_sequence: row.get(10)?,
+                problem_counts: JsonValue::Object(Default::default()),
+            })
+        })
+        .map_err(|error| format!("unable to load Driver Analysis drives: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("unable to read Driver Analysis drives: {error}"))?;
+
+    // Load problem counts for each drive
+    let mut drives = rows;
+    for drive in &mut drives {
+        let mut counts: std::collections::BTreeMap<String, i32> = std::collections::BTreeMap::new();
+        let mut stmt = connection
+            .prepare(
+                "SELECT opportunity_type, COUNT(*)
+                   FROM driver_analysis_opportunities
+                  WHERE session_id = ?1
+                    AND outcome = 'problem'
+                    AND started_at_ms >= ?2
+                    AND started_at_ms <= ?3
+                  GROUP BY opportunity_type",
+            )
+            .map_err(|error| format!("unable to prepare problem count query: {error}"))?;
+        let mut rows = stmt
+            .query(params![
+                session_id,
+                drive.started_at_ms,
+                drive.finished_at_ms
+            ])
+            .map_err(|error| format!("unable to query problem counts: {error}"))?;
+        while let Some(row) = rows
+            .next()
+            .map_err(|error| format!("unable to read problem count row: {error}"))?
+        {
+            let opp_type: String = row
+                .get(0)
+                .map_err(|error| format!("unable to read opportunity type: {error}"))?;
+            let count: i32 = row
+                .get(1)
+                .map_err(|error| format!("unable to read problem count: {error}"))?;
+            counts.insert(opp_type, count);
+        }
+        drive.problem_counts =
+            serde_json::to_value(counts).unwrap_or(JsonValue::Object(Default::default()));
+    }
+    Ok(drives)
+}
 
 fn load_driver_analysis_sessions_from_connection(
     connection: &Connection,
@@ -2178,11 +2536,16 @@ fn load_driver_analysis_sessions_from_connection(
             "{DRIVER_ANALYSIS_HISTORY_SELECT} ORDER BY started_at_ms DESC, id DESC"
         ))
         .map_err(|error| format!("unable to load Driver Analysis history: {error}"))?;
-    let rows = statement
+    let mut records = statement
         .query_map([], history_record_from_row)
-        .map_err(|error| format!("unable to load Driver Analysis history: {error}"))?;
-    rows.map(|row| row.map_err(|error| format!("unable to read Driver Analysis history: {error}")))
-        .collect()
+        .map_err(|error| format!("unable to load Driver Analysis history: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("unable to read Driver Analysis history: {error}"))?;
+
+    for record in &mut records {
+        record.drives = load_drives_for_session(connection, record.id)?;
+    }
+    Ok(records)
 }
 
 fn recover_driver_analysis_sessions_in_connection(
@@ -2207,13 +2570,15 @@ fn load_driver_analysis_session_from_connection(
     if session_id <= 0 {
         return Err("Driver Analysis session id must be positive".to_string());
     }
-    connection
+    let mut record = connection
         .query_row(
             &format!("{DRIVER_ANALYSIS_HISTORY_SELECT} WHERE id = ?1"),
             params![session_id],
             history_record_from_row,
         )
-        .map_err(|error| format!("unable to load Driver Analysis session: {error}"))
+        .map_err(|error| format!("unable to load Driver Analysis session: {error}"))?;
+    record.drives = load_drives_for_session(connection, session_id)?;
+    Ok(record)
 }
 
 fn save_driver_analysis_stats_in_connection(
@@ -2257,6 +2622,52 @@ fn delete_driver_analysis_session_in_connection(
     Ok(())
 }
 
+fn create_driver_analysis_recording_in_connection(
+    connection: &mut Connection,
+    started_at_ms: i64,
+) -> Result<i64, String> {
+    if started_at_ms < 0 {
+        return Err("Driver Analysis recording start time must be non-negative".to_string());
+    }
+    connection
+        .execute(
+            "INSERT INTO driver_analysis_recordings (started_at_ms) VALUES (?1)",
+            params![started_at_ms],
+        )
+        .map_err(|error| format!("unable to create Driver Analysis recording: {error}"))?;
+    Ok(connection.last_insert_rowid())
+}
+
+fn delete_driver_analysis_recording_in_connection(
+    connection: &mut Connection,
+    recording_id: i64,
+) -> Result<(), String> {
+    if recording_id <= 0 {
+        return Err("Driver Analysis recording id must be positive".to_string());
+    }
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Driver Analysis recording deletion: {error}"))?;
+    let changed = transaction
+        .execute(
+            "DELETE FROM driver_analysis_recordings WHERE id = ?1",
+            params![recording_id],
+        )
+        .map_err(|error| format!("unable to delete Driver Analysis recording: {error}"))?;
+    if changed == 0 {
+        return Err("Driver Analysis recording does not exist".to_string());
+    }
+    transaction
+        .execute(
+            "DELETE FROM driver_analysis_sessions WHERE recording_id = ?1",
+            params![recording_id],
+        )
+        .map_err(|error| format!("unable to delete Driver Analysis sessions: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Driver Analysis recording deletion: {error}"))
+}
+
 #[tauri::command]
 fn create_driver_analysis_session(
     app: AppHandle,
@@ -2283,6 +2694,7 @@ fn finalize_driver_analysis_session(
     opportunities: Vec<DriverAnalysisOpportunityInput>,
     evidence: Vec<DriverAnalysisEvidenceInput>,
     result: DriverAnalysisFinalResultInput,
+    drives: Option<Vec<DriverAnalysisDriveInput>>,
 ) -> Result<DriverAnalysisHistoryRecord, String> {
     let mut connection = open_shift_light_db(&app)?;
     finalize_driver_analysis_session_in_connection(
@@ -2291,6 +2703,7 @@ fn finalize_driver_analysis_session(
         &opportunities,
         &evidence,
         &result,
+        drives.as_deref(),
     )
 }
 
@@ -2322,6 +2735,7 @@ fn reanalyze_driver_analysis_session(
         &evidence,
         &result,
         Some(&algorithm_version),
+        None,
     )
 }
 
@@ -2347,6 +2761,18 @@ fn load_driver_analysis_sessions(
 fn delete_driver_analysis_session(app: AppHandle, session_id: i64) -> Result<(), String> {
     let connection = open_shift_light_db(&app)?;
     delete_driver_analysis_session_in_connection(&connection, session_id)
+}
+
+#[tauri::command]
+fn create_driver_analysis_recording(app: AppHandle, started_at_ms: i64) -> Result<i64, String> {
+    let mut connection = open_shift_light_db(&app)?;
+    create_driver_analysis_recording_in_connection(&mut connection, started_at_ms)
+}
+
+#[tauri::command]
+fn delete_driver_analysis_recording(app: AppHandle, recording_id: i64) -> Result<(), String> {
+    let mut connection = open_shift_light_db(&app)?;
+    delete_driver_analysis_recording_in_connection(&mut connection, recording_id)
 }
 
 const EVENT_CLASSES: [&str; 9] = ["Any", "D", "C", "B", "A", "S1", "S2", "R", "X"];
@@ -4974,6 +5400,7 @@ fn main() {
             clear_driver_analysis_hotkey,
             controller_input::start_controller_capture,
             controller_input::stop_controller_capture,
+            create_driver_analysis_recording,
             create_driver_analysis_session,
             append_driver_analysis_samples,
             finalize_driver_analysis_session,
@@ -4982,6 +5409,7 @@ fn main() {
             save_driver_analysis_stats,
             load_driver_analysis_sessions,
             delete_driver_analysis_session,
+            delete_driver_analysis_recording,
             sync_route_status,
             sync_shift_light_status,
             get_app_version,
@@ -6674,6 +7102,7 @@ mod tests {
             vehicle_pi: Some(800),
             vehicle_drivetrain: Some(1),
             vehicle_rpm_limit: Some(10_300.0),
+            recording_id: None,
         }
     }
 
@@ -6702,6 +7131,7 @@ mod tests {
             lap_time: 30.0,
             lap_number: 1,
             lap_distance: 100.0,
+            position: None,
         }
     }
 
@@ -6893,6 +7323,7 @@ mod tests {
                 &opportunities,
                 &bad_evidence,
                 &driver_analysis_result("issue"),
+                None,
             )
             .is_err()
         );
@@ -6921,6 +7352,7 @@ mod tests {
             &opportunities,
             &evidence,
             &driver_analysis_result("issue"),
+            None,
         )
         .unwrap();
         assert_eq!(record.result.as_deref(), Some("issue"));
@@ -6948,6 +7380,7 @@ mod tests {
             &[driver_analysis_opportunity()],
             &[],
             &driver_analysis_result("insufficient"),
+            None,
         )
         .unwrap();
         let before = load_driver_analysis_session_from_connection(&connection, session_id).unwrap();
@@ -6959,6 +7392,7 @@ mod tests {
             &[],
             &driver_analysis_result("no_recurring_problem"),
             Some("driver-analysis-rules-v3"),
+            None,
         )
         .unwrap();
         assert_eq!(record.result.as_deref(), Some("no_recurring_problem"));
@@ -6985,6 +7419,7 @@ mod tests {
             &[],
             &driver_analysis_result("no_recurring_problem"),
             Some("driver-analysis-rules-v3"),
+            None,
         )
         .unwrap();
         assert_eq!(repeated.opportunity_count, 0);
@@ -7052,6 +7487,7 @@ mod tests {
                 metrics_json: None,
             }],
             &driver_analysis_result("issue"),
+            None,
         )
         .unwrap();
         delete_driver_analysis_session_in_connection(&connection, session_id).unwrap();
@@ -7170,6 +7606,7 @@ mod tests {
             &[],
             &[],
             &result,
+            None,
         )
         .unwrap();
 
@@ -7191,6 +7628,7 @@ mod tests {
             &[],
             &reanalysis_result,
             Some("driver-analysis-rules-v3"),
+            None,
         )
         .unwrap();
 
@@ -7222,6 +7660,7 @@ mod tests {
                 &[],
                 &[],
                 &result_non_json,
+                None,
             )
             .is_err()
         );
@@ -7244,6 +7683,7 @@ mod tests {
                 &[],
                 &[],
                 &result_array,
+                None,
             )
             .is_err()
         );
@@ -7270,6 +7710,7 @@ mod tests {
                 &[],
                 &[],
                 &result_too_large,
+                None,
             )
             .is_err()
         );
@@ -7317,6 +7758,7 @@ mod tests {
             &[driver_analysis_opportunity()],
             &[],
             &driver_analysis_result("insufficient"),
+            None,
         )
         .unwrap();
         let opportunity_count_before = result.opportunity_count;
@@ -7640,7 +8082,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 20);
+        assert_eq!(version, HUD_SCHEMA_VERSION);
 
         assert!(table_has_column(&connection, "event_run_lap_trace_points", "speed_kmh").unwrap());
         assert!(table_has_column(&connection, "event_run_lap_trace_points", "gear").unwrap());
@@ -7677,7 +8119,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 20);
+        assert_eq!(version, HUD_SCHEMA_VERSION);
 
         assert!(table_has_column(&connection, "event_run_lap_trace_points", "speed_kmh").unwrap());
         assert!(table_has_column(&connection, "event_run_lap_trace_points", "gear").unwrap());
@@ -7767,5 +8209,573 @@ mod tests {
         assert_eq!(point.gear, None);
         assert_eq!(point.rpm, None);
         assert_eq!(point.throttle, 0.75);
+    }
+
+    #[test]
+    fn driver_analysis_v20_migration_creates_recordings_and_links_sessions() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE hud_schema_version (version INTEGER NOT NULL);
+                 INSERT INTO hud_schema_version VALUES (20);
+                 CREATE TABLE driver_analysis_sessions (
+                   id INTEGER PRIMARY KEY,
+                   started_at_ms INTEGER NOT NULL,
+                   status TEXT NOT NULL,
+                   algorithm_version TEXT NOT NULL,
+                   vehicle_identity TEXT NOT NULL
+                 );
+                 INSERT INTO driver_analysis_sessions VALUES (1, 1000, 'completed', 'v2', '{}');
+                 INSERT INTO driver_analysis_sessions VALUES (2, 1000, 'completed', 'v2', '{}');
+                 CREATE TABLE driver_analysis_samples (
+                   id INTEGER PRIMARY KEY,
+                   session_id INTEGER,
+                   sequence INTEGER,
+                   timestamp_ms INTEGER,
+                   speed_kmh REAL, throttle REAL, brake REAL, steer REAL,
+                   gear INTEGER, rpm REAL, rpm_max REAL,
+                   acceleration_x REAL, acceleration_y REAL, acceleration_z REAL, yaw_rate REAL,
+                   slip_ratio_fl REAL, slip_ratio_fr REAL, slip_ratio_rl REAL, slip_ratio_rr REAL,
+                   slip_angle_fl REAL, slip_angle_fr REAL, slip_angle_rl REAL, slip_angle_rr REAL,
+                   combined_slip_fl REAL, combined_slip_fr REAL, combined_slip_rl REAL, combined_slip_rr REAL,
+                   tire_temp_fl REAL, tire_temp_fr REAL, tire_temp_rl REAL, tire_temp_rr REAL,
+                   suspension_fl REAL, suspension_fr REAL, suspension_rl REAL, suspension_rr REAL,
+                   rumble_fl INTEGER, rumble_fr INTEGER, rumble_rl INTEGER, rumble_rr INTEGER,
+                   puddle_fl REAL, puddle_fr REAL, puddle_rl REAL, puddle_rr REAL,
+                   lap_time REAL, lap_number INTEGER, lap_distance REAL
+                 );",
+            )
+            .unwrap();
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+        assert_eq!(
+            connection
+                .query_row("SELECT version FROM hud_schema_version", [], |row| row
+                    .get::<_, i32>(0))
+                .unwrap(),
+            HUD_SCHEMA_VERSION
+        );
+
+        let (recording_id, drives_recorded): (Option<i64>, i32) = connection
+            .query_row(
+                "SELECT recording_id, drives_recorded FROM driver_analysis_sessions WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert!(recording_id.is_some());
+        assert_eq!(drives_recorded, 0);
+
+        let recording_exists: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM driver_analysis_recordings WHERE id = ?1)",
+                params![recording_id.unwrap()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(recording_exists);
+
+        // Sessions that started at the same moment still get separate recordings.
+        let distinct_recordings: i64 = connection
+            .query_row(
+                "SELECT COUNT(DISTINCT recording_id) FROM driver_analysis_sessions",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let recordings: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM driver_analysis_recordings",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!((distinct_recordings, recordings), (2, 2));
+    }
+
+    #[test]
+    fn driver_analysis_fresh_database_has_all_tables_and_columns_at_v21() {
+        let mut connection = driver_analysis_connection();
+
+        // Check recordings table exists
+        let rec_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='driver_analysis_recordings'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(rec_count, 1);
+
+        // Check drives table exists
+        let drives_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='driver_analysis_drives'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(drives_count, 1);
+
+        // Check recording_id column on sessions
+        let has_rec_id: bool = connection
+            .query_row(
+                "SELECT COUNT(*)>0 FROM pragma_table_info('driver_analysis_sessions') WHERE name='recording_id'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(has_rec_id);
+
+        // Check position columns on samples
+        let has_pos_x: bool = connection
+            .query_row(
+                "SELECT COUNT(*)>0 FROM pragma_table_info('driver_analysis_samples') WHERE name='position_x'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(has_pos_x);
+    }
+
+    #[test]
+    fn driver_analysis_session_with_recording_id_links_to_existing_recording() {
+        let mut connection = driver_analysis_connection();
+        let recording_id =
+            create_driver_analysis_recording_in_connection(&mut connection, 2000).unwrap();
+        let mut input = driver_analysis_session_input(1_000);
+        input.recording_id = Some(recording_id);
+        let session_id =
+            create_driver_analysis_session_in_connection(&mut connection, &input).unwrap();
+
+        let (linked_rec_id, linked_rec_exists): (i64, bool) = connection
+            .query_row(
+                "SELECT s.recording_id, EXISTS(SELECT 1 FROM driver_analysis_recordings WHERE id = s.recording_id)
+                 FROM driver_analysis_sessions s WHERE id = ?1",
+                params![session_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(linked_rec_id, recording_id);
+        assert!(linked_rec_exists);
+    }
+
+    #[test]
+    fn driver_analysis_session_without_recording_id_creates_new_recording() {
+        let mut connection = driver_analysis_connection();
+        let input = driver_analysis_session_input(1_000);
+        let session_id =
+            create_driver_analysis_session_in_connection(&mut connection, &input).unwrap();
+
+        let (recording_id, rec_started_at): (i64, i64) = connection
+            .query_row(
+                "SELECT s.recording_id, r.started_at_ms
+                 FROM driver_analysis_sessions s
+                 JOIN driver_analysis_recordings r ON r.id = s.recording_id
+                 WHERE s.id = ?1",
+                params![session_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert!(recording_id > 0);
+        assert!(rec_started_at >= 0);
+    }
+
+    #[test]
+    fn driver_analysis_sample_with_position_round_trips() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        let mut sample = driver_analysis_sample(0);
+        sample.position = Some([10.5, 20.3, 30.1]);
+        append_driver_analysis_samples_in_connection(&mut connection, session_id, &[sample])
+            .unwrap();
+
+        let loaded =
+            load_driver_analysis_samples_in_connection(&connection, session_id, -1, 10).unwrap();
+        assert_eq!(loaded[0].position, Some([10.5, 20.3, 30.1]));
+    }
+
+    #[test]
+    fn driver_analysis_sample_without_position_stored_as_null() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        let sample = driver_analysis_sample(0);
+        append_driver_analysis_samples_in_connection(&mut connection, session_id, &[sample])
+            .unwrap();
+
+        let loaded =
+            load_driver_analysis_samples_in_connection(&connection, session_id, -1, 10).unwrap();
+        assert_eq!(loaded[0].position, None);
+    }
+
+    #[test]
+    fn driver_analysis_finalize_with_drives_saves_and_sets_flag() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_sample(0)],
+        )
+        .unwrap();
+
+        let drives = vec![DriverAnalysisDriveInput {
+            kind: "circuit".to_string(),
+            finished: true,
+            lap_count: Some(3),
+            first_sequence: 0,
+            last_sequence: 100,
+            started_at_ms: 1000,
+            finished_at_ms: 2000,
+            started_wall_ms: 1609459200000,
+            distance_m: 5000.0,
+        }];
+
+        let record = finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &[],
+            &[],
+            &driver_analysis_result("insufficient"),
+            Some(&drives),
+        )
+        .unwrap();
+
+        assert_eq!(record.drives_recorded, true);
+        assert_eq!(record.drives.len(), 1);
+        assert_eq!(record.drives[0].kind, "circuit");
+        assert_eq!(record.drives[0].lap_count, Some(3));
+        assert_eq!(record.drives[0].distance_m, 5000.0);
+    }
+
+    #[test]
+    fn driver_analysis_finalize_without_drives_leaves_flag_false() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_sample(0)],
+        )
+        .unwrap();
+
+        let record = finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &[],
+            &[],
+            &driver_analysis_result("insufficient"),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(record.drives_recorded, false);
+        assert_eq!(record.drives.len(), 0);
+    }
+
+    #[test]
+    fn driver_analysis_finalize_invalid_drive_rejected_atomically() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_sample(0)],
+        )
+        .unwrap();
+
+        let bad_drives = vec![DriverAnalysisDriveInput {
+            kind: "invalid".to_string(),
+            finished: true,
+            lap_count: Some(3),
+            first_sequence: 0,
+            last_sequence: 100,
+            started_at_ms: 1000,
+            finished_at_ms: 2000,
+            started_wall_ms: 1609459200000,
+            distance_m: 5000.0,
+        }];
+
+        let result = finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &[],
+            &[],
+            &driver_analysis_result("insufficient"),
+            Some(&bad_drives),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM driver_analysis_drives WHERE session_id = ?1",
+                    params![session_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn driver_analysis_reanalysis_does_not_touch_drives() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_sample(0)],
+        )
+        .unwrap();
+
+        let drives = vec![DriverAnalysisDriveInput {
+            kind: "sprint".to_string(),
+            finished: true,
+            lap_count: None,
+            first_sequence: 0,
+            last_sequence: 50,
+            started_at_ms: 1000,
+            finished_at_ms: 2000,
+            started_wall_ms: 1609459200000,
+            distance_m: 3000.0,
+        }];
+
+        finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &[],
+            &[],
+            &driver_analysis_result("insufficient"),
+            Some(&drives),
+        )
+        .unwrap();
+
+        save_driver_analysis_result_in_connection(
+            &mut connection,
+            session_id,
+            &[],
+            &[],
+            &driver_analysis_result("no_recurring_problem"),
+            Some("v3"),
+            None,
+        )
+        .unwrap();
+
+        let record = load_driver_analysis_session_from_connection(&connection, session_id).unwrap();
+        assert_eq!(record.drives.len(), 1);
+        assert_eq!(record.drives[0].kind, "sprint");
+    }
+
+    #[test]
+    fn driver_analysis_delete_recording_cascades_all_data() {
+        let mut connection = driver_analysis_connection();
+        let recording_id =
+            create_driver_analysis_recording_in_connection(&mut connection, 1000).unwrap();
+        let mut input = driver_analysis_session_input(1_000);
+        input.recording_id = Some(recording_id);
+        let session_id =
+            create_driver_analysis_session_in_connection(&mut connection, &input).unwrap();
+
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_sample(0)],
+        )
+        .unwrap();
+
+        let drives = vec![DriverAnalysisDriveInput {
+            kind: "circuit".to_string(),
+            finished: true,
+            lap_count: Some(1),
+            first_sequence: 0,
+            last_sequence: 10,
+            started_at_ms: 1000,
+            finished_at_ms: 1100,
+            started_wall_ms: 1609459200000,
+            distance_m: 1000.0,
+        }];
+
+        finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &[],
+            &[],
+            &driver_analysis_result("insufficient"),
+            Some(&drives),
+        )
+        .unwrap();
+
+        delete_driver_analysis_recording_in_connection(&mut connection, recording_id).unwrap();
+
+        let session_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM driver_analysis_sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(session_count, 0);
+
+        let sample_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM driver_analysis_samples WHERE session_id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(sample_count, 0);
+
+        let drive_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM driver_analysis_drives WHERE session_id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(drive_count, 0);
+
+        let recording_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM driver_analysis_recordings WHERE id = ?1",
+                params![recording_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(recording_count, 0);
+    }
+
+    #[test]
+    fn driver_analysis_problem_counts_computed_per_drive_by_time_range() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_sample(0)],
+        )
+        .unwrap();
+
+        let opportunities = vec![
+            DriverAnalysisOpportunityInput {
+                maneuver_id: "m1".to_string(),
+                opportunity_type: "front_scrub".to_string(),
+                started_at_ms: 1050,
+                finished_at_ms: 1150,
+                speed_bin: None,
+                gear: None,
+                outcome: "problem".to_string(),
+                valid: true,
+                invalid_reason: None,
+                context_json: None,
+            },
+            DriverAnalysisOpportunityInput {
+                maneuver_id: "m2".to_string(),
+                opportunity_type: "front_scrub".to_string(),
+                started_at_ms: 2050,
+                finished_at_ms: 2150,
+                speed_bin: None,
+                gear: None,
+                outcome: "problem".to_string(),
+                valid: true,
+                invalid_reason: None,
+                context_json: None,
+            },
+            DriverAnalysisOpportunityInput {
+                maneuver_id: "m3".to_string(),
+                opportunity_type: "rear_slip".to_string(),
+                started_at_ms: 1100,
+                finished_at_ms: 1200,
+                speed_bin: None,
+                gear: None,
+                outcome: "problem".to_string(),
+                valid: true,
+                invalid_reason: None,
+                context_json: None,
+            },
+        ];
+
+        let drives = vec![
+            DriverAnalysisDriveInput {
+                kind: "circuit".to_string(),
+                finished: true,
+                lap_count: Some(1),
+                first_sequence: 0,
+                last_sequence: 50,
+                started_at_ms: 1000,
+                finished_at_ms: 1200,
+                started_wall_ms: 1609459200000,
+                distance_m: 1000.0,
+            },
+            DriverAnalysisDriveInput {
+                kind: "sprint".to_string(),
+                finished: true,
+                lap_count: None,
+                first_sequence: 51,
+                last_sequence: 100,
+                started_at_ms: 2000,
+                finished_at_ms: 2200,
+                started_wall_ms: 1609459201000,
+                distance_m: 2000.0,
+            },
+        ];
+
+        finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &opportunities,
+            &[],
+            &driver_analysis_result("issue"),
+            Some(&drives),
+        )
+        .unwrap();
+
+        let record = load_driver_analysis_session_from_connection(&connection, session_id).unwrap();
+        assert_eq!(record.drives.len(), 2);
+
+        let drive1_counts = record.drives[0].problem_counts.as_object().unwrap();
+        assert_eq!(
+            drive1_counts.get("front_scrub").and_then(|v| v.as_i64()),
+            Some(1)
+        );
+        assert_eq!(
+            drive1_counts.get("rear_slip").and_then(|v| v.as_i64()),
+            Some(1)
+        );
+
+        let drive2_counts = record.drives[1].problem_counts.as_object().unwrap();
+        assert_eq!(
+            drive2_counts.get("front_scrub").and_then(|v| v.as_i64()),
+            Some(1)
+        );
+        assert!(!drive2_counts.contains_key("rear_slip"));
     }
 }

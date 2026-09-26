@@ -74,7 +74,7 @@ test('legacy settings without hotkeyLabel load unchanged', () => {
   assert.deepEqual(controllerSettings, { enabled: true, hotkey: 'Controller:346E:0006:116', hotkeyLabel: 'Device' })
 })
 
-test('recorder waits for telemetry, batches samples and persists one final result', async () => {
+test('recorder waits for telemetry, stores one sample per timestamp, and persists one final result', async () => {
   let currentTime = Date.parse('2026-09-18T12:00:00.000Z')
   const calls = []
   const engine = {
@@ -91,6 +91,7 @@ test('recorder waits for telemetry, batches samples and persists one final resul
   }
   const invoke = async (command, payload) => {
     calls.push({ command, payload })
+    if (command === 'create_driver_analysis_recording') return 9
     if (command === 'create_driver_analysis_session') return 17
     if (command === 'finalize_driver_analysis_session') return { id: 17, result: payload.result.result, label: payload.result.label }
     return payload.samples.length
@@ -123,12 +124,13 @@ test('recorder waits for telemetry, batches samples and persists one final resul
   const result = await recorder.stop()
 
   assert.equal(result.entry.label, 'FRONT SCRUB')
-  assert.deepEqual(calls.map(call => call.command), ['create_driver_analysis_session', 'append_driver_analysis_samples', 'finalize_driver_analysis_session'])
-  assert.equal(calls[1].payload.samples.length, 2)
-  assert.deepEqual(calls[1].payload.samples.map(sample => sample.timestampMs), [100, 100])
-  assert.deepEqual(calls[1].payload.samples.map(sample => sample.sequence), [0, 1])
-  assert.equal(calls[2].payload.opportunities.length, 1)
-  assert.equal(calls[2].payload.evidence.length, 1)
+  assert.deepEqual(calls.map(call => call.command), ['create_driver_analysis_recording', 'create_driver_analysis_session', 'append_driver_analysis_samples', 'finalize_driver_analysis_session'])
+  assert.equal(calls[1].payload.input.recordingId, 9)
+  // The second packet repeats the timestamp, so only the first is stored.
+  assert.deepEqual(calls[2].payload.samples.map(sample => [sample.sequence, sample.timestampMs]), [[0, 100]])
+  assert.equal(calls[3].payload.opportunities.length, 1)
+  assert.equal(calls[3].payload.evidence.length, 1)
+  assert.deepEqual(calls[3].payload.drives, [])
   assert.equal(recorder.snapshot().phase, 'ready')
 })
 
@@ -421,4 +423,73 @@ test('an analysis engine fault stops the recording without throwing into the tel
   assert.equal(status.phase, 'error')
   assert.equal(status.lastError, 'engine fault')
   assert.deepEqual(commands, [])
+})
+
+function stubEngine() {
+  let updates = 0
+  return {
+    get updates() { return updates },
+    reset() {}, resetTransient() {}, update() { updates += 1 },
+    snapshot() { return { algorithmVersion: 'test-v1' } },
+    finalize() { return { status: 'insufficient', mainProblem: null, opportunities: [], evidence: [], stats: null } }
+  }
+}
+
+function stubInvoke(calls) {
+  let nextSession = 20
+  return async (command, payload) => {
+    calls.push({ command, payload })
+    if (command === 'create_driver_analysis_recording') return 5
+    if (command === 'create_driver_analysis_session') return nextSession++
+    if (command === 'finalize_driver_analysis_session') return { id: payload.sessionId, result: payload.result.result }
+    return payload.samples.length
+  }
+}
+
+const packet = (timestampMs, car, lap = {}, extra = {}) => ({
+  isRaceOn: true, timestampMs, speedKmh: 120, rpmMax: 8000, car,
+  position: { x: timestampMs, y: 1, z: -timestampMs },
+  lap: { current: 30, raceTime: 30, number: 0, distance: 500, last: 0, ...lap },
+  ...extra
+})
+
+test('a car change finishes that car and records the next car in the same recording', async () => {
+  const calls = []
+  const recorder = analysis.createRecorder({ engine: stubEngine(), invoke: stubInvoke(calls), enabled: true })
+  const bmw = { ordinal: 42, pi: 700, drivetrain: 1 }
+  const audi = { ordinal: 77, pi: 600, drivetrain: 2 }
+  recorder.start()
+  recorder.update(packet(100, bmw))
+  recorder.update(packet(116, bmw))
+  recorder.update(packet(900, audi))
+  recorder.update(packet(916, audi))
+  assert.equal(recorder.snapshot().phase, 'recording')
+  await recorder.stop()
+
+  const sessions = calls.filter(call => call.command === 'create_driver_analysis_session')
+  assert.deepEqual(sessions.map(call => [call.payload.input.vehicleOrdinal, call.payload.input.recordingId]), [[42, 5], [77, 5]])
+  assert.equal(calls.filter(call => call.command === 'create_driver_analysis_recording').length, 1)
+  const finals = calls.filter(call => call.command === 'finalize_driver_analysis_session')
+  assert.deepEqual(finals.map(call => [call.payload.sessionId, call.payload.result.result]), [[20, 'insufficient'], [21, 'insufficient']])
+  const appended = calls.filter(call => call.command === 'append_driver_analysis_samples')
+  assert.deepEqual(appended.map(call => [call.payload.sessionId, call.payload.samples.map(sample => sample.sequence)]), [[20, [0, 1]], [21, [0, 1]]])
+  assert.equal(recorder.snapshot().phase, 'ready')
+})
+
+test('stored samples carry the car position and finalize carries the drives', async () => {
+  const calls = []
+  const recorder = analysis.createRecorder({ engine: stubEngine(), invoke: stubInvoke(calls), enabled: true })
+  const car = { ordinal: 42, pi: 700, drivetrain: 1 }
+  recorder.start()
+  recorder.update(packet(100, car, { current: 0, raceTime: 0, distance: 0 }))
+  recorder.update(packet(116, car, { current: 0.5, raceTime: 0.5, distance: 20 }))
+  recorder.update(packet(132, car, { current: 30, raceTime: 30, distance: 1500 }))
+  recorder.update({ ...packet(148, car), isRaceOn: false, lap: { current: 0, raceTime: 0, number: 1, distance: 0, last: 31 } })
+  await recorder.stop()
+
+  const samples = calls.find(call => call.command === 'append_driver_analysis_samples').payload.samples
+  assert.deepEqual(samples[0].position, [100, 1, -100])
+  const drives = calls.find(call => call.command === 'finalize_driver_analysis_session').payload.drives
+  assert.equal(drives.length, 1)
+  assert.deepEqual([drives[0].kind, drives[0].finished, drives[0].firstSequence, drives[0].lastSequence, drives[0].distanceM], ['sprint', true, 0, 2, 1500])
 })
