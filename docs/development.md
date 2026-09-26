@@ -18,7 +18,7 @@ The repository is organized around the current runtime boundaries:
 src-tauri/                 Native Tauri runtime and Direct Data Out decoder
 overlay/                   Static browser HUD and feature runtime modules
 src/shift-light/           Canonical Shift Light TypeScript source
-tools/                     Shift Light build and integrity test tooling
+tools/                     Build, release notes, diagnostic, and integrity test tooling
 docs/                      Current architecture and feature documentation
 ```
 
@@ -60,6 +60,36 @@ The canonical Shift Light TypeScript source lives in `src/shift-light/`. The
 generated runtime bundle is at `overlay/shift-light-engine.js`. Verify the
 generated output uses the canonical source labels and contains no obsolete
 source paths. Runtime behavior and compatibility contracts must remain unchanged.
+
+## Tire slip report
+
+`tools/slip-report.mjs` reads saved Driver Analysis recordings from an
+`fdc.sqlite` file read-only and prints tire slip statistics. It requires
+Node.js with the built-in `node:sqlite` module. Slip values are printed as
+absolute values times 100%, the scale of the in-game tire friction telemetry.
+
+```powershell
+node tools/slip-report.mjs --db path\to\fdc.sqlite
+```
+
+For every recording, the report shows the stored `CORNERS` tire shares, the
+share of moving time (20 km/h or more) in which the front axle, the rear axle,
+or any wheel is above 100% combined slip, the number and length of any-wheel
+episodes above 100%, axle slip percentiles, and lateral acceleration grouped
+by front axle combined slip. `--db` defaults to `%APPDATA%\FDC\fdc.sqlite`, and
+`--session <id>` limits the report to one recording.
+
+To compare a recording with a screen capture of the in-game telemetry, pass
+local clock times with `--at`:
+
+```powershell
+node tools/slip-report.mjs --db path\to\fdc.sqlite --at 10:24:38,10:24:42
+```
+
+Each time selects one second of the newest recording, or of `--session`, using
+the recording start time plus the telemetry time since its first sample. For
+each wheel, the report prints slip angle, slip ratio, and combined slip in the
+middle of that second and the maximum within it.
 
 ## Release verification cycle
 
