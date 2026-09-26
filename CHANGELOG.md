@@ -14,12 +14,13 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ### Added
 
-- **Events**: the lap map of a saved run now draws the track outline with
-  Throttle, Brake, Coast, and Slip layers that can be switched on and off.
-  Hovering the trace shows the recorded speed, gear, RPM, pedals, steering,
-  acceleration, and per-wheel slip, tire temperature, suspension travel, curb,
-  and puddle values at that point. Laps recorded before this version show the
-  pedal layers only.
+- **Events**: the lap map of a saved run is larger and draws the track
+  outline with Throttle, Brake, Coast, and Slip layers. A legend below the map
+  shows each layer's share of lap time and lets you show one layer or any
+  combination. Hovering the trace shows the recorded speed, gear, RPM, pedals,
+  steering, acceleration, and per-wheel slip, tire temperature, suspension
+  travel, curb, and puddle values at that point. Laps recorded before this
+  version show the pedal layers only.
 
 ### Improved
 

@@ -69,8 +69,8 @@ available as the Events tab in Configuration, directly after Garage.
   order. In each time column, every tied quickest value is purple, the next
   distinct value is green, and all remaining values are white. Selecting a lap
   row expands it beneath the table; selecting the same row again collapses it.
-  The expanded row shows a top-down X/Z trace on the left and pedal-use
-  statistics on the right. The first Escape collapses an open row; **BACK** or
+  The expanded row shows a full-width top-down X/Z trace map shaped to the
+  track, at most 560 px tall, with a legend row beneath it. The first Escape collapses an open row; **BACK** or
   a following Escape returns to the Event page.
 - The trace map draws a thin white track outline under its layers. Pedal
   segments use green for throttle, red for brake, and yellow for coasting.
@@ -80,11 +80,16 @@ available as the Events tab in Configuration, directly after Garage.
   in-game tire friction telemetry shows more than 100% and turns red. Thin
   `S1`, `S2`, and `S3` ticks mark the ends of the three virtual distance
   sectors. The white marker is the saved start point.
-- **THROTTLE**, **BRAKE**, **COAST**, and **SLIP** toggles above the map show
-  or hide each layer; a hidden layer leaves the white outline visible. The
-  choice applies to every lap until the Configuration window is reloaded. The
-  pedal statistics do not change with the toggles. **SLIP** is unavailable for
-  a lap recorded without extended telemetry.
+- The legend row shows **THROTTLE**, **BRAKE**, and **COAST** with their share
+  of lap time, **SLIP** with the share of lap time in which any wheel was above
+  100% combined slip, and **ALL**. The legend buttons also choose the visible
+  layers: with every layer shown, selecting one shows only that layer; after
+  that, selecting a layer adds or removes it. Removing the last visible layer,
+  adding the final hidden one, or selecting **ALL** shows every layer again. A
+  hidden layer leaves the white outline visible, and the shares do not change
+  with the selection. The choice applies to every lap until the Configuration
+  window is reloaded. **SLIP** is unavailable and shows `—` for a lap recorded
+  without extended telemetry.
 - Hovering the map marks the nearest trace point and shows its recorded values
   without interpretation: distance from the lap's first point, lap time, speed,
   gear, RPM, throttle, brake, steering, lateral, longitudinal, and vertical
@@ -94,8 +99,9 @@ available as the Events tab in Configuration, directly after Garage.
   rumble strip and a puddle row lists wheels in water; each appears only when
   it applies. A lap recorded before extended telemetry shows distance, time,
   throttle, and brake only.
-- Pedal statistics are time-weighted, not sample-count-weighted: Throttle
-  (`X`), Brake (`A`), and Coast (`C`) always total 100%. The first point owns
+- Legend shares are time-weighted, not sample-count-weighted: Throttle
+  (`X`), Brake (`A`), and Coast (`C`) always total 100%, and Slip uses the
+  same time ownership. The first point owns
   the initial interval from lap zero, each following point owns the interval
   until the next point, and the last point owns the remaining time until the
   saved lap result. A pre-trace lap keeps its normal timing row and shows an

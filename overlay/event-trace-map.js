@@ -6,6 +6,7 @@
   'use strict'
 
   const GRAVITY = 9.80665
+  const TRACE_LAYERS = ['throttle', 'brake', 'coast', 'slip']
 
   function finiteNumber(value) {
     if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null
@@ -336,7 +337,65 @@
     }
   }
 
+  /**
+   * Layers shown for a stored selection. null (or a selection with nothing available) shows every available layer.
+   * @param {string[]|null} selection - selected layer names, or null for all
+   * @param {string[]} available - layers that exist for this lap
+   * @returns {string[]}
+   */
+  function visibleLayers(selection, available) {
+    const visible = Array.isArray(selection) ? available.filter(layer => selection.includes(layer)) : []
+    return visible.length > 0 ? visible : [...available]
+  }
+
+  /**
+   * Selection after clicking a layer: the first click from "all" isolates the layer, later clicks add or remove
+   * it, and removing the last visible layer or adding the final missing one returns to "all" (null).
+   * @param {string[]|null} selection - current selection
+   * @param {string} layer - clicked layer
+   * @param {string[]} available - layers that exist for this lap
+   * @returns {string[]|null}
+   */
+  function nextLayerSelection(selection, layer, available) {
+    if (!available.includes(layer)) return selection
+    const visible = visibleLayers(selection, available)
+    if (visible.length === available.length) return available.length > 1 ? [layer] : null
+    const next = visible.includes(layer) ? visible.filter(item => item !== layer) : [...visible, layer]
+    return next.length === 0 || next.length === available.length ? null : next
+  }
+
+  /**
+   * Share of lap time, in whole percent, during which any wheel was above 100% combined slip. Time is owned the
+   * same way as the pedal statistics: the first point owns the time from lap zero, each point owns the interval
+   * until the next point, and the last point owns the rest of the lap.
+   * @param {object[]} points - trace points
+   * @param {number|null} lapTimeMs - lap time
+   * @returns {number|null} null when the lap has no extended telemetry
+   */
+  function slipTimeShare(points, lapTimeMs = null) {
+    if (!hasExtendedTelemetry(points)) return null
+    let slipMs = 0
+    let totalMs = 0
+    const own = (point, durationMs) => {
+      if (!(durationMs > 0)) return
+      totalMs += durationMs
+      if (isSlipPoint(point)) slipMs += durationMs
+    }
+    own(points[0], finiteNumber(points[0]?.elapsedMs))
+    for (let index = 0; index < points.length - 1; index += 1) {
+      own(points[index], finiteNumber(points[index + 1]?.elapsedMs) - finiteNumber(points[index]?.elapsedMs))
+    }
+    const lap = finiteNumber(lapTimeMs)
+    const lastElapsed = finiteNumber(points.at(-1)?.elapsedMs)
+    if (lap !== null && lastElapsed !== null) own(points.at(-1), lap - lastElapsed)
+    return totalMs > 0 ? Math.round(slipMs / totalMs * 100) : null
+  }
+
   return {
+    TRACE_LAYERS,
+    visibleLayers,
+    nextLayerSelection,
+    slipTimeShare,
     pedalState,
     isSlipPoint,
     hasExtendedTelemetry,

@@ -237,3 +237,35 @@ test('tooltipModel orders acceleration rows and explains peak slip and suspensio
   assert.equal(model.wheelTable[0].values.Fl, '150%')
   assert.deepEqual(model.notes, ['SLIP: PEAK OVER 0.1 S', 'SUSP: 0% EXTENDED · 100% COMPRESSED'])
 })
+
+test('layer selection isolates on the first click, then adds and removes', () => {
+  const available = ['throttle', 'brake', 'coast', 'slip']
+  let selection = null
+  selection = EventTraceMap.nextLayerSelection(selection, 'coast', available)
+  assert.deepEqual(selection, ['coast'])
+  selection = EventTraceMap.nextLayerSelection(selection, 'brake', available)
+  assert.deepEqual(selection, ['coast', 'brake'])
+  selection = EventTraceMap.nextLayerSelection(selection, 'coast', available)
+  assert.deepEqual(selection, ['brake'])
+  assert.equal(EventTraceMap.nextLayerSelection(selection, 'brake', available), null, 'removing the last layer shows all')
+  assert.equal(EventTraceMap.nextLayerSelection(['throttle', 'brake', 'coast'], 'slip', available), null, 'adding the final layer shows all')
+})
+
+test('visible layers fall back to every available layer', () => {
+  const legacy = ['throttle', 'brake', 'coast']
+  assert.deepEqual(EventTraceMap.visibleLayers(null, legacy), legacy)
+  assert.deepEqual(EventTraceMap.visibleLayers(['slip'], legacy), legacy, 'a slip-only selection on a legacy lap shows all')
+  assert.deepEqual(EventTraceMap.visibleLayers(['slip', 'brake'], legacy), ['brake'])
+  assert.equal(EventTraceMap.nextLayerSelection(null, 'slip', legacy), null, 'an unavailable layer does not change the selection')
+})
+
+test('slipTimeShare is time-weighted like the pedal statistics', () => {
+  const points = [
+    { elapsedMs: 1000, combinedSlipFl: 0.5 },
+    { elapsedMs: 2000, combinedSlipFl: 1.2 },
+    { elapsedMs: 5000, combinedSlipFl: -0.4 }
+  ]
+  // 0-1 s and 1-2 s calm, 2-5 s slip, 5-10 s calm.
+  assert.equal(EventTraceMap.slipTimeShare(points, 10000), 30)
+  assert.equal(EventTraceMap.slipTimeShare([{ elapsedMs: 0, throttle: 1 }, { elapsedMs: 100, throttle: 1 }], 200), null)
+})

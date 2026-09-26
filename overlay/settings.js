@@ -148,7 +148,8 @@
   let eventRunsSort = { key: 'date', direction: 'desc' }
   let eventRunLapSortDirection = 'desc'
   let expandedEventRunLap = null
-  let traceMapLayerToggles = { throttle: true, brake: true, coast: true, slip: true }
+  // Selected trace map layers shared by every lap until the window reloads; null shows all layers.
+  let traceMapLayerSelection = null
   let eventsSortValue = 'id-desc'
   let editingTarget = null
   let layoutMode = 'grouped'
@@ -1313,7 +1314,7 @@
     return ticks
   }
 
-  function renderTraceMap(points) {
+  function renderTraceMap(points, lapTimeMs) {
     const map = document.createElement('div')
     map.className = 'events-lap-detail__map'
     if (points.length < 2) {
@@ -1328,48 +1329,26 @@
     const maxX = Math.max(...coordinates.map(point => point.x))
     const minZ = Math.min(...coordinates.map(point => point.z))
     const maxZ = Math.max(...coordinates.map(point => point.z))
-    const width = 720
-    const height = 380
-    const padding = 30
-    const scale = Math.min(
-      (width - padding * 2) / Math.max(1, maxX - minX),
-      (height - padding * 2) / Math.max(1, maxZ - minZ)
-    )
+    // The viewBox follows the track's shape so any layout fills the width; CSS caps the rendered height.
+    const width = 1000
+    const padding = 36
+    const spanX = Math.max(1, maxX - minX)
+    const spanZ = Math.max(1, maxZ - minZ)
+    const height = Math.round(Math.min(1400, Math.max(360, (width - padding * 2) * spanZ / spanX + padding * 2)))
+    const scale = Math.min((width - padding * 2) / spanX, (height - padding * 2) / spanZ)
+    const offsetX = (width - spanX * scale) / 2
+    const offsetY = (height - spanZ * scale) / 2
     const project = point => ({
-      x: padding + (point.positionX - minX) * scale,
-      y: height - padding - (point.positionZ - minZ) * scale
+      x: offsetX + (point.positionX - minX) * scale,
+      y: height - offsetY - (point.positionZ - minZ) * scale
     })
     const projected = points.map(project)
 
     // Check if extended telemetry is available
     const hasExtended = globalThis.EventTraceMap?.hasExtendedTelemetry(points) ?? false
 
-    // Layer toggles
-    const togglesContainer = document.createElement('div')
-    togglesContainer.className = 'events-lap-detail__toggles'
-    const toggleButtons = {}
-    for (const [layer, label] of [['throttle', 'THROTTLE'], ['brake', 'BRAKE'], ['coast', 'COAST'], ['slip', 'SLIP']]) {
-      const swatch = document.createElement('span')
-      swatch.className = `events-lap-detail__toggle-swatch events-lap-detail__toggle-swatch--${layer}`
-      swatch.setAttribute('aria-hidden', 'true')
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.className = 'events-lap-detail__toggle-button'
-      button.append(swatch, label)
-      button.setAttribute('aria-pressed', String(traceMapLayerToggles[layer] ?? true))
-      if (layer === 'slip' && !hasExtended) {
-        button.disabled = true
-        button.title = 'Extended telemetry was not recorded for this lap'
-      }
-      button.addEventListener('click', () => {
-        traceMapLayerToggles[layer] = !traceMapLayerToggles[layer]
-        button.setAttribute('aria-pressed', String(traceMapLayerToggles[layer]))
-        updateSvgLayers(svg)
-      })
-      toggleButtons[layer] = button
-      togglesContainer.append(button)
-    }
-    map.append(togglesContainer)
+    const available = globalThis.EventTraceMap?.TRACE_LAYERS.filter(layer => layer !== 'slip' || hasExtended)
+      ?? ['throttle', 'brake', 'coast']
 
     const svg = svgElement('svg', {
       class: 'events-lap-detail__svg',
@@ -1378,15 +1357,6 @@
       'aria-label': 'Throttle, brake, coast, and slip trace map'
     })
     svg.append(svgElement('rect', { class: 'events-lap-detail__surface', x: 0, y: 0, width, height, rx: 2 }))
-
-    // Helper to update SVG layers
-    const updateSvgLayers = svgEl => {
-      const traceGroups = svgEl.querySelectorAll('[data-layer-group]')
-      for (const group of traceGroups) {
-        const layer = group.getAttribute('data-layer-group')
-        group.style.display = traceMapLayerToggles[layer] ? 'block' : 'none'
-      }
-    }
 
     // White track outline: always visible
     const outlineGroup = svgElement('g', { class: 'events-lap-detail__outline-group' })
@@ -1410,7 +1380,6 @@
           points: pointsStr
         }))
       }
-      slipGroup.style.display = traceMapLayerToggles.slip ? 'block' : 'none'
       svg.append(slipGroup)
     }
 
@@ -1429,7 +1398,6 @@
           points: pointsStr
         }))
       }
-      group.style.display = traceMapLayerToggles[pedal] ? 'block' : 'none'
       svg.append(group)
     }
 
@@ -1458,7 +1426,8 @@
     const tooltipPanel = document.createElement('div')
     tooltipPanel.className = 'events-lap-detail__tooltip'
     tooltipPanel.hidden = true
-    const markerCircle = svgElement('circle', { class: 'events-lap-detail__hover-marker', cx: 0, cy: 0, r: 2 })
+    const markerCircle = svgElement('circle', { class: 'events-lap-detail__hover-marker', cx: 0, cy: 0, r: 4 })
+    markerCircle.style.display = 'none'
     svg.append(markerCircle)
 
     svg.addEventListener('pointermove', (event) => {
@@ -1491,8 +1460,71 @@
       markerCircle.style.display = 'none'
     })
 
-    map.append(svg, tooltipPanel)
+    const legend = renderTraceLegend(points, lapTimeMs, available)
+    const applyLayers = () => {
+      const visible = globalThis.EventTraceMap?.visibleLayers(traceMapLayerSelection, available) ?? available
+      for (const group of svg.querySelectorAll('[data-layer-group]')) {
+        group.style.display = visible.includes(group.getAttribute('data-layer-group')) ? '' : 'none'
+      }
+      for (const button of legend.querySelectorAll('[data-layer]')) {
+        button.setAttribute('aria-pressed', String(visible.includes(button.dataset.layer)))
+      }
+    }
+    legend.addEventListener('click', event => {
+      const button = event.target.closest('button')
+      if (!button || button.disabled) return
+      traceMapLayerSelection = button.dataset.layer
+        ? globalThis.EventTraceMap?.nextLayerSelection(traceMapLayerSelection, button.dataset.layer, available) ?? null
+        : null
+      applyLayers()
+    })
+    applyLayers()
+
+    map.append(svg, legend, tooltipPanel)
     return map
+  }
+
+  // One row under the map: each pedal layer with its share of lap time, SLIP with its time above 100% combined
+  // slip, and ALL to show every layer again. The buttons also select the visible layers.
+  function renderTraceLegend(points, lapTimeMs, available) {
+    const legend = document.createElement('div')
+    legend.className = 'events-lap-detail__legend'
+    const pedalShares = traceStats(points, lapTimeMs)
+    const slipShare = globalThis.EventTraceMap?.slipTimeShare(points, lapTimeMs) ?? null
+    const labels = [
+      ['throttle', 'THROTTLE'],
+      ['brake', 'BRAKE'],
+      ['coast', 'COAST'],
+      ['slip', 'SLIP']
+    ]
+    for (const [key, label] of labels) {
+      const share = key === 'slip' ? slipShare : pedalShares?.[key]
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = `events-lap-detail__stat events-lap-detail__stat--${key}`
+      button.dataset.layer = key
+      const swatch = document.createElement('span')
+      swatch.className = `events-lap-detail__swatch events-lap-detail__swatch--${key}`
+      swatch.setAttribute('aria-hidden', 'true')
+      const name = document.createElement('span')
+      name.className = 'events-lap-detail__stat-name'
+      name.textContent = label
+      const value = document.createElement('output')
+      value.className = 'events-lap-detail__stat-value'
+      value.textContent = Number.isFinite(share) ? `${share}%` : '—'
+      button.append(swatch, name, value)
+      if (!available.includes(key)) {
+        button.disabled = true
+        button.title = 'Extended telemetry was not recorded for this lap'
+      }
+      legend.append(button)
+    }
+    const all = document.createElement('button')
+    all.type = 'button'
+    all.className = 'events-lap-detail__legend-all'
+    all.textContent = 'ALL'
+    legend.append(all)
+    return legend
   }
 
   function placeTooltip(tooltip, container, event) {
@@ -1592,41 +1624,6 @@
     }
   }
 
-  function renderTraceStats(points, lapTimeMs) {
-    const stats = document.createElement('aside')
-    stats.className = 'events-lap-detail__stats'
-    const heading = document.createElement('div')
-    heading.className = 'events-lap-detail__label'
-    heading.textContent = 'INPUT TIME'
-    stats.append(heading)
-    const values = traceStats(points, lapTimeMs)
-    if (!values) {
-      const empty = document.createElement('p')
-      empty.className = 'events-lap-detail__empty'
-      empty.textContent = 'STATISTICS UNAVAILABLE'
-      stats.append(empty)
-      return stats
-    }
-    const labels = [
-      ['throttle', 'THROTTLE'],
-      ['brake', 'BRAKE'],
-      ['coast', 'COAST']
-    ]
-    for (const [key, label] of labels) {
-      const row = document.createElement('div')
-      row.className = `events-lap-detail__stat events-lap-detail__stat--${key}`
-      const name = document.createElement('span')
-      name.className = 'events-lap-detail__stat-name'
-      name.textContent = label
-      const value = document.createElement('output')
-      value.className = 'events-lap-detail__stat-value'
-      value.textContent = `${values[key]}%`
-      row.append(name, value)
-      stats.append(row)
-    }
-    return stats
-  }
-
   function toggleEventRunLap(lapNumber, row) {
     const key = Number(lapNumber)
     expandedEventRunLap = expandedEventRunLap === key ? null : key
@@ -1688,7 +1685,7 @@
           detailCell.colSpan = 5
           const detail = document.createElement('div')
           detail.className = 'events-lap-detail'
-          detail.append(renderTraceMap(lap.tracePoints || []), renderTraceStats(lap.tracePoints || [], lap.timeMs))
+          detail.append(renderTraceMap(lap.tracePoints || [], lap.timeMs))
           detailCell.append(detail)
           detailRow.append(detailCell)
           eventsRunLaps.append(detailRow)

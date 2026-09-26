@@ -1011,13 +1011,12 @@ h1 {
 
 .events-lap-detail {
   display: grid;
-  grid-template-columns: minmax(0, 1.9fr) minmax(180px, 0.85fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   padding: 14px;
 }
 
-.events-lap-detail__map,
-.events-lap-detail__stats {
+.events-lap-detail__map {
   min-width: 0;
   border: 1px solid rgb(226 232 240 / 12%);
   background: #080a0c;
@@ -1027,76 +1026,16 @@ h1 {
   position: relative;
 }
 
-.events-lap-detail__label {
-  padding: 9px 11px 0;
-  color: #71717a;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-}
-
-.events-lap-detail__toggles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 9px 11px;
-  border-bottom: 1px solid rgb(226 232 240 / 9%);
-}
-
-.events-lap-detail__toggle-swatch {
-  width: 9px;
-  height: 9px;
-  border-radius: 1px;
-  opacity: 0.25;
-}
-
-.events-lap-detail__toggle-button[aria-pressed="true"] .events-lap-detail__toggle-swatch {
-  opacity: 1;
-}
-
-.events-lap-detail__toggle-swatch--throttle { background: #69e83f; }
-.events-lap-detail__toggle-swatch--brake { background: #ef4444; }
-.events-lap-detail__toggle-swatch--coast { background: #facc15; }
-.events-lap-detail__toggle-swatch--slip { background: #22d3ee; }
-
-.events-lap-detail__toggle-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 7px;
-  border: 1px solid rgb(226 232 240 / 12%);
-  border-radius: 2px;
-  color: #52525b;
-  background: transparent;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
-}
-
-.events-lap-detail__toggle-button:hover:not(:disabled),
-.events-lap-detail__toggle-button:focus-visible,
-.events-lap-detail__toggle-button[aria-pressed="true"] {
-  color: #f8fafc;
-  border-color: rgb(226 232 240 / 30%);
-}
-
-.events-lap-detail__toggle-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .events-lap-detail__svg {
   display: block;
   width: 100%;
-  height: 380px;
+  height: auto;
+  max-height: 560px;
   padding: 7px;
 }
 
 .events-lap-detail__surface {
   fill: #080a0c;
-  stroke: rgb(226 232 240 / 9%);
 }
 
 .events-lap-detail__outline {
@@ -1162,24 +1101,55 @@ h1 {
   text-align: center;
 }
 
-.events-lap-detail__stats {
+.events-lap-detail__legend {
   display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding-bottom: 11px;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 11px 11px;
+  border-top: 1px solid rgb(226 232 240 / 9%);
 }
 
 .events-lap-detail__stat {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 11px;
-  padding: 10px 0;
-  border-bottom: 1px solid rgb(226 232 240 / 9%);
+  gap: 9px;
+  padding: 7px 11px;
+  border: 1px solid rgb(226 232 240 / 12%);
+  border-radius: 2px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.15s ease, border-color 0.15s ease;
 }
 
-.events-lap-detail__stat:last-child { border-bottom: 0; }
+.events-lap-detail__stat[aria-pressed="true"] {
+  border-color: rgb(226 232 240 / 26%);
+  opacity: 1;
+}
+
+.events-lap-detail__stat:hover:not(:disabled),
+.events-lap-detail__stat:focus-visible {
+  border-color: rgb(226 232 240 / 40%);
+  opacity: 1;
+}
+
+.events-lap-detail__stat:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.events-lap-detail__swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 1px;
+}
+
+.events-lap-detail__swatch--throttle { background: #69e83f; }
+.events-lap-detail__swatch--brake { background: #ef4444; }
+.events-lap-detail__swatch--coast { background: #facc15; }
+.events-lap-detail__swatch--slip { background: #22d3ee; }
 
 .events-lap-detail__stat-name {
   color: #a1a1aa;
@@ -1195,13 +1165,30 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
-.events-lap-detail__stat--throttle { color: #69e83f; }
-.events-lap-detail__stat--brake { color: #ef4444; }
-.events-lap-detail__stat--coast { color: #facc15; }
-
 .events-lap-detail__stat--throttle .events-lap-detail__stat-value { color: #69e83f; }
 .events-lap-detail__stat--brake .events-lap-detail__stat-value { color: #ef4444; }
 .events-lap-detail__stat--coast .events-lap-detail__stat-value { color: #facc15; }
+.events-lap-detail__stat--slip .events-lap-detail__stat-value { color: #22d3ee; }
+
+.events-lap-detail__legend-all {
+  margin-left: auto;
+  padding: 7px 13px;
+  border: 1px solid rgb(226 232 240 / 12%);
+  border-radius: 2px;
+  color: #a1a1aa;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+.events-lap-detail__legend-all:hover,
+.events-lap-detail__legend-all:focus-visible {
+  color: #f8fafc;
+  border-color: rgb(226 232 240 / 40%);
+}
 
 .events-lap-detail__tooltip {
   position: absolute;
@@ -1678,7 +1665,7 @@ h1 {
   }
 
   .events-lap-detail__svg {
-    height: 280px;
+    max-height: 320px;
   }
 }
 
