@@ -215,7 +215,7 @@ test('persistencePayload includes statsJson when stats are provided', () => {
       maxSpeedKmh: 200,
       pedals: { fullThrottle: 0.5, partialThrottle: 0.2, coast: 0.1, brake: 0.2, brakeWithSteering: 0.05 },
       braking: { count: 3, peakDecelG: { median: 1.1 }, durationS: { median: 2.5 }, releaseS: { median: 0.5 }, trailBrakingShare: 0.8 },
-      corners: { count: 3, lateralG: { median: 1.0 }, frontSlipDominantShare: 0.5 },
+      corners: { count: 3, lateralG: { median: 1.0 }, frontOverLimitShare: 0.2, rearOverLimitShare: 0.05 },
       exits: { count: 3, toFullThrottleS: { median: 1.5 }, peakLongitudinalG: { median: 0.8 } }
     }
   }

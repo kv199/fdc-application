@@ -90,6 +90,7 @@
       frontSlip: finite(frame?.frontSlip) ?? axleAverage(frame?.slipAngle, 'fl', 'fr'),
       rearSlip: finite(frame?.rearSlip) ?? axleAverage(frame?.slipAngle, 'rl', 'rr'),
       frontCombinedSlip: finite(frame?.frontCombinedSlip) ?? axleAverage(frame?.combinedSlip, 'fl', 'fr'),
+      rearCombinedSlip: finite(frame?.rearCombinedSlip) ?? axleAverage(frame?.combinedSlip, 'rl', 'rr'),
       drivenSlip: drivenSlip(frame),
       lateralResponse: finite(frame?.lateralResponse ?? acceleration.x),
       verticalResponse: finite(frame?.verticalResponse ?? acceleration.y),

@@ -5,7 +5,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   'use strict'
 
-  const STATS_VERSION = 6
+  const STATS_VERSION = 7
   const GRAVITY = 9.80665
   const MIN_EVENTS = 3
   const TURNING_PHASES = new Set(['turn-in', 'rotation', 'exit'])
@@ -27,6 +27,8 @@
     trailBrakingMinMs: 250,
     cornerMinMs: 700,
     cornerLateralMin: 4,
+    // Combined slip of 1 is 100% on the in-game tire friction telemetry, where the tire turns red.
+    tireSlipLimit: 1,
     exitWindowMs: 6000,
     exitAfterFullThrottleMs: 2000,
     smoothingWindowMs: 150
@@ -81,7 +83,7 @@
       totals = {
         movingMs: 0, distanceM: 0, maxSpeedKmh: 0,
         fullThrottleMs: 0, partialThrottleMs: 0, coastMs: 0, brakeMs: 0, brakeWithSteeringMs: 0,
-        turningMs: 0, frontSlipDominantMs: 0,
+        turningMs: 0, frontOverLimitMs: 0, rearOverLimitMs: 0,
         steeringMs: 0, fullLockMs: 0
       }
       brakingEvent = null
@@ -257,9 +259,10 @@
           if (sample.steerMagnitude >= thresholds.steerOn) totals.steeringMs += dtMs
           if (sample.steerMagnitude >= thresholds.fullLock) totals.fullLockMs += dtMs
         }
-        if (TURNING_PHASES.has(snapshot.phase) && finite(sample.frontSlip) !== null && finite(sample.rearSlip) !== null) {
+        if (TURNING_PHASES.has(snapshot.phase) && finite(sample.frontCombinedSlip) !== null && finite(sample.rearCombinedSlip) !== null) {
           totals.turningMs += dtMs
-          if (sample.frontSlip > sample.rearSlip) totals.frontSlipDominantMs += dtMs
+          if (sample.frontCombinedSlip > thresholds.tireSlipLimit) totals.frontOverLimitMs += dtMs
+          if (sample.rearCombinedSlip > thresholds.tireSlipLimit) totals.rearOverLimitMs += dtMs
         }
         if (prevSteerMagnitude < thresholds.fullLock && sample.steerMagnitude >= thresholds.fullLock && corner) {
           corner.fullLockEntries++
@@ -311,7 +314,8 @@
           count: corners.length,
           flatOutCount: flatOutCount,
           lateralG: distribution(corners.map(item => item.lateralG)),
-          frontSlipDominantShare: share(totals.frontSlipDominantMs, totals.turningMs)
+          frontOverLimitShare: share(totals.frontOverLimitMs, totals.turningMs),
+          rearOverLimitShare: share(totals.rearOverLimitMs, totals.turningMs)
         },
         exits: {
           cornerCount: corners.length,
@@ -529,8 +533,11 @@
       if (finite(corners.lateralG?.median) !== null && finite(corners.lateralG?.p90) !== null) {
         items.push({ name: 'Grip', value: Number(corners.lateralG.median).toFixed(1) + ' g, best ' + Number(corners.lateralG.p90).toFixed(1) + ' g' })
       }
-      if (finite(corners.frontSlipDominantShare) !== null) {
-        items.push({ name: 'Front sliding more than rear', value: percent(corners.frontSlipDominantShare) + ' of cornering time' })
+      if (finite(corners.frontOverLimitShare) !== null) {
+        items.push({ name: 'Front tires over 100% slip', value: percent(corners.frontOverLimitShare) + ' of cornering time' })
+      }
+      if (finite(corners.rearOverLimitShare) !== null) {
+        items.push({ name: 'Rear tires over 100% slip', value: percent(corners.rearOverLimitShare) + ' of cornering time' })
       }
       if (finite(corners.flatOutCount) !== null) {
         items.push({ name: 'Flat out', value: corners.flatOutCount + ' of ' + corners.count })
@@ -542,7 +549,8 @@
         text: join([
           fixed('lateral', corners.lateralG?.median, 1, 'g'),
           fixed('peak', corners.lateralG?.p90, 1, 'g'),
-          finite(corners.frontSlipDominantShare) === null ? null : `front slip > rear ${percent(corners.frontSlipDominantShare)}`,
+          finite(corners.frontOverLimitShare) === null ? null : `front over 100% slip ${percent(corners.frontOverLimitShare)}`,
+          finite(corners.rearOverLimitShare) === null ? null : `rear over 100% slip ${percent(corners.rearOverLimitShare)}`,
           flatOutText
         ]),
         title: range(corners.lateralG, 1, 'g lateral') || '',

@@ -41,7 +41,7 @@ test('distribution filters non-finite values and sorts', () => {
 
 test('MIN_EVENTS and STATS_VERSION are exported', () => {
   assert.equal(statsApi.MIN_EVENTS, 3)
-  assert.equal(statsApi.STATS_VERSION, 6)
+  assert.equal(statsApi.STATS_VERSION, 7)
 })
 
 test('DEFAULT_THRESHOLDS includes required configuration', () => {
@@ -93,6 +93,12 @@ test('synthetic session: 5 laps with acceleration, braking, turns, and exits', (
         fr: Math.abs(steer) * 0.15,
         rl: 0.03,
         rr: 0.03
+      },
+      combinedSlip: {
+        fl: -Math.abs(steer) * 2.4,
+        fr: -Math.abs(steer) * 2.4,
+        rl: 0.3,
+        rr: -0.3
       },
       lap: { number: lapCount, distance: lapDistance, raceTime: timestampMs / 1000 }
     }
@@ -179,6 +185,11 @@ test('synthetic session: 5 laps with acceleration, braking, turns, and exits', (
   assert.ok(Math.abs(stats.corners.lateralG.median - expectedLateralG) < 0.15,
     `lateral G should be close to ~${expectedLateralG}, got ${stats.corners.lateralG.median}`)
 
+  // Front combined slip passes 1 only near peak steering; the rear stays at 0.3 regardless of sign.
+  assert.ok(stats.corners.frontOverLimitShare > 0 && stats.corners.frontOverLimitShare < 1,
+    `front over-limit share should be partial, got ${stats.corners.frontOverLimitShare}`)
+  assert.equal(stats.corners.rearOverLimitShare, 0)
+
   // Distance and speed should be positive
   assert.ok(stats.distanceM > 0, 'distance should be > 0')
   assert.ok(stats.avgSpeedKmh > 0, 'average speed should be > 0')
@@ -254,6 +265,88 @@ test('pedal classification: brake frames count as brake even when throttle is 1'
 
   assert.ok(result.pedals.brake > 0, 'brake share should be > 0 even when throttle is 1')
   assert.equal(result.pedals.fullThrottle || 0, 0, 'full throttle share should be 0 when brake is active')
+})
+
+test('corner tire shares count turning time above 100% combined slip per axle', () => {
+  const stats = statsApi.createDriverAnalysisStats()
+  const axleSlips = [
+    ['straight', 1.5, 1.5],
+    ['turn-in', 0.5, 0.4],
+    ['rotation', 1.2, 0.8],
+    ['rotation', 1.4, 1.1],
+    ['exit', 1.0, 0.6],
+    ['exit', 0.7, 1.3]
+  ]
+  let previousSample = null
+  axleSlips.forEach(([phase, frontCombinedSlip, rearCombinedSlip], index) => {
+    const sample = {
+      timestampMs: index * 100,
+      speedKmh: 100,
+      throttle: 0.5,
+      brake: 0,
+      steer: 0.3,
+      steerMagnitude: 0.3,
+      lateralResponse: 8,
+      longitudinalResponse: 0,
+      frontCombinedSlip,
+      rearCombinedSlip
+    }
+    stats.update({ valid: true, phase, maneuverId: 1, sample, previousSample })
+    previousSample = sample
+  })
+  const result = stats.finalize()
+
+  // Five turning steps of 100 ms; front above 1 in two, rear above 1 in two. Exactly 1 is not over.
+  assert.equal(result.corners.frontOverLimitShare, 0.4)
+  assert.equal(result.corners.rearOverLimitShare, 0.4)
+  assert.equal(result.corners.frontSlipDominantShare, undefined)
+})
+
+test('corner tire shares are null without combined slip', () => {
+  const stats = statsApi.createDriverAnalysisStats()
+  const first = { timestampMs: 0, speedKmh: 100, throttle: 0.5, brake: 0, steerMagnitude: 0.3, lateralResponse: 8, frontSlip: 1.5, rearSlip: 0.2 }
+  const second = { ...first, timestampMs: 100 }
+  stats.update({ valid: true, phase: 'rotation', maneuverId: 1, sample: first, previousSample: null })
+  stats.update({ valid: true, phase: 'rotation', maneuverId: 1, sample: second, previousSample: first })
+  const result = stats.finalize()
+
+  assert.equal(result.corners.frontOverLimitShare, null)
+  assert.equal(result.corners.rearOverLimitShare, null)
+})
+
+test('formatStatsRows shows corner tire shares over 100% slip', () => {
+  const rows = statsApi.formatStatsRows({
+    version: statsApi.STATS_VERSION,
+    corners: {
+      count: 5,
+      flatOutCount: 1,
+      lateralG: { median: 1.02, p10: 0.9, p90: 1.1, max: 1.2 },
+      frontOverLimitShare: 0.214,
+      rearOverLimitShare: 0.05
+    }
+  })
+  const corners = rows.find(row => row.key === 'corners')
+
+  assert.ok(corners.text.includes('front over 100% slip 21%'), corners.text)
+  assert.ok(corners.text.includes('rear over 100% slip 5%'), corners.text)
+  assert.deepEqual(
+    corners.items.filter(item => item.name.includes('100% slip')),
+    [
+      { name: 'Front tires over 100% slip', value: '21% of cornering time' },
+      { name: 'Rear tires over 100% slip', value: '5% of cornering time' }
+    ]
+  )
+})
+
+test('formatStatsRows ignores the retired front-versus-rear corner share', () => {
+  const rows = statsApi.formatStatsRows({
+    version: 6,
+    corners: { count: 5, flatOutCount: 1, lateralG: { median: 1.02, p10: 0.9, p90: 1.1, max: 1.2 }, frontSlipDominantShare: 0.9 }
+  })
+  const corners = rows.find(row => row.key === 'corners')
+
+  assert.ok(!corners.text.includes('slip'), corners.text)
+  assert.ok(corners.items.every(item => !item.name.toLowerCase().includes('slid')))
 })
 
 test('frames below 5 km/h are excluded from movingMs', () => {
@@ -647,7 +740,8 @@ test('formatStatsRows returns rows with required keys and no judgmental words', 
       count: 5,
       flatOutCount: 1,
       lateralG: { median: 1.02, p10: 0.9, p90: 1.1, max: 1.2 },
-      frontSlipDominantShare: 0.6
+      frontOverLimitShare: 0.2,
+      rearOverLimitShare: 0.05
     },
     exits: {
       count: 5,
@@ -1788,7 +1882,8 @@ test('formatStatsRows returns items array with new structure', () => {
       count: 5,
       flatOutCount: 1,
       lateralG: { median: 1.02, p10: 0.9, p90: 1.1, max: 1.2 },
-      frontSlipDominantShare: 0.6
+      frontOverLimitShare: 0.2,
+      rearOverLimitShare: 0.05
     },
     exits: {
       cornerCount: 5,
