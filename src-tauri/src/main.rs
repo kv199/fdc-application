@@ -376,7 +376,7 @@ struct ShiftLightVariantResolution {
 }
 
 const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 4;
-const HUD_SCHEMA_VERSION: i32 = 19;
+const HUD_SCHEMA_VERSION: i32 = 20;
 const MAX_SHIFT_LIGHT_CEILING_SAMPLES: usize = 3;
 const MAX_SHIFT_LIGHT_GEAR_TARGETS: usize = 9;
 const MAX_SHIFT_LIGHT_SHIFT_SAMPLES: usize = 64;
@@ -1047,7 +1047,7 @@ fn migrate_shift_light_v15(connection: &mut Connection) -> Result<(), String> {
         .map_err(|error| format!("unable to commit Shift Light v15 migration: {error}"))
 }
 
-const DRIVER_ANALYSIS_SCHEMA_VERSION: i32 = HUD_SCHEMA_VERSION;
+const DRIVER_ANALYSIS_SCHEMA_VERSION: i32 = 19;
 const DRIVER_ANALYSIS_INITIAL_SCHEMA_VERSION: i32 = 17;
 const DRIVER_ANALYSIS_RESULTS_SCHEMA_VERSION: i32 = 18;
 const DRIVER_ANALYSIS_STATS_MAX_BYTES: usize = 16 * 1024;
@@ -1237,6 +1237,78 @@ fn migrate_driver_analysis_stats(connection: &mut Connection) -> Result<(), Stri
         .map_err(|error| format!("unable to commit Driver Analysis statistics migration: {error}"))
 }
 
+const EVENT_TRACE_TELEMETRY_COLUMNS: [(&str, &str); 36] = [
+    ("speed_kmh", "REAL"),
+    ("gear", "INTEGER"),
+    ("rpm", "REAL"),
+    ("steer", "REAL"),
+    ("acceleration_x", "REAL"),
+    ("acceleration_y", "REAL"),
+    ("acceleration_z", "REAL"),
+    ("yaw_rate", "REAL"),
+    ("slip_angle_fl", "REAL"),
+    ("slip_angle_fr", "REAL"),
+    ("slip_angle_rl", "REAL"),
+    ("slip_angle_rr", "REAL"),
+    ("slip_ratio_fl", "REAL"),
+    ("slip_ratio_fr", "REAL"),
+    ("slip_ratio_rl", "REAL"),
+    ("slip_ratio_rr", "REAL"),
+    ("combined_slip_fl", "REAL"),
+    ("combined_slip_fr", "REAL"),
+    ("combined_slip_rl", "REAL"),
+    ("combined_slip_rr", "REAL"),
+    ("tire_temp_c_fl", "REAL"),
+    ("tire_temp_c_fr", "REAL"),
+    ("tire_temp_c_rl", "REAL"),
+    ("tire_temp_c_rr", "REAL"),
+    ("suspension_fl", "REAL"),
+    ("suspension_fr", "REAL"),
+    ("suspension_rl", "REAL"),
+    ("suspension_rr", "REAL"),
+    ("puddle_fl", "REAL"),
+    ("puddle_fr", "REAL"),
+    ("puddle_rl", "REAL"),
+    ("puddle_rr", "REAL"),
+    ("rumble_fl", "INTEGER"),
+    ("rumble_fr", "INTEGER"),
+    ("rumble_rl", "INTEGER"),
+    ("rumble_rr", "INTEGER"),
+];
+
+fn migrate_event_trace_telemetry_schema(connection: &mut Connection) -> Result<(), String> {
+    let mut missing_columns = Vec::new();
+    for (column, column_type) in EVENT_TRACE_TELEMETRY_COLUMNS {
+        if !table_has_column(connection, "event_run_lap_trace_points", column)? {
+            missing_columns.push((column, column_type));
+        }
+    }
+    let transaction = connection.transaction().map_err(|error| {
+        format!("unable to start Event trace telemetry schema migration: {error}")
+    })?;
+    for (column, column_type) in missing_columns {
+        transaction
+            .execute(
+                &format!(
+                    "ALTER TABLE event_run_lap_trace_points ADD COLUMN {column} {column_type}"
+                ),
+                [],
+            )
+            .map_err(|error| format!("unable to add Event trace {column} data: {error}"))?;
+    }
+    transaction
+        .execute(
+            "UPDATE hud_schema_version SET version = ?1",
+            params![HUD_SCHEMA_VERSION],
+        )
+        .map_err(|error| {
+            format!("unable to update Event trace telemetry schema version: {error}")
+        })?;
+    transaction.commit().map_err(|error| {
+        format!("unable to commit Event trace telemetry schema migration: {error}")
+    })
+}
+
 fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), String> {
     connection
         .execute_batch(
@@ -1351,6 +1423,9 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
     }
     if version < DRIVER_ANALYSIS_SCHEMA_VERSION {
         migrate_driver_analysis_stats(connection)?;
+    }
+    if version < 20 {
+        migrate_event_trace_telemetry_schema(connection)?;
     }
     Ok(())
 }
@@ -2319,6 +2394,78 @@ struct EventRunTracePointInput {
     position_z: f64,
     throttle: f64,
     brake: f64,
+    #[serde(default)]
+    speed_kmh: Option<f64>,
+    #[serde(default)]
+    gear: Option<i32>,
+    #[serde(default)]
+    rpm: Option<f64>,
+    #[serde(default)]
+    steer: Option<f64>,
+    #[serde(default)]
+    acceleration_x: Option<f64>,
+    #[serde(default)]
+    acceleration_y: Option<f64>,
+    #[serde(default)]
+    acceleration_z: Option<f64>,
+    #[serde(default)]
+    yaw_rate: Option<f64>,
+    #[serde(default)]
+    slip_angle_fl: Option<f64>,
+    #[serde(default)]
+    slip_angle_fr: Option<f64>,
+    #[serde(default)]
+    slip_angle_rl: Option<f64>,
+    #[serde(default)]
+    slip_angle_rr: Option<f64>,
+    #[serde(default)]
+    slip_ratio_fl: Option<f64>,
+    #[serde(default)]
+    slip_ratio_fr: Option<f64>,
+    #[serde(default)]
+    slip_ratio_rl: Option<f64>,
+    #[serde(default)]
+    slip_ratio_rr: Option<f64>,
+    #[serde(default)]
+    combined_slip_fl: Option<f64>,
+    #[serde(default)]
+    combined_slip_fr: Option<f64>,
+    #[serde(default)]
+    combined_slip_rl: Option<f64>,
+    #[serde(default)]
+    combined_slip_rr: Option<f64>,
+    #[serde(default)]
+    tire_temp_c_fl: Option<f64>,
+    #[serde(default)]
+    tire_temp_c_fr: Option<f64>,
+    #[serde(default)]
+    tire_temp_c_rl: Option<f64>,
+    #[serde(default)]
+    tire_temp_c_rr: Option<f64>,
+    #[serde(default)]
+    suspension_fl: Option<f64>,
+    #[serde(default)]
+    suspension_fr: Option<f64>,
+    #[serde(default)]
+    suspension_rl: Option<f64>,
+    #[serde(default)]
+    suspension_rr: Option<f64>,
+    #[serde(default)]
+    puddle_fl: Option<f64>,
+    #[serde(default)]
+    puddle_fr: Option<f64>,
+    #[serde(default)]
+    puddle_rl: Option<f64>,
+    #[serde(default)]
+    puddle_rr: Option<f64>,
+    #[serde(default)]
+    rumble_fl: Option<bool>,
+    #[serde(default)]
+    rumble_fr: Option<bool>,
+    #[serde(default)]
+    rumble_rl: Option<bool>,
+    #[serde(default)]
+    rumble_rr: Option<bool>,
 }
 
 #[derive(Clone, Serialize)]
@@ -2332,6 +2479,78 @@ struct EventRunTracePoint {
     position_z: f64,
     throttle: f64,
     brake: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speed_kmh: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gear: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rpm: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    steer: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    acceleration_x: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    acceleration_y: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    acceleration_z: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    yaw_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slip_angle_fl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slip_angle_fr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slip_angle_rl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slip_angle_rr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slip_ratio_fl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slip_ratio_fr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slip_ratio_rl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slip_ratio_rr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    combined_slip_fl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    combined_slip_fr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    combined_slip_rl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    combined_slip_rr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tire_temp_c_fl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tire_temp_c_fr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tire_temp_c_rl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tire_temp_c_rr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    suspension_fl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    suspension_fr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    suspension_rl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    suspension_rr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    puddle_fl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    puddle_fr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    puddle_rl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    puddle_rr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rumble_fl: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rumble_fr: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rumble_rl: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rumble_rr: Option<bool>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -2641,6 +2860,63 @@ fn normalize_event_run_input(mut run: NewEventRun) -> Result<NewEventRun, String
                     "Event run lap trace throttle and brake must be between 0 and 1".to_string(),
                 );
             }
+            if let Some(speed) = point.speed_kmh {
+                if !speed.is_finite() || speed < 0.0 {
+                    return Err(
+                        "Event run lap trace speed must be finite and non-negative".to_string()
+                    );
+                }
+            }
+            if let Some(gear) = point.gear {
+                if gear < 0 {
+                    return Err("Event run lap trace gear must not be negative".to_string());
+                }
+            }
+            if let Some(rpm) = point.rpm {
+                if !rpm.is_finite() || rpm < 0.0 {
+                    return Err(
+                        "Event run lap trace rpm must be finite and non-negative".to_string()
+                    );
+                }
+            }
+            let extended_numeric = [
+                point.steer,
+                point.acceleration_x,
+                point.acceleration_y,
+                point.acceleration_z,
+                point.yaw_rate,
+                point.slip_angle_fl,
+                point.slip_angle_fr,
+                point.slip_angle_rl,
+                point.slip_angle_rr,
+                point.slip_ratio_fl,
+                point.slip_ratio_fr,
+                point.slip_ratio_rl,
+                point.slip_ratio_rr,
+                point.combined_slip_fl,
+                point.combined_slip_fr,
+                point.combined_slip_rl,
+                point.combined_slip_rr,
+                point.tire_temp_c_fl,
+                point.tire_temp_c_fr,
+                point.tire_temp_c_rl,
+                point.tire_temp_c_rr,
+                point.suspension_fl,
+                point.suspension_fr,
+                point.suspension_rl,
+                point.suspension_rr,
+                point.puddle_fl,
+                point.puddle_fr,
+                point.puddle_rl,
+                point.puddle_rr,
+            ];
+            if extended_numeric
+                .into_iter()
+                .flatten()
+                .any(|v| !v.is_finite())
+            {
+                return Err("Event run lap trace extended values must be finite".to_string());
+            }
             if !sample_indexes.insert(point.sample_index) {
                 return Err("Event run lap trace sample indexes must be unique".to_string());
             }
@@ -2715,7 +2991,16 @@ fn event_run_trace_points_from_connection(
     let mut statement = connection
         .prepare(
             "SELECT sample_index, elapsed_ms, distance,
-                    position_x, position_y, position_z, throttle, brake
+                    position_x, position_y, position_z, throttle, brake,
+                    speed_kmh, gear, rpm, steer,
+                    acceleration_x, acceleration_y, acceleration_z, yaw_rate,
+                    slip_angle_fl, slip_angle_fr, slip_angle_rl, slip_angle_rr,
+                    slip_ratio_fl, slip_ratio_fr, slip_ratio_rl, slip_ratio_rr,
+                    combined_slip_fl, combined_slip_fr, combined_slip_rl, combined_slip_rr,
+                    tire_temp_c_fl, tire_temp_c_fr, tire_temp_c_rl, tire_temp_c_rr,
+                    suspension_fl, suspension_fr, suspension_rl, suspension_rr,
+                    puddle_fl, puddle_fr, puddle_rl, puddle_rr,
+                    rumble_fl, rumble_fr, rumble_rl, rumble_rr
              FROM event_run_lap_trace_points
              WHERE run_id = ?1 AND lap_number = ?2
              ORDER BY sample_index ASC",
@@ -2732,11 +3017,115 @@ fn event_run_trace_points_from_connection(
                 position_z: row.get(5)?,
                 throttle: row.get(6)?,
                 brake: row.get(7)?,
+                speed_kmh: row.get(8)?,
+                gear: row.get(9)?,
+                rpm: row.get(10)?,
+                steer: row.get(11)?,
+                acceleration_x: row.get(12)?,
+                acceleration_y: row.get(13)?,
+                acceleration_z: row.get(14)?,
+                yaw_rate: row.get(15)?,
+                slip_angle_fl: row.get(16)?,
+                slip_angle_fr: row.get(17)?,
+                slip_angle_rl: row.get(18)?,
+                slip_angle_rr: row.get(19)?,
+                slip_ratio_fl: row.get(20)?,
+                slip_ratio_fr: row.get(21)?,
+                slip_ratio_rl: row.get(22)?,
+                slip_ratio_rr: row.get(23)?,
+                combined_slip_fl: row.get(24)?,
+                combined_slip_fr: row.get(25)?,
+                combined_slip_rl: row.get(26)?,
+                combined_slip_rr: row.get(27)?,
+                tire_temp_c_fl: row.get(28)?,
+                tire_temp_c_fr: row.get(29)?,
+                tire_temp_c_rl: row.get(30)?,
+                tire_temp_c_rr: row.get(31)?,
+                suspension_fl: row.get(32)?,
+                suspension_fr: row.get(33)?,
+                suspension_rl: row.get(34)?,
+                suspension_rr: row.get(35)?,
+                puddle_fl: row.get(36)?,
+                puddle_fr: row.get(37)?,
+                puddle_rl: row.get(38)?,
+                puddle_rr: row.get(39)?,
+                rumble_fl: row.get::<_, Option<i32>>(40)?.map(|v| v != 0),
+                rumble_fr: row.get::<_, Option<i32>>(41)?.map(|v| v != 0),
+                rumble_rl: row.get::<_, Option<i32>>(42)?.map(|v| v != 0),
+                rumble_rr: row.get::<_, Option<i32>>(43)?.map(|v| v != 0),
             })
         })
         .map_err(|error| format!("unable to load Event run trace points: {error}"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("unable to decode Event run trace points: {error}"))
+}
+
+fn event_run_trace_points_base_fields_from_connection(
+    connection: &Connection,
+    run_id: i64,
+    lap_number: i32,
+) -> Result<Vec<EventRunTracePoint>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT sample_index, elapsed_ms, distance,
+                    position_x, position_y, position_z, throttle, brake
+             FROM event_run_lap_trace_points
+             WHERE run_id = ?1 AND lap_number = ?2
+             ORDER BY sample_index ASC",
+        )
+        .map_err(|error| format!("unable to prepare Event run trace base query: {error}"))?;
+    statement
+        .query_map(params![run_id, lap_number], |row| {
+            Ok(EventRunTracePoint {
+                sample_index: row.get(0)?,
+                elapsed_ms: row.get(1)?,
+                distance: row.get(2)?,
+                position_x: row.get(3)?,
+                position_y: row.get(4)?,
+                position_z: row.get(5)?,
+                throttle: row.get(6)?,
+                brake: row.get(7)?,
+                speed_kmh: None,
+                gear: None,
+                rpm: None,
+                steer: None,
+                acceleration_x: None,
+                acceleration_y: None,
+                acceleration_z: None,
+                yaw_rate: None,
+                slip_angle_fl: None,
+                slip_angle_fr: None,
+                slip_angle_rl: None,
+                slip_angle_rr: None,
+                slip_ratio_fl: None,
+                slip_ratio_fr: None,
+                slip_ratio_rl: None,
+                slip_ratio_rr: None,
+                combined_slip_fl: None,
+                combined_slip_fr: None,
+                combined_slip_rl: None,
+                combined_slip_rr: None,
+                tire_temp_c_fl: None,
+                tire_temp_c_fr: None,
+                tire_temp_c_rl: None,
+                tire_temp_c_rr: None,
+                suspension_fl: None,
+                suspension_fr: None,
+                suspension_rl: None,
+                suspension_rr: None,
+                puddle_fl: None,
+                puddle_fr: None,
+                puddle_rl: None,
+                puddle_rr: None,
+                rumble_fl: None,
+                rumble_fr: None,
+                rumble_rl: None,
+                rumble_rr: None,
+            })
+        })
+        .map_err(|error| format!("unable to load Event run trace base points: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("unable to decode Event run trace base points: {error}"))
 }
 
 fn event_run_values_from_row(
@@ -2979,7 +3368,9 @@ fn load_event_absolute_best_from_connection(
         return Ok(None);
     };
     let trace_points = lap_number
-        .map(|lap_number| event_run_trace_points_from_connection(connection, run_id, lap_number))
+        .map(|lap_number| {
+            event_run_trace_points_base_fields_from_connection(connection, run_id, lap_number)
+        })
         .transpose()?
         .unwrap_or_default();
     Ok(Some(EventAbsoluteBestReference {
@@ -3071,8 +3462,22 @@ fn record_event_run_in_connection(
                 .execute(
                     "INSERT INTO event_run_lap_trace_points
                        (run_id, lap_number, sample_index, elapsed_ms, distance,
-                        position_x, position_y, position_z, throttle, brake)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                        position_x, position_y, position_z, throttle, brake,
+                        speed_kmh, gear, rpm, steer,
+                        acceleration_x, acceleration_y, acceleration_z, yaw_rate,
+                        slip_angle_fl, slip_angle_fr, slip_angle_rl, slip_angle_rr,
+                        slip_ratio_fl, slip_ratio_fr, slip_ratio_rl, slip_ratio_rr,
+                        combined_slip_fl, combined_slip_fr, combined_slip_rl, combined_slip_rr,
+                        tire_temp_c_fl, tire_temp_c_fr, tire_temp_c_rl, tire_temp_c_rr,
+                        suspension_fl, suspension_fr, suspension_rl, suspension_rr,
+                        puddle_fl, puddle_fr, puddle_rl, puddle_rr,
+                        rumble_fl, rumble_fr, rumble_rl, rumble_rr)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                             ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
+                             ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
+                             ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34,
+                             ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42,
+                             ?43, ?44, ?45, ?46)",
                     params![
                         run_id,
                         lap_number,
@@ -3084,6 +3489,42 @@ fn record_event_run_in_connection(
                         point.position_z,
                         point.throttle,
                         point.brake,
+                        point.speed_kmh,
+                        point.gear,
+                        point.rpm,
+                        point.steer,
+                        point.acceleration_x,
+                        point.acceleration_y,
+                        point.acceleration_z,
+                        point.yaw_rate,
+                        point.slip_angle_fl,
+                        point.slip_angle_fr,
+                        point.slip_angle_rl,
+                        point.slip_angle_rr,
+                        point.slip_ratio_fl,
+                        point.slip_ratio_fr,
+                        point.slip_ratio_rl,
+                        point.slip_ratio_rr,
+                        point.combined_slip_fl,
+                        point.combined_slip_fr,
+                        point.combined_slip_rl,
+                        point.combined_slip_rr,
+                        point.tire_temp_c_fl,
+                        point.tire_temp_c_fr,
+                        point.tire_temp_c_rl,
+                        point.tire_temp_c_rr,
+                        point.suspension_fl,
+                        point.suspension_fr,
+                        point.suspension_rl,
+                        point.suspension_rr,
+                        point.puddle_fl,
+                        point.puddle_fr,
+                        point.puddle_rl,
+                        point.puddle_rr,
+                        point.rumble_fl.map(|v| if v { 1 } else { 0 }),
+                        point.rumble_fr.map(|v| if v { 1 } else { 0 }),
+                        point.rumble_rl.map(|v| if v { 1 } else { 0 }),
+                        point.rumble_rr.map(|v| if v { 1 } else { 0 }),
                     ],
                 )
                 .map_err(|error| format!("unable to record Event run trace point: {error}"))?;
@@ -5099,6 +5540,64 @@ mod tests {
         }
     }
 
+    fn test_event_trace_point(
+        sample_index: i32,
+        elapsed_ms: i64,
+        distance: f64,
+        position_x: f64,
+        position_y: f64,
+        position_z: f64,
+        throttle: f64,
+        brake: f64,
+    ) -> EventRunTracePointInput {
+        EventRunTracePointInput {
+            sample_index,
+            elapsed_ms,
+            distance,
+            position_x,
+            position_y,
+            position_z,
+            throttle,
+            brake,
+            speed_kmh: None,
+            gear: None,
+            rpm: None,
+            steer: None,
+            acceleration_x: None,
+            acceleration_y: None,
+            acceleration_z: None,
+            yaw_rate: None,
+            slip_angle_fl: None,
+            slip_angle_fr: None,
+            slip_angle_rl: None,
+            slip_angle_rr: None,
+            slip_ratio_fl: None,
+            slip_ratio_fr: None,
+            slip_ratio_rl: None,
+            slip_ratio_rr: None,
+            combined_slip_fl: None,
+            combined_slip_fr: None,
+            combined_slip_rl: None,
+            combined_slip_rr: None,
+            tire_temp_c_fl: None,
+            tire_temp_c_fr: None,
+            tire_temp_c_rl: None,
+            tire_temp_c_rr: None,
+            suspension_fl: None,
+            suspension_fr: None,
+            suspension_rl: None,
+            suspension_rr: None,
+            puddle_fl: None,
+            puddle_fr: None,
+            puddle_rl: None,
+            puddle_rr: None,
+            rumble_fl: None,
+            rumble_fr: None,
+            rumble_rl: None,
+            rumble_rr: None,
+        }
+    }
+
     #[test]
     fn events_migrate_from_v6_without_touching_existing_tables() {
         let mut connection = Connection::open_in_memory().unwrap();
@@ -5426,16 +5925,9 @@ mod tests {
                     sector_1_time_ms: Some(30_000),
                     sector_2_time_ms: Some(30_000),
                     sector_3_time_ms: Some(30_000),
-                    trace_points: vec![EventRunTracePointInput {
-                        sample_index: 0,
-                        elapsed_ms: 250,
-                        distance: 12.5,
-                        position_x: 1.0,
-                        position_y: 2.0,
-                        position_z: 3.0,
-                        throttle: 0.75,
-                        brake: 0.0,
-                    }],
+                    trace_points: vec![test_event_trace_point(
+                        0, 250, 12.5, 1.0, 2.0, 3.0, 0.75, 0.0,
+                    )],
                 }],
             ),
         )
@@ -5473,16 +5965,8 @@ mod tests {
         )
         .unwrap();
 
-        let trace = |distance: f64| EventRunTracePointInput {
-            sample_index: 0,
-            elapsed_ms: 500,
-            distance,
-            position_x: 1.0,
-            position_y: 2.0,
-            position_z: 3.0,
-            throttle: 0.75,
-            brake: 0.0,
-        };
+        let trace =
+            |distance: f64| test_event_trace_point(0, 500, distance, 1.0, 2.0, 3.0, 0.75, 0.0);
         let circuit = record_event_run_in_connection(
             &mut connection,
             test_event_run(
@@ -5574,15 +6058,17 @@ mod tests {
             vec![0.0, end_distance]
                 .into_iter()
                 .enumerate()
-                .map(|(index, distance)| EventRunTracePointInput {
-                    sample_index: index as i32,
-                    elapsed_ms: index as i64 * 1000,
-                    distance,
-                    position_x: 1.0,
-                    position_y: 2.0,
-                    position_z: 3.0,
-                    throttle: 0.75,
-                    brake: 0.0,
+                .map(|(index, distance)| {
+                    test_event_trace_point(
+                        index as i32,
+                        index as i64 * 1000,
+                        distance,
+                        1.0,
+                        2.0,
+                        3.0,
+                        0.75,
+                        0.0,
+                    )
                 })
                 .collect::<Vec<_>>()
         };
@@ -6856,5 +7342,430 @@ mod tests {
         assert_eq!(updated.result.as_deref(), result_before.as_deref());
         assert_eq!(updated.status, status_before);
         assert_eq!(updated.opportunity_count, opportunity_count_before);
+    }
+
+    #[test]
+    fn event_run_trace_points_extended_fields_round_trip() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Extended trace run", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let saved = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![EventRunLapInput {
+                    lap_number: 1,
+                    lap_time_ms: 90_000,
+                    sector_1_time_ms: None,
+                    sector_2_time_ms: None,
+                    sector_3_time_ms: None,
+                    trace_points: vec![EventRunTracePointInput {
+                        sample_index: 0,
+                        elapsed_ms: 250,
+                        distance: 12.5,
+                        position_x: 1.0,
+                        position_y: 2.0,
+                        position_z: 3.0,
+                        throttle: 0.75,
+                        brake: 0.0,
+                        speed_kmh: Some(150.25),
+                        gear: Some(3),
+                        rpm: Some(5500.0),
+                        steer: Some(-0.125),
+                        acceleration_x: Some(1.234),
+                        acceleration_y: Some(2.345),
+                        acceleration_z: Some(3.456),
+                        yaw_rate: Some(0.0123),
+                        slip_angle_fl: Some(0.100),
+                        slip_angle_fr: Some(0.200),
+                        slip_angle_rl: Some(-0.050),
+                        slip_angle_rr: Some(-0.075),
+                        slip_ratio_fl: Some(0.010),
+                        slip_ratio_fr: Some(0.020),
+                        slip_ratio_rl: Some(-0.005),
+                        slip_ratio_rr: Some(-0.010),
+                        combined_slip_fl: Some(0.105),
+                        combined_slip_fr: Some(0.210),
+                        combined_slip_rl: Some(0.055),
+                        combined_slip_rr: Some(0.085),
+                        tire_temp_c_fl: Some(85.5),
+                        tire_temp_c_fr: Some(86.3),
+                        tire_temp_c_rl: Some(82.1),
+                        tire_temp_c_rr: Some(81.9),
+                        suspension_fl: Some(0.450),
+                        suspension_fr: Some(0.460),
+                        suspension_rl: Some(0.550),
+                        suspension_rr: Some(0.560),
+                        puddle_fl: Some(0.100),
+                        puddle_fr: Some(0.050),
+                        puddle_rl: Some(0.200),
+                        puddle_rr: Some(0.150),
+                        rumble_fl: Some(false),
+                        rumble_fr: Some(true),
+                        rumble_rl: Some(false),
+                        rumble_rr: Some(true),
+                    }],
+                }],
+            ),
+        )
+        .unwrap();
+        let loaded = load_event_run_from_connection(&connection, saved.id).unwrap();
+        assert_eq!(loaded.laps[0].trace_points.len(), 1);
+        let point = &loaded.laps[0].trace_points[0];
+        assert_eq!(point.speed_kmh, Some(150.25));
+        assert_eq!(point.gear, Some(3));
+        assert_eq!(point.rpm, Some(5500.0));
+        assert_eq!(point.steer, Some(-0.125));
+        assert_eq!(point.rumble_fl, Some(false));
+        assert_eq!(point.rumble_fr, Some(true));
+    }
+
+    #[test]
+    fn event_run_trace_points_without_extended_fields_serializes_clean() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Base only trace", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let saved = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![EventRunLapInput {
+                    lap_number: 1,
+                    lap_time_ms: 90_000,
+                    sector_1_time_ms: None,
+                    sector_2_time_ms: None,
+                    sector_3_time_ms: None,
+                    trace_points: vec![EventRunTracePointInput {
+                        sample_index: 0,
+                        elapsed_ms: 250,
+                        distance: 12.5,
+                        position_x: 1.0,
+                        position_y: 2.0,
+                        position_z: 3.0,
+                        throttle: 0.75,
+                        brake: 0.0,
+                        speed_kmh: None,
+                        gear: None,
+                        rpm: None,
+                        steer: None,
+                        acceleration_x: None,
+                        acceleration_y: None,
+                        acceleration_z: None,
+                        yaw_rate: None,
+                        slip_angle_fl: None,
+                        slip_angle_fr: None,
+                        slip_angle_rl: None,
+                        slip_angle_rr: None,
+                        slip_ratio_fl: None,
+                        slip_ratio_fr: None,
+                        slip_ratio_rl: None,
+                        slip_ratio_rr: None,
+                        combined_slip_fl: None,
+                        combined_slip_fr: None,
+                        combined_slip_rl: None,
+                        combined_slip_rr: None,
+                        tire_temp_c_fl: None,
+                        tire_temp_c_fr: None,
+                        tire_temp_c_rl: None,
+                        tire_temp_c_rr: None,
+                        suspension_fl: None,
+                        suspension_fr: None,
+                        suspension_rl: None,
+                        suspension_rr: None,
+                        puddle_fl: None,
+                        puddle_fr: None,
+                        puddle_rl: None,
+                        puddle_rr: None,
+                        rumble_fl: None,
+                        rumble_fr: None,
+                        rumble_rl: None,
+                        rumble_rr: None,
+                    }],
+                }],
+            ),
+        )
+        .unwrap();
+        let loaded = load_event_run_from_connection(&connection, saved.id).unwrap();
+        let point = &loaded.laps[0].trace_points[0];
+        let serialized = serde_json::to_value(point).unwrap();
+        assert!(!serialized.get("speedKmh").is_some());
+        assert!(!serialized.get("gear").is_some());
+        assert!(!serialized.get("rpm").is_some());
+        assert!(serialized.get("distance").is_some());
+        assert!(serialized.get("throttle").is_some());
+    }
+
+    #[test]
+    fn event_run_trace_validation_rejects_non_finite_extended_values() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Validation test", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let mut invalid_run = test_event_run(
+            event.id,
+            "circuit",
+            "completed",
+            None,
+            vec![EventRunLapInput {
+                lap_number: 1,
+                lap_time_ms: 90_000,
+                sector_1_time_ms: None,
+                sector_2_time_ms: None,
+                sector_3_time_ms: None,
+                trace_points: vec![EventRunTracePointInput {
+                    sample_index: 0,
+                    elapsed_ms: 250,
+                    distance: 12.5,
+                    position_x: 1.0,
+                    position_y: 2.0,
+                    position_z: 3.0,
+                    throttle: 0.75,
+                    brake: 0.0,
+                    speed_kmh: Some(f64::NAN),
+                    gear: None,
+                    rpm: None,
+                    steer: None,
+                    acceleration_x: None,
+                    acceleration_y: None,
+                    acceleration_z: None,
+                    yaw_rate: None,
+                    slip_angle_fl: None,
+                    slip_angle_fr: None,
+                    slip_angle_rl: None,
+                    slip_angle_rr: None,
+                    slip_ratio_fl: None,
+                    slip_ratio_fr: None,
+                    slip_ratio_rl: None,
+                    slip_ratio_rr: None,
+                    combined_slip_fl: None,
+                    combined_slip_fr: None,
+                    combined_slip_rl: None,
+                    combined_slip_rr: None,
+                    tire_temp_c_fl: None,
+                    tire_temp_c_fr: None,
+                    tire_temp_c_rl: None,
+                    tire_temp_c_rr: None,
+                    suspension_fl: None,
+                    suspension_fr: None,
+                    suspension_rl: None,
+                    suspension_rr: None,
+                    puddle_fl: None,
+                    puddle_fr: None,
+                    puddle_rl: None,
+                    puddle_rr: None,
+                    rumble_fl: None,
+                    rumble_fr: None,
+                    rumble_rl: None,
+                    rumble_rr: None,
+                }],
+            }],
+        );
+        assert!(record_event_run_in_connection(&mut connection, invalid_run.clone()).is_err());
+
+        invalid_run.laps[0].trace_points[0].speed_kmh = None;
+        invalid_run.laps[0].trace_points[0].speed_kmh = Some(-10.0);
+        assert!(record_event_run_in_connection(&mut connection, invalid_run).is_err());
+    }
+
+    #[test]
+    fn event_trace_migration_from_v19_preserves_data() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE hud_schema_version (version INTEGER NOT NULL);
+                 INSERT INTO hud_schema_version VALUES (19);",
+            )
+            .unwrap();
+        let transaction = connection.transaction().unwrap();
+        create_event_tables(&transaction).unwrap();
+        create_event_run_tables(&transaction).unwrap();
+        create_event_trace_tables(&transaction).unwrap();
+        transaction.commit().unwrap();
+
+        connection
+            .execute(
+                "INSERT INTO events (name, class, route, mode)
+                 VALUES ('Test Event', 'A', 'Asphalt', 'Rivals')",
+                [],
+            )
+            .unwrap();
+        let event_id = connection.last_insert_rowid();
+        connection
+            .execute(
+                "INSERT INTO event_runs
+                   (event_id, car_ordinal, car_class, car_pi, drivetrain, started_at, run_type, result)
+                 VALUES (?1, 260, 8, 700, 2, '2026-08-30T12:00:00Z', 'circuit', 'completed')",
+                params![event_id],
+            )
+            .unwrap();
+        let run_id = connection.last_insert_rowid();
+        connection
+            .execute(
+                "INSERT INTO event_run_laps (run_id, lap_number, lap_time_ms)
+                 VALUES (?1, 1, 90000)",
+                params![run_id],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO event_run_lap_trace_points
+                   (run_id, lap_number, sample_index, elapsed_ms, distance,
+                    position_x, position_y, position_z, throttle, brake)
+                 VALUES (?1, 1, 0, 250, 12.5, 1.0, 2.0, 3.0, 0.75, 0.0)",
+                params![run_id],
+            )
+            .unwrap();
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        let version: i32 = connection
+            .query_row("SELECT version FROM hud_schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 20);
+
+        assert!(table_has_column(&connection, "event_run_lap_trace_points", "speed_kmh").unwrap());
+        assert!(table_has_column(&connection, "event_run_lap_trace_points", "gear").unwrap());
+        assert!(table_has_column(&connection, "event_run_lap_trace_points", "rumble_fl").unwrap());
+
+        let point_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM event_run_lap_trace_points",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(point_count, 1);
+
+        let (distance, speed_kmh, gear): (f64, Option<f64>, Option<i32>) = connection
+            .query_row(
+                "SELECT distance, speed_kmh, gear FROM event_run_lap_trace_points WHERE sample_index = 0",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(distance, 12.5);
+        assert_eq!(speed_kmh, None);
+        assert_eq!(gear, None);
+    }
+
+    #[test]
+    fn event_trace_fresh_database_starts_at_v20_with_columns() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        let version: i32 = connection
+            .query_row("SELECT version FROM hud_schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 20);
+
+        assert!(table_has_column(&connection, "event_run_lap_trace_points", "speed_kmh").unwrap());
+        assert!(table_has_column(&connection, "event_run_lap_trace_points", "gear").unwrap());
+        assert!(table_has_column(&connection, "event_run_lap_trace_points", "rpm").unwrap());
+        assert!(table_has_column(&connection, "event_run_lap_trace_points", "rumble_fl").unwrap());
+        assert!(table_has_column(&connection, "event_run_lap_trace_points", "rumble_rr").unwrap());
+    }
+
+    #[test]
+    fn event_absolute_best_reference_returns_only_base_fields() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Absolute best ref", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let _saved = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![EventRunLapInput {
+                    lap_number: 1,
+                    lap_time_ms: 90_000,
+                    sector_1_time_ms: None,
+                    sector_2_time_ms: None,
+                    sector_3_time_ms: None,
+                    trace_points: vec![EventRunTracePointInput {
+                        sample_index: 0,
+                        elapsed_ms: 250,
+                        distance: 12.5,
+                        position_x: 1.0,
+                        position_y: 2.0,
+                        position_z: 3.0,
+                        throttle: 0.75,
+                        brake: 0.0,
+                        speed_kmh: Some(150.25),
+                        gear: Some(3),
+                        rpm: Some(5500.0),
+                        steer: Some(-0.125),
+                        acceleration_x: None,
+                        acceleration_y: None,
+                        acceleration_z: None,
+                        yaw_rate: None,
+                        slip_angle_fl: None,
+                        slip_angle_fr: None,
+                        slip_angle_rl: None,
+                        slip_angle_rr: None,
+                        slip_ratio_fl: None,
+                        slip_ratio_fr: None,
+                        slip_ratio_rl: None,
+                        slip_ratio_rr: None,
+                        combined_slip_fl: None,
+                        combined_slip_fr: None,
+                        combined_slip_rl: None,
+                        combined_slip_rr: None,
+                        tire_temp_c_fl: None,
+                        tire_temp_c_fr: None,
+                        tire_temp_c_rl: None,
+                        tire_temp_c_rr: None,
+                        suspension_fl: None,
+                        suspension_fr: None,
+                        suspension_rl: None,
+                        suspension_rr: None,
+                        puddle_fl: None,
+                        puddle_fr: None,
+                        puddle_rl: None,
+                        puddle_rr: None,
+                        rumble_fl: None,
+                        rumble_fr: None,
+                        rumble_rl: None,
+                        rumble_rr: None,
+                    }],
+                }],
+            ),
+        )
+        .unwrap();
+        let best = load_event_absolute_best_from_connection(&connection, event.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(best.trace_points.len(), 1);
+        let point = &best.trace_points[0];
+        assert_eq!(point.speed_kmh, None);
+        assert_eq!(point.gear, None);
+        assert_eq!(point.rpm, None);
+        assert_eq!(point.throttle, 0.75);
     }
 }

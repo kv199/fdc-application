@@ -148,6 +148,7 @@
   let eventRunsSort = { key: 'date', direction: 'desc' }
   let eventRunLapSortDirection = 'desc'
   let expandedEventRunLap = null
+  let traceMapLayerToggles = { throttle: true, brake: true, coast: true, slip: true }
   let eventsSortValue = 'id-desc'
   let editingTarget = null
   let layoutMode = 'grouped'
@@ -866,7 +867,7 @@
       const positionY = finiteNumber(point.positionY ?? point.position_y ?? position.y)
       const positionZ = finiteNumber(point.positionZ ?? point.position_z ?? position.z)
       if (positionX === null || positionZ === null) return null
-      return {
+      const normalized = {
         elapsedMs: runTimeMs(point.elapsedMs ?? point.elapsed_ms ?? point.timeMs ?? point.time_ms, 'ms'),
         distanceM: finiteNumber(point.distanceM ?? point.distance_m ?? point.distance),
         positionX,
@@ -875,6 +876,54 @@
         throttle: normalizePedal(point.throttle ?? point.throttleInput ?? point.throttle_input),
         brake: normalizePedal(point.brake ?? point.brakeInput ?? point.brake_input)
       }
+      // Extended contract fields (optional; include when present and finite, accept camelCase and snake_case)
+      const extendedFields = [
+        ['speedKmh', 'speed_kmh'],
+        ['gear', 'gear'],
+        ['rpm', 'rpm'],
+        ['steer', 'steer'],
+        ['accelerationX', 'acceleration_x'],
+        ['accelerationY', 'acceleration_y'],
+        ['accelerationZ', 'acceleration_z'],
+        ['yawRate', 'yaw_rate'],
+        ['slipAngleFl', 'slip_angle_fl'],
+        ['slipAngleFr', 'slip_angle_fr'],
+        ['slipAngleRl', 'slip_angle_rl'],
+        ['slipAngleRr', 'slip_angle_rr'],
+        ['slipRatioFl', 'slip_ratio_fl'],
+        ['slipRatioFr', 'slip_ratio_fr'],
+        ['slipRatioRl', 'slip_ratio_rl'],
+        ['slipRatioRr', 'slip_ratio_rr'],
+        ['combinedSlipFl', 'combined_slip_fl'],
+        ['combinedSlipFr', 'combined_slip_fr'],
+        ['combinedSlipRl', 'combined_slip_rl'],
+        ['combinedSlipRr', 'combined_slip_rr'],
+        ['tireTempCFl', 'tire_temp_c_fl'],
+        ['tireTempCFr', 'tire_temp_c_fr'],
+        ['tireTempCRl', 'tire_temp_c_rl'],
+        ['tireTempCRr', 'tire_temp_c_rr'],
+        ['suspensionFl', 'suspension_fl'],
+        ['suspensionFr', 'suspension_fr'],
+        ['suspensionRl', 'suspension_rl'],
+        ['suspensionRr', 'suspension_rr'],
+        ['puddleFl', 'puddle_fl'],
+        ['puddleFr', 'puddle_fr'],
+        ['puddleRl', 'puddle_rl'],
+        ['puddleRr', 'puddle_rr']
+      ]
+      for (const [camelCase, snakeCase] of extendedFields) {
+        const value = finiteNumber(point[camelCase] ?? point[snakeCase])
+        if (value !== null) normalized[camelCase] = value
+      }
+      // Rumble fields: boolean, accept camelCase and snake_case
+      for (const wheel of ['Fl', 'Fr', 'Rl', 'Rr']) {
+        const camel = `rumble${wheel}`
+        const snake = `rumble_${wheel.toLowerCase()}`
+        if (point[camel] === true || point[snake] === true) {
+          normalized[camel] = true
+        }
+      }
+      return normalized
     }).filter(Boolean)
   }
 
@@ -1290,24 +1339,101 @@
       x: padding + (point.positionX - minX) * scale,
       y: height - padding - (point.positionZ - minZ) * scale
     })
+    const projected = points.map(project)
+
+    // Check if extended telemetry is available
+    const hasExtended = globalThis.EventTraceMap?.hasExtendedTelemetry(points) ?? false
+
+    // Layer toggles
+    const togglesContainer = document.createElement('div')
+    togglesContainer.className = 'events-lap-detail__toggles'
+    const toggleButtons = {}
+    for (const [layer, label] of [['throttle', 'THROTTLE'], ['brake', 'BRAKE'], ['coast', 'COAST'], ['slip', 'SLIP']]) {
+      const swatch = document.createElement('span')
+      swatch.className = `events-lap-detail__toggle-swatch events-lap-detail__toggle-swatch--${layer}`
+      swatch.setAttribute('aria-hidden', 'true')
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'events-lap-detail__toggle-button'
+      button.append(swatch, label)
+      button.setAttribute('aria-pressed', String(traceMapLayerToggles[layer] ?? true))
+      if (layer === 'slip' && !hasExtended) {
+        button.disabled = true
+        button.title = 'Extended telemetry was not recorded for this lap'
+      }
+      button.addEventListener('click', () => {
+        traceMapLayerToggles[layer] = !traceMapLayerToggles[layer]
+        button.setAttribute('aria-pressed', String(traceMapLayerToggles[layer]))
+        updateSvgLayers(svg)
+      })
+      toggleButtons[layer] = button
+      togglesContainer.append(button)
+    }
+    map.append(togglesContainer)
+
     const svg = svgElement('svg', {
       class: 'events-lap-detail__svg',
       viewBox: `0 0 ${width} ${height}`,
       role: 'img',
-      'aria-label': 'Throttle, brake and coast trace map'
+      'aria-label': 'Throttle, brake, coast, and slip trace map'
     })
     svg.append(svgElement('rect', { class: 'events-lap-detail__surface', x: 0, y: 0, width, height, rx: 2 }))
-    for (let index = 0; index < points.length - 1; index += 1) {
-      const from = project(points[index])
-      const to = project(points[index + 1])
-      svg.append(svgElement('line', {
-        class: `events-lap-detail__trace events-lap-detail__trace--${traceState(points[index])}`,
-        x1: from.x,
-        y1: from.y,
-        x2: to.x,
-        y2: to.y
-      }))
+
+    // Helper to update SVG layers
+    const updateSvgLayers = svgEl => {
+      const traceGroups = svgEl.querySelectorAll('[data-layer-group]')
+      for (const group of traceGroups) {
+        const layer = group.getAttribute('data-layer-group')
+        group.style.display = traceMapLayerToggles[layer] ? 'block' : 'none'
+      }
     }
+
+    // White track outline: always visible
+    const outlineGroup = svgElement('g', { class: 'events-lap-detail__outline-group' })
+    const outlinePoints = projected.map((p, i) => `${p.x},${p.y}`).join(' ')
+    outlineGroup.append(svgElement('polyline', {
+      class: 'events-lap-detail__outline',
+      points: outlinePoints
+    }))
+    svg.append(outlineGroup)
+
+    // Slip layer (drawn under pedal lines)
+    if (hasExtended) {
+      const slipGroup = svgElement('g', { class: 'events-lap-detail__slip-group', 'data-layer-group': 'slip' })
+      const slipRuns = globalThis.EventTraceMap?.groupRuns(points, (p) => globalThis.EventTraceMap?.isSlipPoint(p) ? 'slip' : 'no-slip') ?? []
+      for (const run of slipRuns) {
+        if (run.key !== 'slip') continue
+        const runPoints = projected.slice(run.startIndex, run.endIndex + 1)
+        const pointsStr = runPoints.map((p) => `${p.x},${p.y}`).join(' ')
+        slipGroup.append(svgElement('polyline', {
+          class: 'events-lap-detail__slip-line',
+          points: pointsStr
+        }))
+      }
+      slipGroup.style.display = traceMapLayerToggles.slip ? 'block' : 'none'
+      svg.append(slipGroup)
+    }
+
+    // Pedal layers
+    const pedalLayers = ['throttle', 'brake', 'coast']
+    for (const pedal of pedalLayers) {
+      const group = svgElement('g', { class: `events-lap-detail__pedal-group events-lap-detail__pedal-group--${pedal}`, 'data-layer-group': pedal })
+      const runs = globalThis.EventTraceMap?.groupRuns(points, (p) => globalThis.EventTraceMap?.pedalState(p)) ?? []
+      for (const run of runs) {
+        if (run.key !== pedal) continue
+        const runPoints = projected.slice(run.startIndex, run.endIndex + 1)
+        if (runPoints.length < 2) continue
+        const pointsStr = runPoints.map((p) => `${p.x},${p.y}`).join(' ')
+        group.append(svgElement('polyline', {
+          class: `events-lap-detail__trace events-lap-detail__trace--${pedal}`,
+          points: pointsStr
+        }))
+      }
+      group.style.display = traceMapLayerToggles[pedal] ? 'block' : 'none'
+      svg.append(group)
+    }
+
+    // Sector ticks and labels (on top)
     const distances = points.map(point => point.distanceM).filter(value => value !== null)
     const minDistance = distances.length ? Math.min(...distances) : 0
     const maxDistance = distances.length ? Math.max(...distances) : 0
@@ -1323,10 +1449,147 @@
       label.textContent = tick.label
       svg.append(label)
     }
+
+    // Start marker
     const start = project(points[0])
     svg.append(svgElement('circle', { class: 'events-lap-detail__start', cx: start.x, cy: start.y, r: 3 }))
-    map.append(svg)
+
+    // Hover functionality
+    const tooltipPanel = document.createElement('div')
+    tooltipPanel.className = 'events-lap-detail__tooltip'
+    tooltipPanel.hidden = true
+    const markerCircle = svgElement('circle', { class: 'events-lap-detail__hover-marker', cx: 0, cy: 0, r: 2 })
+    svg.append(markerCircle)
+
+    svg.addEventListener('pointermove', (event) => {
+      // The viewBox is letterboxed inside the padded element, so map through the screen matrix.
+      const matrix = svg.getScreenCTM()
+      if (!matrix) return
+      const cursor = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse())
+      const x = cursor.x
+      const y = cursor.y
+
+      const nearestIdx = globalThis.EventTraceMap?.nearestPointIndex(projected, x, y, 14) ?? null
+      if (nearestIdx !== null) {
+        const p = projected[nearestIdx]
+        markerCircle.setAttribute('cx', p.x)
+        markerCircle.setAttribute('cy', p.y)
+
+        const tooltipData = globalThis.EventTraceMap?.tooltipModel(points[nearestIdx], points[0].distanceM ?? 0) ?? { rows: [], wheelTable: [] }
+        renderTooltip(tooltipPanel, tooltipData)
+        tooltipPanel.hidden = false
+        placeTooltip(tooltipPanel, map, event)
+        markerCircle.style.display = 'block'
+      } else {
+        tooltipPanel.hidden = true
+        markerCircle.style.display = 'none'
+      }
+    })
+
+    svg.addEventListener('pointerleave', () => {
+      tooltipPanel.hidden = true
+      markerCircle.style.display = 'none'
+    })
+
+    map.append(svg, tooltipPanel)
     return map
+  }
+
+  function placeTooltip(tooltip, container, event) {
+    const bounds = container.getBoundingClientRect()
+    const offset = 14
+    const pointerX = event.clientX - bounds.left
+    const pointerY = event.clientY - bounds.top
+    const tooltipWidth = tooltip.offsetWidth
+    const tooltipHeight = tooltip.offsetHeight
+    const left = pointerX + offset + tooltipWidth <= bounds.width ? pointerX + offset : pointerX - offset - tooltipWidth
+    const top = pointerY + offset + tooltipHeight <= bounds.height ? pointerY + offset : pointerY - offset - tooltipHeight
+    tooltip.style.left = `${Math.max(0, Math.min(left, bounds.width - tooltipWidth))}px`
+    tooltip.style.top = `${Math.max(0, Math.min(top, bounds.height - tooltipHeight))}px`
+  }
+
+  function renderTooltip(container, model) {
+    container.replaceChildren()
+
+    // Simple rows
+    for (const row of model.rows) {
+      const div = document.createElement('div')
+      div.className = 'events-lap-detail__tooltip-row'
+      const label = document.createElement('span')
+      label.className = 'events-lap-detail__tooltip-label'
+      label.textContent = row.label
+      const value = document.createElement('span')
+      value.className = 'events-lap-detail__tooltip-value'
+      value.textContent = row.value
+      div.append(label, value)
+      container.append(div)
+    }
+
+    // Wheel table
+    if (model.wheelTable.length > 0) {
+      const table = document.createElement('table')
+      table.className = 'events-lap-detail__tooltip-table'
+      const headerRow = document.createElement('tr')
+      const headerLabel = document.createElement('th')
+      headerLabel.textContent = ''
+      headerRow.append(headerLabel)
+      for (const wheel of ['Fl', 'Fr', 'Rl', 'Rr']) {
+        const th = document.createElement('th')
+        th.textContent = wheel.toUpperCase()
+        headerRow.append(th)
+      }
+      table.append(headerRow)
+
+      for (const row of model.wheelTable) {
+        const tr = document.createElement('tr')
+        const labelTd = document.createElement('td')
+        labelTd.className = 'events-lap-detail__tooltip-wheel-label'
+        labelTd.textContent = row.label
+        tr.append(labelTd)
+        for (const wheel of ['Fl', 'Fr', 'Rl', 'Rr']) {
+          const td = document.createElement('td')
+          td.textContent = row.values?.[wheel] ?? '—'
+          tr.append(td)
+        }
+        table.append(tr)
+      }
+      container.append(table)
+    }
+
+    // Curb row
+    if (model.curbRow) {
+      const div = document.createElement('div')
+      div.className = 'events-lap-detail__tooltip-row'
+      const label = document.createElement('span')
+      label.className = 'events-lap-detail__tooltip-label'
+      label.textContent = model.curbRow.label
+      const value = document.createElement('span')
+      value.className = 'events-lap-detail__tooltip-value'
+      value.textContent = model.curbRow.wheels.map(wheel => wheel.toUpperCase()).join(', ')
+      div.append(label, value)
+      container.append(div)
+    }
+
+    // Puddle row
+    if (model.puddleRow) {
+      const div = document.createElement('div')
+      div.className = 'events-lap-detail__tooltip-row'
+      const label = document.createElement('span')
+      label.className = 'events-lap-detail__tooltip-label'
+      label.textContent = model.puddleRow.label
+      const value = document.createElement('span')
+      value.className = 'events-lap-detail__tooltip-value'
+      value.textContent = Object.entries(model.puddleRow.wheels).map(([w, d]) => `${w.toUpperCase()} ${d}`).join(', ')
+      div.append(label, value)
+      container.append(div)
+    }
+
+    for (const note of model.notes || []) {
+      const caption = document.createElement('div')
+      caption.className = 'events-lap-detail__tooltip-caption'
+      caption.textContent = note
+      container.append(caption)
+    }
   }
 
   function renderTraceStats(points, lapTimeMs) {

@@ -1023,12 +1023,68 @@ h1 {
   background: #080a0c;
 }
 
+.events-lap-detail__map {
+  position: relative;
+}
+
 .events-lap-detail__label {
   padding: 9px 11px 0;
   color: #71717a;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.12em;
+}
+
+.events-lap-detail__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 11px;
+  border-bottom: 1px solid rgb(226 232 240 / 9%);
+}
+
+.events-lap-detail__toggle-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 1px;
+  opacity: 0.25;
+}
+
+.events-lap-detail__toggle-button[aria-pressed="true"] .events-lap-detail__toggle-swatch {
+  opacity: 1;
+}
+
+.events-lap-detail__toggle-swatch--throttle { background: #69e83f; }
+.events-lap-detail__toggle-swatch--brake { background: #ef4444; }
+.events-lap-detail__toggle-swatch--coast { background: #facc15; }
+.events-lap-detail__toggle-swatch--slip { background: #22d3ee; }
+
+.events-lap-detail__toggle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 7px;
+  border: 1px solid rgb(226 232 240 / 12%);
+  border-radius: 2px;
+  color: #52525b;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.events-lap-detail__toggle-button:hover:not(:disabled),
+.events-lap-detail__toggle-button:focus-visible,
+.events-lap-detail__toggle-button[aria-pressed="true"] {
+  color: #f8fafc;
+  border-color: rgb(226 232 240 / 30%);
+}
+
+.events-lap-detail__toggle-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .events-lap-detail__svg {
@@ -1043,6 +1099,21 @@ h1 {
   stroke: rgb(226 232 240 / 9%);
 }
 
+.events-lap-detail__outline {
+  fill: none;
+  stroke: #f8fafc;
+  stroke-width: 1.4;
+}
+
+.events-lap-detail__slip-line {
+  fill: none;
+  stroke: #22d3ee;
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.6;
+}
+
 .events-lap-detail__trace {
   fill: none;
   stroke-width: 2.4;
@@ -1053,6 +1124,13 @@ h1 {
 .events-lap-detail__trace--throttle { stroke: #69e83f; }
 .events-lap-detail__trace--brake { stroke: #ef4444; }
 .events-lap-detail__trace--coast { stroke: #facc15; }
+
+.events-lap-detail__hover-marker {
+  fill: #22d3ee;
+  stroke: #080a0c;
+  stroke-width: 1;
+  pointer-events: none;
+}
 
 .events-lap-detail__sector-tick {
   stroke: #f8fafc;
@@ -1124,6 +1202,83 @@ h1 {
 .events-lap-detail__stat--throttle .events-lap-detail__stat-value { color: #69e83f; }
 .events-lap-detail__stat--brake .events-lap-detail__stat-value { color: #ef4444; }
 .events-lap-detail__stat--coast .events-lap-detail__stat-value { color: #facc15; }
+
+.events-lap-detail__tooltip {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  max-width: 280px;
+  padding: 8px 10px;
+  border: 1px solid rgb(226 232 240 / 15%);
+  border-radius: 2px;
+  background: rgb(8 10 12 / 95%);
+  backdrop-filter: blur(4px);
+  font-size: 11px;
+  font-weight: 600;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.events-lap-detail__tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+}
+
+.events-lap-detail__tooltip-label {
+  color: #a1a1aa;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.events-lap-detail__tooltip-value {
+  color: #f8fafc;
+  font-family: monospace;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.events-lap-detail__tooltip-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+.events-lap-detail__tooltip-table th {
+  padding: 2px 3px;
+  color: #a1a1aa;
+  font-weight: 800;
+  text-align: center;
+  border-bottom: 1px solid rgb(226 232 240 / 9%);
+}
+
+.events-lap-detail__tooltip-table td {
+  padding: 2px 3px;
+  color: #f8fafc;
+  text-align: center;
+  font-family: monospace;
+  font-size: 10px;
+}
+
+.events-lap-detail__tooltip-wheel-label {
+  text-align: left;
+  color: #a1a1aa;
+  font-weight: 800;
+  padding-right: 6px;
+}
+
+.events-lap-detail__tooltip-caption {
+  padding-top: 3px;
+  margin-top: 4px;
+  border-top: 1px solid rgb(226 232 240 / 9%);
+  color: #718096;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
 
 .events-run-table tbody th {
   color: #f8fafc;

@@ -8,7 +8,24 @@
   const POST_FINISH_PACKET_WINDOW = 48
   const POST_FINISH_WAIT_MS = 1000
   const TRACE_SAMPLE_INTERVAL_MS = 100
-  const TRACE_MAX_POINTS = 1200
+  const TRACE_MAX_POINTS = 10000
+  const WHEELS = ['Fl', 'Fr', 'Rl', 'Rr']
+  // [telemetry quad, trace field prefix, decimals]
+  const WHEEL_FIELDS = [
+    ['slipAngle', 'slipAngle', 3],
+    ['slipRatio', 'slipRatio', 3],
+    ['combinedSlip', 'combinedSlip', 3],
+    ['tireTempC', 'tireTempC', 1],
+    ['suspension', 'suspension', 3],
+    ['puddle', 'puddle', 3]
+  ]
+  // Slip values keep the signed peak and curb contact keeps any contact since the previous trace point.
+  const PEAK_FIELDS = ['slipAngle', 'slipRatio', 'combinedSlip'].flatMap(name => WHEELS.map(wheel => `${name}${wheel}`))
+  const RUMBLE_FIELDS = WHEELS.map(wheel => `rumble${wheel}`)
+  const EXTENDED_FIELDS = [
+    'speedKmh', 'gear', 'rpm', 'steer', 'accelerationX', 'accelerationY', 'accelerationZ', 'yawRate',
+    ...WHEEL_FIELDS.flatMap(([, prefix]) => WHEELS.map(wheel => `${prefix}${wheel}`))
+  ]
   // An abandoned attempt that is restarted from the menu looks exactly like a
   // sprint whose finish was hidden by a telemetry reset. Only the covered
   // distance separates them, so a sprint must cover nearly the full distance
@@ -19,6 +36,12 @@
     if (value === null || value === undefined || value === '') return null
     const number = Number(value)
     return Number.isFinite(number) ? number : null
+  }
+
+  function round(value, dp) {
+    if (value === null || !Number.isFinite(value)) return null
+    const factor = Math.pow(10, dp)
+    return Math.round(value * factor) / factor
   }
 
   function text(value) {
@@ -38,7 +61,7 @@
     const position = telemetry?.position && typeof telemetry.position === 'object' ? telemetry.position : {}
     const throttle = finite(telemetry?.throttle)
     const brake = finite(telemetry?.brake)
-    return {
+    const sample = {
       distance,
       elapsedMs,
       positionX: finite(position.x),
@@ -47,6 +70,39 @@
       throttle: throttle === null ? null : Math.min(1, Math.max(0, throttle)),
       brake: brake === null ? null : Math.min(1, Math.max(0, brake))
     }
+
+    // Extended fields
+    const speedKmh = round(finite(telemetry?.speedKmh), 2)
+    if (speedKmh !== null) sample.speedKmh = speedKmh
+    const gear = finite(telemetry?.gear)
+    if (gear !== null && gear >= 0) sample.gear = Math.round(gear)
+    const rpm = round(finite(telemetry?.rpm), 0)
+    if (rpm !== null) sample.rpm = rpm
+    const steer = round(finite(telemetry?.steer), 3)
+    if (steer !== null) sample.steer = steer
+    const accel = telemetry?.acceleration && typeof telemetry.acceleration === 'object' ? telemetry.acceleration : {}
+    const accelX = round(finite(accel.x), 3)
+    if (accelX !== null) sample.accelerationX = accelX
+    const accelY = round(finite(accel.y), 3)
+    if (accelY !== null) sample.accelerationY = accelY
+    const accelZ = round(finite(accel.z), 3)
+    if (accelZ !== null) sample.accelerationZ = accelZ
+    const yawRate = round(finite(telemetry?.angularVelocity?.y), 4)
+    if (yawRate !== null) sample.yawRate = yawRate
+
+    for (const [source, prefix, digits] of WHEEL_FIELDS) {
+      const quad = telemetry?.[source] && typeof telemetry[source] === 'object' ? telemetry[source] : {}
+      for (const wheel of WHEELS) {
+        const value = round(finite(quad[wheel.toLowerCase()]), digits)
+        if (value !== null) sample[`${prefix}${wheel}`] = value
+      }
+    }
+    const rumble = telemetry?.rumble && typeof telemetry.rumble === 'object' ? telemetry.rumble : {}
+    for (const wheel of WHEELS) {
+      if (rumble[wheel.toLowerCase()]) sample[`rumble${wheel}`] = true
+    }
+
+    return sample
   }
 
   // The telemetry stream does not expose sector boundaries.  Use the observed
@@ -105,16 +161,25 @@
     return samples
       .filter(sample => [sample.positionX, sample.positionY, sample.positionZ, sample.throttle, sample.brake]
         .every(value => value !== null && Number.isFinite(value)))
-      .map((sample, sampleIndex) => ({
-        sampleIndex,
-        elapsedMs: sample.elapsedMs,
-        distance: sample.distance,
-        positionX: sample.positionX,
-        positionY: sample.positionY,
-        positionZ: sample.positionZ,
-        throttle: sample.throttle,
-        brake: sample.brake
-      }))
+      .map((sample, sampleIndex) => {
+        const point = {
+          sampleIndex,
+          elapsedMs: sample.elapsedMs,
+          distance: sample.distance,
+          positionX: sample.positionX,
+          positionY: sample.positionY,
+          positionZ: sample.positionZ,
+          throttle: sample.throttle,
+          brake: sample.brake
+        }
+        for (const field of EXTENDED_FIELDS) {
+          if (Number.isFinite(sample[field])) point[field] = sample[field]
+        }
+        for (const field of RUMBLE_FIELDS) {
+          if (sample[field] === true) point[field] = true
+        }
+        return point
+      })
   }
 
   function pedalState(sample) {
@@ -200,6 +265,36 @@
     }
   }
 
+  function createAccumulator() {
+    return Object.fromEntries([
+      ...PEAK_FIELDS.map(field => [field, null]),
+      ...RUMBLE_FIELDS.map(field => [field, false])
+    ])
+  }
+
+  function updateAccumulator(acc, sample) {
+    if (!sample) return
+    for (const field of PEAK_FIELDS) {
+      const value = sample[field]
+      if (!Number.isFinite(value)) continue
+      if (acc[field] === null || Math.abs(value) > Math.abs(acc[field])) acc[field] = value
+    }
+    for (const field of RUMBLE_FIELDS) {
+      if (sample[field]) acc[field] = true
+    }
+  }
+
+  function applyAccumulator(sample, acc) {
+    if (!sample || !acc) return sample
+    for (const field of PEAK_FIELDS) {
+      if (acc[field] !== null) sample[field] = acc[field]
+    }
+    for (const field of RUMBLE_FIELDS) {
+      if (acc[field]) sample[field] = true
+    }
+    return sample
+  }
+
   function createRun(eventId, telemetry, timestamp) {
     const safeTimestamp = Number.isFinite(Number(timestamp)) ? Number(timestamp) : Date.now()
     return {
@@ -210,6 +305,7 @@
       laps: [],
       activeLapNumber: finite(telemetry?.lap?.number),
       lapSamples: [],
+      sampleAccumulator: createAccumulator(),
       finalTimeMs: null,
       finalTimeSource: null,
       runType: 'circuit',
@@ -324,6 +420,7 @@
       state.pendingLapNumber = null
       state.run.activeLapNumber = Math.round(number)
       state.run.lapSamples = []
+      state.run.sampleAccumulator = createAccumulator()
       captureActiveSample(state.run, telemetry)
       return true
     }
@@ -337,9 +434,15 @@
       const previous = run.lapSamples.at(-1)
       if (previous && sample.distance < previous.distance) return
       if (previous && sample.distance === previous.distance && sample.elapsedMs <= previous.elapsedMs) return
+      // Every accepted packet counts toward the peaks, including packets skipped below.
+      updateAccumulator(run.sampleAccumulator, sample)
+      const gearChanged = previous && sample.gear !== undefined && previous.gear !== undefined && sample.gear !== previous.gear
       if (previous
         && sample.elapsedMs - previous.elapsedMs < TRACE_SAMPLE_INTERVAL_MS
-        && pedalState(sample) === pedalState(previous)) return
+        && pedalState(sample) === pedalState(previous)
+        && !gearChanged) return
+      applyAccumulator(sample, run.sampleAccumulator)
+      run.sampleAccumulator = createAccumulator()
       if (run.lapSamples.length >= TRACE_MAX_POINTS) {
         run.lapSamples = run.lapSamples.filter((_, index) => index % 2 === 0)
       }
@@ -678,6 +781,9 @@
     isZeroedNonLiveRacePacket,
     normalizeRunsPayload,
     sectorTimesFromSamples,
-    tracePointsFromSamples
+    tracePointsFromSamples,
+    createAccumulator,
+    updateAccumulator,
+    applyAccumulator
   }
 }))

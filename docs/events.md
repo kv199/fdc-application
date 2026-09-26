@@ -72,11 +72,28 @@ available as the Events tab in Configuration, directly after Garage.
   The expanded row shows a top-down X/Z trace on the left and pedal-use
   statistics on the right. The first Escape collapses an open row; **BACK** or
   a following Escape returns to the Event page.
-- Trace segments are thin and use green for throttle, red for brake, and
-  yellow for coasting. Brake takes precedence whenever both pedal inputs are
-  at least five percent. Thin black `S1`, `S2`, and `S3` ticks mark the ends
-  of the three virtual distance sectors. The white marker is the saved start
-  point.
+- The trace map draws a thin white track outline under its layers. Pedal
+  segments use green for throttle, red for brake, and yellow for coasting.
+  Brake takes precedence whenever both pedal inputs are at least five percent.
+  The Slip layer draws a wide translucent cyan band under the pedal segments
+  wherever any wheel's absolute combined slip exceeds 1, the level at which the
+  in-game tire friction telemetry shows more than 100% and turns red. Thin
+  `S1`, `S2`, and `S3` ticks mark the ends of the three virtual distance
+  sectors. The white marker is the saved start point.
+- **THROTTLE**, **BRAKE**, **COAST**, and **SLIP** toggles above the map show
+  or hide each layer; a hidden layer leaves the white outline visible. The
+  choice applies to every lap until the Configuration window is reloaded. The
+  pedal statistics do not change with the toggles. **SLIP** is unavailable for
+  a lap recorded without extended telemetry.
+- Hovering the map marks the nearest trace point and shows its recorded values
+  without interpretation: distance from the lap's first point, lap time, speed,
+  gear, RPM, throttle, brake, steering, lateral, longitudinal, and vertical
+  acceleration in g, yaw rate, and a per-wheel table of combined slip, slip
+  angle, and slip ratio in percent, tire temperature, and suspension travel
+  (0% fully extended, 100% fully compressed). A curb row lists wheels on a
+  rumble strip and a puddle row lists wheels in water; each appears only when
+  it applies. A lap recorded before extended telemetry shows distance, time,
+  throttle, and brake only.
 - Pedal statistics are time-weighted, not sample-count-weighted: Throttle
   (`X`), Brake (`A`), and Coast (`C`) always total 100%. The first point owns
   the initial interval from lap zero, each following point owns the interval
@@ -142,6 +159,8 @@ clears its reference.
 | `LastLap` | Stores a game-reported completed circuit lap and is the preferred sprint finish evidence. |
 | `Position X`, `Position Y`, `Position Z` | Saves a compact per-lap vehicle trace; the detail map renders the top-down X/Z projection while retaining Y. |
 | `Throttle`, `Brake` | Saves the pedal inputs used by the existing HUD and derives trace colors and time-weighted pedal statistics. |
+| Speed, gear, RPM, steering, acceleration, angular velocity Y | Saves the extended trace values shown when hovering the map. |
+| Tire slip angle, slip ratio, and combined slip; tire temperature; suspension travel; rumble strip; puddle depth (per wheel) | Saves the per-wheel trace values shown when hovering the map; combined slip also drives the Slip layer. |
 | Vehicle ordinal, name, class, PI, and drivetrain | Snapshots the vehicle recorded with the run. |
 
 Forza `BestLap` is not persisted as an independent input. FDC derives a circuit
@@ -155,12 +174,22 @@ It stores the resulting three virtual-sector durations with the lap. This does
 not persist the telemetry stream. Runs created before sector storage have no
 sector values and therefore show `—` for them and no hypothetical time.
 
-For a newly completed lap, FDC also stores a compact downsampled trace (at
-most 1,200 points) containing elapsed time, travelled distance, position, and
-pedal inputs. This is independent data for every lap: runs on the same route
-can look similar, but each trace and its colouring describe that exact drive.
+For a newly completed lap, FDC also stores a trace containing elapsed time,
+travelled distance, position, pedal inputs, and extended telemetry: speed,
+gear, RPM, steering, acceleration, yaw rate, and per wheel slip angle, slip
+ratio, combined slip, tire temperature, suspension travel, puddle depth, and
+rumble strip contact. A point is stored every 100 ms and additionally whenever
+the pedal state or gear changes. A lap keeps up to 10,000 points; only beyond
+that are every other point dropped. Slip values are the signed value with the
+largest magnitude among all packets since the previous point, and rumble strip
+contact is set when any of those packets touched a strip, so short slides and
+curb strikes between points are not lost. The other values come from the
+packet that stored the point. This is independent data for every lap: runs on
+the same route can look similar, but each trace and its colouring describe
+that exact drive.
 The same synthetic lap used for a confirmed Sprint receives a trace. Existing
-saved laps are not backfilled because the source telemetry no longer exists.
+saved laps are not backfilled because the source telemetry no longer exists;
+laps recorded before extended telemetry keep their pedal-only traces.
 
 ### Run lifecycle
 
@@ -242,7 +271,9 @@ Shift Light v15 migration preserves compatible configuration identity and
 reported-redline data but intentionally discards obsolete learning facts.
 Schema version 16 adds the nullable `deleted_at` marker used for silent Event
 deletion; deleted rows and their numeric IDs remain stored and are excluded
-from the active library.
+from the active library. Schema version 20 adds nullable extended telemetry
+columns to `event_run_lap_trace_points`; existing trace rows keep them empty.
+The Absolute Best reference used by Delta loads only the base trace columns.
 
 Deleting an Event hides it from the active library while retaining its row and
 runs in SQLite so its numeric ID is not reused. FDC trims names and

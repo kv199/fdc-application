@@ -385,7 +385,7 @@
       abrupt_brake_release: 'Abrupt brake release'
     }
     const descriptions = {
-      front_scrub: 'steering more than the front tyres can take',
+      front_scrub: 'steering more than the front tires can take',
       exit_wheelspin: 'more throttle than the driven wheels can take',
       brake_steering_overload: 'braking hard while the steering is loaded',
       abrupt_brake_release: 'letting the brake go too quickly through the corner'

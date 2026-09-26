@@ -191,7 +191,7 @@ The headline block shows the qualified problem and its instruction when the
 recording has one. Otherwise it shows `MOST FREQUENT` with the pattern that has
 the highest share of problems among the patterns with at least 10 checked
 opportunities and at least 3 problems, for example `Front scrub — steering more
-than the front tyres can take — in 18 of 133 checks (14%). Becomes a reported
+than the front tires can take — in 18 of 133 checks (14%). Becomes a reported
 problem above 40%.` When no pattern reaches that support, the card keeps the
 result copy of the recording, such as `NOT ENOUGH ELIGIBLE MANEUVERS`.
 

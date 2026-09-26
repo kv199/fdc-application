@@ -12,6 +12,20 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   in-game tire friction telemetry turns red, instead of a front-versus-rear
   comparison that read above 90% for almost every recording.
 
+### Added
+
+- **Events**: the lap map of a saved run now draws the track outline with
+  Throttle, Brake, Coast, and Slip layers that can be switched on and off.
+  Hovering the trace shows the recorded speed, gear, RPM, pedals, steering,
+  acceleration, and per-wheel slip, tire temperature, suspension travel, curb,
+  and puddle values at that point. Laps recorded before this version show the
+  pedal layers only.
+
+### Improved
+
+- **Driver Analysis**: the Front scrub description now spells "tires" like the
+  rest of FDC.
+
 ## 7.16.48 - 2026-09-25
 
 First public release of FDC.

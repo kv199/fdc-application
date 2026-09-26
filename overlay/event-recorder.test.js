@@ -536,3 +536,177 @@ test('stop reports discarded and failed results explicitly', async () => {
   assert.equal(results[2].outcome, 'failed')
   assert.match(results[2].reason, /database offline/i)
 })
+
+test('extended fields are recorded when present', async () => {
+  const saved = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  const frame = (current, distance, position, controls = {}) => telemetry({
+    lap: { number: 0, current, last: 0, raceTime: current, distance },
+    position,
+    throttle: 0.7,
+    brake: 0,
+    speedKmh: 123.456,
+    gear: 3,
+    rpm: 5678.9,
+    ...controls
+  })
+  instance.arm(101)
+  instance.update(frame(0, 0, { x: 0, y: 0, z: 0 }))
+  instance.update(frame(0.15, 100, { x: 100, y: 0, z: 100 }))
+  instance.update(frame(0.3, 300, { x: 200, y: 0, z: 200 }))
+  instance.update(telemetry({
+    position: { x: 200, y: 0, z: 200 },
+    lap: { number: 1, current: 0, last: 0.3, raceTime: 0.3, distance: 0 }
+  }))
+
+  await instance.stop()
+  assert.ok(saved[0].run.laps.length >= 1)
+  const trace = saved[0].run.laps[0].tracePoints
+  assert.ok(trace.length >= 1)
+  const point = trace[0]
+  assert.equal(point.speedKmh, 123.46)
+  assert.equal(point.gear, 3)
+})
+
+test('telemetry without extended fields produces base-only points (backward compatibility)', async () => {
+  const saved = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  const frame = (current, distance, position) => {
+    // Minimal telemetry without extended fields
+    return {
+      isRaceOn: true,
+      lap: { number: 0, current, last: 0, raceTime: current, distance },
+      position,
+      throttle: 0.7,
+      brake: 0
+    }
+  }
+  instance.arm(107)
+  instance.update(frame(0, 0, { x: 1, y: 2, z: 3 }))
+  instance.update(frame(0.1, 100, { x: 2, y: 2, z: 4 }))
+  instance.update({
+    isRaceOn: true,
+    position: { x: 3, y: 2, z: 5 },
+    lap: { number: 1, current: 0, last: 0.1, raceTime: 0.1, distance: 0 }
+  })
+
+  await instance.stop()
+  const trace = saved[0].run.laps[0].tracePoints
+  assert.ok(trace.length >= 1)
+  const point = trace[0]
+  // Check base fields exist
+  assert.equal(typeof point.sampleIndex, 'number')
+  assert.equal(typeof point.elapsedMs, 'number')
+  assert.equal(typeof point.distance, 'number')
+  assert.equal(typeof point.positionX, 'number')
+  assert.equal(typeof point.positionY, 'number')
+  assert.equal(typeof point.positionZ, 'number')
+  assert.equal(typeof point.throttle, 'number')
+  assert.equal(typeof point.brake, 'number')
+  // Extended fields should not be present
+  assert.equal(point.speedKmh, undefined)
+  assert.equal(point.gear, undefined)
+  assert.equal(point.rpm, undefined)
+})
+
+async function recordTrace(packets) {
+  const saved = []
+  const instance = recorder.createEventRecorder({
+    timingApi: timing,
+    now: () => 1700000000000,
+    invoke: async (_command, payload) => { saved.push(payload); return payload }
+  })
+  instance.arm(200)
+  for (const { current, ...extra } of packets) {
+    instance.update(telemetry({
+      lap: { number: 0, current, last: 0, raceTime: current, distance: current * 50 },
+      position: { x: current, y: 0, z: current },
+      throttle: 0.5,
+      brake: 0,
+      ...extra
+    }))
+  }
+  const last = packets.at(-1).current
+  instance.update(telemetry({
+    position: { x: last, y: 0, z: last },
+    lap: { number: 1, current: 0, last: last + 0.1, raceTime: last + 0.1, distance: 0 }
+  }))
+  await instance.stop()
+  return saved[0].run.laps[0].tracePoints
+}
+
+const packetsEvery16Ms = (count, extraAt = () => ({})) => Array.from({ length: count }, (_, index) => ({
+  current: index * 0.016,
+  ...extraAt(index)
+}))
+
+test('extended trace fields use the contract rounding and wheel names', async () => {
+  const [point] = await recordTrace([{
+    current: 0,
+    speedKmh: 123.456,
+    gear: 3,
+    rpm: 5678.9,
+    steer: -0.12345,
+    acceleration: { x: 1.23456, y: -0.98765, z: 4.56789 },
+    angularVelocity: { y: 0.123456 },
+    slipAngle: { fl: 0.12345, fr: -0.5, rl: 0, rr: 1.23456 },
+    slipRatio: { fl: -1.23456, fr: 0, rl: 0.5, rr: 2 },
+    combinedSlip: { fl: 1.23456, fr: 0.5, rl: 0.25, rr: 2.34567 },
+    tireTempC: { fl: 85.56, fr: 90, rl: 70.04, rr: 75 },
+    suspension: { fl: 0.45678, fr: 0.5, rl: 0, rr: 1 },
+    puddle: { fl: 0.1234, fr: 0, rl: 0, rr: 0 },
+    rumble: { fl: true, fr: false, rl: false, rr: false }
+  }, { current: 0.2 }])
+
+  assert.equal(point.speedKmh, 123.46)
+  assert.equal(point.gear, 3)
+  assert.equal(point.rpm, 5679)
+  assert.equal(point.steer, -0.123)
+  assert.deepEqual([point.accelerationX, point.accelerationY, point.accelerationZ], [1.235, -0.988, 4.568])
+  assert.equal(point.yawRate, 0.1235)
+  assert.deepEqual([point.slipAngleFl, point.slipRatioFl, point.combinedSlipRr], [0.123, -1.235, 2.346])
+  assert.deepEqual([point.tireTempCFl, point.tireTempCRl], [85.6, 70])
+  assert.deepEqual([point.suspensionFl, point.puddleFl], [0.457, 0.123])
+  assert.equal(point.rumbleFl, true)
+  assert.equal(point.rumbleFr, undefined)
+})
+
+test('a slip spike on a skipped packet becomes the signed peak of the next trace point only', async () => {
+  const trace = await recordTrace(packetsEvery16Ms(20, index => ({
+    combinedSlip: { fl: index === 3 ? -1.8 : 0.2, fr: 0.2, rl: 0.2, rr: 0.2 }
+  })))
+
+  assert.deepEqual(trace.slice(0, 3).map(point => point.elapsedMs), [0, 112, 224])
+  assert.equal(trace[0].combinedSlipFl, 0.2)
+  assert.equal(trace[1].combinedSlipFl, -1.8)
+  assert.equal(trace[2].combinedSlipFl, 0.2)
+})
+
+test('curb contact on any packet in the interval marks the next trace point', async () => {
+  const trace = await recordTrace(packetsEvery16Ms(20, index => ({
+    rumble: { fl: false, fr: false, rl: index === 2, rr: false }
+  })))
+
+  assert.deepEqual(trace.slice(0, 3).map(point => point.rumbleRl), [undefined, true, undefined])
+})
+
+test('a gear change adds a trace point inside the 100 ms window', async () => {
+  const trace = await recordTrace(packetsEvery16Ms(12, index => ({ gear: index < 3 ? 2 : 3 })))
+
+  assert.deepEqual(trace.slice(0, 3).map(point => [point.elapsedMs, point.gear]), [[0, 2], [48, 3], [160, 3]])
+})
+
+test('a long lap keeps every 100 ms trace point instead of thinning at 1,200', async () => {
+  const trace = await recordTrace(Array.from({ length: 1500 }, (_, index) => ({ current: index / 10 })))
+
+  assert.equal(trace.length, 1500)
+  assert.equal(trace[1].elapsedMs - trace[0].elapsedMs, 100)
+})
