@@ -39,6 +39,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 - **Driver Analysis**: the Front scrub description now spells "tires" like the
   rest of FDC.
+- **Driver Analysis**: DETAILS now opens pages like the Events tab instead of
+  expanding the card: a recording page with its cars, a car page with its
+  result, statistics, and drives, and a drive page with the map across the
+  full width. BACK or Escape goes up one level, and a recording with one car
+  opens its car page directly.
 
 ## 7.16.48 - 2026-09-25
 

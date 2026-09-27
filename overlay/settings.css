@@ -1947,6 +1947,11 @@ h1 {
   line-height: 1.35;
 }
 
+.driver-analysis-history-view[hidden],
+.driver-analysis-detail-view[hidden] {
+  display: none;
+}
+
 .driver-analysis-history {
   margin-top: 26px;
 }
@@ -1999,16 +2004,21 @@ h1 {
 
 /* Every headline carries its own result: a recording card lists several cars. */
 .driver-analysis-history-row strong[data-result='insufficient'],
-.driver-analysis-history-row strong[data-result='recording'] {
+.driver-analysis-history-row strong[data-result='recording'],
+.driver-analysis-detail-view strong[data-result='insufficient'],
+.driver-analysis-detail-view strong[data-result='recording'] {
   color: #fbbf24;
 }
 
-.driver-analysis-history-row strong[data-result='no_recurring_problem'] {
+.driver-analysis-history-row strong[data-result='no_recurring_problem'],
+.driver-analysis-detail-view strong[data-result='no_recurring_problem'] {
   color: #86efac;
 }
 
 .driver-analysis-history-row strong[data-result='ambiguous'],
-.driver-analysis-history-row strong[data-result='interrupted'] {
+.driver-analysis-history-row strong[data-result='interrupted'],
+.driver-analysis-detail-view strong[data-result='ambiguous'],
+.driver-analysis-detail-view strong[data-result='interrupted'] {
   color: #a1a1aa;
 }
 
@@ -2029,22 +2039,6 @@ h1 {
 .driver-analysis-history-row__details-toggle {
   margin-top: 12px;
   min-width: 78px;
-}
-
-.driver-analysis-history-row > .driver-analysis-history-row__details-panel {
-  grid-column: 1 / -1;
-}
-
-.driver-analysis-history-row__details-panel {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid rgb(226 232 240 / 10%);
-  display: grid;
-  gap: 14px;
-}
-
-.driver-analysis-history-row__details-panel[hidden] {
-  display: none;
 }
 
 .driver-analysis-history-row__details-section-title {
@@ -2192,7 +2186,14 @@ h1 {
   gap: 12px;
   align-items: baseline;
   padding: 8px 0;
+  width: 100%;
+  border: 0;
   border-bottom: 1px solid rgb(226 232 240 / 8%);
+  color: inherit;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .driver-analysis-history-row__car-row:last-child {
@@ -2208,45 +2209,21 @@ h1 {
   letter-spacing: 0.08em;
 }
 
-.driver-analysis-history-row__car-stats {
-  display: none;
-}
-
-.driver-analysis-history-row__car-expand {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: baseline;
-  gap: 6px;
-  padding: 0;
-  border: none;
-  background: none;
+.driver-analysis-history-row__car-meta {
   color: #d4d4d8;
   font-size: 11px;
   line-height: 1.35;
   font-weight: 750;
   text-align: right;
-  cursor: pointer;
 }
 
-.driver-analysis-history-row__car-expand strong {
+.driver-analysis-history-row__car-meta strong {
   color: #ff827d;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
 
-
-/* Car details panel */
-.driver-analysis-history-row__car-details-panel {
-  grid-column: 1 / -1;
-  padding: 8px 0 0 0;
-  border-top: 1px solid rgb(226 232 240 / 8%);
-}
-
-.driver-analysis-history-row__car-details-panel[hidden] {
-  display: none;
-}
 
 .driver-analysis-history-row__car-finding strong {
   color: #ff827d;
@@ -2290,12 +2267,8 @@ h1 {
 
 .driver-analysis-history-row__drive-row:hover,
 .driver-analysis-history-row__drive-row:focus-visible,
-.driver-analysis-history-row__drive-row[aria-expanded="true"] {
+.driver-analysis-history-row__drive-row:active {
   background: rgb(226 232 240 / 5%);
-}
-
-.driver-analysis-history-row__drive-detail > td {
-  padding: 8px 0 12px;
 }
 
 .driver-analysis-history-row__drives-table {
@@ -2332,6 +2305,22 @@ h1 {
   font-size: 11px;
   font-weight: 750;
   letter-spacing: 0.1em;
+}
+
+.driver-analysis-detail-view__body {
+  display: grid;
+  gap: 12px;
+}
+
+.driver-analysis-detail-view__hint {
+  color: #71717a;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.driver-analysis-history-row__car-row:hover,
+.driver-analysis-history-row__car-row:focus-visible {
+  background: rgb(226 232 240 / 5%);
 }
 
 @media (max-width: 680px) {

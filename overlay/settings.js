@@ -32,6 +32,12 @@
   const driverAnalysisRecorderHint = document.getElementById('driver-analysis-recorder-hint')
   const driverAnalysisHotkeyValue = document.getElementById('driver-analysis-hotkey-value')
   const driverAnalysisHotkeyChange = document.getElementById('driver-analysis-hotkey-change')
+  const driverAnalysisHistoryView = document.getElementById('driver-analysis-history-view')
+  const driverAnalysisDetailView = document.getElementById('driver-analysis-detail-view')
+  const driverAnalysisDetailBack = document.getElementById('driver-analysis-detail-back')
+  const driverAnalysisDetailTitle = document.getElementById('driver-analysis-detail-title')
+  const driverAnalysisDetailSummary = document.getElementById('driver-analysis-detail-summary')
+  const driverAnalysisDetailBody = document.getElementById('driver-analysis-detail-body')
   const driverAnalysisHistoryList = document.getElementById('driver-analysis-history-list')
   const driverAnalysisHistoryEmpty = document.getElementById('driver-analysis-history-empty')
   const driverAnalysisHistoryCount = document.getElementById('driver-analysis-history-count')
@@ -2224,11 +2230,352 @@
     }
   }
 
-  const expandedDriverAnalysisRecordings = new Set()
-  const expandedDriverAnalysisCarRows = new Set()
-  const expandedDriverAnalysisDrives = new Set()
+  let driverAnalysisView = { level: 'history', recordingId: null, sessionId: null, driveId: null }
   const expandedDriverAnalysisStats = new Set()
   const driverAnalysisDriveMaps = new Map()
+
+  function setDriverAnalysisView(next) {
+    driverAnalysisView = next
+    if (driverAnalysisHistoryView) driverAnalysisHistoryView.hidden = next.level !== 'history'
+    if (driverAnalysisDetailView) driverAnalysisDetailView.hidden = next.level === 'history'
+    renderDriverAnalysisView()
+    if (next.level !== 'history' && driverAnalysisDetailBack) driverAnalysisDetailBack.focus()
+  }
+
+  function closeDriverAnalysisLevel() {
+    const { level, recordingId, sessionId } = driverAnalysisView
+    if (level === 'drive') {
+      setDriverAnalysisView({ level: 'car', recordingId, sessionId, driveId: null })
+    } else if (level === 'car') {
+      const recordings = globalScope.DriverAnalysisHistory?.groupRecordings?.(driverAnalysisHistory) || []
+      const recording = recordings.find(r => String(r.recordingId) === recordingId)
+      if (recording && recording.sessions.length > 1) {
+        setDriverAnalysisView({ level: 'recording', recordingId, sessionId: null, driveId: null })
+      } else {
+        setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
+      }
+    } else if (level === 'recording') {
+      setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
+    }
+  }
+
+  function renderDriverAnalysisView() {
+    if (driverAnalysisView.level === 'history') return
+    const recordingId = String(driverAnalysisView.recordingId)
+    const sessionId = String(driverAnalysisView.sessionId)
+    const driveId = String(driverAnalysisView.driveId)
+    const recordings = globalScope.DriverAnalysisHistory?.groupRecordings?.(driverAnalysisHistory) || []
+    const recording = recordings.find(r => String(r.recordingId) === recordingId)
+    if (!recording) {
+      setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
+      return
+    }
+    const session = recording.sessions.find(s => String(s?.id) === sessionId)
+    if (driverAnalysisView.level !== 'recording' && !session) {
+      setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
+      return
+    }
+    if (driverAnalysisDetailBody) driverAnalysisDetailBody.replaceChildren()
+    if (driverAnalysisDetailSummary) driverAnalysisDetailSummary.replaceChildren()
+    if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = 'RECORDING'
+    if (driverAnalysisView.level === 'recording') {
+      const firstSession = recording.sessions[0]
+      if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = formatDriverAnalysisDate(firstSession?.recordedAt)
+      const badges = []
+      const totalDurationMs = globalScope.DriverAnalysisHistory?.recordingDurationMs?.(recording.sessions) ?? 0
+      const durationBadge = document.createElement('span')
+      durationBadge.className = 'events-detail-view__badge'
+      durationBadge.textContent = formatDriverAnalysisDuration(totalDurationMs)
+      badges.push(durationBadge)
+      const carCountBadge = document.createElement('span')
+      carCountBadge.className = 'events-detail-view__badge'
+      carCountBadge.textContent = `${recording.sessions.length} ${recording.sessions.length === 1 ? 'CAR' : 'CARS'}`
+      badges.push(carCountBadge)
+      const totalDrives = recording.sessions.reduce((sum, s) => sum + (Array.isArray(s?.drives) ? s.drives.length : 0), 0)
+      const drivesBadge = document.createElement('span')
+      drivesBadge.className = 'events-detail-view__badge'
+      drivesBadge.textContent = `${totalDrives} ${totalDrives === 1 ? 'DRIVE' : 'DRIVES'}`
+      badges.push(drivesBadge)
+      const totalStorageBytes = recording.sessions.reduce((sum, s) => sum + (Number(s?.storageBytes) || 0), 0)
+      const storageBadge = document.createElement('span')
+      storageBadge.className = 'events-detail-view__badge'
+      storageBadge.textContent = formatDriverAnalysisSize(totalStorageBytes)
+      badges.push(storageBadge)
+      if (driverAnalysisDetailSummary) driverAnalysisDetailSummary.append(...badges)
+      const summaryText = globalScope.DriverAnalysisHistory?.recordingSummary?.(recording.sessions) || ''
+      if (summaryText) {
+        const summary = document.createElement('div')
+        summary.className = 'driver-analysis-history-row__summary'
+        summary.textContent = summaryText
+        driverAnalysisDetailBody?.append(summary)
+      }
+      const carsContainer = document.createElement('div')
+      carsContainer.className = 'driver-analysis-history-row__cars-section'
+      const carsTitle = document.createElement('div')
+      carsTitle.className = 'driver-analysis-history-row__cars-title'
+      carsTitle.textContent = 'CARS'
+      carsContainer.append(carsTitle)
+      for (const s of recording.sessions) {
+        const sessionSummaryLabel = globalScope.DriverAnalysisHistory?.carLabel?.(s) || 'Car'
+        const pi = Number(s?.vehicleIdentity?.pi)
+        const piLabel = Number.isFinite(pi) ? ` · PI ${pi}` : ''
+        const drivetrain = globalScope.DriverAnalysisHistory?.drivetrainLabel?.(s?.vehicleIdentity?.drivetrain) || ''
+        const drivetrainLabel = drivetrain ? ` · ${drivetrain}` : ''
+        const carRowButton = document.createElement('button')
+        carRowButton.type = 'button'
+        carRowButton.className = 'driver-analysis-history-row__car-row'
+        const carInfoSpan = document.createElement('span')
+        carInfoSpan.className = 'driver-analysis-history-row__car-info'
+        carInfoSpan.textContent = sessionSummaryLabel + piLabel + drivetrainLabel
+        const drivesCount = Array.isArray(s?.drives) ? s.drives.length : 0
+        const durationMs = Number(s?.durationMs) || 0
+        const isIssue = s?.result === 'issue' && s?.label
+        const patternSummary = isIssue ? null : globalScope.DriverAnalysisStats?.formatPatternSummary?.(s.stats)
+        const headline = document.createElement('strong')
+        if (isIssue) {
+          headline.textContent = s.label
+          headline.dataset.result = 'issue'
+        } else if (patternSummary) {
+          headline.textContent = 'MOST FREQUENT'
+          headline.dataset.result = s?.result || 'unknown'
+        } else {
+          const copy = driverAnalysisResultCopy(s)
+          headline.textContent = copy.label
+          headline.dataset.result = s?.status === 'recording' ? 'recording' : s?.result || 'unknown'
+        }
+        const rightSpan = document.createElement('span')
+        rightSpan.className = 'driver-analysis-history-row__car-meta'
+        rightSpan.append(
+          document.createTextNode(`${drivesCount} ${drivesCount === 1 ? 'DRIVE' : 'DRIVES'} · ${formatDriverAnalysisDuration(durationMs)} · `),
+          headline
+        )
+        carRowButton.append(carInfoSpan, rightSpan)
+        carRowButton.addEventListener('click', () => {
+          setDriverAnalysisView({ level: 'car', recordingId: String(recording.recordingId), sessionId: String(s?.id), driveId: null })
+        })
+        carsContainer.append(carRowButton)
+      }
+      driverAnalysisDetailBody?.append(carsContainer)
+    } else if (driverAnalysisView.level === 'car') {
+      const carLabel = globalScope.DriverAnalysisHistory?.carLabel?.(session) || 'Car'
+      const pi = Number(session?.vehicleIdentity?.pi)
+      const drivetrain = globalScope.DriverAnalysisHistory?.drivetrainLabel?.(session?.vehicleIdentity?.drivetrain) || ''
+      if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = carLabel
+      const badges = []
+      if (Number.isFinite(pi)) {
+        const piBadge = document.createElement('span')
+        piBadge.className = 'events-detail-view__badge'
+        piBadge.textContent = `PI ${pi}`
+        badges.push(piBadge)
+      }
+      if (drivetrain) {
+        const drivetrainBadge = document.createElement('span')
+        drivetrainBadge.className = 'events-detail-view__badge'
+        drivetrainBadge.textContent = drivetrain
+        badges.push(drivetrainBadge)
+      }
+      const drivesCount = Array.isArray(session?.drives) ? session.drives.length : 0
+      const drivesBadge = document.createElement('span')
+      drivesBadge.className = 'events-detail-view__badge'
+      drivesBadge.textContent = `${drivesCount} ${drivesCount === 1 ? 'DRIVE' : 'DRIVES'}`
+      badges.push(drivesBadge)
+      const durationMs = Number(session?.durationMs) || 0
+      const durationBadge = document.createElement('span')
+      durationBadge.className = 'events-detail-view__badge'
+      durationBadge.textContent = session?.status === 'recording' ? 'LIVE' : formatDriverAnalysisDuration(durationMs)
+      badges.push(durationBadge)
+      const recordedDate = new Date(session?.recordedAt)
+      if (Number.isFinite(recordedDate.getTime())) {
+        const dateBadge = document.createElement('span')
+        dateBadge.className = 'events-detail-view__badge'
+        dateBadge.textContent = recordedDate.toLocaleDateString()
+        badges.push(dateBadge)
+      }
+      if (driverAnalysisDetailSummary) driverAnalysisDetailSummary.append(...badges)
+      const isIssue = session?.result === 'issue' && session?.label
+      const patternSummary = isIssue ? null : globalScope.DriverAnalysisStats?.formatPatternSummary?.(session.stats)
+      const findingBlock = document.createElement('div')
+      findingBlock.className = 'driver-analysis-history-row__car-finding'
+      const findingLabel = document.createElement('strong')
+      const findingInstruction = document.createElement('p')
+      if (isIssue) {
+        findingLabel.textContent = session.label
+        findingInstruction.textContent = session.instruction || 'Repeat the session before changing another part of your technique.'
+        findingLabel.dataset.result = 'issue'
+      } else if (patternSummary) {
+        findingLabel.textContent = 'MOST FREQUENT'
+        findingInstruction.textContent = patternSummary.text
+        findingLabel.dataset.result = session?.result || 'unknown'
+      } else {
+        const copy = driverAnalysisResultCopy(session)
+        findingLabel.textContent = copy.label
+        findingInstruction.textContent = copy.instruction
+        findingLabel.dataset.result = session?.status === 'recording' ? 'recording' : session?.result || 'unknown'
+      }
+      findingBlock.append(findingLabel, findingInstruction)
+      const sessionSummaryLine = globalScope.DriverAnalysisStats?.formatSummaryLine?.(session.stats)
+      if (sessionSummaryLine) {
+        const sessionSummary = document.createElement('div')
+        sessionSummary.className = 'driver-analysis-history-row__car-summary'
+        sessionSummary.textContent = sessionSummaryLine
+        findingBlock.append(sessionSummary)
+      }
+      driverAnalysisDetailBody?.append(findingBlock)
+      const statsRows = globalScope.DriverAnalysisStats?.formatStatsRows?.(session.stats) || []
+      if (statsRows.length > 0) {
+        const statsToggleButton = document.createElement('button')
+        statsToggleButton.type = 'button'
+        statsToggleButton.className = 'settings-button driver-analysis-history-row__stats-toggle'
+        const statsExpanded = expandedDriverAnalysisStats.has(sessionId)
+        statsToggleButton.textContent = statsExpanded ? 'HIDE' : 'STATS'
+        statsToggleButton.setAttribute('aria-expanded', String(statsExpanded))
+        driverAnalysisDetailBody?.append(statsToggleButton)
+        const statsPanel = document.createElement('div')
+        statsPanel.className = 'driver-analysis-history-row__stats-panel'
+        statsPanel.hidden = !statsExpanded
+        for (const statsRow of statsRows) {
+          const section = document.createElement('div')
+          section.className = 'driver-analysis-history-row__details-section'
+          const sectionTitle = document.createElement('div')
+          sectionTitle.className = 'driver-analysis-history-row__details-section-title'
+          sectionTitle.textContent = statsRow.count !== null && Number.isFinite(statsRow.count)
+            ? `${statsRow.label} (${statsRow.count})`
+            : statsRow.label
+          if (statsRow.title) section.title = statsRow.title
+          section.append(sectionTitle)
+          if (Array.isArray(statsRow.items) && statsRow.items.length > 0) {
+            const list = document.createElement('div')
+            list.className = 'driver-analysis-history-row__details-list'
+            for (const item of statsRow.items) {
+              const itemRow = document.createElement('div')
+              itemRow.className = 'driver-analysis-history-row__details-item'
+              const name = document.createElement('span')
+              name.className = 'driver-analysis-history-row__details-item-name'
+              name.textContent = item.name
+              const value = document.createElement('span')
+              value.className = 'driver-analysis-history-row__details-item-value'
+              value.textContent = item.value
+              itemRow.append(name, value)
+              list.append(itemRow)
+            }
+            section.append(list)
+          }
+          statsPanel.append(section)
+        }
+        statsToggleButton.addEventListener('click', () => {
+          const isExpanded = statsToggleButton.getAttribute('aria-expanded') === 'true'
+          statsToggleButton.setAttribute('aria-expanded', String(!isExpanded))
+          statsToggleButton.textContent = isExpanded ? 'STATS' : 'HIDE'
+          statsPanel.hidden = isExpanded
+          if (isExpanded) expandedDriverAnalysisStats.delete(sessionId)
+          else expandedDriverAnalysisStats.add(sessionId)
+        })
+        driverAnalysisDetailBody?.append(statsPanel)
+      }
+      const drivesRecorded = session?.drivesRecorded !== false
+      if (drivesRecorded && Array.isArray(session?.drives) && session.drives.length > 0) {
+        const hint = document.createElement('p')
+        hint.className = 'driver-analysis-detail-view__hint'
+        hint.textContent = 'Select a drive to open its map.'
+        driverAnalysisDetailBody?.append(hint)
+        const drivesTable = document.createElement('table')
+        drivesTable.className = 'driver-analysis-history-row__drives-table'
+        const thead = document.createElement('thead')
+        const headerRow = document.createElement('tr')
+        for (const colHeader of ['ID', 'TYPE', 'DURATION', 'START', 'ERRORS']) {
+          const th = document.createElement('th')
+          th.scope = 'col'
+          th.textContent = colHeader
+          headerRow.append(th)
+        }
+        thead.append(headerRow)
+        drivesTable.append(thead)
+        const tbody = document.createElement('tbody')
+        for (const drive of session.drives) {
+          const driveRow = document.createElement('tr')
+          const driveKey = String(drive?.id)
+          driveRow.className = 'driver-analysis-history-row__drive-row'
+          driveRow.tabIndex = 0
+          driveRow.setAttribute('aria-label', `Open drive ${driveKey} map`)
+          driveRow.addEventListener('click', () => {
+            setDriverAnalysisView({ level: 'drive', recordingId, sessionId, driveId: driveKey })
+          })
+          driveRow.addEventListener('keydown', event => {
+            if (event.key !== 'Enter' && event.key !== ' ') return
+            event.preventDefault()
+            setDriverAnalysisView({ level: 'drive', recordingId, sessionId, driveId: driveKey })
+          })
+          const idCell = document.createElement('td')
+          idCell.textContent = `#${drive?.id || ''}`
+          driveRow.append(idCell)
+          const typeCell = document.createElement('td')
+          typeCell.textContent = globalScope.DriverAnalysisHistory?.driveTypeLabel?.(drive) || 'UNKNOWN'
+          driveRow.append(typeCell)
+          const durationCell = document.createElement('td')
+          durationCell.textContent = globalScope.DriverAnalysisHistory?.formatDriveDuration?.(drive?.durationMs) || '00:00'
+          driveRow.append(durationCell)
+          const startCell = document.createElement('td')
+          const startTime = new Date(drive?.startedWallMs)
+          startCell.textContent = Number.isFinite(startTime.getTime())
+            ? startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : '—'
+          driveRow.append(startCell)
+          const errorsCell = document.createElement('td')
+          const errorCount = globalScope.DriverAnalysisHistory?.driveErrorCount?.(drive) || 0
+          errorsCell.textContent = errorCount > 0 ? String(errorCount) : '—'
+          driveRow.append(errorsCell)
+          tbody.append(driveRow)
+        }
+        drivesTable.append(tbody)
+        driverAnalysisDetailBody?.append(drivesTable)
+      } else if (!drivesRecorded) {
+        const noRecordMsg = document.createElement('div')
+        noRecordMsg.className = 'driver-analysis-history-row__no-drives'
+        noRecordMsg.textContent = 'RECORDED BEFORE DRIVES'
+        driverAnalysisDetailBody?.append(noRecordMsg)
+      } else if (Array.isArray(session?.drives) && session.drives.length === 0 && drivesRecorded) {
+        const noRacesMsg = document.createElement('div')
+        noRacesMsg.className = 'driver-analysis-history-row__no-drives'
+        noRacesMsg.textContent = 'NO RACES IN THIS RECORDING'
+        driverAnalysisDetailBody?.append(noRacesMsg)
+      }
+    } else if (driverAnalysisView.level === 'drive') {
+      const drive = session.drives.find(d => String(d?.id) === driveId)
+      if (!drive) {
+        setDriverAnalysisView({ level: 'car', recordingId, sessionId, driveId: null })
+        return
+      }
+      const carLabel = globalScope.DriverAnalysisHistory?.carLabel?.(session) || 'Car'
+      if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = `DRIVE #${drive?.id || ''}`
+      const badges = []
+      const carBadge = document.createElement('span')
+      carBadge.className = 'events-detail-view__badge'
+      carBadge.textContent = carLabel
+      badges.push(carBadge)
+      const driveTypeBadge = document.createElement('span')
+      driveTypeBadge.className = 'events-detail-view__badge'
+      driveTypeBadge.textContent = globalScope.DriverAnalysisHistory?.driveTypeLabel?.(drive) || 'UNKNOWN'
+      badges.push(driveTypeBadge)
+      const durationBadge = document.createElement('span')
+      durationBadge.className = 'events-detail-view__badge'
+      durationBadge.textContent = globalScope.DriverAnalysisHistory?.formatDriveDuration?.(drive?.durationMs) || '00:00'
+      badges.push(durationBadge)
+      const startTime = new Date(drive?.startedWallMs)
+      const timeBadge = document.createElement('span')
+      timeBadge.className = 'events-detail-view__badge'
+      timeBadge.textContent = Number.isFinite(startTime.getTime())
+        ? startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : '—'
+      badges.push(timeBadge)
+      const errorCount = globalScope.DriverAnalysisHistory?.driveErrorCount?.(drive) || 0
+      const errorBadge = document.createElement('span')
+      errorBadge.className = 'events-detail-view__badge'
+      errorBadge.textContent = errorCount > 0 ? `${errorCount} ${errorCount === 1 ? 'ERROR' : 'ERRORS'}` : 'NO ERRORS'
+      badges.push(errorBadge)
+      if (driverAnalysisDetailSummary) driverAnalysisDetailSummary.append(...badges)
+      driverAnalysisDetailBody?.append(driverAnalysisDriveMap(session, drive))
+    }
+  }
 
   async function deleteDriverAnalysisRecording(recording) {
     if (!recording || !Array.isArray(recording.sessions) || recording.sessions.length === 0) return false
@@ -2241,8 +2588,9 @@
       await call('delete_driver_analysis_recording', { recordingId: Number(recording.recordingId) })
       driverAnalysisHistory = driverAnalysisHistory.filter(session => !sessionIds.includes(Number(session?.id)))
       const recordingId = String(recording.recordingId)
-      expandedDriverAnalysisRecordings.delete(recordingId)
-      expandedDriverAnalysisCarRows.delete(recordingId)
+      if (driverAnalysisView.recordingId === recordingId) {
+        setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
+      }
       renderDriverAnalysisHistory()
       setStatus('DRIVER ANALYSIS RECORDING DELETED')
       return true
@@ -2269,16 +2617,13 @@
 
     for (const recording of recordings) {
       const recordingId = String(recording.recordingId)
-      const isRecordingExpanded = expandedDriverAnalysisRecordings.has(recordingId)
       const firstSession = recording.sessions[0]
       const hasUnfinishedSessions = recording.sessions.some(s => s?.status === 'recording')
 
-      // Collapsed recording card
       const row = document.createElement('article')
       row.className = 'driver-analysis-history-row'
       row.dataset.recordingId = recordingId
 
-      // Meta column: date, total duration, total storage, cars/drives count
       const meta = document.createElement('div')
       meta.className = 'driver-analysis-history-row__meta'
       const date = document.createElement('time')
@@ -2303,7 +2648,6 @@
 
       meta.append(date, duration, storage, carsDrivesLabel)
 
-      // Finding column: one line per session
       const finding = document.createElement('div')
       finding.className = 'driver-analysis-history-row__finding'
 
@@ -2336,7 +2680,6 @@
         finding.append(sessionLine)
       }
 
-      // Summary line
       const summaryText = globalScope.DriverAnalysisHistory?.recordingSummary?.(recording.sessions) || ''
       if (summaryText) {
         const summary = document.createElement('div')
@@ -2345,288 +2688,23 @@
         finding.append(summary)
       }
 
-      // DETAILS/HIDE toggle button (only if there are sessions and at least one is not recording)
-      // The opened cars span the whole card width below it, so drive maps get room.
-      let recordingDetailsPanel = null
       if (recording.sessions.length > 0 && !hasUnfinishedSessions) {
         const detailsButton = document.createElement('button')
         detailsButton.type = 'button'
         detailsButton.className = 'settings-button driver-analysis-history-row__details-toggle'
-        detailsButton.textContent = isRecordingExpanded ? 'HIDE' : 'DETAILS'
-        detailsButton.setAttribute('aria-expanded', String(isRecordingExpanded))
+        detailsButton.textContent = 'DETAILS'
         detailsButton.addEventListener('click', () => {
-          if (expandedDriverAnalysisRecordings.has(recordingId)) {
-            expandedDriverAnalysisRecordings.delete(recordingId)
-            detailsButton.textContent = 'DETAILS'
-            detailsButton.setAttribute('aria-expanded', 'false')
+          if (recording.sessions.length === 1) {
+            setDriverAnalysisView({ level: 'car', recordingId, sessionId: String(recording.sessions[0]?.id), driveId: null })
           } else {
-            expandedDriverAnalysisRecordings.add(recordingId)
-            detailsButton.textContent = 'HIDE'
-            detailsButton.setAttribute('aria-expanded', 'true')
+            setDriverAnalysisView({ level: 'recording', recordingId, sessionId: null, driveId: null })
           }
-          detailsPanel.hidden = !expandedDriverAnalysisRecordings.has(recordingId)
         })
         finding.append(detailsButton)
-
-        // Details panel with cars list
-        const detailsPanel = document.createElement('div')
-        detailsPanel.className = 'driver-analysis-history-row__details-panel'
-        detailsPanel.hidden = !isRecordingExpanded
-
-        // CARS section
-        const carsSection = document.createElement('div')
-        carsSection.className = 'driver-analysis-history-row__cars-section'
-        const carsTitle = document.createElement('div')
-        carsTitle.className = 'driver-analysis-history-row__cars-title'
-        carsTitle.textContent = 'CARS'
-        carsSection.append(carsTitle)
-
-        for (const session of recording.sessions) {
-          const sessionId = String(session?.id)
-          const isCarExpanded = expandedDriverAnalysisCarRows.has(sessionId)
-
-          // Car row
-          const carRow = document.createElement('div')
-          carRow.className = 'driver-analysis-history-row__car-row'
-
-          const carInfo = document.createElement('div')
-          carInfo.className = 'driver-analysis-history-row__car-info'
-          const carNameLabel = document.createElement('span')
-          carNameLabel.textContent = globalScope.DriverAnalysisHistory?.carLabel?.(session) || 'Car'
-          const pi = Number(session?.vehicleIdentity?.pi)
-          const piLabel = Number.isFinite(pi) ? ` · PI ${pi}` : ''
-          const drivetrain = globalScope.DriverAnalysisHistory?.drivetrainLabel?.(session?.vehicleIdentity?.drivetrain) || ''
-          const drivetrainLabel = drivetrain ? ` · ${drivetrain}` : ''
-          carInfo.append(carNameLabel, document.createTextNode(`${piLabel}${drivetrainLabel}`))
-
-          const drivesCount = Array.isArray(session?.drives) ? session.drives.length : 0
-          const drivesLabel = document.createElement('span')
-          drivesLabel.textContent = `${drivesCount} ${drivesCount === 1 ? 'DRIVE' : 'DRIVES'}`
-          const sessionDurationMs = Number(session?.durationMs) || 0
-          const durationLabel = document.createElement('span')
-          durationLabel.textContent = session?.status === 'recording' ? 'LIVE' : formatDriverAnalysisDuration(sessionDurationMs)
-
-          const carHeadline = document.createElement('strong')
-          const isIssue = session?.result === 'issue' && session?.label
-          const patternSummary = isIssue ? null : globalScope.DriverAnalysisStats?.formatPatternSummary?.(session.stats)
-          if (isIssue) {
-            carHeadline.textContent = session.label
-            carHeadline.dataset.result = 'issue'
-          } else if (patternSummary) {
-            carHeadline.textContent = 'MOST FREQUENT'
-            carHeadline.dataset.result = session?.result || 'unknown'
-          } else {
-            const copy = driverAnalysisResultCopy(session)
-            carHeadline.textContent = copy.label
-            carHeadline.dataset.result = session?.status === 'recording' ? 'recording' : session?.result || 'unknown'
-          }
-
-          const carExpandButton = document.createElement('button')
-          carExpandButton.type = 'button'
-          carExpandButton.className = 'driver-analysis-history-row__car-expand'
-          carExpandButton.setAttribute('aria-expanded', String(isCarExpanded))
-          carExpandButton.append(drivesLabel, document.createTextNode(' · '), durationLabel, document.createTextNode(' · '), carHeadline)
-
-          carRow.append(carInfo, carExpandButton)
-          carsSection.append(carRow)
-
-          // Car details panel (finding, stats, drives table)
-          const carDetailsPanel = document.createElement('div')
-          carDetailsPanel.className = 'driver-analysis-history-row__car-details-panel'
-          carDetailsPanel.hidden = !isCarExpanded
-
-          // Finding block
-          const findingBlock = document.createElement('div')
-          findingBlock.className = 'driver-analysis-history-row__car-finding'
-          const findingLabel = document.createElement('strong')
-          const findingInstruction = document.createElement('p')
-          if (isIssue) {
-            findingLabel.textContent = session.label
-            findingInstruction.textContent = session.instruction || 'Repeat the session before changing another part of your technique.'
-            findingLabel.dataset.result = 'issue'
-          } else if (patternSummary) {
-            findingLabel.textContent = 'MOST FREQUENT'
-            findingInstruction.textContent = patternSummary.text
-            findingLabel.dataset.result = session?.result || 'unknown'
-          } else {
-            const copy = driverAnalysisResultCopy(session)
-            findingLabel.textContent = copy.label
-            findingInstruction.textContent = copy.instruction
-            findingLabel.dataset.result = session?.status === 'recording' ? 'recording' : session?.result || 'unknown'
-          }
-          findingBlock.append(findingLabel, findingInstruction)
-
-          const sessionSummaryLine = globalScope.DriverAnalysisStats?.formatSummaryLine?.(session.stats)
-          if (sessionSummaryLine) {
-            const sessionSummary = document.createElement('div')
-            sessionSummary.className = 'driver-analysis-history-row__car-summary'
-            sessionSummary.textContent = sessionSummaryLine
-            findingBlock.append(sessionSummary)
-          }
-
-          carDetailsPanel.append(findingBlock)
-
-          // Stats section
-          const statsRows = globalScope.DriverAnalysisStats?.formatStatsRows?.(session.stats) || []
-          if (statsRows.length > 0) {
-            const statsToggleButton = document.createElement('button')
-            statsToggleButton.type = 'button'
-            statsToggleButton.className = 'settings-button driver-analysis-history-row__stats-toggle'
-            const statsExpanded = expandedDriverAnalysisStats.has(sessionId)
-            statsToggleButton.textContent = statsExpanded ? 'HIDE' : 'STATS'
-            statsToggleButton.setAttribute('aria-expanded', String(statsExpanded))
-            carDetailsPanel.append(statsToggleButton)
-
-            const statsPanel = document.createElement('div')
-            statsPanel.className = 'driver-analysis-history-row__stats-panel'
-            statsPanel.hidden = !statsExpanded
-            for (const statsRow of statsRows) {
-              const section = document.createElement('div')
-              section.className = 'driver-analysis-history-row__details-section'
-              const sectionTitle = document.createElement('div')
-              sectionTitle.className = 'driver-analysis-history-row__details-section-title'
-              sectionTitle.textContent = statsRow.count !== null && Number.isFinite(statsRow.count)
-                ? `${statsRow.label} (${statsRow.count})`
-                : statsRow.label
-              if (statsRow.title) section.title = statsRow.title
-              section.append(sectionTitle)
-              if (Array.isArray(statsRow.items) && statsRow.items.length > 0) {
-                const list = document.createElement('div')
-                list.className = 'driver-analysis-history-row__details-list'
-                for (const item of statsRow.items) {
-                  const itemRow = document.createElement('div')
-                  itemRow.className = 'driver-analysis-history-row__details-item'
-                  const name = document.createElement('span')
-                  name.className = 'driver-analysis-history-row__details-item-name'
-                  name.textContent = item.name
-                  const value = document.createElement('span')
-                  value.className = 'driver-analysis-history-row__details-item-value'
-                  value.textContent = item.value
-                  itemRow.append(name, value)
-                  list.append(itemRow)
-                }
-                section.append(list)
-              }
-              statsPanel.append(section)
-            }
-            statsToggleButton.addEventListener('click', () => {
-              const isExpanded = statsToggleButton.getAttribute('aria-expanded') === 'true'
-              statsToggleButton.setAttribute('aria-expanded', String(!isExpanded))
-              statsToggleButton.textContent = isExpanded ? 'STATS' : 'HIDE'
-              statsPanel.hidden = isExpanded
-              if (isExpanded) expandedDriverAnalysisStats.delete(sessionId)
-              else expandedDriverAnalysisStats.add(sessionId)
-            })
-            carDetailsPanel.append(statsPanel)
-          }
-
-          // Drives table
-          const drivesRecorded = session?.drivesRecorded !== false
-          if (drivesRecorded && Array.isArray(session?.drives) && session.drives.length > 0) {
-            const drivesTable = document.createElement('table')
-            drivesTable.className = 'driver-analysis-history-row__drives-table'
-            const thead = document.createElement('thead')
-            const headerRow = document.createElement('tr')
-            for (const colHeader of ['ID', 'TYPE', 'DURATION', 'START', 'ERRORS']) {
-              const th = document.createElement('th')
-              th.scope = 'col'
-              th.textContent = colHeader
-              headerRow.append(th)
-            }
-            thead.append(headerRow)
-            drivesTable.append(thead)
-
-            const tbody = document.createElement('tbody')
-            for (const drive of session.drives) {
-              const driveRow = document.createElement('tr')
-              const driveKey = String(drive?.id)
-              const driveExpanded = expandedDriverAnalysisDrives.has(driveKey)
-              driveRow.className = 'driver-analysis-history-row__drive-row'
-              driveRow.tabIndex = 0
-              driveRow.setAttribute('aria-expanded', String(driveExpanded))
-              driveRow.setAttribute('aria-label', `Drive ${driveKey} map`)
-              const toggleDrive = () => {
-                if (expandedDriverAnalysisDrives.has(driveKey)) expandedDriverAnalysisDrives.delete(driveKey)
-                else expandedDriverAnalysisDrives.add(driveKey)
-                renderDriverAnalysisHistory()
-              }
-              driveRow.addEventListener('click', toggleDrive)
-              driveRow.addEventListener('keydown', event => {
-                if (event.key !== 'Enter' && event.key !== ' ') return
-                event.preventDefault()
-                toggleDrive()
-              })
-
-              const idCell = document.createElement('td')
-              idCell.textContent = `#${drive?.id || ''}`
-              driveRow.append(idCell)
-
-              const typeCell = document.createElement('td')
-              typeCell.textContent = globalScope.DriverAnalysisHistory?.driveTypeLabel?.(drive) || 'UNKNOWN'
-              driveRow.append(typeCell)
-
-              const durationCell = document.createElement('td')
-              durationCell.textContent = globalScope.DriverAnalysisHistory?.formatDriveDuration?.(drive?.durationMs) || '00:00'
-              driveRow.append(durationCell)
-
-              const startCell = document.createElement('td')
-              const startTime = new Date(drive?.startedWallMs)
-              startCell.textContent = Number.isFinite(startTime.getTime())
-                ? startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                : '—'
-              driveRow.append(startCell)
-
-              const errorsCell = document.createElement('td')
-              const errorCount = globalScope.DriverAnalysisHistory?.driveErrorCount?.(drive) || 0
-              errorsCell.textContent = errorCount > 0 ? String(errorCount) : '—'
-              driveRow.append(errorsCell)
-
-              tbody.append(driveRow)
-              if (driveExpanded) {
-                const detailRow = document.createElement('tr')
-                detailRow.className = 'driver-analysis-history-row__drive-detail'
-                const detailCell = document.createElement('td')
-                detailCell.colSpan = 5
-                detailCell.append(driverAnalysisDriveMap(session, drive))
-                detailRow.append(detailCell)
-                tbody.append(detailRow)
-              }
-            }
-            drivesTable.append(tbody)
-            carDetailsPanel.append(drivesTable)
-          } else if (!drivesRecorded) {
-            const noRecordMsg = document.createElement('div')
-            noRecordMsg.className = 'driver-analysis-history-row__no-drives'
-            noRecordMsg.textContent = 'RECORDED BEFORE DRIVES'
-            carDetailsPanel.append(noRecordMsg)
-          } else if (Array.isArray(session?.drives) && session.drives.length === 0 && drivesRecorded) {
-            const noRacesMsg = document.createElement('div')
-            noRacesMsg.className = 'driver-analysis-history-row__no-drives'
-            noRacesMsg.textContent = 'NO RACES IN THIS RECORDING'
-            carDetailsPanel.append(noRacesMsg)
-          }
-
-          carExpandButton.addEventListener('click', () => {
-            const isExpanded = carExpandButton.getAttribute('aria-expanded') === 'true'
-            carExpandButton.setAttribute('aria-expanded', String(!isExpanded))
-            carDetailsPanel.hidden = isExpanded
-            if (!isExpanded) {
-              expandedDriverAnalysisCarRows.add(sessionId)
-            } else {
-              expandedDriverAnalysisCarRows.delete(sessionId)
-            }
-          })
-
-          carsSection.append(carDetailsPanel)
-        }
-
-        detailsPanel.append(carsSection)
-        recordingDetailsPanel = detailsPanel
       }
 
       row.append(meta, finding)
 
-      // DELETE button
       const actions = document.createElement('div')
       actions.className = 'driver-analysis-history-row__actions'
       const remove = document.createElement('button')
@@ -2640,7 +2718,6 @@
       actions.append(remove)
 
       row.append(actions)
-      if (recordingDetailsPanel) row.append(recordingDetailsPanel)
       driverAnalysisHistoryList.append(row)
     }
   }
@@ -2660,10 +2737,10 @@
       driverAnalysisDriveMaps.set(key, { loading: true })
       void loadDriverAnalysisDriveMap(session, drive).then(element => {
         driverAnalysisDriveMaps.set(key, { element })
-        renderDriverAnalysisHistory()
+        renderDriverAnalysisView()
       }).catch(() => {
         driverAnalysisDriveMaps.set(key, { error: true })
-        renderDriverAnalysisHistory()
+        renderDriverAnalysisView()
       })
     }
     return holder
@@ -2703,6 +2780,8 @@
     try {
       const history = await call('load_driver_analysis_sessions')
       renderDriverAnalysisHistory(Array.isArray(history) ? history : [])
+      // A reload rebuilds the open page from the new history, or returns to it when that recording is gone.
+      renderDriverAnalysisView()
       return driverAnalysisHistory
     } catch (error) {
       renderDriverAnalysisHistory([])
@@ -3639,6 +3718,12 @@
     if (event.key !== 'Escape') return
     if (event.target?.classList?.contains('garage-current-car__input')
       || event.target?.classList?.contains('events-detail-view__title-input')) return
+    const isDriverAnalysisPanelVisible = !document.getElementById('driver-analysis-panel')?.hidden
+    if (isDriverAnalysisPanelVisible && driverAnalysisView.level !== 'history') {
+      event.preventDefault()
+      closeDriverAnalysisLevel()
+      return
+    }
     if (eventsDiscardConfirmOpen) {
       event.preventDefault()
       setEventsDiscardConfirmOpen(false)
@@ -3666,6 +3751,10 @@
       return
     }
     closeGarageVariants()
+  })
+
+  driverAnalysisDetailBack?.addEventListener('click', () => {
+    closeDriverAnalysisLevel()
   })
 
   telemetryRouteRetry.addEventListener('click', () => {

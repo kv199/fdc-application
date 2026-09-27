@@ -266,53 +266,66 @@
     </section>
 
     <section id="driver-analysis-panel" class="settings-tab-panel driver-analysis-panel" role="tabpanel" aria-labelledby="driver-analysis-tab" data-settings-panel="driver-analysis" hidden>
-      <div class="settings-section__heading driver-analysis-heading">
-        <div>
-          <h2 id="driver-analysis-title">DRIVER ANALYSIS</h2>
-          <span>RECORDED ASPHALT REVIEW</span>
+      <div id="driver-analysis-history-view" class="driver-analysis-history-view">
+        <div class="settings-section__heading driver-analysis-heading">
+          <div>
+            <h2 id="driver-analysis-title">DRIVER ANALYSIS</h2>
+            <span>RECORDED ASPHALT REVIEW</span>
+          </div>
+          <button id="driver-analysis-enabled" class="visibility-toggle" type="button" aria-label="Enable Driver Analysis" aria-pressed="false">
+            <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+          </button>
         </div>
-        <button id="driver-analysis-enabled" class="visibility-toggle" type="button" aria-label="Enable Driver Analysis" aria-pressed="false">
-          <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
-        </button>
+
+        <div class="driver-analysis-warning" role="note" aria-label="Beta warning">
+          <strong>BETA</strong>
+          <p>Driver Analysis is experimental and may be inaccurate. Record on asphalt only. Recordings stay on this device until you delete them.</p>
+        </div>
+
+        <section class="driver-analysis-recorder" aria-labelledby="driver-analysis-recorder-title">
+          <div class="driver-analysis-recorder__main">
+            <div>
+              <h3 id="driver-analysis-recorder-title">RECORD A SESSION</h3>
+              <p id="driver-analysis-recorder-hint">Enable Driver Analysis to start recording.</p>
+            </div>
+            <div class="driver-analysis-recorder__actions">
+              <span id="driver-analysis-recording-status" class="driver-analysis-recording-status" role="status" aria-live="polite">OFF</span>
+              <button id="driver-analysis-record" class="settings-button driver-analysis-record" type="button" aria-pressed="false" disabled>RECORD</button>
+            </div>
+          </div>
+
+          <div class="driver-analysis-hotkey">
+            <div>
+              <strong>GLOBAL RECORD HOTKEY</strong>
+              <small>Works while Forza is in focus. Windows-key combinations are not allowed.</small>
+            </div>
+            <div class="driver-analysis-hotkey__control">
+              <output id="driver-analysis-hotkey-value" aria-live="polite">Ctrl + Shift + F9</output>
+              <button id="driver-analysis-hotkey-change" class="settings-button" type="button" aria-describedby="driver-analysis-hotkey-help" disabled>CHANGE</button>
+            </div>
+          </div>
+          <p id="driver-analysis-hotkey-help" class="driver-analysis-hotkey-help">Press Escape to cancel. Use a controller button unbound in Forza Horizon 6, as the game also receives it.</p>
+        </section>
+
+        <section class="driver-analysis-history" aria-labelledby="driver-analysis-history-title">
+          <div class="settings-section__heading">
+            <h2 id="driver-analysis-history-title">HISTORY</h2>
+            <span id="driver-analysis-history-count">0 RECORDINGS</span>
+          </div>
+          <div id="driver-analysis-history-list" class="driver-analysis-history__list" aria-live="polite"></div>
+          <p id="driver-analysis-history-empty" class="driver-analysis-history__empty">No recordings yet. Complete an asphalt session to create the first analysis.</p>
+        </section>
       </div>
 
-      <div class="driver-analysis-warning" role="note" aria-label="Beta warning">
-        <strong>BETA</strong>
-        <p>Driver Analysis is experimental and may be inaccurate. Record on asphalt only. Recordings stay on this device until you delete them.</p>
-      </div>
-
-      <section class="driver-analysis-recorder" aria-labelledby="driver-analysis-recorder-title">
-        <div class="driver-analysis-recorder__main">
-          <div>
-            <h3 id="driver-analysis-recorder-title">RECORD A SESSION</h3>
-            <p id="driver-analysis-recorder-hint">Enable Driver Analysis to start recording.</p>
-          </div>
-          <div class="driver-analysis-recorder__actions">
-            <span id="driver-analysis-recording-status" class="driver-analysis-recording-status" role="status" aria-live="polite">OFF</span>
-            <button id="driver-analysis-record" class="settings-button driver-analysis-record" type="button" aria-pressed="false" disabled>RECORD</button>
-          </div>
+      <section id="driver-analysis-detail-view" class="driver-analysis-detail-view" aria-labelledby="driver-analysis-detail-title" hidden>
+        <div class="events-detail-view__header">
+          <button id="driver-analysis-detail-back" class="settings-button" type="button">BACK</button>
         </div>
-
-        <div class="driver-analysis-hotkey">
-          <div>
-            <strong>GLOBAL RECORD HOTKEY</strong>
-            <small>Works while Forza is in focus. Windows-key combinations are not allowed.</small>
-          </div>
-          <div class="driver-analysis-hotkey__control">
-            <output id="driver-analysis-hotkey-value" aria-live="polite">Ctrl + Shift + F9</output>
-            <button id="driver-analysis-hotkey-change" class="settings-button" type="button" aria-describedby="driver-analysis-hotkey-help" disabled>CHANGE</button>
-          </div>
+        <div class="events-detail-view__heading">
+          <h2 id="driver-analysis-detail-title" class="events-detail-view__title events-run-view__title">RECORDING</h2>
+          <div id="driver-analysis-detail-summary" class="events-detail-view__summary" aria-label="Driver Analysis details"></div>
         </div>
-        <p id="driver-analysis-hotkey-help" class="driver-analysis-hotkey-help">Press Escape to cancel. Use a controller button unbound in Forza Horizon 6, as the game also receives it.</p>
-      </section>
-
-      <section class="driver-analysis-history" aria-labelledby="driver-analysis-history-title">
-        <div class="settings-section__heading">
-          <h2 id="driver-analysis-history-title">HISTORY</h2>
-          <span id="driver-analysis-history-count">0 RECORDINGS</span>
-        </div>
-        <div id="driver-analysis-history-list" class="driver-analysis-history__list" aria-live="polite"></div>
-        <p id="driver-analysis-history-empty" class="driver-analysis-history__empty">No recordings yet. Complete an asphalt session to create the first analysis.</p>
+        <div id="driver-analysis-detail-body" class="driver-analysis-detail-view__body" aria-live="polite"></div>
       </section>
     </section>
 

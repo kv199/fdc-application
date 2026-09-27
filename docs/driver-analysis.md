@@ -228,11 +228,16 @@ car's Garage name (or `CAR #` and the ordinal) and the headline of that car.
 A one-line summary below adds up every car: distance, average speed, top
 speed, and corner count.
 
-`DETAILS` switches to `HIDE` and opens the `CARS` list. A car row shows the
-car, its PI and drivetrain, its drive count, duration, and headline; selecting
-it expands that car.
+`DETAILS` opens the recording page, and the history is replaced by pages like
+the Events tab: each page has `BACK`, and Escape also goes up one level. The
+recording page shows the date, duration, car and drive counts, storage size,
+the summary line, and the `CARS` list. A car row shows the car, its PI and
+drivetrain, its drive count, duration, and headline; selecting it opens the car
+page. A recording with a single car opens its car page directly, and `BACK`
+from it returns to the history.
 
-An expanded car shows its headline block: the qualified problem and its
+The car page shows the car's name with its PI, drivetrain, drive count,
+duration, and date, then its headline block: the qualified problem and its
 instruction when the car has one. Otherwise it shows `MOST FREQUENT` with the pattern that has
 the highest share of problems among the patterns with at least 10 checked
 opportunities and at least 3 problems, for example `Front scrub — steering more
@@ -244,18 +249,21 @@ Below the headline block, the car's recording summary line is followed by a
 `STATS` control that reveals the statistics rows, and by the drives table
 with `ID`, `TYPE` (`CIRCUIT · N LAPS`, `SPRINT`, with ` · UNFINISHED` when no
 finish line was seen), `DURATION`, `START` (local time), and `ERRORS`, the
-number of checks inside the drive that ended as a problem. A car recorded
+number of checks inside the drive that ended as a problem. Selecting a drive
+row opens the drive page. A car recorded
 before drives existed shows `RECORDED BEFORE DRIVES`; a car without races
 shows `NO RACES IN THIS RECORDING`.
 
 ### Drive map
 
-Selecting a drive row opens its map below the row; selecting it again closes
-it. The map is built from the drive's stored samples, thinned like an Events
+The drive page shows the drive number with the car, drive type, duration,
+start time, and problem count, and the drive map across the full page width.
+The map is built from the drive's stored samples, thinned like an Events
 lap trace to one point per 100 ms plus pedal and gear changes, with slip kept
 as the signed peak and curb contact kept as any contact since the previous
 point. It uses the Events lap map: the white track outline, the pedal and Slip
-layers, the legend row, and the hover values, without sector ticks.
+layers, the legend row, and the hover values, without sector ticks. It needs no
+Events recording.
 
 On top of it, each check of the drive that ended as a problem is a thick
 segment from the check's start to its end, colored by problem type: front
@@ -279,7 +287,9 @@ problem with its distance and duration; selecting one outlines it on the map.
 Drives recorded before sample positions existed have no map and show
 `NO POSITION DATA WAS SAVED FOR THIS DRIVE`.
 
-The expanded recordings and cars are kept while Configuration stays open.
+The open page and each car's `STATS` state are kept while Configuration stays
+open. When the history reloads, the open page is rebuilt from it, and a page
+whose recording was deleted returns to the history.
 
 ## Local persistence and deletion
 
