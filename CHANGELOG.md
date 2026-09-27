@@ -14,9 +14,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Driver Analysis**: a sprint driven to the finish is no longer marked
   UNFINISHED when the game clears the race clock and distance on the result
   screen instead of reporting the finish time.
-- **Driver Analysis**: waiting on the start grid without driving off, for
-  example before changing cars, no longer adds an empty unfinished sprint to
-  the drives table.
+- **Driver Analysis**: standing in free roam after a race, for example to
+  change cars, no longer adds an empty unfinished sprint to the drives table.
 
 ### Added
 

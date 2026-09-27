@@ -86,8 +86,9 @@ laps:
   includes the finish lap when it was reached; any other drive is a sprint, so
   a one-lap circuit appears as a sprint;
 - a drive without a finish line is unfinished;
-- a drive whose car never travels more than 25 metres from its start, such as
-  waiting on the start grid before changing cars, is not saved.
+- a drive whose car never travels more than 25 metres from its start is not
+  saved; standing in free roam, for example to change cars, reports the same
+  zero race clock and distance as a race start.
 
 Driving outside races is analyzed exactly as before and counts toward the
 car's result, but it is not a drive. Drives are saved with the car's session
