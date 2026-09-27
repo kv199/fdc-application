@@ -231,35 +231,39 @@ A one-line summary below adds up every car: distance, average speed, top
 speed, and corner count.
 
 `DETAILS` opens the recording page, and the history is replaced by pages like
-the Events tab: each page has `BACK`, and Escape also goes up one level. The
-recording page shows the date, duration, car and drive counts, storage size,
-the summary line, and the `CARS` list. A car row shows the car, its PI and
-drivetrain, its drive count, duration, and headline; selecting it opens the car
-page. A recording with a single car opens its car page directly, and `BACK`
+the Events tab, with the same tables and metrics: each page has `BACK`, and
+Escape also goes up one level. The recording page shows the date, duration,
+car and drive counts, storage size, the summary line, and the `CARS` table with
+each car, its PI, drivetrain, drive count, duration, and headline; selecting a
+row opens the car page. A recording with a single car opens its car page directly, and `BACK`
 from it returns to the history.
 
 The car page shows the car's name with its PI, drivetrain, drive count,
-duration, and date, then its headline block: the qualified problem and its
-instruction when the car has one. Otherwise it shows `MOST FREQUENT` with the pattern that has
-the highest share of problems among the patterns with at least 10 checked
-opportunities and at least 3 problems, for example `Front scrub — steering more
-than the front tires can take — in 18 of 133 checks (14%). Becomes a reported
-problem above 40%.` When no pattern reaches that support, the car keeps its
-result copy, such as `NOT ENOUGH ELIGIBLE MANEUVERS`.
+duration, and date, then its headline as the `RESULT` metric with the text
+below it: the qualified problem and its instruction when the car has one.
+Otherwise it shows `MOST FREQUENT:` followed
+by the name of the pattern that has the highest share of problems among the
+patterns with at least 10 checked opportunities and at least 3 problems, for
+example `MOST FREQUENT: FRONT SCRUB`, with the pattern text below it, such as
+`Front scrub — steering more than the front tires can take — in 18 of 133
+checks (14%). Becomes a reported problem above 40%.` When no pattern reaches
+that support, the car keeps its result copy, such as
+`NOT ENOUGH ELIGIBLE MANEUVERS`.
 
-Below the headline block, the car's recording summary line is followed by a
-`STATS` control that reveals the statistics rows, and by the drives table
+Below the headline, the car's recording summary line is followed by a `STATS`
+control that reveals the statistics tables, and by the `DRIVES` table
 with `ID`, `TYPE` (`CIRCUIT · N LAPS`, `SPRINT`, with ` · UNFINISHED` when no
 finish line was seen), `DURATION`, `START` (local time), and `ERRORS`, the
 number of checks inside the drive that ended as a problem. Selecting a drive
-row opens the drive page. A car recorded
-before drives existed shows `RECORDED BEFORE DRIVES`; a car without races
-shows `NO RACES IN THIS RECORDING`.
+row opens the drive page. A car recorded before drives existed shows
+`RECORDED BEFORE DRIVES`; a car without races shows
+`NO RACES IN THIS RECORDING`.
 
 ### Drive map
 
-The drive page shows the drive number with the car, drive type, duration,
-start time, and problem count, and the drive map across the full page width.
+The drive page shows the drive number with the car, drive type, and start
+time, the `DURATION` and `ERRORS` metrics, and the drive map across the full
+page width.
 The map is built from the drive's stored samples, thinned like an Events
 lap trace to one point per 100 ms plus pedal and gear changes, with slip kept
 as the signed peak and curb contact kept as any contact since the previous

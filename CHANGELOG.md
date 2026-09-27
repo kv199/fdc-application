@@ -47,6 +47,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   result, statistics, and drives, and a drive page with the map across the
   full width. BACK or Escape goes up one level, and a recording with one car
   opens its car page directly.
+- **Driver Analysis**: the recording, car, and drive pages use the Events
+  tables, row highlight, and metrics, and a car without a reported problem
+  names its most frequent pattern, for example MOST FREQUENT: FRONT SCRUB.
 
 ## 7.16.48 - 2026-09-25
 

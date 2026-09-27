@@ -2230,6 +2230,27 @@
     }
   }
 
+  function driverAnalysisHeadline(session) {
+    const isIssue = session?.result === 'issue' && session?.label
+    const patternSummary = isIssue ? null : globalScope.DriverAnalysisStats?.formatPatternSummary?.(session.stats)
+    let label, instruction, result
+    if (isIssue) {
+      label = session.label
+      instruction = session.instruction || 'Repeat the session before changing another part of your technique.'
+      result = 'issue'
+    } else if (patternSummary) {
+      label = globalScope.DriverAnalysisStats?.formatPatternHeadline?.(patternSummary) || 'MOST FREQUENT'
+      instruction = patternSummary.text
+      result = session?.result || 'unknown'
+    } else {
+      const copy = driverAnalysisResultCopy(session)
+      label = copy.label
+      instruction = copy.instruction
+      result = session?.status === 'recording' ? 'recording' : session?.result || 'unknown'
+    }
+    return { label, instruction, result }
+  }
+
   let driverAnalysisView = { level: 'history', recordingId: null, sessionId: null, driveId: null }
   const expandedDriverAnalysisStats = new Set()
   const driverAnalysisDriveMaps = new Map()
@@ -2304,58 +2325,90 @@
       if (driverAnalysisDetailSummary) driverAnalysisDetailSummary.append(...badges)
       const summaryText = globalScope.DriverAnalysisHistory?.recordingSummary?.(recording.sessions) || ''
       if (summaryText) {
-        const summary = document.createElement('div')
-        summary.className = 'driver-analysis-history-row__summary'
+        const summary = document.createElement('p')
+        summary.className = 'driver-analysis-detail-view__hint'
         summary.textContent = summaryText
         driverAnalysisDetailBody?.append(summary)
       }
-      const carsContainer = document.createElement('div')
-      carsContainer.className = 'driver-analysis-history-row__cars-section'
-      const carsTitle = document.createElement('div')
-      carsTitle.className = 'driver-analysis-history-row__cars-title'
-      carsTitle.textContent = 'CARS'
-      carsContainer.append(carsTitle)
+      const section = document.createElement('section')
+      section.className = 'events-run-table-section'
+      const heading = document.createElement('div')
+      heading.className = 'events-run-table-section__heading'
+      const headingH3 = document.createElement('h3')
+      headingH3.textContent = 'CARS'
+      const headingSpan = document.createElement('span')
+      headingSpan.textContent = 'SELECT A CAR'
+      heading.append(headingH3, headingSpan)
+      section.append(heading)
+      const tableWrap = document.createElement('div')
+      tableWrap.className = 'events-run-table-wrap'
+      const table = document.createElement('table')
+      table.className = 'events-run-table'
+      const caption = document.createElement('caption')
+      caption.className = 'events-run-table__caption'
+      caption.textContent = 'Select a car row to open its drives and statistics.'
+      table.append(caption)
+      const thead = document.createElement('thead')
+      const headerRow = document.createElement('tr')
+      for (const header of ['CAR', 'PI', 'DRIVETRAIN', 'DRIVES', 'DURATION', 'RESULT']) {
+        const th = document.createElement('th')
+        th.scope = 'col'
+        th.textContent = header
+        headerRow.append(th)
+      }
+      thead.append(headerRow)
+      table.append(thead)
+      const tbody = document.createElement('tbody')
       for (const s of recording.sessions) {
-        const sessionSummaryLabel = globalScope.DriverAnalysisHistory?.carLabel?.(s) || 'Car'
-        const pi = Number(s?.vehicleIdentity?.pi)
-        const piLabel = Number.isFinite(pi) ? ` · PI ${pi}` : ''
-        const drivetrain = globalScope.DriverAnalysisHistory?.drivetrainLabel?.(s?.vehicleIdentity?.drivetrain) || ''
-        const drivetrainLabel = drivetrain ? ` · ${drivetrain}` : ''
-        const carRowButton = document.createElement('button')
-        carRowButton.type = 'button'
-        carRowButton.className = 'driver-analysis-history-row__car-row'
-        const carInfoSpan = document.createElement('span')
-        carInfoSpan.className = 'driver-analysis-history-row__car-info'
-        carInfoSpan.textContent = sessionSummaryLabel + piLabel + drivetrainLabel
-        const drivesCount = Array.isArray(s?.drives) ? s.drives.length : 0
-        const durationMs = Number(s?.durationMs) || 0
-        const isIssue = s?.result === 'issue' && s?.label
-        const patternSummary = isIssue ? null : globalScope.DriverAnalysisStats?.formatPatternSummary?.(s.stats)
-        const headline = document.createElement('strong')
-        if (isIssue) {
-          headline.textContent = s.label
-          headline.dataset.result = 'issue'
-        } else if (patternSummary) {
-          headline.textContent = 'MOST FREQUENT'
-          headline.dataset.result = s?.result || 'unknown'
-        } else {
-          const copy = driverAnalysisResultCopy(s)
-          headline.textContent = copy.label
-          headline.dataset.result = s?.status === 'recording' ? 'recording' : s?.result || 'unknown'
-        }
-        const rightSpan = document.createElement('span')
-        rightSpan.className = 'driver-analysis-history-row__car-meta'
-        rightSpan.append(
-          document.createTextNode(`${drivesCount} ${drivesCount === 1 ? 'DRIVE' : 'DRIVES'} · ${formatDriverAnalysisDuration(durationMs)} · `),
-          headline
-        )
-        carRowButton.append(carInfoSpan, rightSpan)
-        carRowButton.addEventListener('click', () => {
+        const row = document.createElement('tr')
+        row.className = 'events-run-table__lap-row'
+        row.tabIndex = 0
+        const carLabel = globalScope.DriverAnalysisHistory?.carLabel?.(s) || 'Car'
+        row.setAttribute('aria-label', `Open ${carLabel}`)
+        row.addEventListener('click', () => {
           setDriverAnalysisView({ level: 'car', recordingId: String(recording.recordingId), sessionId: String(s?.id), driveId: null })
         })
-        carsContainer.append(carRowButton)
+        row.addEventListener('keydown', event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          setDriverAnalysisView({ level: 'car', recordingId: String(recording.recordingId), sessionId: String(s?.id), driveId: null })
+        })
+        const carCell = document.createElement('th')
+        carCell.scope = 'row'
+        carCell.textContent = carLabel
+        row.append(carCell)
+        const pi = Number(s?.vehicleIdentity?.pi)
+        const piCell = document.createElement('td')
+        piCell.textContent = Number.isFinite(pi) ? String(pi) : '—'
+        row.append(piCell)
+        const drivetrain = globalScope.DriverAnalysisHistory?.drivetrainLabel?.(s?.vehicleIdentity?.drivetrain) || '—'
+        const drivetrainCell = document.createElement('td')
+        drivetrainCell.textContent = drivetrain
+        row.append(drivetrainCell)
+        const drivesCount = Array.isArray(s?.drives) ? s.drives.length : 0
+        const drivesCell = document.createElement('td')
+        drivesCell.textContent = String(drivesCount)
+        row.append(drivesCell)
+        const durationMs = Number(s?.durationMs) || 0
+        const durationCell = document.createElement('td')
+        const durationTime = document.createElement('span')
+        durationTime.className = 'events-run-table__time'
+        durationTime.textContent = formatDriverAnalysisDuration(durationMs)
+        durationCell.append(durationTime)
+        row.append(durationCell)
+        const resultCell = document.createElement('td')
+        const headline = document.createElement('strong')
+        const hd = driverAnalysisHeadline(s)
+        headline.textContent = hd.label
+        headline.dataset.result = hd.result
+        resultCell.append(headline)
+        row.append(resultCell)
+        tbody.append(row)
       }
-      driverAnalysisDetailBody?.append(carsContainer)
+      table.append(tbody)
+      tableWrap.append(table)
+      section.append(tableWrap)
+      driverAnalysisDetailBody?.append(section)
     } else if (driverAnalysisView.level === 'car') {
       const carLabel = globalScope.DriverAnalysisHistory?.carLabel?.(session) || 'Car'
       const pi = Number(session?.vehicleIdentity?.pi)
@@ -2392,73 +2445,81 @@
         badges.push(dateBadge)
       }
       if (driverAnalysisDetailSummary) driverAnalysisDetailSummary.append(...badges)
-      const isIssue = session?.result === 'issue' && session?.label
-      const patternSummary = isIssue ? null : globalScope.DriverAnalysisStats?.formatPatternSummary?.(session.stats)
-      const findingBlock = document.createElement('div')
-      findingBlock.className = 'driver-analysis-history-row__car-finding'
-      const findingLabel = document.createElement('strong')
+      const hd = driverAnalysisHeadline(session)
+      const resultMeta = document.createElement('div')
+      resultMeta.className = 'events-run-view__meta'
+      const resultMetric = document.createElement('div')
+      resultMetric.className = 'events-run-view__metric driver-analysis-detail-view__result'
+      const resultLabel = document.createElement('div')
+      resultLabel.className = 'events-run-view__metric-label'
+      resultLabel.textContent = 'RESULT'
+      const resultValue = document.createElement('div')
+      resultValue.className = 'events-run-view__metric-value'
+      const resultHeadline = document.createElement('strong')
+      resultHeadline.textContent = hd.label
+      resultHeadline.dataset.result = hd.result
+      resultValue.append(resultHeadline)
+      resultMetric.append(resultLabel, resultValue)
+      resultMeta.append(resultMetric)
+      driverAnalysisDetailBody?.append(resultMeta)
       const findingInstruction = document.createElement('p')
-      if (isIssue) {
-        findingLabel.textContent = session.label
-        findingInstruction.textContent = session.instruction || 'Repeat the session before changing another part of your technique.'
-        findingLabel.dataset.result = 'issue'
-      } else if (patternSummary) {
-        findingLabel.textContent = 'MOST FREQUENT'
-        findingInstruction.textContent = patternSummary.text
-        findingLabel.dataset.result = session?.result || 'unknown'
-      } else {
-        const copy = driverAnalysisResultCopy(session)
-        findingLabel.textContent = copy.label
-        findingInstruction.textContent = copy.instruction
-        findingLabel.dataset.result = session?.status === 'recording' ? 'recording' : session?.result || 'unknown'
-      }
-      findingBlock.append(findingLabel, findingInstruction)
+      findingInstruction.className = 'driver-analysis-detail-view__text'
+      findingInstruction.textContent = hd.instruction
+      driverAnalysisDetailBody?.append(findingInstruction)
       const sessionSummaryLine = globalScope.DriverAnalysisStats?.formatSummaryLine?.(session.stats)
       if (sessionSummaryLine) {
-        const sessionSummary = document.createElement('div')
-        sessionSummary.className = 'driver-analysis-history-row__car-summary'
+        const sessionSummary = document.createElement('p')
+        sessionSummary.className = 'driver-analysis-detail-view__hint'
         sessionSummary.textContent = sessionSummaryLine
-        findingBlock.append(sessionSummary)
+        driverAnalysisDetailBody?.append(sessionSummary)
       }
-      driverAnalysisDetailBody?.append(findingBlock)
       const statsRows = globalScope.DriverAnalysisStats?.formatStatsRows?.(session.stats) || []
       if (statsRows.length > 0) {
         const statsToggleButton = document.createElement('button')
         statsToggleButton.type = 'button'
-        statsToggleButton.className = 'settings-button driver-analysis-history-row__stats-toggle'
+        statsToggleButton.className = 'settings-button driver-analysis-detail-view__stats-toggle'
         const statsExpanded = expandedDriverAnalysisStats.has(sessionId)
         statsToggleButton.textContent = statsExpanded ? 'HIDE' : 'STATS'
         statsToggleButton.setAttribute('aria-expanded', String(statsExpanded))
         driverAnalysisDetailBody?.append(statsToggleButton)
         const statsPanel = document.createElement('div')
-        statsPanel.className = 'driver-analysis-history-row__stats-panel'
+        statsPanel.className = 'driver-analysis-detail-view__stats'
         statsPanel.hidden = !statsExpanded
         for (const statsRow of statsRows) {
-          const section = document.createElement('div')
-          section.className = 'driver-analysis-history-row__details-section'
-          const sectionTitle = document.createElement('div')
-          sectionTitle.className = 'driver-analysis-history-row__details-section-title'
-          sectionTitle.textContent = statsRow.count !== null && Number.isFinite(statsRow.count)
+          const section = document.createElement('section')
+          section.className = 'events-run-table-section'
+          const sectionHeading = document.createElement('div')
+          sectionHeading.className = 'events-run-table-section__heading'
+          const sectionH3 = document.createElement('h3')
+          sectionH3.textContent = statsRow.count !== null && Number.isFinite(statsRow.count)
             ? `${statsRow.label} (${statsRow.count})`
             : statsRow.label
           if (statsRow.title) section.title = statsRow.title
-          section.append(sectionTitle)
+          sectionHeading.append(sectionH3)
+          section.append(sectionHeading)
           if (Array.isArray(statsRow.items) && statsRow.items.length > 0) {
-            const list = document.createElement('div')
-            list.className = 'driver-analysis-history-row__details-list'
+            const tableWrap = document.createElement('div')
+            tableWrap.className = 'events-run-table-wrap'
+            const table = document.createElement('table')
+            table.className = 'events-run-table'
+            const tbody = document.createElement('tbody')
             for (const item of statsRow.items) {
-              const itemRow = document.createElement('div')
-              itemRow.className = 'driver-analysis-history-row__details-item'
-              const name = document.createElement('span')
-              name.className = 'driver-analysis-history-row__details-item-name'
-              name.textContent = item.name
-              const value = document.createElement('span')
-              value.className = 'driver-analysis-history-row__details-item-value'
-              value.textContent = item.value
-              itemRow.append(name, value)
-              list.append(itemRow)
+              const itemRow = document.createElement('tr')
+              const nameCell = document.createElement('th')
+              nameCell.scope = 'row'
+              nameCell.textContent = item.name
+              itemRow.append(nameCell)
+              const valueCell = document.createElement('td')
+              const valueSpan = document.createElement('span')
+              valueSpan.className = 'events-run-table__time'
+              valueSpan.textContent = item.value
+              valueCell.append(valueSpan)
+              itemRow.append(valueCell)
+              tbody.append(itemRow)
             }
-            section.append(list)
+            table.append(tbody)
+            tableWrap.append(table)
+            section.append(tableWrap)
           }
           statsPanel.append(section)
         }
@@ -2474,12 +2535,24 @@
       }
       const drivesRecorded = session?.drivesRecorded !== false
       if (drivesRecorded && Array.isArray(session?.drives) && session.drives.length > 0) {
-        const hint = document.createElement('p')
-        hint.className = 'driver-analysis-detail-view__hint'
-        hint.textContent = 'Select a drive to open its map.'
-        driverAnalysisDetailBody?.append(hint)
+        const drivesSection = document.createElement('section')
+        drivesSection.className = 'events-run-table-section'
+        const drivesHeading = document.createElement('div')
+        drivesHeading.className = 'events-run-table-section__heading'
+        const drivesH3 = document.createElement('h3')
+        drivesH3.textContent = 'DRIVES'
+        const drivesSpan = document.createElement('span')
+        drivesSpan.textContent = 'SELECT A DRIVE TO OPEN ITS MAP'
+        drivesHeading.append(drivesH3, drivesSpan)
+        drivesSection.append(drivesHeading)
+        const tableWrap = document.createElement('div')
+        tableWrap.className = 'events-run-table-wrap'
         const drivesTable = document.createElement('table')
-        drivesTable.className = 'driver-analysis-history-row__drives-table'
+        drivesTable.className = 'events-run-table'
+        const caption = document.createElement('caption')
+        caption.className = 'events-run-table__caption'
+        caption.textContent = 'Select a drive row to open its map.'
+        drivesTable.append(caption)
         const thead = document.createElement('thead')
         const headerRow = document.createElement('tr')
         for (const colHeader of ['ID', 'TYPE', 'DURATION', 'START', 'ERRORS']) {
@@ -2494,7 +2567,7 @@
         for (const drive of session.drives) {
           const driveRow = document.createElement('tr')
           const driveKey = String(drive?.id)
-          driveRow.className = 'driver-analysis-history-row__drive-row'
+          driveRow.className = 'events-run-table__lap-row'
           driveRow.tabIndex = 0
           driveRow.setAttribute('aria-label', `Open drive ${driveKey} map`)
           driveRow.addEventListener('click', () => {
@@ -2505,14 +2578,18 @@
             event.preventDefault()
             setDriverAnalysisView({ level: 'drive', recordingId, sessionId, driveId: driveKey })
           })
-          const idCell = document.createElement('td')
+          const idCell = document.createElement('th')
+          idCell.scope = 'row'
           idCell.textContent = `#${drive?.id || ''}`
           driveRow.append(idCell)
           const typeCell = document.createElement('td')
           typeCell.textContent = globalScope.DriverAnalysisHistory?.driveTypeLabel?.(drive) || 'UNKNOWN'
           driveRow.append(typeCell)
           const durationCell = document.createElement('td')
-          durationCell.textContent = globalScope.DriverAnalysisHistory?.formatDriveDuration?.(drive?.durationMs) || '00:00'
+          const durationSpan = document.createElement('span')
+          durationSpan.className = 'events-run-table__time'
+          durationSpan.textContent = globalScope.DriverAnalysisHistory?.formatDriveDuration?.(drive?.durationMs) || '00:00'
+          durationCell.append(durationSpan)
           driveRow.append(durationCell)
           const startCell = document.createElement('td')
           const startTime = new Date(drive?.startedWallMs)
@@ -2527,15 +2604,17 @@
           tbody.append(driveRow)
         }
         drivesTable.append(tbody)
-        driverAnalysisDetailBody?.append(drivesTable)
+        tableWrap.append(drivesTable)
+        drivesSection.append(tableWrap)
+        driverAnalysisDetailBody?.append(drivesSection)
       } else if (!drivesRecorded) {
         const noRecordMsg = document.createElement('div')
-        noRecordMsg.className = 'driver-analysis-history-row__no-drives'
+        noRecordMsg.className = 'events-run-empty'
         noRecordMsg.textContent = 'RECORDED BEFORE DRIVES'
         driverAnalysisDetailBody?.append(noRecordMsg)
       } else if (Array.isArray(session?.drives) && session.drives.length === 0 && drivesRecorded) {
         const noRacesMsg = document.createElement('div')
-        noRacesMsg.className = 'driver-analysis-history-row__no-drives'
+        noRacesMsg.className = 'events-run-empty'
         noRacesMsg.textContent = 'NO RACES IN THIS RECORDING'
         driverAnalysisDetailBody?.append(noRacesMsg)
       }
@@ -2556,10 +2635,6 @@
       driveTypeBadge.className = 'events-detail-view__badge'
       driveTypeBadge.textContent = globalScope.DriverAnalysisHistory?.driveTypeLabel?.(drive) || 'UNKNOWN'
       badges.push(driveTypeBadge)
-      const durationBadge = document.createElement('span')
-      durationBadge.className = 'events-detail-view__badge'
-      durationBadge.textContent = globalScope.DriverAnalysisHistory?.formatDriveDuration?.(drive?.durationMs) || '00:00'
-      badges.push(durationBadge)
       const startTime = new Date(drive?.startedWallMs)
       const timeBadge = document.createElement('span')
       timeBadge.className = 'events-detail-view__badge'
@@ -2568,12 +2643,36 @@
         : '—'
       badges.push(timeBadge)
       const errorCount = globalScope.DriverAnalysisHistory?.driveErrorCount?.(drive) || 0
-      const errorBadge = document.createElement('span')
-      errorBadge.className = 'events-detail-view__badge'
-      errorBadge.textContent = errorCount > 0 ? `${errorCount} ${errorCount === 1 ? 'ERROR' : 'ERRORS'}` : 'NO ERRORS'
-      badges.push(errorBadge)
       if (driverAnalysisDetailSummary) driverAnalysisDetailSummary.append(...badges)
-      driverAnalysisDetailBody?.append(driverAnalysisDriveMap(session, drive))
+      const meta = document.createElement('div')
+      meta.className = 'events-run-view__meta'
+      const durationMetric = document.createElement('div')
+      durationMetric.className = 'events-run-view__metric'
+      const durationLabel = document.createElement('div')
+      durationLabel.className = 'events-run-view__metric-label'
+      durationLabel.textContent = 'DURATION'
+      const durationValue = document.createElement('div')
+      durationValue.className = 'events-run-view__metric-value'
+      durationValue.textContent = globalScope.DriverAnalysisHistory?.formatDriveDuration?.(drive?.durationMs) || '00:00'
+      durationMetric.append(durationLabel, durationValue)
+      const errorsMetric = document.createElement('div')
+      errorsMetric.className = 'events-run-view__metric events-run-view__metric--run'
+      const errorsLabel = document.createElement('div')
+      errorsLabel.className = 'events-run-view__metric-label'
+      errorsLabel.textContent = 'ERRORS'
+      const errorsValue = document.createElement('div')
+      errorsValue.className = 'events-run-view__metric-value'
+      errorsValue.textContent = String(errorCount)
+      errorsMetric.append(errorsLabel, errorsValue)
+      meta.append(durationMetric, errorsMetric)
+      driverAnalysisDetailBody?.append(meta)
+      const mapWrap = document.createElement('div')
+      mapWrap.className = 'events-run-table-wrap'
+      const mapDetail = document.createElement('div')
+      mapDetail.className = 'events-lap-detail'
+      mapDetail.append(driverAnalysisDriveMap(session, drive))
+      mapWrap.append(mapDetail)
+      driverAnalysisDetailBody?.append(mapWrap)
     }
   }
 
@@ -2661,20 +2760,9 @@
         sessionCarLabel.textContent = carName
 
         const headline = document.createElement('strong')
-        const isIssue = session?.result === 'issue' && session?.label
-        const patternSummary = isIssue ? null : globalScope.DriverAnalysisStats?.formatPatternSummary?.(session.stats)
-
-        if (isIssue) {
-          headline.textContent = session.label
-          headline.dataset.result = 'issue'
-        } else if (patternSummary) {
-          headline.textContent = 'MOST FREQUENT'
-          headline.dataset.result = session?.result || 'unknown'
-        } else {
-          const copy = driverAnalysisResultCopy(session)
-          headline.textContent = copy.label
-          headline.dataset.result = session?.status === 'recording' ? 'recording' : session?.result || 'unknown'
-        }
+        const hd = driverAnalysisHeadline(session)
+        headline.textContent = hd.label
+        headline.dataset.result = hd.result
 
         sessionLine.append(sessionCarLabel, document.createTextNode(' — '), headline)
         finding.append(sessionLine)

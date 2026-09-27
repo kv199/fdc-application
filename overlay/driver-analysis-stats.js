@@ -407,6 +407,11 @@
     }
   }
 
+  function formatPatternHeadline(summary) {
+    if (!summary || !summary.label) return null
+    return `MOST FREQUENT: ${summary.label.toUpperCase()}`
+  }
+
   // Descriptive card rows only: no reference values, grades, or recommendations.
   function formatStatsRows(stats) {
     if (!stats || typeof stats !== 'object' || finite(stats.version) === null) return []
@@ -614,5 +619,5 @@
     return rows
   }
 
-  return { DEFAULT_THRESHOLDS, MIN_EVENTS, STATS_VERSION, createDriverAnalysisStats, distribution, formatSummaryLine, formatPatternSummary, formatStatsRows }
+  return { DEFAULT_THRESHOLDS, MIN_EVENTS, STATS_VERSION, createDriverAnalysisStats, distribution, formatSummaryLine, formatPatternSummary, formatPatternHeadline, formatStatsRows }
 }))

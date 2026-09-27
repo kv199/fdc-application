@@ -2022,6 +2022,10 @@ h1 {
   color: #a1a1aa;
 }
 
+.driver-analysis-detail-view strong[data-result='issue'] {
+  color: #ff827d;
+}
+
 .driver-analysis-history-row__finding p {
   margin-top: 6px;
   color: #d4d4d8;
@@ -2041,39 +2045,6 @@ h1 {
   min-width: 78px;
 }
 
-.driver-analysis-history-row__details-section-title {
-  color: #71717a;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  margin-bottom: 6px;
-}
-
-.driver-analysis-history-row__details-list {
-  display: grid;
-  gap: 4px;
-}
-
-.driver-analysis-history-row__details-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: baseline;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.driver-analysis-history-row__details-item-name {
-  min-width: 0;
-  color: #d4d4d8;
-}
-
-.driver-analysis-history-row__details-item-value {
-  color: #d4d4d8;
-  font-variant-numeric: tabular-nums;
-  font-weight: 750;
-  white-space: nowrap;
-}
 
 .driver-analysis-stats {
   display: grid;
@@ -2165,151 +2136,31 @@ h1 {
 }
 
 
-/* Details panel: cars section */
-.driver-analysis-history-row__cars-section {
-  margin-top: 12px;
-  border-top: 1px solid rgb(226 232 240 / 10%);
-  padding-top: 10px;
-}
-
-.driver-analysis-history-row__cars-title {
-  color: #71717a;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  margin-bottom: 10px;
-}
-
-.driver-analysis-history-row__car-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: baseline;
-  padding: 8px 0;
-  width: 100%;
-  border: 0;
-  border-bottom: 1px solid rgb(226 232 240 / 8%);
-  color: inherit;
-  background: none;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.driver-analysis-history-row__car-row:last-child {
-  border-bottom: none;
-}
-
-.driver-analysis-history-row__car-info {
-  min-width: 0;
-  color: #d4d4d8;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-}
-
-.driver-analysis-history-row__car-meta {
-  color: #d4d4d8;
-  font-size: 11px;
-  line-height: 1.35;
-  font-weight: 750;
-  text-align: right;
-}
-
-.driver-analysis-history-row__car-meta strong {
-  color: #ff827d;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-
-.driver-analysis-history-row__car-finding strong {
-  color: #ff827d;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.driver-analysis-history-row__car-finding p {
-  margin-top: 4px;
-  color: #d4d4d8;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.driver-analysis-history-row__car-summary {
-  margin-top: 4px;
-  color: #d4d4d8;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.driver-analysis-history-row__stats-toggle {
-  margin-top: 8px;
-  min-width: 60px;
-}
-
-.driver-analysis-history-row__stats-panel {
-  margin-top: 8px;
-  display: grid;
-  gap: 12px;
-}
-
-.driver-analysis-history-row__stats-panel[hidden] {
-  display: none;
-}
-
-.driver-analysis-history-row__drive-row {
-  cursor: pointer;
-}
-
-.driver-analysis-history-row__drive-row:hover,
-.driver-analysis-history-row__drive-row:focus-visible,
-.driver-analysis-history-row__drive-row:active {
-  background: rgb(226 232 240 / 5%);
-}
-
-.driver-analysis-history-row__drives-table {
-  width: 100%;
-  margin-top: 8px;
-  border-collapse: collapse;
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.driver-analysis-history-row__drives-table thead th {
-  padding: 6px 8px;
-  border-bottom: 1px solid rgb(226 232 240 / 12%);
-  color: #71717a;
-  text-align: left;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-}
-
-.driver-analysis-history-row__drives-table tbody td {
-  padding: 4px 8px;
-  border-bottom: 1px solid rgb(226 232 240 / 8%);
-  color: #d4d4d8;
-  font-variant-numeric: tabular-nums;
-}
-
-.driver-analysis-history-row__drives-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.driver-analysis-history-row__no-drives {
-  margin-top: 8px;
-  color: #71717a;
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0.1em;
-}
 
 .driver-analysis-detail-view__body {
   display: grid;
   gap: 12px;
+}
+
+.driver-analysis-detail-view__body .events-run-view__meta {
+  margin-bottom: 0;
+}
+
+/* A result headline can be long, so it wraps instead of running out of the metric. */
+.driver-analysis-detail-view__result {
+  grid-column: 1 / -1;
+}
+
+.driver-analysis-detail-view__result .events-run-view__metric-value {
+  font-size: 16px;
+  text-align: right;
+  white-space: normal;
+}
+
+.driver-analysis-detail-view__text {
+  color: #d4d4d8;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .driver-analysis-detail-view__hint {
@@ -2318,9 +2169,28 @@ h1 {
   letter-spacing: 0.08em;
 }
 
-.driver-analysis-history-row__car-row:hover,
-.driver-analysis-history-row__car-row:focus-visible {
-  background: rgb(226 232 240 / 5%);
+.driver-analysis-detail-view__stats-toggle {
+  justify-self: start;
+}
+
+.driver-analysis-detail-view__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 12px;
+}
+
+.driver-analysis-detail-view__stats .events-run-table {
+  min-width: 0;
+}
+
+/* Car names and statistic names are longer than Events lap numbers. */
+.driver-analysis-detail-view .events-run-table th:first-child {
+  width: auto;
+  white-space: nowrap;
+}
+
+.driver-analysis-detail-view__stats[hidden] {
+  display: none;
 }
 
 @media (max-width: 680px) {
@@ -2342,10 +2212,6 @@ h1 {
   .driver-analysis-history-row {
     grid-template-columns: 1fr;
     gap: 12px;
-  }
-
-  .driver-analysis-history-row__details-item {
-    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 

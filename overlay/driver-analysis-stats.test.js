@@ -1851,6 +1851,62 @@ test('formatPatternSummary returns pattern with highest problem ratio', () => {
   assert.ok(result.text.includes('10 of 35 checks'), 'should include counts')
 })
 
+test('formatPatternHeadline returns null for null summary', () => {
+  assert.equal(statsApi.formatPatternHeadline(null), null)
+})
+
+test('formatPatternHeadline returns null for summary with no label', () => {
+  assert.equal(statsApi.formatPatternHeadline({}), null)
+})
+
+test('formatPatternHeadline returns formatted headline for front_scrub', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    patterns: [
+      { kind: 'front_scrub', checked: 20, problems: 5, ambiguous: 1 }
+    ]
+  }
+  const summary = statsApi.formatPatternSummary(stats)
+  const headline = statsApi.formatPatternHeadline(summary)
+  assert.equal(headline, 'MOST FREQUENT: FRONT SCRUB')
+})
+
+test('formatPatternHeadline returns formatted headline for exit_wheelspin', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    patterns: [
+      { kind: 'exit_wheelspin', checked: 25, problems: 8, ambiguous: 2 }
+    ]
+  }
+  const summary = statsApi.formatPatternSummary(stats)
+  const headline = statsApi.formatPatternHeadline(summary)
+  assert.equal(headline, 'MOST FREQUENT: EXIT WHEELSPIN')
+})
+
+test('formatPatternHeadline returns formatted headline for brake_steering_overload', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    patterns: [
+      { kind: 'brake_steering_overload', checked: 30, problems: 10, ambiguous: 3 }
+    ]
+  }
+  const summary = statsApi.formatPatternSummary(stats)
+  const headline = statsApi.formatPatternHeadline(summary)
+  assert.equal(headline, 'MOST FREQUENT: BRAKE + STEERING')
+})
+
+test('formatPatternHeadline returns formatted headline for abrupt_brake_release', () => {
+  const stats = {
+    version: statsApi.STATS_VERSION,
+    patterns: [
+      { kind: 'abrupt_brake_release', checked: 15, problems: 5, ambiguous: 1 }
+    ]
+  }
+  const summary = statsApi.formatPatternSummary(stats)
+  const headline = statsApi.formatPatternHeadline(summary)
+  assert.equal(headline, 'MOST FREQUENT: ABRUPT BRAKE RELEASE')
+})
+
 test('formatStatsRows returns items array with new structure', () => {
   const stats = {
     version: statsApi.STATS_VERSION,
