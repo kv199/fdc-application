@@ -49,6 +49,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Driver Analysis**: the recording, car, and drive pages use the Events
   tables, row highlight, and metrics, and a car without a reported problem
   names its most frequent pattern, for example MOST FREQUENT: FRONT SCRUB.
+- **Driver Analysis**: the car page shows distance, average speed, top speed,
+  and corners as separate metrics, and a recording card with several cars no
+  longer adds up their distance and speeds in one line.
 
 ## 7.16.48 - 2026-09-25
 

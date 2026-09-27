@@ -70,7 +70,7 @@
     return Math.max(0, Math.max(...finishes) - Math.min(...starts))
   }
 
-  // Same wording as DriverAnalysisStats.formatSummaryLine, aggregated over every car of the recording.
+  // The overview line of a single-car recording card: distance, average and top speed, and corners.
   function recordingSummary(sessions) {
     if (!Array.isArray(sessions)) return ''
     let distanceM = 0

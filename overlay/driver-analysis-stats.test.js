@@ -754,7 +754,7 @@ test('formatStatsRows returns rows with required keys and no judgmental words', 
 
   assert.ok(rows.length > 0, 'should have rows')
   const keys = new Set(rows.map(r => r.key))
-  assert.ok(!keys.has('overview'), 'the overview is shown by formatSummaryLine, not as a row')
+  assert.ok(!keys.has('overview'), 'the overview is shown by formatSummaryMetrics, not as a row')
   assert.ok(keys.has('pedals'), 'should have pedals row')
   assert.ok(keys.has('braking'), 'should have braking row')
   assert.ok(keys.has('corners'), 'should have corners row')
@@ -1774,13 +1774,13 @@ test('exits structure has cornerCount and atMinSpeedCount fields', () => {
   assert.ok(stats.exits.atMinSpeedCount <= stats.exits.cornerCount, 'atMinSpeedCount should be <= cornerCount')
 })
 
-test('formatSummaryLine returns empty string when no stats', () => {
-  assert.equal(statsApi.formatSummaryLine(null), '')
-  assert.equal(statsApi.formatSummaryLine(undefined), '')
-  assert.equal(statsApi.formatSummaryLine({}), '')
+test('formatSummaryMetrics returns no metrics when there are no stats', () => {
+  assert.deepEqual(statsApi.formatSummaryMetrics(null), [])
+  assert.deepEqual(statsApi.formatSummaryMetrics(undefined), [])
+  assert.deepEqual(statsApi.formatSummaryMetrics({}), [])
 })
 
-test('formatSummaryLine includes available metrics', () => {
+test('formatSummaryMetrics labels distance, speeds, and corners', () => {
   const stats = {
     version: statsApi.STATS_VERSION,
     distanceM: 5000,
@@ -1788,14 +1788,15 @@ test('formatSummaryLine includes available metrics', () => {
     maxSpeedKmh: 200,
     corners: { count: 5 }
   }
-  const result = statsApi.formatSummaryLine(stats)
-  assert.ok(result.includes('5.0 km'), 'should include distance')
-  assert.ok(result.includes('average 100 km/h'), 'should include average speed')
-  assert.ok(result.includes('top 200 km/h'), 'should include top speed')
-  assert.ok(result.includes('5 corners'), 'should include corner count')
+  assert.deepEqual(statsApi.formatSummaryMetrics(stats), [
+    { label: 'DISTANCE', value: '5.0 km' },
+    { label: 'AVERAGE', value: '100 km/h' },
+    { label: 'TOP', value: '200 km/h' },
+    { label: 'CORNERS', value: '5' }
+  ])
 })
 
-test('formatSummaryLine omits corner count when < 3', () => {
+test('formatSummaryMetrics omits corner count when < 3', () => {
   const stats = {
     version: statsApi.STATS_VERSION,
     distanceM: 5000,
@@ -1803,8 +1804,7 @@ test('formatSummaryLine omits corner count when < 3', () => {
     maxSpeedKmh: 200,
     corners: { count: 2 }
   }
-  const result = statsApi.formatSummaryLine(stats)
-  assert.ok(!result.includes('corners'), 'should omit corners when count < 3')
+  assert.deepEqual(statsApi.formatSummaryMetrics(stats).map(metric => metric.label), ['DISTANCE', 'AVERAGE', 'TOP'])
 })
 
 test('formatPatternSummary returns null when no patterns', () => {

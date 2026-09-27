@@ -2323,13 +2323,6 @@
       storageBadge.textContent = formatDriverAnalysisSize(totalStorageBytes)
       badges.push(storageBadge)
       if (driverAnalysisDetailSummary) driverAnalysisDetailSummary.append(...badges)
-      const summaryText = globalScope.DriverAnalysisHistory?.recordingSummary?.(recording.sessions) || ''
-      if (summaryText) {
-        const summary = document.createElement('p')
-        summary.className = 'driver-analysis-detail-view__hint'
-        summary.textContent = summaryText
-        driverAnalysisDetailBody?.append(summary)
-      }
       const section = document.createElement('section')
       section.className = 'events-run-table-section'
       const heading = document.createElement('div')
@@ -2466,12 +2459,22 @@
       findingInstruction.className = 'driver-analysis-detail-view__text'
       findingInstruction.textContent = hd.instruction
       driverAnalysisDetailBody?.append(findingInstruction)
-      const sessionSummaryLine = globalScope.DriverAnalysisStats?.formatSummaryLine?.(session.stats)
-      if (sessionSummaryLine) {
-        const sessionSummary = document.createElement('p')
-        sessionSummary.className = 'driver-analysis-detail-view__hint'
-        sessionSummary.textContent = sessionSummaryLine
-        driverAnalysisDetailBody?.append(sessionSummary)
+      const summaryMetrics = globalScope.DriverAnalysisStats?.formatSummaryMetrics?.(session.stats) || []
+      if (summaryMetrics.length > 0) {
+        const overview = document.createElement('div')
+        overview.className = 'driver-analysis-detail-view__overview'
+        for (const metric of summaryMetrics) {
+          const cell = document.createElement('div')
+          cell.className = 'driver-analysis-detail-view__overview-metric'
+          const label = document.createElement('span')
+          label.className = 'events-run-view__metric-label'
+          label.textContent = metric.label
+          const value = document.createElement('strong')
+          value.textContent = metric.value
+          cell.append(label, value)
+          overview.append(cell)
+        }
+        driverAnalysisDetailBody?.append(overview)
       }
       const statsRows = globalScope.DriverAnalysisStats?.formatStatsRows?.(session.stats) || []
       if (statsRows.length > 0) {
@@ -2768,7 +2771,10 @@
         finding.append(sessionLine)
       }
 
-      const summaryText = globalScope.DriverAnalysisHistory?.recordingSummary?.(recording.sessions) || ''
+      // Totals across different cars say little, so only a single-car card shows them.
+      const summaryText = recording.sessions.length === 1
+        ? globalScope.DriverAnalysisHistory?.recordingSummary?.(recording.sessions) || ''
+        : ''
       if (summaryText) {
         const summary = document.createElement('div')
         summary.className = 'driver-analysis-history-row__summary'

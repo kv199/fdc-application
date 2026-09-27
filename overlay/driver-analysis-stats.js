@@ -351,24 +351,17 @@
     return parts.filter(Boolean).join(' · ')
   }
 
-  function formatSummaryLine(stats) {
-    if (!stats || typeof stats !== 'object' || finite(stats.version) === null) return ''
-    const parts = []
+  // The car overview as labelled metrics; values that were not measured are left out.
+  function formatSummaryMetrics(stats) {
+    if (!stats || typeof stats !== 'object' || finite(stats.version) === null) return []
+    const metrics = []
     const distanceKm = finite(stats.distanceM) === null ? null : stats.distanceM / 1000
-    if (distanceKm !== null && distanceKm > 0) {
-      parts.push(`${distanceKm.toFixed(1)} km`)
-    }
-    if (finite(stats.avgSpeedKmh) !== null) {
-      parts.push(`average ${Math.round(stats.avgSpeedKmh)} km/h`)
-    }
-    if (finite(stats.maxSpeedKmh) !== null) {
-      parts.push(`top ${Math.round(stats.maxSpeedKmh)} km/h`)
-    }
+    if (distanceKm !== null && distanceKm > 0) metrics.push({ label: 'DISTANCE', value: `${distanceKm.toFixed(1)} km` })
+    if (finite(stats.avgSpeedKmh) !== null) metrics.push({ label: 'AVERAGE', value: `${Math.round(stats.avgSpeedKmh)} km/h` })
+    if (finite(stats.maxSpeedKmh) !== null) metrics.push({ label: 'TOP', value: `${Math.round(stats.maxSpeedKmh)} km/h` })
     const cornerCount = finite(stats.corners?.count)
-    if (cornerCount !== null && cornerCount >= 3) {
-      parts.push(`${cornerCount} corners`)
-    }
-    return parts.join(' · ')
+    if (cornerCount !== null && cornerCount >= 3) metrics.push({ label: 'CORNERS', value: String(cornerCount) })
+    return metrics
   }
 
   function formatPatternSummary(stats, options = {}) {
@@ -619,5 +612,5 @@
     return rows
   }
 
-  return { DEFAULT_THRESHOLDS, MIN_EVENTS, STATS_VERSION, createDriverAnalysisStats, distribution, formatSummaryLine, formatPatternSummary, formatPatternHeadline, formatStatsRows }
+  return { DEFAULT_THRESHOLDS, MIN_EVENTS, STATS_VERSION, createDriverAnalysisStats, distribution, formatSummaryMetrics, formatPatternSummary, formatPatternHeadline, formatStatsRows }
 }))

@@ -2163,12 +2163,6 @@ h1 {
   line-height: 1.45;
 }
 
-.driver-analysis-detail-view__hint {
-  color: #71717a;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-}
-
 .driver-analysis-detail-view__stats-toggle {
   justify-self: start;
 }
@@ -2193,9 +2187,38 @@ h1 {
   display: none;
 }
 
+/* The car overview uses the neutral Events RUN metric look so it does not compete with RESULT. */
+.driver-analysis-detail-view__overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.driver-analysis-detail-view__overview-metric {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid rgb(226 232 240 / 18%);
+  background: rgb(226 232 240 / 4%);
+}
+
+.driver-analysis-detail-view__overview-metric strong {
+  color: #f8fafc;
+  font-size: 16px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
 @media (max-width: 680px) {
   .settings-tabs {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .driver-analysis-detail-view__overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .driver-analysis-recorder__main,
