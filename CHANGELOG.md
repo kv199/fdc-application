@@ -11,6 +11,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   time the front and rear tires spent above 100% slip, the level at which the
   in-game tire friction telemetry turns red, instead of a front-versus-rear
   comparison that read above 90% for almost every recording.
+- **Driver Analysis**: a sprint driven to the finish is no longer marked
+  UNFINISHED when the game clears the race clock and distance on the result
+  screen instead of reporting the finish time.
 
 ### Added
 

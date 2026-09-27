@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { createDriveSegmenter } = require('./driver-analysis-drives.js')
+const { createDriveSegmenter, isZeroedResultPacket } = require('./driver-analysis-drives.js')
 
 // Feeds packets and persists every live one with an increasing sequence and a 16 ms telemetry clock.
 function run(packets) {
@@ -106,4 +106,119 @@ test('a start without persisted samples is discarded', () => {
   segmenter.update(live(0), null)
   segmenter.update(live(10), null)
   assert.deepEqual(segmenter.finalize(), [])
+})
+
+test('a sprint that ends with zeroed result packets and then finalize is finished', () => {
+  const drives = run([
+    ...drive(0, 3000),
+    result({ distance: 0, current: 0, raceTime: 0 }),
+    result({ distance: 0, current: 0, raceTime: 0 })
+  ])
+
+  assert.equal(drives.length, 1)
+  assert.deepEqual(
+    { kind: drives[0].kind, finished: drives[0].finished, lapCount: drives[0].lapCount },
+    { kind: 'sprint', finished: true, lapCount: null }
+  )
+})
+
+test('a zeroed sprint result followed by a new start gives two finished sprints', () => {
+  const drives = run([
+    ...drive(0, 3000),
+    result({ distance: 0, current: 0, raceTime: 0 }),
+    result({ distance: 0, current: 0, raceTime: 0 }),
+    ...drive(0, 2000, 50, { current: 0, raceTime: 0 }),
+    result({ distance: 0, current: 0, raceTime: 0 })
+  ])
+
+  assert.equal(drives.length, 2)
+  assert.equal(drives[0].finished, true)
+  assert.deepEqual([drives[1].kind, drives[1].finished], ['sprint', true])
+})
+
+test('free roam after a zeroed result is not part of the finished sprint', () => {
+  const drives = run([
+    ...drive(0, 3000),
+    result({ distance: 0, current: 0, raceTime: 0 }),
+    live(50, { current: 5, raceTime: 2, number: 0 })
+  ])
+
+  assert.equal(drives.length, 1)
+  assert.equal(drives[0].finished, true)
+  assert.equal(drives[0].lastSequence, 60)
+})
+
+test('a race that continues after zeroed packets keeps the drive open', () => {
+  const drives = run([
+    live(0, { current: 0, raceTime: 0 }),
+    ...drive(50, 3000),
+    result({ distance: 0, current: 0, raceTime: 0 }),
+    live(3000, { current: 60.5, raceTime: 60.5 })
+  ])
+
+  assert.equal(drives.length, 1)
+  assert.equal(drives[0].finished, false)
+})
+
+test('zeroed packets within the first 25 m do not finish the drive', () => {
+  const drives = run([
+    live(0, { current: 0, raceTime: 0 }),
+    live(25, { current: 0.5, raceTime: 0.5 }),
+    result({ distance: 0, current: 0, raceTime: 0 })
+  ])
+
+  assert.equal(drives.length, 1)
+  assert.equal(drives[0].finished, false)
+})
+
+test('zeroed packets do not finish a circuit', () => {
+  const drives = run([
+    ...drive(0, 1000, 50, { number: 0 }),
+    ...drive(1050, 2000, 50, { number: 1, last: 30 }),
+    result({ distance: 0, current: 0, raceTime: 0 }),
+    result({ distance: 0, current: 0, raceTime: 0 })
+  ])
+
+  assert.equal(drives.length, 1)
+  assert.deepEqual([drives[0].kind, drives[0].finished], ['circuit', false])
+})
+
+test('an advancing non-live Current Lap repeated in two packets is the sprint finish', () => {
+  const drives = run([
+    live(0, { current: 0, raceTime: 0 }),
+    ...drive(50, 2000),
+    { isRaceOn: false, lap: { distance: 100, current: 52, raceTime: 50, number: 0, last: 0 }, car: { ordinal: 1 } },
+    { isRaceOn: false, lap: { distance: 100, current: 52, raceTime: 50, number: 0, last: 0 }, car: { ordinal: 1 } },
+    live(2000, { current: 50, raceTime: 50 })
+  ])
+
+  assert.equal(drives.length, 1)
+  assert.equal(drives[0].finished, true)
+})
+
+test('an advancing non-live Current Lap that does not repeat is not a finish', () => {
+  const drives = run([
+    live(0, { current: 0, raceTime: 0 }),
+    ...drive(50, 2000),
+    { isRaceOn: false, lap: { distance: 100, current: 52, raceTime: 50, number: 0, last: 0 }, car: { ordinal: 1 } },
+    { isRaceOn: false, lap: { distance: 100, current: 53, raceTime: 50, number: 0, last: 0 }, car: { ordinal: 1 } }
+  ])
+
+  assert.equal(drives.length, 1)
+  assert.equal(drives[0].finished, false)
+})
+
+test('isZeroedResultPacket returns true for zeroed packet', () => {
+  const zeroed = result({ distance: 0, current: 0, raceTime: 0 })
+  assert.ok(isZeroedResultPacket(zeroed))
+})
+
+test('isZeroedResultPacket returns false for live packet', () => {
+  const livePacket = live(1000)
+  assert.ok(!isZeroedResultPacket(livePacket))
+})
+
+test('isZeroedResultPacket returns false when distance is non-zero', () => {
+  const nonZeroed = result({ distance: 100, current: 0, raceTime: 0 })
+  assert.ok(!isZeroedResultPacket(nonZeroed))
 })

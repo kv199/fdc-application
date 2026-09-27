@@ -75,8 +75,13 @@ laps:
 - a higher Lap Number seen while racing
   becomes a completed circuit lap once the car travels another 100 metres;
 - a higher Lap Number or a new Last Lap on the non-live result packets, or a
-  lap boundary that the car does
-  not travel past, is the finish line;
+  lap boundary that the car does not travel past, is the finish line;
+- in a sprint, a non-live Current Lap that advances past the last live value
+  and repeats in two consecutive packets is the finish line too, and so is a
+  zeroed non-live result, with Current Lap, Current Race Time, Last Lap, and
+  travelled distance all cleared, once the drive has covered more than 25
+  metres; live driving after a zeroed result that does not continue the race
+  clock and distance ends the drive;
 - a drive with at least one completed circuit lap is a circuit whose lap count
   includes the finish lap when it was reached; any other drive is a sprint, so
   a one-lap circuit appears as a sprint;
@@ -323,3 +328,5 @@ opportunities, evidence, and the summary result are replaced transactionally.
   driving assessment.
 - There is no track identity, reference lap, ideal line, score, exact time
   loss, or optimal-gear recommendation.
+- A sprint abandoned through the in-game restart menu produces the same zeroed
+  transition as a natural sprint finish, so it is also shown as finished.

@@ -34,6 +34,16 @@
     return value !== null && value > 0 ? value : null
   }
 
+  // Some sprint results clear the race clock, Last Lap, and distance instead of reporting the result, like in Events.
+  function isZeroedResultPacket(telemetry) {
+    if (telemetry?.isRaceOn === true) return false
+    const current = finite(telemetry?.lap?.current)
+    const raceTime = finite(telemetry?.lap?.raceTime)
+    const distance = finite(telemetry?.lap?.distance)
+    const lastLap = lastLapValue(telemetry)
+    return current === 0 && raceTime === 0 && lastLap === null && distance === 0
+  }
+
   // Splits one car's telemetry into races. Every packet is passed in, live or not; `persisted` is the saved sample
   // ({ sequence, timestampMs }) for packets that were stored, so a drive maps onto a contiguous sample range.
   function createDriveSegmenter(options = {}) {
@@ -52,6 +62,10 @@
         confirmedLaps: 0,
         pendingBoundaryDistance: null,
         finishLine: false,
+        lastLiveCurrent: null,
+        lastLiveRaceTime: null,
+        zeroedExit: false,
+        pendingSprintCurrent: null,
         firstSequence: null,
         lastSequence: null,
         startedAtMs: null,
@@ -64,7 +78,7 @@
       active = null
       if (!drive || drive.firstSequence === null) return
       const kind = drive.confirmedLaps > 0 ? 'circuit' : 'sprint'
-      const finished = drive.finishLine || drive.pendingBoundaryDistance !== null
+      const finished = drive.finishLine || drive.pendingBoundaryDistance !== null || (kind === 'sprint' && drive.zeroedExit)
       drives.push({
         kind,
         finished,
@@ -103,6 +117,26 @@
       if (!active) return
       if (!live) {
         noteBoundary(telemetry, false)
+        const sprintSoFar = active.confirmedLaps === 0 && active.pendingBoundaryDistance === null
+        const progressed = active.lastDistance - active.startDistance > START_MAX_DISTANCE_M
+        const zeroed = isZeroedResultPacket(telemetry)
+        if (zeroed && progressed && sprintSoFar) active.zeroedExit = true
+        // A non-live Current Lap past the last live value confirms a sprint finish once it repeats.
+        if (sprintSoFar && !zeroed) {
+          const current = finite(telemetry?.lap?.current)
+          const ordinal = finite(telemetry?.car?.ordinal)
+          if (current !== null && ordinal !== null && ordinal > 0 && active.lastLiveCurrent !== null && current > active.lastLiveCurrent) {
+            if (current === active.pendingSprintCurrent) {
+              active.finishLine = true
+            } else {
+              active.pendingSprintCurrent = current
+            }
+          } else {
+            active.pendingSprintCurrent = null
+          }
+        } else {
+          active.pendingSprintCurrent = null
+        }
         return
       }
       // Driving on after the finish line is no longer part of the race.
@@ -110,6 +144,20 @@
         close()
         return
       }
+      // After a zeroed result only a continuing race clock and distance keep the drive going.
+      if (active.zeroedExit) {
+        const raceTime = finite(telemetry?.lap?.raceTime)
+        const distance = finite(telemetry?.lap?.distance)
+        const continues = raceTime !== null && raceTime >= active.lastLiveRaceTime - 1
+          && distance !== null && distance >= active.lastDistance - DISTANCE_RESET_M
+        if (continues) {
+          active.zeroedExit = false
+        } else {
+          close()
+          return
+        }
+      }
+      active.pendingSprintCurrent = null
       const distance = finite(telemetry?.lap?.distance)
       const lapNumber = finite(telemetry?.lap?.number)
       if (distance !== null && distance < active.lastDistance - DISTANCE_RESET_M) {
@@ -127,6 +175,10 @@
       } else if (distance !== null) {
         active.lastDistance = Math.max(active.lastDistance, distance)
       }
+      const current = finite(telemetry?.lap?.current)
+      const raceTime = finite(telemetry?.lap?.raceTime)
+      if (current !== null) active.lastLiveCurrent = current
+      if (raceTime !== null) active.lastLiveRaceTime = raceTime
       noteBoundary(telemetry, true)
       if (active.pendingBoundaryDistance !== null && active.lastDistance >= active.pendingBoundaryDistance + LAP_CONFIRM_DISTANCE_M) {
         active.confirmedLaps += 1
@@ -151,5 +203,5 @@
     return { finalize, update }
   }
 
-  return { createDriveSegmenter, isCleanStart }
+  return { createDriveSegmenter, isCleanStart, isZeroedResultPacket }
 }))
