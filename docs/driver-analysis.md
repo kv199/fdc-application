@@ -85,7 +85,9 @@ laps:
 - a drive with at least one completed circuit lap is a circuit whose lap count
   includes the finish lap when it was reached; any other drive is a sprint, so
   a one-lap circuit appears as a sprint;
-- a drive without a finish line is unfinished.
+- a drive without a finish line is unfinished;
+- a drive whose car never travels more than 25 metres from its start, such as
+  waiting on the start grid before changing cars, is not saved.
 
 Driving outside races is analyzed exactly as before and counts toward the
 car's result, but it is not a drive. Drives are saved with the car's session

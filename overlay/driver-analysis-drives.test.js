@@ -160,15 +160,14 @@ test('a race that continues after zeroed packets keeps the drive open', () => {
   assert.equal(drives[0].finished, false)
 })
 
-test('zeroed packets within the first 25 m do not finish the drive', () => {
+test('a drive that ends with a zeroed result within its first 25 m is not saved', () => {
   const drives = run([
     live(0, { current: 0, raceTime: 0 }),
     live(25, { current: 0.5, raceTime: 0.5 }),
     result({ distance: 0, current: 0, raceTime: 0 })
   ])
 
-  assert.equal(drives.length, 1)
-  assert.equal(drives[0].finished, false)
+  assert.equal(drives.length, 0)
 })
 
 test('zeroed packets do not finish a circuit', () => {
@@ -206,6 +205,53 @@ test('an advancing non-live Current Lap that does not repeat is not a finish', (
 
   assert.equal(drives.length, 1)
   assert.equal(drives[0].finished, false)
+})
+
+test('a clean start followed by stationary packets and finalize creates no drive', () => {
+  const drives = run([
+    live(0, { current: 0, raceTime: 0 }),
+    live(0, { current: 2, raceTime: 2 }),
+    live(0, { current: 4, raceTime: 4 }),
+    live(0, { current: 6, raceTime: 6 }),
+    live(0, { current: 8, raceTime: 8 }),
+    live(0, { current: 10, raceTime: 10 }),
+    live(0, { current: 12, raceTime: 12 }),
+    live(0, { current: 14, raceTime: 14 }),
+    live(0, { current: 16, raceTime: 16 }),
+    live(0, { current: 18, raceTime: 18 }),
+    live(0, { current: 20, raceTime: 20 })
+  ])
+
+  assert.equal(drives.length, 0)
+})
+
+test('a finished sprint followed by a clean start where car never moves creates one drive', () => {
+  const drives = run([
+    ...drive(0, 3000),
+    result({ number: 1, last: 61.2 }),
+    live(238, { current: 0, raceTime: 0, number: 1 }),
+    live(0, { current: 0, raceTime: 0, number: 0 }),
+    live(0, { current: 2, raceTime: 2, number: 0 }),
+    live(0, { current: 4, raceTime: 4, number: 0 })
+  ])
+
+  assert.equal(drives.length, 1)
+  assert.equal(drives[0].kind, 'sprint')
+  assert.equal(drives[0].finished, true)
+  assert.equal(drives[0].distanceM, 3000)
+})
+
+test('a drive of exactly 30 m is kept', () => {
+  const drives = run([
+    live(0, { current: 0, raceTime: 0 }),
+    live(10, { current: 0.2, raceTime: 0.2 }),
+    live(20, { current: 0.4, raceTime: 0.4 }),
+    live(30, { current: 0.6, raceTime: 0.6 }),
+    result({ number: 1, last: 1.2, distance: 30 })
+  ])
+
+  assert.equal(drives.length, 1)
+  assert.equal(drives[0].distanceM, 30)
 })
 
 test('isZeroedResultPacket returns true for zeroed packet', () => {

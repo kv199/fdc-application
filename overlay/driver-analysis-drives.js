@@ -77,6 +77,8 @@
       const drive = active
       active = null
       if (!drive || drive.firstSequence === null) return
+      // A start the car never drove away from is not a race
+      if (drive.lastDistance - drive.startDistance <= START_MAX_DISTANCE_M) return
       const kind = drive.confirmedLaps > 0 ? 'circuit' : 'sprint'
       const finished = drive.finishLine || drive.pendingBoundaryDistance !== null || (kind === 'sprint' && drive.zeroedExit)
       drives.push({
