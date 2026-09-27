@@ -1170,6 +1170,106 @@ h1 {
 .events-lap-detail__stat--coast .events-lap-detail__stat-value { color: #facc15; }
 .events-lap-detail__stat--slip .events-lap-detail__stat-value { color: #22d3ee; }
 
+/* Driver Analysis drive maps: problem segments over a dark casing and clean checks. */
+.events-lap-detail__mark-casing {
+  fill: none;
+  stroke: #080a0c;
+  stroke-width: 11;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.events-lap-detail__mark {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.events-lap-detail__mark-casing.is-selected { stroke: #f8fafc; stroke-width: 15; }
+
+.events-lap-detail__mark--front_scrub { stroke: #fb923c; }
+.events-lap-detail__mark--exit_wheelspin { stroke: #f472b6; }
+.events-lap-detail__mark--brake_steering_overload { stroke: #818cf8; }
+.events-lap-detail__mark--abrupt_brake_release { stroke: #d8b4fe; }
+
+.events-lap-detail__clean {
+  fill: #a1a1aa;
+  fill-opacity: 0.55;
+  stroke: #080a0c;
+  stroke-width: 1.5;
+}
+
+.events-lap-detail__swatch--front_scrub { background: #fb923c; }
+.events-lap-detail__swatch--exit_wheelspin { background: #f472b6; }
+.events-lap-detail__swatch--brake_steering_overload { background: #818cf8; }
+.events-lap-detail__swatch--abrupt_brake_release { background: #d8b4fe; }
+.events-lap-detail__swatch--clean { background: #a1a1aa; border-radius: 50%; }
+
+.events-lap-detail__stat--front_scrub .events-lap-detail__stat-value { color: #fb923c; }
+.events-lap-detail__stat--exit_wheelspin .events-lap-detail__stat-value { color: #f472b6; }
+.events-lap-detail__stat--brake_steering_overload .events-lap-detail__stat-value { color: #818cf8; }
+.events-lap-detail__stat--abrupt_brake_release .events-lap-detail__stat-value { color: #d8b4fe; }
+.events-lap-detail__stat--clean .events-lap-detail__stat-value { color: #a1a1aa; }
+
+.events-lap-detail__errors {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 11px 11px;
+}
+
+.events-lap-detail__error {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px;
+  border: 1px solid rgb(226 232 240 / 10%);
+  border-radius: 2px;
+  color: #d4d4d8;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.events-lap-detail__error:hover,
+.events-lap-detail__error:focus-visible,
+.events-lap-detail__error[aria-pressed="true"] {
+  border-color: rgb(226 232 240 / 40%);
+}
+
+.events-lap-detail__error-where {
+  color: #a1a1aa;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.events-lap-detail__tooltip-heading {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.events-lap-detail__tooltip-heading--front_scrub { color: #fb923c; }
+.events-lap-detail__tooltip-heading--exit_wheelspin { color: #f472b6; }
+.events-lap-detail__tooltip-heading--brake_steering_overload { color: #818cf8; }
+.events-lap-detail__tooltip-heading--abrupt_brake_release { color: #d8b4fe; }
+
+.events-lap-detail__tooltip-line {
+  padding-top: 4px;
+  color: #f8fafc;
+}
+
+.events-lap-detail__tooltip-instruction {
+  padding-top: 6px;
+  color: #a1a1aa;
+}
+
 .events-lap-detail__legend-all {
   margin-left: auto;
   padding: 7px 13px;
@@ -1931,6 +2031,10 @@ h1 {
   min-width: 78px;
 }
 
+.driver-analysis-history-row > .driver-analysis-history-row__details-panel {
+  grid-column: 1 / -1;
+}
+
 .driver-analysis-history-row__details-panel {
   margin-top: 12px;
   padding-top: 10px;
@@ -2178,6 +2282,20 @@ h1 {
 
 .driver-analysis-history-row__stats-panel[hidden] {
   display: none;
+}
+
+.driver-analysis-history-row__drive-row {
+  cursor: pointer;
+}
+
+.driver-analysis-history-row__drive-row:hover,
+.driver-analysis-history-row__drive-row:focus-visible,
+.driver-analysis-history-row__drive-row[aria-expanded="true"] {
+  background: rgb(226 232 240 / 5%);
+}
+
+.driver-analysis-history-row__drive-detail > td {
+  padding: 8px 0 12px;
 }
 
 .driver-analysis-history-row__drives-table {

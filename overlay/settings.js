@@ -150,6 +150,8 @@
   let expandedEventRunLap = null
   // Selected trace map layers shared by every lap until the window reloads; null shows all layers.
   let traceMapLayerSelection = null
+  // Driver Analysis drive maps open with the errors and clean checks; ALL shows every layer.
+  let driveMapLayerSelection = [...(globalScope.DriverAnalysisMap?.ERROR_TYPES || []), 'clean']
   let eventsSortValue = 'id-desc'
   let editingTarget = null
   let layoutMode = 'grouped'
@@ -1314,13 +1316,20 @@
     return ticks
   }
 
-  function renderTraceMap(points, lapTimeMs) {
+  // Events lap maps use the defaults. Driver Analysis drive maps pass marks (problem segments and clean checks), their
+  // own layer selection, and no sector ticks.
+  function renderTraceMap(points, lapTimeMs, options = {}) {
+    const marks = options.marks || null
+    const selection = options.selection || {
+      get: () => traceMapLayerSelection,
+      set: value => { traceMapLayerSelection = value }
+    }
     const map = document.createElement('div')
     map.className = 'events-lap-detail__map'
     if (points.length < 2) {
       const empty = document.createElement('p')
       empty.className = 'events-lap-detail__empty'
-      empty.textContent = 'NO TRACE DATA SAVED FOR THIS LAP'
+      empty.textContent = options.emptyText || 'NO TRACE DATA SAVED FOR THIS LAP'
       map.append(empty)
       return map
     }
@@ -1347,8 +1356,16 @@
     // Check if extended telemetry is available
     const hasExtended = globalThis.EventTraceMap?.hasExtendedTelemetry(points) ?? false
 
-    const available = globalThis.EventTraceMap?.TRACE_LAYERS.filter(layer => layer !== 'slip' || hasExtended)
-      ?? ['throttle', 'brake', 'coast']
+    const markLayers = marks
+      ? [
+          ...(globalThis.DriverAnalysisMap?.ERROR_TYPES || []).filter(kind => marks.errors.some(mark => mark.kind === kind)),
+          ...(marks.clean.length > 0 ? ['clean'] : [])
+        ]
+      : []
+    const available = [
+      ...markLayers,
+      ...(globalThis.EventTraceMap?.TRACE_LAYERS.filter(layer => layer !== 'slip' || hasExtended) ?? ['throttle', 'brake', 'coast'])
+    ]
 
     const svg = svgElement('svg', {
       class: 'events-lap-detail__svg',
@@ -1401,11 +1418,14 @@
       svg.append(group)
     }
 
+    if (marks) svg.append(...renderTraceMarks(marks, projected))
+
     // Sector ticks and labels (on top)
     const distances = points.map(point => point.distanceM).filter(value => value !== null)
     const minDistance = distances.length ? Math.min(...distances) : 0
     const maxDistance = distances.length ? Math.max(...distances) : 0
-    for (const tick of traceSectorTicks(points, minDistance, maxDistance, project, minX, maxX, minZ, maxZ)) {
+    const ticks = options.sectorTicks === false ? [] : traceSectorTicks(points, minDistance, maxDistance, project, minX, maxX, minZ, maxZ)
+    for (const tick of ticks) {
       svg.append(svgElement('line', {
         class: 'events-lap-detail__sector-tick',
         x1: tick.x1,
@@ -1438,13 +1458,17 @@
       const x = cursor.x
       const y = cursor.y
 
-      const nearestIdx = globalThis.EventTraceMap?.nearestPointIndex(projected, x, y, 14) ?? null
+      const nearestIdx = (marks ? globalThis.DriverAnalysisMap?.nearestErrorIndex(marks, projected, x, y, 14) : null)
+        ?? globalThis.EventTraceMap?.nearestPointIndex(projected, x, y, 14) ?? null
       if (nearestIdx !== null) {
         const p = projected[nearestIdx]
         markerCircle.setAttribute('cx', p.x)
         markerCircle.setAttribute('cy', p.y)
 
-        const tooltipData = globalThis.EventTraceMap?.tooltipModel(points[nearestIdx], points[0].distanceM ?? 0) ?? { rows: [], wheelTable: [] }
+        const errorMark = marks ? globalThis.DriverAnalysisMap?.errorAt(marks, nearestIdx) : null
+        const tooltipData = errorMark
+          ? globalThis.DriverAnalysisMap.errorTooltipModel(errorMark, points)
+          : globalThis.EventTraceMap?.tooltipModel(points[nearestIdx], points[0].distanceM ?? 0) ?? { rows: [], wheelTable: [] }
         renderTooltip(tooltipPanel, tooltipData)
         tooltipPanel.hidden = false
         placeTooltip(tooltipPanel, map, event)
@@ -1460,9 +1484,9 @@
       markerCircle.style.display = 'none'
     })
 
-    const legend = renderTraceLegend(points, lapTimeMs, available)
+    const legend = renderTraceLegend(points, lapTimeMs, available, marks)
     const applyLayers = () => {
-      const visible = globalThis.EventTraceMap?.visibleLayers(traceMapLayerSelection, available) ?? available
+      const visible = globalThis.EventTraceMap?.visibleLayers(selection.get(), available) ?? available
       for (const group of svg.querySelectorAll('[data-layer-group]')) {
         group.style.display = visible.includes(group.getAttribute('data-layer-group')) ? '' : 'none'
       }
@@ -1473,22 +1497,87 @@
     legend.addEventListener('click', event => {
       const button = event.target.closest('button')
       if (!button || button.disabled) return
-      traceMapLayerSelection = button.dataset.layer
-        ? globalThis.EventTraceMap?.nextLayerSelection(traceMapLayerSelection, button.dataset.layer, available) ?? null
-        : null
+      selection.set(button.dataset.layer
+        ? globalThis.EventTraceMap?.nextLayerSelection(selection.get(), button.dataset.layer, available) ?? null
+        : null)
       applyLayers()
     })
     applyLayers()
 
-    map.append(svg, legend, tooltipPanel)
+    map.append(svg, legend)
+    if (marks && marks.errors.length > 0) map.append(renderTraceErrorList(marks, points, svg))
+    map.append(tooltipPanel)
     return map
+  }
+
+  // Problem segments are drawn thick over a dark casing, one group per problem type; clean checks are small dots.
+  function renderTraceMarks(marks, projected) {
+    const groups = new Map()
+    const groupFor = key => {
+      if (!groups.has(key)) groups.set(key, svgElement('g', { class: 'events-lap-detail__marks', 'data-layer-group': key }))
+      return groups.get(key)
+    }
+    marks.errors.forEach((mark, index) => {
+      const pointsText = projected.slice(mark.startIndex, mark.endIndex + 1).map(point => `${point.x},${point.y}`).join(' ')
+      const group = groupFor(mark.kind)
+      group.append(
+        svgElement('polyline', { class: 'events-lap-detail__mark-casing', points: pointsText, 'data-mark-index': index }),
+        svgElement('polyline', { class: `events-lap-detail__mark events-lap-detail__mark--${mark.kind}`, points: pointsText, 'data-mark-index': index })
+      )
+    })
+    for (const mark of marks.clean) {
+      const point = projected[mark.index]
+      groupFor('clean').append(svgElement('circle', { class: 'events-lap-detail__clean', cx: point.x, cy: point.y, r: 5 }))
+    }
+    const order = [...(globalThis.DriverAnalysisMap?.ERROR_TYPES || []), 'clean']
+    return [...groups.entries()].sort(([left], [right]) => order.indexOf(right) - order.indexOf(left)).map(([, group]) => group)
+  }
+
+  // Every problem of the drive in order; selecting one highlights it on the map.
+  function renderTraceErrorList(marks, points, svg) {
+    const list = document.createElement('div')
+    list.className = 'events-lap-detail__errors'
+    marks.errors.forEach((mark, index) => {
+      const model = globalThis.DriverAnalysisMap?.errorTooltipModel(mark, points)
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'events-lap-detail__error'
+      button.setAttribute('aria-pressed', 'false')
+      const swatch = document.createElement('span')
+      swatch.className = `events-lap-detail__swatch events-lap-detail__swatch--${mark.kind}`
+      swatch.setAttribute('aria-hidden', 'true')
+      const name = document.createElement('span')
+      name.className = 'events-lap-detail__error-name'
+      name.textContent = model?.heading || mark.kind
+      const where = document.createElement('span')
+      where.className = 'events-lap-detail__error-where'
+      where.textContent = model?.subtitle || ''
+      button.append(swatch, name, where)
+      button.addEventListener('click', () => {
+        const selected = button.getAttribute('aria-pressed') !== 'true'
+        for (const other of list.querySelectorAll('.events-lap-detail__error')) other.setAttribute('aria-pressed', 'false')
+        button.setAttribute('aria-pressed', String(selected))
+        for (const line of svg.querySelectorAll('[data-mark-index]')) {
+          line.classList.toggle('is-selected', selected && line.getAttribute('data-mark-index') === String(index))
+        }
+      })
+      list.append(button)
+    })
+    return list
   }
 
   // One row under the map: each pedal layer with its share of lap time, SLIP with its time above 100% combined
   // slip, and ALL to show every layer again. The buttons also select the visible layers.
-  function renderTraceLegend(points, lapTimeMs, available) {
+  function renderTraceLegend(points, lapTimeMs, available, marks = null) {
     const legend = document.createElement('div')
     legend.className = 'events-lap-detail__legend'
+    if (marks) {
+      const counts = globalThis.DriverAnalysisMap?.errorCounts(marks) || {}
+      for (const key of available.filter(layer => !['throttle', 'brake', 'coast', 'slip'].includes(layer))) {
+        const label = key === 'clean' ? 'CLEAN' : globalThis.DriverAnalysisMap?.ERROR_SHORT_LABELS?.[key] || key.toUpperCase()
+        legend.append(renderLegendButton(key, label, String(key === 'clean' ? marks.clean.length : counts[key] || 0)))
+      }
+    }
     const pedalShares = traceStats(points, lapTimeMs)
     const slipShare = globalThis.EventTraceMap?.slipTimeShare(points, lapTimeMs) ?? null
     const labels = [
@@ -1499,20 +1588,7 @@
     ]
     for (const [key, label] of labels) {
       const share = key === 'slip' ? slipShare : pedalShares?.[key]
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.className = `events-lap-detail__stat events-lap-detail__stat--${key}`
-      button.dataset.layer = key
-      const swatch = document.createElement('span')
-      swatch.className = `events-lap-detail__swatch events-lap-detail__swatch--${key}`
-      swatch.setAttribute('aria-hidden', 'true')
-      const name = document.createElement('span')
-      name.className = 'events-lap-detail__stat-name'
-      name.textContent = label
-      const value = document.createElement('output')
-      value.className = 'events-lap-detail__stat-value'
-      value.textContent = Number.isFinite(share) ? `${share}%` : '—'
-      button.append(swatch, name, value)
+      const button = renderLegendButton(key, label, Number.isFinite(share) ? `${share}%` : '—')
       if (!available.includes(key)) {
         button.disabled = true
         button.title = 'Extended telemetry was not recorded for this lap'
@@ -1525,6 +1601,24 @@
     all.textContent = 'ALL'
     legend.append(all)
     return legend
+  }
+
+  function renderLegendButton(key, label, valueText) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = `events-lap-detail__stat events-lap-detail__stat--${key}`
+    button.dataset.layer = key
+    const swatch = document.createElement('span')
+    swatch.className = `events-lap-detail__swatch events-lap-detail__swatch--${key}`
+    swatch.setAttribute('aria-hidden', 'true')
+    const name = document.createElement('span')
+    name.className = 'events-lap-detail__stat-name'
+    name.textContent = label
+    const value = document.createElement('output')
+    value.className = 'events-lap-detail__stat-value'
+    value.textContent = valueText
+    button.append(swatch, name, value)
+    return button
   }
 
   function placeTooltip(tooltip, container, event) {
@@ -1540,8 +1634,34 @@
     tooltip.style.top = `${Math.max(0, Math.min(top, bounds.height - tooltipHeight))}px`
   }
 
+  function renderErrorTooltip(container, model) {
+    const heading = document.createElement('div')
+    heading.className = `events-lap-detail__tooltip-heading events-lap-detail__tooltip-heading--${model.kind}`
+    heading.textContent = model.heading
+    const subtitle = document.createElement('div')
+    subtitle.className = 'events-lap-detail__tooltip-caption'
+    subtitle.textContent = model.subtitle
+    container.append(heading, subtitle)
+    for (const text of model.lines || []) {
+      const line = document.createElement('div')
+      line.className = 'events-lap-detail__tooltip-line'
+      line.textContent = text
+      container.append(line)
+    }
+    if (model.instruction) {
+      const instruction = document.createElement('div')
+      instruction.className = 'events-lap-detail__tooltip-instruction'
+      instruction.textContent = `→ ${model.instruction}`
+      container.append(instruction)
+    }
+  }
+
   function renderTooltip(container, model) {
     container.replaceChildren()
+    if (model.heading) {
+      renderErrorTooltip(container, model)
+      return
+    }
 
     // Simple rows
     for (const row of model.rows) {
@@ -2106,6 +2226,9 @@
 
   const expandedDriverAnalysisRecordings = new Set()
   const expandedDriverAnalysisCarRows = new Set()
+  const expandedDriverAnalysisDrives = new Set()
+  const expandedDriverAnalysisStats = new Set()
+  const driverAnalysisDriveMaps = new Map()
 
   async function deleteDriverAnalysisRecording(recording) {
     if (!recording || !Array.isArray(recording.sessions) || recording.sessions.length === 0) return false
@@ -2223,6 +2346,8 @@
       }
 
       // DETAILS/HIDE toggle button (only if there are sessions and at least one is not recording)
+      // The opened cars span the whole card width below it, so drive maps get room.
+      let recordingDetailsPanel = null
       if (recording.sessions.length > 0 && !hasUnfinishedSessions) {
         const detailsButton = document.createElement('button')
         detailsButton.type = 'button'
@@ -2347,13 +2472,14 @@
             const statsToggleButton = document.createElement('button')
             statsToggleButton.type = 'button'
             statsToggleButton.className = 'settings-button driver-analysis-history-row__stats-toggle'
-            statsToggleButton.textContent = 'STATS'
-            statsToggleButton.setAttribute('aria-expanded', 'false')
+            const statsExpanded = expandedDriverAnalysisStats.has(sessionId)
+            statsToggleButton.textContent = statsExpanded ? 'HIDE' : 'STATS'
+            statsToggleButton.setAttribute('aria-expanded', String(statsExpanded))
             carDetailsPanel.append(statsToggleButton)
 
             const statsPanel = document.createElement('div')
             statsPanel.className = 'driver-analysis-history-row__stats-panel'
-            statsPanel.hidden = true
+            statsPanel.hidden = !statsExpanded
             for (const statsRow of statsRows) {
               const section = document.createElement('div')
               section.className = 'driver-analysis-history-row__details-section'
@@ -2388,6 +2514,8 @@
               statsToggleButton.setAttribute('aria-expanded', String(!isExpanded))
               statsToggleButton.textContent = isExpanded ? 'STATS' : 'HIDE'
               statsPanel.hidden = isExpanded
+              if (isExpanded) expandedDriverAnalysisStats.delete(sessionId)
+              else expandedDriverAnalysisStats.add(sessionId)
             })
             carDetailsPanel.append(statsPanel)
           }
@@ -2411,6 +2539,23 @@
             const tbody = document.createElement('tbody')
             for (const drive of session.drives) {
               const driveRow = document.createElement('tr')
+              const driveKey = String(drive?.id)
+              const driveExpanded = expandedDriverAnalysisDrives.has(driveKey)
+              driveRow.className = 'driver-analysis-history-row__drive-row'
+              driveRow.tabIndex = 0
+              driveRow.setAttribute('aria-expanded', String(driveExpanded))
+              driveRow.setAttribute('aria-label', `Drive ${driveKey} map`)
+              const toggleDrive = () => {
+                if (expandedDriverAnalysisDrives.has(driveKey)) expandedDriverAnalysisDrives.delete(driveKey)
+                else expandedDriverAnalysisDrives.add(driveKey)
+                renderDriverAnalysisHistory()
+              }
+              driveRow.addEventListener('click', toggleDrive)
+              driveRow.addEventListener('keydown', event => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.preventDefault()
+                toggleDrive()
+              })
 
               const idCell = document.createElement('td')
               idCell.textContent = `#${drive?.id || ''}`
@@ -2437,6 +2582,15 @@
               driveRow.append(errorsCell)
 
               tbody.append(driveRow)
+              if (driveExpanded) {
+                const detailRow = document.createElement('tr')
+                detailRow.className = 'driver-analysis-history-row__drive-detail'
+                const detailCell = document.createElement('td')
+                detailCell.colSpan = 5
+                detailCell.append(driverAnalysisDriveMap(session, drive))
+                detailRow.append(detailCell)
+                tbody.append(detailRow)
+              }
             }
             drivesTable.append(tbody)
             carDetailsPanel.append(drivesTable)
@@ -2467,7 +2621,7 @@
         }
 
         detailsPanel.append(carsSection)
-        finding.append(detailsPanel)
+        recordingDetailsPanel = detailsPanel
       }
 
       row.append(meta, finding)
@@ -2486,8 +2640,63 @@
       actions.append(remove)
 
       row.append(actions)
+      if (recordingDetailsPanel) row.append(recordingDetailsPanel)
       driverAnalysisHistoryList.append(row)
     }
+  }
+
+  // A drive map is built once from the stored samples and checks of that drive and kept while Configuration is open.
+  function driverAnalysisDriveMap(session, drive) {
+    const key = String(drive?.id)
+    const cached = driverAnalysisDriveMaps.get(key)
+    if (cached?.element) return cached.element
+    const holder = document.createElement('div')
+    holder.className = 'driver-analysis-history-row__drive-map'
+    const status = document.createElement('p')
+    status.className = 'events-lap-detail__empty'
+    status.textContent = cached?.error ? 'THE DRIVE MAP COULD NOT BE LOADED' : 'LOADING DRIVE MAP…'
+    holder.append(status)
+    if (!cached) {
+      driverAnalysisDriveMaps.set(key, { loading: true })
+      void loadDriverAnalysisDriveMap(session, drive).then(element => {
+        driverAnalysisDriveMaps.set(key, { element })
+        renderDriverAnalysisHistory()
+      }).catch(() => {
+        driverAnalysisDriveMaps.set(key, { error: true })
+        renderDriverAnalysisHistory()
+      })
+    }
+    return holder
+  }
+
+  async function loadDriverAnalysisDriveMap(session, drive) {
+    const sessionId = Number(session?.id)
+    const lastSequence = Number(drive?.lastSequence)
+    const samples = []
+    let afterSequence = Number(drive?.firstSequence) - 1
+    while (afterSequence < lastSequence) {
+      const page = await call('load_driver_analysis_samples', { sessionId, afterSequence, limit: 5000 })
+      if (!Array.isArray(page) || page.length === 0) break
+      samples.push(...page.filter(sample => Number(sample?.sequence) <= lastSequence))
+      afterSequence = Number(page.at(-1)?.sequence)
+      if (page.length < 5000) break
+    }
+    const checks = await call('load_driver_analysis_checks', {
+      sessionId,
+      startedAtMs: Number(drive?.startedAtMs),
+      finishedAtMs: Number(drive?.finishedAtMs)
+    })
+    const mapApi = globalScope.DriverAnalysisMap
+    const points = mapApi?.tracePointsFromSamples(samples) || []
+    return renderTraceMap(points, Number(drive?.durationMs), {
+      marks: mapApi?.checkMarks(Array.isArray(checks) ? checks : [], points) || { errors: [], clean: [] },
+      sectorTicks: false,
+      emptyText: 'NO POSITION DATA WAS SAVED FOR THIS DRIVE',
+      selection: {
+        get: () => driveMapLayerSelection,
+        set: value => { driveMapLayerSelection = value }
+      }
+    })
   }
 
   async function loadDriverAnalysisHistory() {

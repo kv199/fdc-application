@@ -241,7 +241,38 @@ with `ID`, `TYPE` (`CIRCUIT · N LAPS`, `SPRINT`, with ` · UNFINISHED` when no
 finish line was seen), `DURATION`, `START` (local time), and `ERRORS`, the
 number of checks inside the drive that ended as a problem. A car recorded
 before drives existed shows `RECORDED BEFORE DRIVES`; a car without races
-shows `NO RACES IN THIS RECORDING`. Drive rows do not open a detail view yet.
+shows `NO RACES IN THIS RECORDING`.
+
+### Drive map
+
+Selecting a drive row opens its map below the row; selecting it again closes
+it. The map is built from the drive's stored samples, thinned like an Events
+lap trace to one point per 100 ms plus pedal and gear changes, with slip kept
+as the signed peak and curb contact kept as any contact since the previous
+point. It uses the Events lap map: the white track outline, the pedal and Slip
+layers, the legend row, and the hover values, without sector ticks.
+
+On top of it, each check of the drive that ended as a problem is a thick
+segment from the check's start to its end, colored by problem type: front
+scrub orange, exit wheelspin pink, brake with steering blue-violet, and abrupt
+brake release lilac. Each check that ended clean is a grey dot. Ambiguous and
+incomplete checks are not shown. The legend row starts with the problem types
+of the drive and `CLEAN` with their counts, followed by the pedal and Slip
+layers. A drive map opens with only the problems and clean checks shown; the
+layer selection works as in Events and is shared by every drive map until the
+Configuration window is reloaded.
+
+Hovering a problem segment, or a point within reach of one, shows the problem
+type, its distance from the drive start, its duration, the numbers its check
+recorded, and the instruction of that problem type, for example
+`Steering +18% · front slip 112%` and `Response lateral −0.6 m/s² · yaw
+−5 °/s`. The numbers use the check's own units: steering, pedals, and slip in
+percent, lateral response in m/s², and yaw in degrees per second. Elsewhere
+the hover shows the Events trace values. A list below the legend names every
+problem with its distance and duration; selecting one outlines it on the map.
+
+Drives recorded before sample positions existed have no map and show
+`NO POSITION DATA WAS SAVED FOR THIS DRIVE`.
 
 The expanded recordings and cars are kept while Configuration stays open.
 
@@ -290,5 +321,5 @@ opportunities, evidence, and the summary result are replaced transactionally.
   opportunities than corners driven.
 - The supported findings are bounded technique patterns, not a complete
   driving assessment.
-- There is no map, track identity, reference lap, ideal line, score, exact time
+- There is no track identity, reference lap, ideal line, score, exact time
   loss, or optimal-gear recommendation.

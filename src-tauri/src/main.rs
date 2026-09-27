@@ -2528,6 +2528,64 @@ fn load_drives_for_session(
     Ok(drives)
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DriverAnalysisCheckRecord {
+    id: i64,
+    opportunity_type: String,
+    started_at_ms: i64,
+    finished_at_ms: i64,
+    outcome: String,
+    problem_type: Option<String>,
+    metrics: Option<JsonValue>,
+}
+
+// The checks of one drive for its map: every valid clean or problem opportunity that starts inside the time range,
+// with the metrics its evidence recorded.
+fn load_driver_analysis_checks_in_connection(
+    connection: &Connection,
+    session_id: i64,
+    started_at_ms: i64,
+    finished_at_ms: i64,
+) -> Result<Vec<DriverAnalysisCheckRecord>, String> {
+    if session_id <= 0 || started_at_ms < 0 || finished_at_ms < started_at_ms {
+        return Err("Driver Analysis check range is invalid".to_string());
+    }
+    let mut statement = connection
+        .prepare(
+            "SELECT opportunities.id, opportunities.opportunity_type, opportunities.started_at_ms,
+                    opportunities.finished_at_ms, opportunities.outcome,
+                    evidence.problem_type, evidence.metrics_json
+               FROM driver_analysis_opportunities AS opportunities
+               LEFT JOIN driver_analysis_evidence AS evidence
+                 ON evidence.opportunity_id = opportunities.id
+              WHERE opportunities.session_id = ?1
+                AND opportunities.valid = 1
+                AND opportunities.outcome IN ('clean', 'problem')
+                AND opportunities.started_at_ms BETWEEN ?2 AND ?3
+              ORDER BY opportunities.started_at_ms, opportunities.id",
+        )
+        .map_err(|error| format!("unable to prepare Driver Analysis checks query: {error}"))?;
+    statement
+        .query_map(params![session_id, started_at_ms, finished_at_ms], |row| {
+            let metrics_json: Option<String> = row.get(6)?;
+            Ok(DriverAnalysisCheckRecord {
+                id: row.get(0)?,
+                opportunity_type: row.get(1)?,
+                started_at_ms: row.get(2)?,
+                finished_at_ms: row.get(3)?,
+                outcome: row.get(4)?,
+                problem_type: row.get(5)?,
+                metrics: metrics_json
+                    .and_then(|text| serde_json::from_str::<JsonValue>(&text).ok())
+                    .filter(JsonValue::is_object),
+            })
+        })
+        .map_err(|error| format!("unable to load Driver Analysis checks: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("unable to read Driver Analysis checks: {error}"))
+}
+
 fn load_driver_analysis_sessions_from_connection(
     connection: &Connection,
 ) -> Result<Vec<DriverAnalysisHistoryRecord>, String> {
@@ -2704,6 +2762,22 @@ fn finalize_driver_analysis_session(
         &evidence,
         &result,
         drives.as_deref(),
+    )
+}
+
+#[tauri::command]
+fn load_driver_analysis_checks(
+    app: AppHandle,
+    session_id: i64,
+    started_at_ms: i64,
+    finished_at_ms: i64,
+) -> Result<Vec<DriverAnalysisCheckRecord>, String> {
+    let connection = open_shift_light_db(&app)?;
+    load_driver_analysis_checks_in_connection(
+        &connection,
+        session_id,
+        started_at_ms,
+        finished_at_ms,
     )
 }
 
@@ -5405,6 +5479,7 @@ fn main() {
             append_driver_analysis_samples,
             finalize_driver_analysis_session,
             load_driver_analysis_samples,
+            load_driver_analysis_checks,
             reanalyze_driver_analysis_session,
             save_driver_analysis_stats,
             load_driver_analysis_sessions,
@@ -8667,6 +8742,73 @@ mod tests {
             )
             .unwrap();
         assert_eq!(recording_count, 0);
+    }
+
+    #[test]
+    fn driver_analysis_checks_load_clean_and_problem_opportunities_in_range() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        let opportunity = |id: &str, started_at_ms: i64, outcome: &str, valid: bool| {
+            DriverAnalysisOpportunityInput {
+                maneuver_id: id.to_string(),
+                opportunity_type: "front_scrub".to_string(),
+                started_at_ms,
+                finished_at_ms: started_at_ms + 100,
+                speed_bin: None,
+                gear: None,
+                outcome: outcome.to_string(),
+                valid,
+                invalid_reason: (!valid).then(|| "incomplete_opportunity".to_string()),
+                context_json: None,
+            }
+        };
+        let opportunities = vec![
+            opportunity("clean", 1_100, "clean", true),
+            opportunity("problem", 1_200, "problem", true),
+            opportunity("ambiguous", 1_300, "ambiguous", true),
+            opportunity("invalid", 1_400, "incomplete", false),
+            opportunity("outside", 5_000, "problem", true),
+        ];
+        let evidence = vec![DriverAnalysisEvidenceInput {
+            opportunity_index: 1,
+            problem_type: "front_scrub".to_string(),
+            primary: true,
+            detector_confidence: 0.9,
+            attribution_confidence: 0.8,
+            severity: 0.5,
+            metrics_json: Some("{\"peakFrontSlip\":1.12}".to_string()),
+        }];
+        finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &opportunities,
+            &evidence,
+            &driver_analysis_result("issue"),
+            None,
+        )
+        .unwrap();
+
+        let checks =
+            load_driver_analysis_checks_in_connection(&connection, session_id, 1_000, 2_000)
+                .unwrap();
+        assert_eq!(
+            checks
+                .iter()
+                .map(|check| (check.outcome.as_str(), check.started_at_ms))
+                .collect::<Vec<_>>(),
+            vec![("clean", 1_100), ("problem", 1_200)]
+        );
+        assert_eq!(checks[0].problem_type, None);
+        assert_eq!(checks[1].problem_type.as_deref(), Some("front_scrub"));
+        assert_eq!(checks[1].metrics.as_ref().unwrap()["peakFrontSlip"], 1.12);
+        assert!(
+            load_driver_analysis_checks_in_connection(&connection, session_id, 2_000, 1_000)
+                .is_err()
+        );
     }
 
     #[test]

@@ -26,6 +26,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   each car has its own result, statistics, and a table of its races with type
   (circuit laps or sprint), duration, start time, and error count. Recordings
   also use about half the disk space.
+- **Driver Analysis**: selecting a race in a car's drives table opens its map.
+  Problems are drawn where they happened, one color per problem type, with
+  grey dots where the same check passed cleanly. Hovering a problem shows what
+  was measured and the instruction, and a list below the map highlights each
+  problem. Pedal and Slip layers from the Events map can be switched on too.
 
 ### Improved
 
