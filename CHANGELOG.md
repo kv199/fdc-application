@@ -5,6 +5,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+## 7.19.54 - 2026-09-27
+
 ### Fixed
 
 - **Driver Analysis**: corner stats now show time above 100% tire slip
