@@ -39,6 +39,10 @@ test('completed laps persist three interpolated equal-distance sector times', as
 
   const outcome = await instance.stop()
   assert.equal(outcome.outcome, 'saved')
+  // Names come from the native vehicle catalog, so a telemetry name is never sent.
+  assert.equal(saved[0].run.carOrdinal, 42)
+  assert.equal('carName' in saved[0].run, false)
+  assert.equal('name' in recorder.carSnapshot(telemetry()), false)
   assert.deepEqual(saved[0].run.laps, [{
     lapNumber: 1,
     lapTimeMs: 36000,

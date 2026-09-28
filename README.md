@@ -142,9 +142,10 @@ application webview.
   identify track surface, track identity, an ideal line, a driving score, exact
   time loss, or optimal gear advice, and it checks only steering held for at
   least 200 ms.
-- Shift Light learns from live telemetry and has no manual target entry or
-  car-name database.
-- Garage shows image placeholders; it does not download car images or names.
+- Shift Light learns from live telemetry and has no manual target entry.
+- Car names come from a catalog built into each FDC release, so a car added to
+  the game after that release shows as `#<ordinal>` until the next update.
+- Garage shows image placeholders; it does not download car images.
 - The HUD covers the primary monitor only.
 
 ## Build from source
@@ -179,3 +180,9 @@ never in a public issue.
 ## License
 
 FDC is available under the [MIT License](LICENSE).
+
+Car names and car types come from HDR's
+[Forza Horizon 6 Car Ordinals](https://gist.github.com/HDR/0659d1717bc61504bf83750628963f4f)
+and the [official Forza Horizon 6 car list](https://forza.net/fh6cars). Thank you,
+HDR. This catalog data is not covered by the MIT License; see
+[Third-party notices](THIRD_PARTY_NOTICES.md).

@@ -9,21 +9,21 @@ Garage is the Configuration tab immediately to the right of HUD.
 
 - **Current car** updates immediately when a new valid vehicle telemetry sample
   is observed. It shows an empty square reserved for a future image, then the
-  saved vehicle name or its numeric car ordinal. A positive current `CarGroup`
-  value is displayed below that name as `GROUP <value>`, followed by a paired
-  Forza-style class and performance-index badge, drivetrain label, and cylinder
-  count. It does not carry a Last Used badge.
+  car name from the [vehicle catalog](vehicle-catalog.md), or `#<ordinal>` for a
+  car the catalog does not know. Below the name it shows the catalog car type,
+  or `GROUP <value>` for a positive current `CarGroup` when the car type is
+  unknown, followed by a paired Forza-style class and performance-index badge,
+  drivetrain label, and cylinder count. It does not carry a Last Used badge.
 - The current-car block has a right-aligned `VIEW` button in the same detail row
   as its class/PI badge, drivetrain, and cylinder count. It changes to `HIDE`
   and reveals a separate framed configuration area directly below the block.
-  Escape closes that area, except while the inline name field owns Escape to
-  cancel its edit. Each configuration row uses the Saved Cars border style and
+  Escape closes that area. Each configuration row uses the Saved Cars border style and
   shows, from left to right, a Forza-style class/PI badge, its recorded
   drivetrain, and its recorded cylinder count. The list shows ten rows before
   it scrolls vertically.
-- Clicking the current vehicle name or ordinal opens an inline name field. Enter
-  or leaving the field saves the name; Escape cancels the edit. An empty saved
-  name returns the display to the numeric ordinal.
+- Car names are not editable. A long current-car name wraps to two lines and a
+  long saved-card name stays on one line; both end with an ellipsis when cut,
+  and the full name is available as a tooltip.
 - **Saved cars** is a responsive grid with one card per car ordinal. Its heading
   shows the saved count. The most recently observed car is first and carries a
   `LAST USED` badge in its upper-right corner. Every saved card is as tall as
@@ -35,8 +35,9 @@ Garage is the Configuration tab immediately to the right of HUD.
   The `S32` and `U32` field names are internal telemetry contract terms and are
   not rendered in cards.
 
-Forza Data Out does not provide a stock car name. A saved name is a local user
-label for the matching car ordinal; it does not modify the game.
+Forza Data Out does not provide a car name. Garage resolves the name and car
+type from the built-in [vehicle catalog](vehicle-catalog.md) each time it builds
+a snapshot, so it stores no names.
 
 ## Data flow
 
@@ -116,8 +117,9 @@ not render a second Shift Light status or profile control.
 ## Local SQLite state
 
 Garage uses the existing FDC application-data database, `fdc.sqlite`. Its table
-shape was introduced through schema versions 4–6; the current shared database
-schema is version 15.
+shape was introduced through schema versions 4–6; schema version 22 removes the
+former user-entered `display_name` column. The current shared database schema
+is version 22.
 
 ```text
 garage_cars
@@ -125,7 +127,6 @@ garage_cars
   car_group
   drivetrain_type
   num_cylinders
-  display_name                          nullable local label
   first_seen_sequence
   last_seen_sequence
 
@@ -158,16 +159,16 @@ Light variant/profile tables are not part of the Garage contract.
 - `record_garage_vehicle` validates and records a vehicle observation, then
   returns a complete Garage snapshot.
 - `load_garage_snapshot` returns the saved snapshot for Configuration startup.
-- `rename_garage_car` stores or clears a local name for one existing ordinal.
 
-Garage rejects non-positive ordinals and negative class or PI values. Names are
-trimmed and limited to 80 characters.
+Each snapshot car carries `name` (the catalog name or `#<ordinal>`) and
+`carType` (the catalog car type or null). Garage rejects non-positive ordinals
+and negative class or PI values.
 
 ## Verification
 
 Garage changes require the standard runtime release verification cycle. Focused
 coverage includes packet decoding for `CarGroup`, schema migration,
 one-car/multiple-configuration persistence including drivetrain, latest-used
-ordering, renaming, configuration-list keyboard behavior and scrolling, UI
-class formatting and detail order, Shift Light summary aggregation, telemetry
+ordering, catalog names and car types, configuration-list keyboard behavior and
+scrolling, UI class formatting and detail order, Shift Light summary aggregation, telemetry
 deduplication, and Configuration tab structure.

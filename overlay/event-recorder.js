@@ -240,10 +240,8 @@
     const classValue = numericClass !== null
       ? Math.round(numericClass)
       : classLabels.indexOf(String(rawClass || '').trim().toUpperCase())
-    const name = text(car.name ?? car.displayName ?? car.carName ?? telemetry?.carName)
     return {
       ordinal: ordinal === null ? null : Math.round(ordinal),
-      name,
       class: classValue < 0 ? null : classValue,
       pi: pi === null ? null : Math.round(pi),
       drivetrain: drivetrain === null ? null : Math.round(drivetrain)
@@ -501,7 +499,6 @@
         tracePoints: lap.tracePoints.map(point => ({ ...point })),
         captureRunId: run.runId,
         carOrdinal: run.car.ordinal,
-        carName: run.car.name,
         carClass: run.car.class,
         carPi: run.car.pi,
         drivetrain: run.car.drivetrain
@@ -578,7 +575,6 @@
         run: {
           eventId: Number.isFinite(Number(run.eventId)) ? Math.round(Number(run.eventId)) : run.eventId,
           carOrdinal: run.car.ordinal,
-          carName: run.car.name,
           carClass: carClass < 0 ? null : carClass,
           carPi: run.car.pi,
           drivetrain: run.car.drivetrain,

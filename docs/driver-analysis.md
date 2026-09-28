@@ -227,7 +227,8 @@ The history shows one card per recording, newest first. A collapsed card shows
 the recording date, its duration from the first car's start to the last car's
 finish (`LIVE` while recording), storage size, and the number of cars and
 drives. Its finding column has one line per car, in the order driven, with the
-car's Garage name (or `CAR #` and the ordinal) and the headline of that car.
+car's name from the [vehicle catalog](vehicle-catalog.md) (or `#<ordinal>` for
+an unknown car) and the headline of that car.
 A card with a single car adds a one-line summary below: distance, average
 speed, top speed, and corner count. A card with several cars leaves it out,
 because totals across different cars say little.

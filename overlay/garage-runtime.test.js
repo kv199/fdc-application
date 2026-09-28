@@ -5,11 +5,24 @@ const {
   classLabel,
   drivetrainLabel,
   normalizeShiftLightSummary,
+  vehicleLabel,
   displayName,
   normalizeGaragePayload,
   vehicleFromTelemetry,
   createGarageRuntime
 } = require('./garage-runtime.js')
+
+test('vehicle labels use the catalog name or #ordinal and keep the car type', () => {
+  assert.equal(vehicleLabel(' 1969 Toyota 2000GT ', 247), '1969 Toyota 2000GT')
+  assert.equal(vehicleLabel(null, 4239), '#4239')
+  assert.equal(vehicleLabel('', 4239.4), '#4239')
+  assert.equal(vehicleLabel(null, 0), '')
+  const [car] = normalizeGaragePayload({ cars: [{ carOrdinal: 247, name: '1969 Toyota 2000GT', carType: ' Rare Classics ', carGroup: 12 }] })
+  assert.equal(car.carType, 'Rare Classics')
+  assert.equal(car.carGroup, 12)
+  assert.equal(displayName(car), '1969 Toyota 2000GT')
+  assert.equal(normalizeGaragePayload({ cars: [{ carOrdinal: 4239, name: '#4239', carType: null }] })[0].carType, null)
+})
 
 function frame(overrides = {}) {
   return {
@@ -49,6 +62,7 @@ test('normalizes native and telemetry vehicle identity without inventing values'
   assert.deepEqual(vehicleFromTelemetry(frame()), {
     carOrdinal: 123,
     name: null,
+    carType: null,
     class: 4,
     classLabel: 'S1',
     pi: 850,
@@ -59,10 +73,11 @@ test('normalizes native and telemetry vehicle identity without inventing values'
     latestUsed: false,
     lastUsedAt: null
   })
-  assert.equal(displayName(vehicleFromTelemetry(frame())), '123')
+  assert.equal(displayName(vehicleFromTelemetry(frame())), '#123')
   assert.deepEqual(normalizeGaragePayload({ vehicles: [{ carOrdinal: 123, name: 'Track Tool', class: 4, pi: 850 }] })[0], {
     carOrdinal: 123,
     name: 'Track Tool',
+    carType: null,
     class: 4,
     classLabel: 'S1',
     pi: 850,

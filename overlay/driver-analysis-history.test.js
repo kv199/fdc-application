@@ -27,7 +27,7 @@ test('groupRecordings keeps a session without a recording on its own card', () =
 
 test('car and drivetrain labels', () => {
   assert.equal(history.carLabel({ vehicleName: ' BMW M1 ', vehicleIdentity: { ordinal: 42 } }), 'BMW M1')
-  assert.equal(history.carLabel({ vehicleName: null, vehicleIdentity: { ordinal: 42 } }), 'CAR #42')
+  assert.equal(history.carLabel({ vehicleName: null, vehicleIdentity: { ordinal: 42 } }), '#42')
   assert.equal(history.carLabel({}), 'UNKNOWN CAR')
   assert.deepEqual([0, 1, 2, 9, null].map(history.drivetrainLabel), ['FWD', 'RWD', 'AWD', '', ''])
 })

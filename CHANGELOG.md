@@ -5,6 +5,14 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+### Breaking
+
+- **Garage**: cars are now named automatically, for example
+  **1969 Toyota 2000GT**, and the current car shows its type, such as
+  **Rare Classics**. Events, Driver Analysis, and Shift Light use the same
+  names. Cars can no longer be renamed, and names you entered earlier are
+  removed.
+
 ### Fixed
 
 - **HUD**: in Freeform layout, **EDIT** no longer hides the block you are
