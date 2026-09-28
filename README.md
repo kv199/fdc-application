@@ -2,7 +2,7 @@
   <img src="src-tauri/icons/icon.png" width="128" alt="FDC app icon">
   <h1>FDC</h1>
   <p><strong>Feedback-Driven Companion — a local-first telemetry HUD compatible with Forza Horizon 6 on Windows.</strong></p>
-  <p><a href="https://github.com/kv199/fdc-application/releases/latest/download/FDC-setup.exe">Download</a> · <a href="https://github.com/kv199/fdc-application/releases">Releases</a> · <a href="SECURITY.md">Security</a></p>
+  <p><a href="https://github.com/kv199/fdc-application/releases/latest/download/FDC-setup.exe">Download</a> · <a href="https://github.com/kv199/fdc-application/releases">Releases</a> · <a href="https://github.com/kv199/fdc-application/discussions">Discussions</a> · <a href="SECURITY.md">Security</a></p>
   <p>
     <a href="https://github.com/kv199/fdc-application/actions/workflows/ci.yml"><img src="https://github.com/kv199/fdc-application/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/kv199/fdc-application" alt="License: MIT"></a>
@@ -173,7 +173,9 @@ branch holds the latest release and `develop` holds ongoing work. See
 
 ## Feedback and security
 
-Report bugs and ideas through [GitHub issues](https://github.com/kv199/fdc-application/issues).
+Ask questions in [Q&A](https://github.com/kv199/fdc-application/discussions/categories/q-a),
+share ideas in [Ideas](https://github.com/kv199/fdc-application/discussions/categories/ideas),
+and report reproducible bugs with the [bug report form](https://github.com/kv199/fdc-application/issues/new?template=bug_report.yml).
 Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md),
 never in a public issue.
 

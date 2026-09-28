@@ -1,6 +1,12 @@
 blank_issues_enabled: false
 
 contact_links:
+  - name: Suggest an idea
+    url: https://github.com/kv199/fdc-application/discussions/categories/ideas
+    about: Describe the problem you want FDC to help solve.
+  - name: Questions and help
+    url: https://github.com/kv199/fdc-application/discussions/categories/q-a
+    about: Ask for help with FDC or Forza Horizon 6 Data Out setup.
   - name: Security vulnerability
     url: https://github.com/kv199/fdc-application/security/advisories/new
     about: Report vulnerabilities privately.
