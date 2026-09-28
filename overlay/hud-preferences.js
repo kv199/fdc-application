@@ -1,18 +1,9 @@
 (function (globalScope) {
   'use strict'
 
+  const { COMPONENTS, OVERLAY_COMPONENTS, COLUMN_WIDTHS } = globalScope.HudWidgets || require('./hud-widgets.js')
   const STORAGE_KEY = 'fdc.hud-visibility.v1'
   const OVERLAY_STORAGE_KEY = 'fdc.overlay-visibility.v1'
-  const COMPONENTS = ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']
-  const OVERLAY_COMPONENTS = ['delta', 'hud']
-  const COLUMN_WIDTHS = {
-    tires: '72px',
-    pedals: '46px',
-    steering: '68px',
-    gear: '92px',
-    engine: '116px',
-    history: '342px'
-  }
   const DEFAULT_STATE = COMPONENTS.reduce((state, name) => {
     state[name] = true
     return state
@@ -56,6 +47,32 @@
     }
   }
 
+  function resolveHudVisibility(input) {
+    const { state, overlayState, telemetryVisible, mode, editingTarget } = input
+    const sections = {}
+    for (const name of COMPONENTS) {
+      sections[name] = state[name] === false
+    }
+    const hasVisibleContent = COMPONENTS.some(name => state[name] !== false)
+    let hud = !hasVisibleContent
+    let hudFrame = !telemetryVisible || overlayState.hud === false || !hasVisibleContent
+    let delta = !telemetryVisible || overlayState.delta === false
+
+    // A layout edit keeps its target and the target's containers visible,
+    // whatever telemetry or the visibility switches would otherwise hide.
+    if (editingTarget === 'delta') {
+      delta = false
+    } else if (editingTarget === 'hud' && mode === 'grouped') {
+      hudFrame = false
+    } else if (COMPONENTS.includes(editingTarget) && mode === 'freeform') {
+      sections[editingTarget] = false
+      hud = false
+      hudFrame = false
+    }
+
+    return { hud, hudFrame, delta, sections }
+  }
+
   function saveOverlayState(state) {
     try {
       localStorage.setItem(OVERLAY_STORAGE_KEY, JSON.stringify(state))
@@ -92,24 +109,30 @@
         return result
       }, {})
 
-      for (const name of COMPONENTS) sections[name].hidden = !state[name]
+      const visibility = resolveHudVisibility({
+        state,
+        overlayState,
+        telemetryVisible,
+        mode: globalScope.HudLayout?.getMode?.() || 'grouped',
+        editingTarget: globalScope.HudLayout?.getEditingTarget?.() ?? null
+      })
+
+      for (const name of COMPONENTS) sections[name].hidden = visibility.sections[name]
+      hud.hidden = visibility.hud
+      hudFrame.hidden = visibility.hudFrame
+      overlayElements.delta.hidden = visibility.delta
 
       const visibleColumns = COMPONENTS
         .filter(name => state[name])
         .map(name => COLUMN_WIDTHS[name])
       const hasVisibleContent = visibleColumns.length > 0
-      hud.hidden = !hasVisibleContent
-      hudFrame.hidden = !telemetryVisible || !overlayState.hud || !hasVisibleContent
-      overlayElements.delta.hidden = !telemetryVisible || !overlayState.delta
       if (hasVisibleContent && globalScope.HudLayout?.getMode?.() !== 'freeform') {
-        hud.style.gridTemplateColumns = visibleColumns.join(' ')
-        hud.style.width = `${visibleColumns.reduce((total, column) => total + Number.parseFloat(column), 0)}px`
+        hud.style.gridTemplateColumns = visibleColumns.map(width => `${width}px`).join(' ')
+        hud.style.width = `${visibleColumns.reduce((total, width) => total + width, 0)}px`
       } else if (globalScope.HudLayout?.getMode?.() === 'freeform') {
         hud.style.gridTemplateColumns = ''
         hud.style.width = ''
       }
-      saveState(state)
-      saveOverlayState(overlayState)
       globalScope.HudLayout?.refreshLayout?.()
     }
 
@@ -126,12 +149,15 @@
       getOverlayState: () => ({ ...overlayState }),
       isOverlayVisible: name => overlayState[name] !== false,
       setTelemetryVisible: visible => {
-        telemetryVisible = visible !== false
+        const next = visible !== false
+        if (next === telemetryVisible) return
+        telemetryVisible = next
         apply(state)
       },
       setVisibility: (name, visible) => {
         if (!COMPONENTS.includes(name)) return
         apply({ ...state, [name]: visible === true })
+        saveState(state)
       },
       getLayoutMode: () => globalScope.HudLayout?.getMode?.() || 'grouped',
       setLayoutMode: mode => globalScope.HudLayout?.setMode?.(mode),
@@ -157,7 +183,8 @@
     readState,
     overlayComponents: OVERLAY_COMPONENTS,
     defaultOverlayState: () => ({ ...DEFAULT_OVERLAY_STATE }),
-    readOverlayState
+    readOverlayState,
+    resolveHudVisibility
   }
 
   if (typeof document !== 'undefined') {

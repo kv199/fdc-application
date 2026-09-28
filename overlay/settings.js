@@ -6,8 +6,7 @@
   const EVENTS_SORT_STORAGE_KEY = 'fdc.events-sort.v1'
   const LAYOUT_MODE_STORAGE_KEY = 'fdc.layout-mode.v1'
   const EVENT_SORT_OPTIONS = ['id-desc', 'id-asc', 'last-recorded-desc', 'last-recorded-asc']
-  const COMPONENTS = ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']
-  const OVERLAY_COMPONENTS = ['delta', 'hud']
+  const { COMPONENTS, OVERLAY_COMPONENTS } = globalScope.HudWidgets
   const LAYOUT_TARGET_LABELS = Object.freeze({
     delta: 'DELTA',
     hud: 'HUD',

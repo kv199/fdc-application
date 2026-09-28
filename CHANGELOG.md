@@ -5,6 +5,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+### Fixed
+
+- **HUD**: in Freeform layout, **EDIT** no longer hides the block you are
+  moving while **Show HUD with telemetry** is on and the game is in a menu.
+
 ## 7.19.54 - 2026-09-27
 
 ### Fixed

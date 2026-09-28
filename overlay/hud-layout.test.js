@@ -53,7 +53,8 @@ test('keeps Delta and grouped HUD separate from freeform telemetry targets', () 
 })
 
 test('freeform preserves current compact grid widths and 69px height', () => {
-  assert.match(source, /tires: 72, pedals: 46, steering: 68, gear: 92, engine: 116, history: 342/)
+  const hudWidgets = require('./hud-widgets.js')
+  assert.deepEqual(hudWidgets.COLUMN_WIDTHS, { tires: 72, pedals: 46, steering: 68, gear: 92, engine: 116, history: 342 })
   assert.match(source, /const HUD_BASE_HEIGHT = 69/)
   assert.match(css, /\.hud\[data-layout-mode='freeform'\] > section\.hud-freeform-widget[\s\S]*height: 69px/)
   assert.match(css, /section\.hud-freeform-widget\.layout-positioned[\s\S]*transform:[^;]+!important/)
@@ -75,7 +76,6 @@ test('freeform targets expose independent edit, reset, cancel, save and resize b
   assert.match(source, /function syncEditorFrame\(name\)/)
   assert.match(source, /if \(name === 'hud'\) syncEditorToolbar\(name, element\.getBoundingClientRect\(\)\)/)
   assert.match(source, /calculateEditorToolbarPosition\(rect, toolbarRect, viewport\)/)
-  assert.match(source, /if \(name !== editingTarget\) return\s+element\.hidden = false/)
   assert.match(css, /\.hud-widget-editor-frame \{[\s\S]*pointer-events: none/)
   assert.match(css, /\.hud-widget-editor-frame:not\(\[hidden\]\) \.layout-resize-handle/)
   assert.match(css, /\.hud-widget-editor-frame \.layout-edit-tools,[\s\S]*pointer-events: auto/)

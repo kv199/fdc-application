@@ -1,13 +1,14 @@
 (function (globalScope) {
   'use strict'
 
+  const HudWidgets = globalScope.HudWidgets || require('./hud-widgets.js')
   const STORAGE_KEY = 'fdc.layout.v2'
   const MODE_STORAGE_KEY = 'fdc.layout-mode.v1'
   const MODES = ['grouped', 'freeform']
-  const GROUPED_TARGETS = ['delta', 'hud']
-  const FREEFORM_TARGETS = ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']
+  const GROUPED_TARGETS = HudWidgets.OVERLAY_COMPONENTS
+  const FREEFORM_TARGETS = HudWidgets.COMPONENTS
   const TARGET_NAMES = [...GROUPED_TARGETS, ...FREEFORM_TARGETS]
-  const COLUMN_WIDTHS = { tires: 72, pedals: 46, steering: 68, gear: 92, engine: 116, history: 342 }
+  const COLUMN_WIDTHS = HudWidgets.COLUMN_WIDTHS
   const HUD_BASE_WIDTH = Object.values(COLUMN_WIDTHS).reduce((total, width) => total + width, 0)
   const HUD_BASE_HEIGHT = 69
   const DEFAULT_SIZE = 0
@@ -68,6 +69,14 @@
     return position
   }
 
+  function sanitizePositionMap(source, names) {
+    return names.reduce((result, name) => {
+      const position = sanitizeTargetPosition(source?.[name])
+      if (position) result[name] = position
+      return result
+    }, {})
+  }
+
   function readStoredMode() {
     const stored = storageGet(MODE_STORAGE_KEY)
     return MODES.includes(stored) ? stored : 'grouped'
@@ -79,16 +88,11 @@
       if (!stored || typeof stored !== 'object') {
         return { mode: readStoredMode(), shared: {}, grouped: {}, freeform: {} }
       }
-      const sanitizeMap = (source, names) => names.reduce((result, name) => {
-        const position = sanitizeTargetPosition(source?.[name])
-        if (position) result[name] = position
-        return result
-      }, {})
       return {
         mode: readStoredMode(),
-        shared: sanitizeMap(stored.shared, ['delta']),
-        grouped: sanitizeMap(stored.grouped, ['hud']),
-        freeform: sanitizeMap(stored.freeform, FREEFORM_TARGETS)
+        shared: sanitizePositionMap(stored.shared, ['delta']),
+        grouped: sanitizePositionMap(stored.grouped, ['hud']),
+        freeform: sanitizePositionMap(stored.freeform, FREEFORM_TARGETS)
       }
     } catch {
       return { mode: readStoredMode(), shared: {}, grouped: {}, freeform: {} }
@@ -96,16 +100,11 @@
   }
 
   function saveStoredLayout(layout) {
-    const sanitizeMap = (source, names) => names.reduce((result, name) => {
-      const position = sanitizeTargetPosition(source?.[name])
-      if (position) result[name] = position
-      return result
-    }, {})
     storageSet(STORAGE_KEY, JSON.stringify({
       version: 2,
-      shared: sanitizeMap(layout.shared, ['delta']),
-      grouped: sanitizeMap(layout.grouped, ['hud']),
-      freeform: sanitizeMap(layout.freeform, FREEFORM_TARGETS)
+      shared: sanitizePositionMap(layout.shared, ['delta']),
+      grouped: sanitizePositionMap(layout.grouped, ['hud']),
+      freeform: sanitizePositionMap(layout.freeform, FREEFORM_TARGETS)
     }))
   }
 
@@ -170,7 +169,6 @@
     const positions = { shared: stored.shared, grouped: stored.grouped, freeform: stored.freeform }
     let editingTarget = null
     let editingSnapshot = null
-    let targetWasHidden = false
     let dragging = false
     let dragOffsetX = 0
     let dragOffsetY = 0
@@ -316,12 +314,14 @@
       syncEditorToolbar(name, rect)
     }
 
+    function applyVisibility() {
+      if (typeof globalScope.HudPreferences?.apply === 'function') globalScope.HudPreferences.apply()
+      else refreshLayout()
+    }
+
     function applyPosition(name) {
       const element = elements[name]
-      if (element.hidden) {
-        if (name !== editingTarget) return
-        element.hidden = false
-      }
+      if (element.hidden) return
       const viewport = getViewport()
       const position = ensurePosition(name)
       if (isFreeformTarget(name)) {
@@ -402,15 +402,12 @@
       setToolsVisible(name, false)
       document.body.classList.remove('is-editing')
       document.body.removeAttribute('data-editing-target')
-      if (targetWasHidden) elements[name].hidden = true
-      targetWasHidden = false
       editingTarget = null
       editingSnapshot = null
       elements[name].setAttribute('aria-grabbed', 'false')
       setNativeInteraction(false)
       notifySettingsEditingState(name, false)
-      globalScope.HudPreferences?.apply?.()
-      refreshLayout()
+      applyVisibility()
     }
 
     function notifySettingsEditingState(name, editing) {
@@ -425,16 +422,9 @@
       if (!TARGET_NAMES.includes(name) || unavailableGroupedTarget || unavailableFreeformTarget) return
       if (editingTarget === name) return
       if (editingTarget) cancelEditMode()
-      if (elements[name].hidden) {
-        targetWasHidden = true
-        elements[name].hidden = false
-      }
-      if (FREEFORM_TARGETS.includes(name)) {
-        hud.hidden = false
-        elements.hud.hidden = false
-      }
-      ensurePosition(name)
       editingTarget = name
+      applyVisibility()
+      ensurePosition(name)
       editingSnapshot = { ...positionMap(name)[name] }
       elements[name].classList.add('is-editing')
       elements[name].setAttribute('aria-grabbed', 'false')
@@ -631,6 +621,7 @@
       resetLayout,
       setMode,
       getMode: () => mode,
+      getEditingTarget: () => editingTarget,
       isEditing: name => editingTarget === name,
       refreshPosition: refreshLayout,
       refreshLayout,

@@ -252,10 +252,10 @@ test('Engine telemetry keeps the compact panel order and one visibility toggle',
 })
 
 test('Engine visibility is part of the safe HUD component contract', () => {
-  const preferences = fs.readFileSync(path.join(__dirname, 'hud-preferences.js'), 'utf8')
+  const hudWidgets = require('./hud-widgets.js')
 
-  assert.match(preferences, /const COMPONENTS = \['tires', 'pedals', 'steering', 'gear', 'engine', 'history'\]/)
-  assert.match(preferences, /engine: '116px'/)
+  assert.deepEqual(hudWidgets.COMPONENTS, ['tires', 'pedals', 'steering', 'gear', 'engine', 'history'])
+  assert.equal(hudWidgets.COLUMN_WIDTHS.engine, 116)
   assert.match(tauriMain, /"tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
 })
 

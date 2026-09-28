@@ -76,6 +76,8 @@ Delta is positioned independently in both modes.
 
 **EDIT** starts an on-screen edit of the selected target:
 
+- the edited target stays visible for the whole edit, even when **Show HUD
+  with telemetry** or a visibility switch would otherwise hide it;
 - drag the target to move it;
 - drag a corner to resize it between 0.5× and 2× of its default size;
 - **SAVE** keeps the change, **CANCEL** or Escape restores the previous
