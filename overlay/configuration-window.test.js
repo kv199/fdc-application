@@ -574,3 +574,24 @@ test('Driver Analysis history cards open drill-down pages for recording, car, an
   assert.match(settingsCss, /\.driver-analysis-detail-view__body[\s\S]*display:\s*grid/)
   assert.match(settingsCss, /\.driver-analysis-detail-view__overview\s*\{[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/)
 })
+
+test('Configuration uses one shared empty-state style', () => {
+  assert.match(settingsCss, /\.settings-empty\s*\{/)
+  assert.match(settingsCss, /\.settings-empty--inline\s*\{/)
+  assert.match(settingsCss, /\.settings-empty\[hidden\]/)
+  for (const id of ['driver-analysis-history-empty', 'garage-grid-empty', 'events-grid-empty', 'event-runs-empty', 'events-run-empty', 'shift-light-empty']) {
+    assert.match(settingsHtml, new RegExp(`id="${id}"[^>]*class="settings-empty"`), id)
+  }
+  assert.match(settingsHtml, /id="garage-current-empty"[^>]*class="settings-empty settings-empty--inline"/)
+  assert.doesNotMatch(settingsHtml, /garage-empty/)
+  assert.doesNotMatch(settingsHtml, /driver-analysis-history__empty/)
+  assert.doesNotMatch(settingsHtml, /event-runs__empty/)
+  assert.doesNotMatch(settingsHtml, /calibration-empty/)
+  assert.doesNotMatch(settingsCss, /garage-empty/)
+  assert.doesNotMatch(settingsCss, /driver-analysis-history__empty/)
+  assert.doesNotMatch(settingsCss, /event-runs__empty/)
+  assert.doesNotMatch(settingsCss, /calibration-empty/)
+  assert.match(settingsJs, /className = 'settings-empty'/)
+  assert.doesNotMatch(settingsJs, /className = 'events-run-empty'/)
+  assert.match(settingsCss, /\.shift-light-brightness-card__heading\s*\{[^}]*align-items:\s*center/)
+})

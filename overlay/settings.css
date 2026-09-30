@@ -190,6 +190,33 @@ h1 {
   max-width: 72ch;
 }
 
+/* Shared empty state: use .settings-empty for any "nothing here yet" message; add --inline inside an existing card. */
+.settings-empty {
+  margin: 0;
+  padding: 18px 16px;
+  border: 1px solid rgb(226 232 240 / 18%);
+  border-radius: 4px;
+  color: #71717a;
+  background: rgb(8 10 12 / 68%);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.settings-empty--inline {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings-empty[hidden] {
+  display: none;
+}
+
+#event-runs-empty {
+  margin: 11px 0 0;
+}
+
 .garage-current {
   margin-bottom: 24px;
   padding: 16px;
@@ -1413,13 +1440,6 @@ h1 {
 .events-run-table__time[data-tone="second"] { color: #69e83f; }
 .events-run-table__time.is-missing { color: #52525b; }
 
-.events-run-empty {
-  margin: 12px 0 0;
-  color: #71717a;
-  font-size: 13px;
-}
-
-.events-run-empty[hidden] { display: none; }
 
 .events-detail-view__actions {
   display: flex;
@@ -1727,7 +1747,6 @@ h1 {
 .event-run-row__label { display: block; margin-bottom: 3px; color: #71717a; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; }
 .event-run-row__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .event-run-row__time { color: #69e83f; font-variant-numeric: tabular-nums; font-weight: 800; }
-.event-runs__empty { margin: 11px 0 0; color: #71717a; font-size: 13px; }
 
 @media (max-width: 760px) {
   .event-run-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1783,14 +1802,6 @@ h1 {
   }
 }
 
-.garage-empty {
-  color: #71717a;
-  font-size: 13px;
-}
-
-.garage-empty {
-  margin: 0;
-}
 
 @media (max-width: 620px) {
   .garage-current-car {
@@ -2088,20 +2099,6 @@ h1 {
   min-width: 84px;
 }
 
-.driver-analysis-history__empty {
-  padding: 18px 16px;
-  border: 1px solid rgb(226 232 240 / 18%);
-  border-radius: 4px;
-  color: #71717a;
-  background: rgb(8 10 12 / 68%);
-  font-size: 13px;
-  font-weight: 750;
-  letter-spacing: 0.12em;
-}
-
-.driver-analysis-history__empty[hidden] {
-  display: none;
-}
 
 /* Recording grouping: meta column, cars/drives label */
 .driver-analysis-history-row__cars-drives {
@@ -2610,19 +2607,10 @@ h1 {
   cursor: pointer;
 }
 
-.calibration-empty,
 .calibration-card {
   border: 1px solid rgb(226 232 240 / 18%);
   border-radius: 4px;
   background: rgb(8 10 12 / 68%);
-}
-
-.calibration-empty {
-  padding: 18px 16px;
-  color: #71717a;
-  font-size: 13px;
-  font-weight: 750;
-  letter-spacing: 0.16em;
 }
 
 .calibration-card {
@@ -3115,19 +3103,10 @@ h1 {
 
 .shift-light-brightness-card__heading {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
   gap: 20px;
   margin-bottom: 15px;
-}
-
-.shift-light-brightness-card__heading span {
-  display: block;
-  margin-bottom: 4px;
-  color: #69e83f;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.2em;
 }
 
 .shift-light-brightness-card__heading h3 {

@@ -5,6 +5,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+### Fixed
+
+- **Configuration**: slider titles line up with their value and RESET again,
+  and every "nothing here yet" message now uses the same framed style.
+
 ### Added
 
 - **Configuration**: **HELP** at the bottom of the window opens the bug report

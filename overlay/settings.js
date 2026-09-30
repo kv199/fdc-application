@@ -2718,12 +2718,12 @@
         driverAnalysisDetailBody?.append(drivesSection)
       } else if (!drivesRecorded) {
         const noRecordMsg = document.createElement('div')
-        noRecordMsg.className = 'events-run-empty'
+        noRecordMsg.className = 'settings-empty'
         noRecordMsg.textContent = 'RECORDED BEFORE DRIVES'
         driverAnalysisDetailBody?.append(noRecordMsg)
       } else if (Array.isArray(session?.drives) && session.drives.length === 0 && drivesRecorded) {
         const noRacesMsg = document.createElement('div')
-        noRacesMsg.className = 'events-run-empty'
+        noRacesMsg.className = 'settings-empty'
         noRacesMsg.textContent = 'NO RACES IN THIS RECORDING'
         driverAnalysisDetailBody?.append(noRacesMsg)
       }

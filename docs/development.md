@@ -91,6 +91,15 @@ the recording start time plus the telemetry time since its first sample. For
 each wheel, the report prints slip angle, slip ratio, and combined slip in the
 middle of that second and the maximum within it.
 
+## Configuration UI conventions
+
+Each Configuration tab starts with a heading block and one
+`settings-section__intro` paragraph. Every empty state uses `.settings-empty`
+(framed box with border and dark background), or
+`.settings-empty settings-empty--inline` when it sits inside an existing card. Toggle empty states with the `hidden` attribute; do not add
+feature-specific empty-state styles. Placeholders inside a map or trace box keep
+`events-lap-detail__empty`.
+
 ## Release verification cycle
 
 Verification is cumulative for the current change set and is performed once
