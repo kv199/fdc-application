@@ -60,7 +60,7 @@ Light Brightness settings. How targets are learned is described in
 
 ## Layout
 
-Configuration → **HUD** offers two layout modes:
+Configuration → **HUD** opens with a short intro and offers two layout modes:
 
 - **Grouped** (default) keeps the visible blocks side by side in one panel. The
   **Telemetry HUD** row moves and resizes that panel as a whole and lists the
@@ -99,7 +99,8 @@ Configuration → **Settings** contains:
 
 - **Configuration always on top**, off by default;
 - **Show HUD with telemetry**, described above;
-- **Speed unit**: `km/h` or `mph` for the HUD speed value.
+- **Speed unit**: `km/h` or `mph` for the HUD speed value;
+- **Your data**: a read-only note that all FDC data stays on this PC.
 
 ## Persistence
 

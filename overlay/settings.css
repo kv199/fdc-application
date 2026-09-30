@@ -182,6 +182,14 @@ h1 {
   background: rgb(105 232 63 / 8%);
 }
 
+.settings-section__intro {
+  margin: 0 0 16px;
+  color: #a1a1aa;
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 72ch;
+}
+
 .garage-current {
   margin-bottom: 24px;
   padding: 16px;
@@ -1940,12 +1948,6 @@ h1 {
   text-align: right;
 }
 
-.driver-analysis-hotkey-help {
-  margin: -4px 16px 14px;
-  color: #71717a;
-  font-size: 12px;
-  line-height: 1.35;
-}
 
 .driver-analysis-history-view[hidden],
 .driver-analysis-detail-view[hidden] {
@@ -3135,18 +3137,6 @@ h1 {
 
 .brightness-control input:disabled {
   cursor: wait;
-}
-
-.brightness-scale {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 6px;
-  color: #71717a;
-  font-size: 10px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.12em;
 }
 
 [data-display-preference].is-pending {

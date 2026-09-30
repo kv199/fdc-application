@@ -1787,7 +1787,7 @@
     if (eventsRunId) eventsRunId.textContent = `#${run.id}`
     if (eventsRunBht) eventsRunBht.textContent = formatRunTime(runBestHypotheticalTimeMs(run))
     if (eventsRunTableHint) {
-      eventsRunTableHint.textContent = run.runType === 'sprint' ? 'SPRINT · ONE PASS' : 'SECTOR TIMES'
+      eventsRunTableHint.textContent = run.runType === 'sprint' ? 'SPRINT · ONE PASS' : ''
     }
     const laps = [...(run.laps || [])].sort((left, right) => {
       const result = Number(left.lapNumber) - Number(right.lapNumber)
@@ -1906,7 +1906,7 @@
       eventRecorderToggle.disabled = recordingAnotherEvent || finalizing
     }
     if (eventRecorderHint) {
-      const sprintWarning = 'For Sprint Racing, leave recording armed between attempts. Press STOP when you are done; if Forza omits the exact result, FDC uses the last live time.'
+      const sprintWarning = 'Sprint: keep recording armed between attempts, then press STOP.'
       const hint = recordingAnotherEvent
         ? `Recording Event #${recorderState.eventId}. Open that event to stop capture.`
         : finalizing

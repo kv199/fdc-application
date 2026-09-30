@@ -11,17 +11,29 @@ const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src',
 const tauriConfig = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'tauri.conf.json'), 'utf8')
 const cargoManifest = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'Cargo.toml'), 'utf8')
 
-test('Configuration exposes Driver Analysis second in the primary tab order', () => {
+test('Every Configuration tab opens with a short intro and Settings states where data lives', () => {
+  for (const panel of ['hud', 'events', 'driver-analysis', 'shift-light', 'garage', 'settings']) {
+    const start = settingsHtml.indexOf(`data-settings-panel="${panel}"`)
+    const next = settingsHtml.indexOf('data-settings-panel="', start + 1)
+    const markup = settingsHtml.slice(start, next === -1 ? undefined : next)
+    assert.match(markup, /<p class="settings-section__intro">[^<]+<\/p>/, panel)
+  }
+  assert.match(settingsHtml, /<h2 id="settings-panel-title">SETTINGS<\/h2>/)
+  assert.match(settingsHtml, /<strong>YOUR DATA<\/strong>\s*<small>All FDC data stays on this PC\.<\/small>/)
+  assert.match(settingsCss, /\.settings-section__intro\s*\{/)
+  assert.doesNotMatch(settingsHtml, /VISUAL OUTPUT|RECORDED ASPHALT REVIEW|VEHICLE LIBRARY|AUTO CALIBRATION/)
+})
+
+test('Configuration exposes Events second and Driver Analysis third in the primary tab order', () => {
   const tabs = [...settingsHtml.matchAll(/data-settings-tab="([^"]+)"/g)].map(match => match[1])
 
-  assert.deepEqual(tabs, ['hud', 'driver-analysis', 'shift-light', 'garage', 'events', 'settings'])
+  assert.deepEqual(tabs, ['hud', 'events', 'driver-analysis', 'shift-light', 'garage', 'settings'])
   assert.match(settingsHtml, /id="driver-analysis-panel"[^>]+data-settings-panel="driver-analysis"/)
   assert.match(settingsHtml, /id="driver-analysis-enabled"[^>]+aria-pressed="false"/)
   assert.match(settingsHtml, /id="driver-analysis-record"[^>]+disabled>RECORD<\/button>/)
   assert.match(settingsHtml, /id="driver-analysis-hotkey-value"[^>]*>Ctrl \+ Shift \+ F9<\/output>/)
   assert.match(settingsHtml, /<strong>BETA<\/strong>/)
-  assert.match(settingsHtml, /Record on asphalt only\./)
-  assert.match(settingsHtml, /Recordings stay on this device until you delete them\./)
+  assert.match(settingsHtml, /Experimental — results may be inaccurate\. Asphalt only\./)
   assert.match(settingsHtml, /id="driver-analysis-history-list"[^>]+aria-live="polite"/)
   assert.match(settingsJs, /call\('load_driver_analysis_sessions'\)/)
   assert.match(settingsJs, /call\('delete_driver_analysis_recording', \{ recordingId[\s\S]*\}\)/)
@@ -167,8 +179,8 @@ test('Event recorder uses the compact idle control and local run timestamps', ()
   assert.match(settingsJs, /eventRecorderStatus\.hidden = !recording && !finalizing/)
   assert.match(settingsJs, /eventRecorderToggle\.textContent = finalizing \? 'FINALIZING' : recording \? 'STOP' : 'RECORD RUN'/)
   assert.match(settingsJs, /eventRecorderToggle\.disabled = recordingAnotherEvent \|\| finalizing/)
-  assert.match(settingsHtml, /data-tone="warning"[^>]*>For Sprint Racing, leave recording armed between attempts\. Press STOP when you are done; if Forza omits the exact result, FDC uses the last live time\.<\/p>/)
-  assert.match(settingsJs, /For Sprint Racing, leave recording armed between attempts\. Press STOP when you are done; if Forza omits the exact result, FDC uses the last live time\./)
+  assert.match(settingsHtml, /data-tone="warning"[^>]*>Sprint: keep recording armed between attempts, then press STOP\.<\/p>/)
+  assert.match(settingsJs, /Sprint: keep recording armed between attempts, then press STOP\./)
   assert.match(settingsJs, /eventRecorderHint\.dataset\.tone = !recordingAnotherEvent && !finalizing \? 'warning' : ''/)
   assert.match(settingsCss, /\.event-recorder__hint\[data-tone="warning"\][\s\S]*#f97316/)
   assert.match(settingsJs, /getHours\(\).*getMinutes\(\).*getSeconds\(\)/s)
@@ -319,7 +331,7 @@ test('Configuration window title reflects the active section and build version w
 
   assert.deepEqual(
     [...settingsHtml.matchAll(/data-settings-tab="([^"]+)"/g)].map(match => match[1]),
-    ['hud', 'driver-analysis', 'shift-light', 'garage', 'events', 'settings']
+    ['hud', 'events', 'driver-analysis', 'shift-light', 'garage', 'settings']
   )
   assert.deepEqual(configuredTitles, ['FDC · HUD', 'FDC · HUD'])
   assert.doesNotMatch(`${configuredTitles.join(' ')} ${overlayHtml}`, /Forza Horizon 6 HUD/u)
@@ -394,15 +406,15 @@ test('Shift Light exposes separate redline and FDC cue controls in the Shift Lig
   assert.match(settingsHtml, /id="redline-brightness" type="range" min="0" max="100" step="5" value="80"/)
   assert.match(settingsHtml, /id="redline-brightness-reset"[^>]*type="button"[^>]*disabled>RESET<\/button>/)
   assert.match(settingsHtml, /id="fdc-shift-light-enabled" class="visibility-toggle" type="button"[^>]*aria-pressed="true"/)
-  assert.match(settingsHtml, /<small>FDC shows the optimal shift cue in purple\.<\/small>/)
+  assert.doesNotMatch(settingsHtml, /class="brightness-scale"/)
   assert.match(settingsHtml, /<h3 id="shift-light-brightness-title">FDC SHIFT LIGHT BRIGHTNESS<\/h3>/)
   assert.match(settingsHtml, /class="shift-light-brightness-card"/)
   assert.match(settingsHtml, /id="shift-light-brightness" type="range" min="0" max="100" step="5" value="80"/)
   assert.match(settingsHtml, /<span class="calibration-label">LEARNED CEILING<\/span>/)
   assert.match(settingsHtml, /id="shift-light-usable-ceiling"/)
-  assert.match(settingsHtml, /The usable redline is the safe shift target/)
+  assert.match(settingsHtml, /<dt>LEARNING<\/dt><dd>Shifts at the safe redline while FDC watches your full-throttle upshifts\.<\/dd>/)
   assert.match(settingsHtml, /<dt>POTENTIAL<\/dt>/)
-  assert.match(settingsHtml, /A negative result simply leaves the safe redline target in place/)
+  assert.match(settingsHtml, /Only clean full-throttle upshifts count; other shifts are ignored\./)
   assert.match(settingsJs, /redlineBrightness/)
   assert.match(settingsJs, /fdcShiftLightEnabled/)
 })

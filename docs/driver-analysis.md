@@ -29,9 +29,10 @@ UDP. It has no HUD widget and displays no live driving cues.
 
 ## Controls and lifecycle
 
-Driver Analysis is disabled by default. Its Configuration tab is second after
-HUD and contains the enable toggle, `RECORD` / `STOP` control, editable hotkey,
-beta/asphalt warning, and newest-first history.
+Driver Analysis is disabled by default. Its Configuration tab is third, after HUD
+and Events. It opens with a short intro and contains the enable toggle,
+`RECORD` / `STOP` control, editable hotkey, beta/asphalt warning, and
+newest-first history.
 
 The recording state machine is:
 

@@ -10,6 +10,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Garage**: a car is shown the same way everywhere — by its Garage name, or
   by its car number when it has no name — and renaming it updates Events,
   Driver Analysis, and Shift Light right away.
+- **Configuration**: tabs are now ordered HUD, Events, Driver, Shift Light,
+  Garage, Settings, and each tab opens with a short explanation of what it
+  does, with fewer technical labels and clearer empty-state hints.
 
 ## 7.19.55 - 2026-09-30
 

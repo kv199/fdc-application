@@ -5,7 +5,8 @@ Forza Horizon 6 Data Out and presents them in the Configuration window.
 
 ## User experience
 
-Garage is the Configuration tab immediately to the right of HUD.
+Garage is the Configuration tab immediately to the right of Shift Light. It
+opens with a short intro.
 
 - **Current car** updates immediately when a new valid vehicle telemetry sample
   is observed. It shows an empty square reserved for a future image, then the

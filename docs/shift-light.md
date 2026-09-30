@@ -229,7 +229,8 @@ the bounded crossover journal.
 
 ## Settings
 
-The settings page shows the active configuration, reported redline, learned
+The Shift Light tab in Configuration opens with a short intro and shows the
+active configuration, reported redline, learned
 ceiling progress, effective target, state, accepted sample count and last power
 comparison for each observed pair. It does not diagnose the driver's shift as
 "bad" or "too early" when the capture was unusable or the next gear was weaker.

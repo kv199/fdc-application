@@ -1,9 +1,11 @@
 # Events
 
 Events is FDC's local library of player-created Forza Horizon 6 events. It is
-available as the Events tab in Configuration, directly after Garage.
+available as the Events tab in Configuration, the second tab after HUD.
 
 ## User experience
+
+The tab opens with a short intro and contains:
 
 - **Events** shows active events as responsive tiles in the Garage card style.
   A tile shows its database event ID as `#ID`, its name, Mode, and Route Type.
