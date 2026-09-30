@@ -5,6 +5,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+## 7.19.55 - 2026-09-30
+
 ### Fixed
 
 - **HUD**: in Freeform layout, **EDIT** no longer hides the block you are
