@@ -162,13 +162,13 @@ branch holds the latest release and `develop` holds ongoing work. See
 
 ## Documentation
 
-- [Changelog](CHANGELOG.md) — user-facing changes in every release.
+- [Architecture](docs/architecture.md) — system boundary and runtime data flow.
 - [HUD](docs/hud.md) — blocks, shift cue, visibility, layout, and opacity.
+- [Driver Analysis](docs/driver-analysis.md) — recording, analysis, and history.
 - [Shift Light](docs/shift-light.md) — learner, presentation, and persistence.
 - [Events](docs/events.md) — event library, run recording, and Delta.
-- [Driver Analysis](docs/driver-analysis.md) — recording, analysis, and history.
 - [Garage](docs/garage.md) — vehicle identity and local persistence.
-- [Architecture](docs/architecture.md) — system boundary and runtime data flow.
+- [Changelog](CHANGELOG.md) — user-facing changes in every release.
 
 ## Feedback and security
 

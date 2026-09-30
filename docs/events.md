@@ -244,17 +244,18 @@ the corresponding value is absent from Direct Data Out.
 
 ## Mode colors
 
-The event tile's left edge and Mode badge use a stable Mode color. The mapping
-uses the corresponding existing Forza-style class colors where specified:
+The event tile's left edge and Mode badge use a stable Mode color:
 
 | Mode | Color |
 | --- | --- |
-| Any | B-class orange |
-| Rivals | D-class blue |
-| Online | C-class yellow |
-| EventLab | White |
-| Official | A-class red |
-| Blueprint | S1-class purple |
+| Any | `#f97316` |
+| Rivals | `#7dd3fc` |
+| Online | `#facc15` |
+| EventLab | `#ffffff` |
+| Official | `#ef4444` |
+| Blueprint | `#c084fc` |
+
+The Any and EventLab badges use dark text (`#090b0e`) for contrast.
 
 ## Local SQLite state
 
