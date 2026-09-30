@@ -100,12 +100,19 @@ data stays on this PC, and contains:
 
 - **Configuration always on top**, off by default;
 - **Show HUD with telemetry**, described above;
-- **Speed unit**: `km/h` or `mph` for the HUD speed value.
+- **Speed unit**: `km/h` or `mph` for speeds in the HUD, Events, and Driver
+  Analysis;
+- **Distance unit**: `km` or `mi` for distances in Events and Driver Analysis.
+  Short distances, such as the Events map hover, use `m` or `ft`. A preference
+  record without a distance unit defaults to `mi` when the speed unit is `mph`.
+
+Units are display-only: telemetry, `fdc.sqlite`, and saved traces stay in
+km/h and meters, and changing a unit immediately redraws the open views.
 
 ## Persistence
 
-HUD layout, block and overlay visibility, opacity, speed unit, and brightness
-preferences are stored in the local application webview storage. They are not
+HUD layout, block and overlay visibility, opacity, speed and distance units,
+and brightness preferences are stored in the local application webview storage. They are not
 written to `fdc.sqlite`.
 
 ## Browser demo

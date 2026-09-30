@@ -64,3 +64,20 @@ test('recording summary aggregates every car', () => {
   assert.equal(summary, '2.0 km · average 120 km/h · top 231 km/h · 4 corners')
   assert.equal(history.recordingSummary([{ stats: null }]), '')
 })
+
+test('recording summary uses imperial units when DisplayPreferences specifies them', () => {
+  try {
+    globalThis.DisplayPreferences = {
+      read: () => ({ speedUnit: 'mph', distanceUnit: 'mi' })
+    }
+    const summary = history.recordingSummary([
+      { stats: { distanceM: 1000, movingMs: 30000, maxSpeedKmh: 180.4, corners: { count: 2 } } },
+      { stats: { distanceM: 1000, movingMs: 30000, maxSpeedKmh: 230.6, corners: { count: 2 } } },
+      { stats: null }
+    ])
+    assert.ok(summary.includes('mi'), `distance should be in miles: ${summary}`)
+    assert.ok(summary.includes('mph'), `speeds should be in mph: ${summary}`)
+  } finally {
+    delete globalThis.DisplayPreferences
+  }
+})

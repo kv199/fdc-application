@@ -96,9 +96,19 @@ middle of that second and the maximum within it.
 Each Configuration tab starts with a heading block and one
 `settings-section__intro` paragraph. Every empty state uses `.settings-empty`
 (framed box with border and dark background), or
-`.settings-empty settings-empty--inline` when it sits inside an existing card. Toggle empty states with the `hidden` attribute; do not add
-feature-specific empty-state styles. Placeholders inside a map or trace box keep
+`.settings-empty settings-empty--inline` when it sits inside an existing card.
+Toggle empty states with the `hidden` attribute; do not add feature-specific
+empty-state styles. Placeholders inside a map or trace box keep
 `events-lap-detail__empty`.
+
+Measurement units go through `overlay/units.js` (`FdcUnits`). Keep values
+metric (km/h, meters) in telemetry, storage, and computations, and format them
+only when shown with `FdcUnits.formatSpeed` or `FdcUnits.formatDistance`; these
+follow the user's per-quantity preference (`speedUnit`, `distanceUnit`). Never
+write a unit label such as `km/h`, `mph`, `km`, or `m` into output text
+directly; `overlay/units-guard.test.js` fails when one appears outside
+`units.js`. To add a quantity, add it to `FdcUnits.QUANTITIES` with a
+`<quantity>Unit` preference and a Settings row.
 
 ## Release verification cycle
 

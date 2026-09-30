@@ -5,6 +5,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   'use strict'
 
+  const FdcUnits = globalThis.FdcUnits || require('./units.js')
   const GRAVITY = 9.80665
   const TRACE_LAYERS = ['throttle', 'brake', 'coast', 'slip']
 
@@ -214,7 +215,7 @@
 
     // Always present: distance and time
     if (distanceM !== null) {
-      rows.push({ label: 'DIST', value: String(Math.round(distanceM - firstDistanceM)) + ' m' })
+      rows.push({ label: 'DIST', value: FdcUnits.formatDistance(distanceM - firstDistanceM, { scale: 'short' }) })
     }
     rows.push({ label: 'TIME', value: formatTime(point.elapsedMs) })
 
@@ -222,7 +223,7 @@
     if (hasExtended) {
       const speed = finiteNumber(point.speedKmh)
       if (speed !== null) {
-        rows.push({ label: 'SPEED', value: String(Math.round(speed)) + ' km/h' })
+        rows.push({ label: 'SPEED', value: FdcUnits.formatSpeed(speed) })
       }
 
       const gear = finiteNumber(point.gear)

@@ -21,6 +21,7 @@ function createStorage(initialValue = null) {
 test('uses the split display defaults and enables the telemetry-driven displays by default', () => {
   assert.deepEqual(DisplayPreferences.read(createStorage()), {
     speedUnit: 'kmh',
+    distanceUnit: 'km',
     redlineBrightness: 80,
     shiftLightBrightness: 80,
     fdcShiftLightEnabled: true,
@@ -31,8 +32,10 @@ test('uses the split display defaults and enables the telemetry-driven displays 
 })
 
 test('migrates old records and sanitizes units, brightness, flags and HUD opacity', () => {
+  // speedUnit=mph defaults distanceUnit to mi
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'mph', shiftLightBrightness: 135 }), {
     speedUnit: 'mph',
+    distanceUnit: 'mi',
     redlineBrightness: 80,
     shiftLightBrightness: 100,
     fdcShiftLightEnabled: true,
@@ -40,8 +43,10 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
     hudOpacity: 80,
     configurationAlwaysOnTop: false
   })
+  // invalid speedUnit defaults to kmh and distanceUnit to km
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'knots', shiftLightBrightness: -4 }), {
     speedUnit: 'kmh',
+    distanceUnit: 'km',
     redlineBrightness: 80,
     shiftLightBrightness: 0,
     fdcShiftLightEnabled: true,
@@ -51,6 +56,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
   })
   assert.deepEqual(DisplayPreferences.normalize({ redlineBrightness: '64.6', shiftLightBrightness: '44.4', fdcShiftLightEnabled: false, showHudWithTelemetry: false }), {
     speedUnit: 'kmh',
+    distanceUnit: 'km',
     redlineBrightness: 65,
     shiftLightBrightness: 44,
     fdcShiftLightEnabled: false,
@@ -58,8 +64,21 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
     hudOpacity: 80,
     configurationAlwaysOnTop: false
   })
+  // speedUnit=mph and distanceUnit=null defaults to mi
   assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'mph', shiftLightBrightness: null }), {
     speedUnit: 'mph',
+    distanceUnit: 'mi',
+    redlineBrightness: 80,
+    shiftLightBrightness: 80,
+    fdcShiftLightEnabled: true,
+    showHudWithTelemetry: true,
+    hudOpacity: 80,
+    configurationAlwaysOnTop: false
+  })
+  // explicit distanceUnit is preserved
+  assert.deepEqual(DisplayPreferences.normalize({ speedUnit: 'mph', distanceUnit: 'km' }), {
+    speedUnit: 'mph',
+    distanceUnit: 'km',
     redlineBrightness: 80,
     shiftLightBrightness: 80,
     fdcShiftLightEnabled: true,
@@ -69,6 +88,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
   })
   assert.deepEqual(DisplayPreferences.normalize({ hudOpacity: 0 }), {
     speedUnit: 'kmh',
+    distanceUnit: 'km',
     redlineBrightness: 80,
     shiftLightBrightness: 80,
     fdcShiftLightEnabled: true,
@@ -78,6 +98,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
   })
   assert.deepEqual(DisplayPreferences.normalize({ hudOpacity: 101.4 }), {
     speedUnit: 'kmh',
+    distanceUnit: 'km',
     redlineBrightness: 80,
     shiftLightBrightness: 80,
     fdcShiftLightEnabled: true,
@@ -87,6 +108,7 @@ test('migrates old records and sanitizes units, brightness, flags and HUD opacit
   })
   assert.deepEqual(DisplayPreferences.normalize({ redlineBrightness: -1, shiftLightBrightness: 101 }), {
     speedUnit: 'kmh',
+    distanceUnit: 'km',
     redlineBrightness: 0,
     shiftLightBrightness: 100,
     fdcShiftLightEnabled: true,
@@ -111,7 +133,7 @@ test('writes a versioned normalized preference record', () => {
   const storage = createStorage()
   const written = DisplayPreferences.write({ speedUnit: 'mph', shiftLightBrightness: 55, hudOpacity: 64, configurationAlwaysOnTop: false }, storage)
 
-  assert.deepEqual(written, { speedUnit: 'mph', redlineBrightness: 80, shiftLightBrightness: 55, fdcShiftLightEnabled: true, showHudWithTelemetry: true, hudOpacity: 64, configurationAlwaysOnTop: false })
+  assert.deepEqual(written, { speedUnit: 'mph', distanceUnit: 'mi', redlineBrightness: 80, shiftLightBrightness: 55, fdcShiftLightEnabled: true, showHudWithTelemetry: true, hudOpacity: 64, configurationAlwaysOnTop: false })
   assert.deepEqual(JSON.parse(storage.value()), written)
 })
 
@@ -120,6 +142,7 @@ test('updates one preference without resetting the other', () => {
 
   assert.deepEqual(DisplayPreferences.update({ shiftLightBrightness: 90 }, storage), {
     speedUnit: 'mph',
+    distanceUnit: 'mi',
     redlineBrightness: 80,
     shiftLightBrightness: 90,
     fdcShiftLightEnabled: true,
@@ -127,13 +150,6 @@ test('updates one preference without resetting the other', () => {
     hudOpacity: 42,
     configurationAlwaysOnTop: false
   })
-})
-
-test('formats canonical km/h telemetry for either display unit', () => {
-  assert.equal(DisplayPreferences.formatSpeed(128), '128 km/h')
-  assert.equal(DisplayPreferences.formatSpeed(128, 'mph'), '80 mph')
-  assert.equal(DisplayPreferences.formatSpeed(null, 'mph'), '-- mph')
-  assert.equal(DisplayPreferences.formatSpeed(-3, 'kmh'), '0 km/h')
 })
 
 test('maps the existing 80 percent appearance to brightness scale 1', () => {

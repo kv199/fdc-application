@@ -7,6 +7,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, scoringApi => {
   'use strict'
 
+  const FdcUnits = globalThis.FdcUnits || require('./units.js')
   // Same density as an Events lap trace.
   const TRACE_INTERVAL_MS = 100
   const ERROR_TYPES = Object.freeze(['front_scrub', 'exit_wheelspin', 'brake_steering_overload', 'abrupt_brake_release'])
@@ -178,7 +179,7 @@
     const firstDistance = finite(points[0]?.distanceM)
     const distance = finite(start?.distanceM)
     const durationS = Math.max(0, (finite(mark.check?.finishedAtMs) ?? 0) - (finite(mark.check?.startedAtMs) ?? 0)) / 1000
-    const where = distance !== null && firstDistance !== null ? `${((distance - firstDistance) / 1000).toFixed(2)} km · ` : ''
+    const where = distance !== null && firstDistance !== null ? `${FdcUnits.formatDistance(distance - firstDistance, { decimals: 2 })} · ` : ''
     const metrics = mark.check?.metrics && typeof mark.check.metrics === 'object' ? mark.check.metrics : {}
     return {
       kind: mark.kind,

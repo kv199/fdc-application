@@ -371,6 +371,9 @@ test('Settings exposes Configuration priority and speed unit preferences', () =>
   assert.doesNotMatch(settingsHtml, /DISPLAY SETTINGS|WINDOW \+ SPEED FORMAT/u)
   assert.match(settingsHtml, /name="speed-unit" value="kmh"/)
   assert.match(settingsHtml, /name="speed-unit" value="mph"/)
+  assert.match(settingsHtml, /name="distance-unit" value="km"/)
+  assert.match(settingsHtml, /name="distance-unit" value="mi"/)
+  assert.ok(settingsHtml.indexOf('speed-unit') < settingsHtml.indexOf('distance-unit'))
   assert.match(settingsHtml, /id="configuration-always-on-top" class="visibility-toggle" type="button"[^>]*aria-pressed="false"/)
   assert.match(settingsHtml, /<strong>SHOW HUD WITH TELEMETRY<\/strong>/)
   assert.match(settingsHtml, /id="show-hud-with-telemetry" class="visibility-toggle" type="button"[^>]*aria-pressed="true"/)
@@ -576,6 +579,13 @@ test('Driver Analysis history cards open drill-down pages for recording, car, an
   assert.match(settingsCss, /\.driver-analysis-detail-view__overview\s*\{[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/)
 })
 
+test('Configuration only calls render functions it defines, with the run they need', () => {
+  const called = new Set([...settingsJs.matchAll(/\b(render[A-Z]\w*)\(/g)].map(match => match[1]))
+  const defined = new Set([...settingsJs.matchAll(/function (render[A-Z]\w*)\(/g)].map(match => match[1]))
+  assert.deepEqual([...called].filter(name => !defined.has(name)), [])
+  assert.doesNotMatch(settingsJs, /renderEventRunDetail\(\)/)
+})
+
 test('Configuration uses one shared empty-state style', () => {
   assert.match(settingsCss, /\.settings-empty\s*\{/)
   assert.match(settingsCss, /\.settings-empty--inline\s*\{/)
@@ -595,4 +605,43 @@ test('Configuration uses one shared empty-state style', () => {
   assert.match(settingsJs, /className = 'settings-empty'/)
   assert.doesNotMatch(settingsJs, /className = 'events-run-empty'/)
   assert.match(settingsCss, /\.shift-light-brightness-card__heading\s*\{[^}]*align-items:\s*center/)
+})
+
+test('Units module is loaded after vehicle in both overlay and settings HTML', () => {
+  const overlayVehicleIndex = overlayHtml.indexOf('src="vehicle.js"')
+  const overlayUnitsIndex = overlayHtml.indexOf('src="units.js"')
+  const settingsVehicleIndex = settingsHtml.indexOf('src="vehicle.js"')
+  const settingsUnitsIndex = settingsHtml.indexOf('src="units.js"')
+
+  assert.ok(overlayVehicleIndex >= 0)
+  assert.ok(overlayUnitsIndex > overlayVehicleIndex)
+  assert.ok(settingsVehicleIndex >= 0)
+  assert.ok(settingsUnitsIndex > settingsVehicleIndex)
+})
+
+test('Settings has distance unit controls wired alongside speed unit controls', () => {
+  assert.match(settingsJs, /const distanceUnitInputs = \[\.\.\.document\.querySelectorAll\('input\[name="distance-unit"\]'\)\]/)
+  assert.match(settingsJs, /distanceUnit: 'km'/)
+  assert.match(settingsJs, /for \(const input of distanceUnitInputs\)/)
+  assert.match(settingsJs, /updateDisplayPreferences\(\s*\{ distanceUnit: input\.value \},/)
+  assert.match(settingsJs, /DISTANCE UNIT SET TO/)
+  assert.match(settingsJs, /distanceUnit === 'mi' \? 'MI' : 'KM'/)
+})
+
+test('Settings re-renders unit-dependent views when units change', () => {
+  assert.match(settingsJs, /function renderUnitDependentViews\(\)/)
+  assert.match(settingsJs, /renderDriverAnalysisHistory\(\)/)
+  assert.match(settingsJs, /renderDriverAnalysisView\(\)/)
+  assert.match(settingsJs, /function renderUnitDependentViews\(\) \{[\s\S]*?renderEventRunDetail\(currentEventRun\)/)
+  assert.match(settingsJs, /unitsChanged = previous\.speedUnit !== next\.speedUnit \|\| previous\.distanceUnit !== next\.distanceUnit/)
+  assert.match(settingsJs, /if \(unitsChanged\) \{\s*renderUnitDependentViews\(\)/)
+})
+
+test('HUD uses FdcUnits for speed formatting and reads fresh display preferences on update', () => {
+  assert.match(overlayHtml, /src="units.js"/)
+  assert.match(overlayHtml, /src="vehicle.js"/)
+  assert.ok(overlayHtml.indexOf('vehicle.js') < overlayHtml.indexOf('units.js'))
+  const overlaySource = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
+  assert.match(overlaySource, /window\.FdcUnits\.formatSpeed\([\s\S]*?\{ unit: displayPreferences\.speedUnit \}/)
+  assert.match(overlaySource, /window\.DisplayPreferences\.write\(\{\s*\.\.\.window\.DisplayPreferences\.read\(\),/)
 })

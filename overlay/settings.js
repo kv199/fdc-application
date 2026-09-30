@@ -71,6 +71,7 @@
     settings: 'SETTINGS'
   })
   const speedUnitInputs = [...document.querySelectorAll('input[name="speed-unit"]')]
+  const distanceUnitInputs = [...document.querySelectorAll('input[name="distance-unit"]')]
   const configurationAlwaysOnTop = document.getElementById('configuration-always-on-top')
   const showHudWithTelemetry = document.getElementById('show-hud-with-telemetry')
   const fdcShiftLightEnabled = document.getElementById('fdc-shift-light-enabled')
@@ -169,6 +170,7 @@
   let displayPreferencesPending = false
   let displayPreferences = displayPreferencesApi?.read?.() || {
     speedUnit: 'kmh',
+    distanceUnit: 'km',
     redlineBrightness: DEFAULT_REDLINE_BRIGHTNESS,
     shiftLightBrightness: 80,
     fdcShiftLightEnabled: true,
@@ -508,15 +510,21 @@
       historyChanged = true
       return { ...session, vehicleName: newName }
     })
+    const openRunOrdinal = Math.round(Number(currentEventRun?.car?.ordinal))
+    if (currentEventRun && ordinals.includes(openRunOrdinal)) {
+      const newName = garageVehicles.get(openRunOrdinal)?.name || null
+      if (currentEventRun.car.name !== newName) {
+        currentEventRun = { ...currentEventRun, car: { ...currentEventRun.car, name: newName } }
+        runsChanged = true
+      }
+    }
     if (runsChanged) {
       renderEventRuns()
-      if (currentEventRun) renderEventRunDetail()
+      if (currentEventRun) renderEventRunDetail(currentEventRun)
     }
     if (historyChanged) {
       renderDriverAnalysisHistory()
-      if (driverAnalysisView.level === 'car' || driverAnalysisView.level === 'drive') {
-        renderDriverAnalysisDetailView()
-      }
+      renderDriverAnalysisView()
     }
   }
 
@@ -3167,6 +3175,9 @@
     for (const input of speedUnitInputs) {
       input.checked = input.value === preferences.speedUnit
     }
+    for (const input of distanceUnitInputs) {
+      input.checked = input.value === preferences.distanceUnit
+    }
     renderRedlineBrightness(preferences.redlineBrightness)
     renderShiftLightBrightness(preferences.shiftLightBrightness)
     renderHudOpacity(preferences.hudOpacity)
@@ -3217,6 +3228,7 @@
   function setDisplayPreferencesPending(pending) {
     displayPreferencesPending = pending
     for (const input of speedUnitInputs) input.disabled = pending
+    for (const input of distanceUnitInputs) input.disabled = pending
     if (configurationAlwaysOnTop) configurationAlwaysOnTop.disabled = pending
     if (showHudWithTelemetry) showHudWithTelemetry.disabled = pending
     if (fdcShiftLightEnabled) fdcShiftLightEnabled.disabled = pending
@@ -3245,6 +3257,8 @@
     renderDisplayPreferences(next)
     setDisplayPreferencesPending(true)
 
+    const unitsChanged = previous.speedUnit !== next.speedUnit || previous.distanceUnit !== next.distanceUnit
+
     try {
       await call('set_display_preferences', {
         speedUnit: next.speedUnit,
@@ -3255,6 +3269,9 @@
         showHudWithTelemetry: next.showHudWithTelemetry
       })
       setStatus(successMessage(next))
+      if (unitsChanged) {
+        renderUnitDependentViews()
+      }
     } catch (error) {
       displayPreferences = previous
       displayPreferencesApi.write(previous)
@@ -3770,6 +3787,12 @@
     }
   })
 
+  function renderUnitDependentViews() {
+    renderDriverAnalysisHistory()
+    renderDriverAnalysisView()
+    if (currentEventRun) renderEventRunDetail(currentEventRun)
+  }
+
   displayPreferences = displayPreferencesApi?.normalize?.(displayPreferences) || displayPreferences
   renderDisplayPreferences(displayPreferences)
   void updateConfigurationAlwaysOnTop(displayPreferences.configurationAlwaysOnTop, false)
@@ -3782,6 +3805,15 @@
       void updateDisplayPreferences(
         { speedUnit: input.value },
         next => `SPEED UNIT SET TO ${next.speedUnit === 'mph' ? 'MPH' : 'KM/H'}`
+      )
+    })
+  }
+  for (const input of distanceUnitInputs) {
+    input.addEventListener('change', () => {
+      if (!input.checked) return
+      void updateDisplayPreferences(
+        { distanceUnit: input.value },
+        next => `DISTANCE UNIT SET TO ${next.distanceUnit === 'mi' ? 'MI' : 'KM'}`
       )
     })
   }

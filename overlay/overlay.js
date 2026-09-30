@@ -196,16 +196,16 @@ function applyDisplayPreferences() {
   document.documentElement.style.setProperty('--shift-light-brightness-scale', String(brightnessScale))
   document.documentElement.style.setProperty('--hud-opacity', String(displayPreferences.hudOpacity / 100))
   document.documentElement.dataset.speedUnit = displayPreferences.speedUnit
-  speedValue.textContent = window.DisplayPreferences.formatSpeed(
+  speedValue.textContent = window.FdcUnits.formatSpeed(
     latestTelemetry?.speedKmh,
-    displayPreferences.speedUnit
+    { unit: displayPreferences.speedUnit }
   )
   applyTelemetryVisibility()
 }
 
 function setDisplayPreferences(preferences) {
   displayPreferences = window.DisplayPreferences.write({
-    ...displayPreferences,
+    ...window.DisplayPreferences.read(),
     ...(preferences && typeof preferences === 'object' ? preferences : {})
   })
   applyDisplayPreferences()
@@ -419,7 +419,7 @@ function renderTelemetry() {
 
   drawSteering(steer)
   updateTires(telemetry.tireTempC)
-  speedValue.textContent = window.DisplayPreferences.formatSpeed(telemetry.speedKmh, displayPreferences.speedUnit)
+  speedValue.textContent = window.FdcUnits.formatSpeed(telemetry.speedKmh, { unit: displayPreferences.speedUnit })
   gearValue.textContent = formatGear(telemetry.gear)
   rpmValue.textContent = formatRpm(telemetry.rpm)
   updateEngine(telemetry)

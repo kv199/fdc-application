@@ -7,6 +7,7 @@
   const STORAGE_KEY = 'fdc.display-preferences.v1'
   const DEFAULTS = Object.freeze({
     speedUnit: 'kmh',
+    distanceUnit: 'km',
     redlineBrightness: 80,
     shiftLightBrightness: 80,
     fdcShiftLightEnabled: true,
@@ -14,7 +15,6 @@
     hudOpacity: 80,
     configurationAlwaysOnTop: false
   })
-  const MPH_PER_KMH = 0.621371
   const REDLINE_BRIGHTNESS_STOPS = Object.freeze([
     Object.freeze({ percent: 0, rgb: Object.freeze([18, 3, 2]) }),
     Object.freeze({ percent: 25, rgb: Object.freeze([77, 13, 12]) }),
@@ -49,8 +49,15 @@
       ? Math.round(Math.max(1, Math.min(100, rawOpacity)))
       : DEFAULTS.hudOpacity
 
+    const speedUnit = candidate.speedUnit === 'mph' ? 'mph' : DEFAULTS.speedUnit
+    // Records saved before the distance unit existed follow the chosen speed unit.
+    const distanceUnit = ['km', 'mi'].includes(candidate.distanceUnit)
+      ? candidate.distanceUnit
+      : speedUnit === 'mph' ? 'mi' : DEFAULTS.distanceUnit
+
     return {
-      speedUnit: candidate.speedUnit === 'mph' ? 'mph' : DEFAULTS.speedUnit,
+      speedUnit,
+      distanceUnit,
       redlineBrightness,
       shiftLightBrightness,
       fdcShiftLightEnabled: candidate.fdcShiftLightEnabled !== false,
@@ -93,24 +100,6 @@
     return write({ ...read(storage), ...candidate }, storage)
   }
 
-  function convertSpeedKmh(speedKmh, speedUnit = DEFAULTS.speedUnit) {
-    if (speedKmh === null || speedKmh === undefined || speedKmh === '') return null
-    const speed = Number(speedKmh)
-    if (!Number.isFinite(speed)) return null
-    return speedUnit === 'mph' ? speed * MPH_PER_KMH : speed
-  }
-
-  function speedUnitLabel(speedUnit = DEFAULTS.speedUnit) {
-    return speedUnit === 'mph' ? 'mph' : 'km/h'
-  }
-
-  function formatSpeed(speedKmh, speedUnit = DEFAULTS.speedUnit) {
-    const unit = speedUnit === 'mph' ? 'mph' : DEFAULTS.speedUnit
-    const speed = convertSpeedKmh(speedKmh, unit)
-    if (speed === null) return `-- ${speedUnitLabel(unit)}`
-    return `${Math.max(0, Math.round(speed))} ${speedUnitLabel(unit)}`
-  }
-
   function shiftLightBrightnessScale(brightness) {
     return normalize({ shiftLightBrightness: brightness }).shiftLightBrightness / DEFAULTS.shiftLightBrightness
   }
@@ -130,16 +119,12 @@
 
   return {
     DEFAULTS,
-    MPH_PER_KMH,
     STORAGE_KEY,
-    convertSpeedKmh,
-    formatSpeed,
     normalize,
     REDLINE_BRIGHTNESS_STOPS,
     redlineBrightnessColor,
     read,
     shiftLightBrightnessScale,
-    speedUnitLabel,
     update,
     write
   }

@@ -1807,6 +1807,30 @@ test('formatSummaryMetrics omits corner count when < 3', () => {
   assert.deepEqual(statsApi.formatSummaryMetrics(stats).map(metric => metric.label), ['DISTANCE', 'AVERAGE', 'TOP'])
 })
 
+test('formatSummaryMetrics uses imperial units when DisplayPreferences specifies them', () => {
+  try {
+    globalThis.DisplayPreferences = {
+      read: () => ({ speedUnit: 'mph', distanceUnit: 'mi' })
+    }
+    const stats = {
+      version: statsApi.STATS_VERSION,
+      distanceM: 5000,
+      avgSpeedKmh: 100,
+      maxSpeedKmh: 200,
+      corners: { count: 5 }
+    }
+    const metrics = statsApi.formatSummaryMetrics(stats)
+    const distance = metrics.find(m => m.label === 'DISTANCE')
+    const average = metrics.find(m => m.label === 'AVERAGE')
+    const top = metrics.find(m => m.label === 'TOP')
+    assert.ok(distance.value.includes('mi'), `distance should be in miles: ${distance.value}`)
+    assert.ok(average.value.includes('mph'), `average speed should be in mph: ${average.value}`)
+    assert.ok(top.value.includes('mph'), `top speed should be in mph: ${top.value}`)
+  } finally {
+    delete globalThis.DisplayPreferences
+  }
+})
+
 test('formatPatternSummary returns null when no patterns', () => {
   const stats = { version: statsApi.STATS_VERSION }
   assert.equal(statsApi.formatPatternSummary(stats), null)

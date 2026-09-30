@@ -5,6 +5,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   'use strict'
 
+  const FdcUnits = globalThis.FdcUnits || require('./units.js')
   const FdcVehicle = globalThis.FdcVehicle || require('./vehicle.js')
 
   function finite(value) {
@@ -83,9 +84,12 @@
       corners += Math.max(0, finite(stats.corners?.count) ?? 0)
     }
     const parts = []
-    if (distanceM > 0) parts.push(`${(distanceM / 1000).toFixed(1)} km`)
-    if (distanceM > 0 && movingMs > 0) parts.push(`average ${Math.round(distanceM / (movingMs / 1000) * 3.6)} km/h`)
-    if (topSpeedKmh !== null) parts.push(`top ${Math.round(topSpeedKmh)} km/h`)
+    if (distanceM > 0) parts.push(FdcUnits.formatDistance(distanceM))
+    if (distanceM > 0 && movingMs > 0) {
+      const avgKmh = distanceM / (movingMs / 1000) * 3.6
+      parts.push(`average ${FdcUnits.formatSpeed(avgKmh)}`)
+    }
+    if (topSpeedKmh !== null) parts.push(`top ${FdcUnits.formatSpeed(topSpeedKmh)}`)
     if (corners >= 3) parts.push(`${corners} corners`)
     return parts.join(' · ')
   }

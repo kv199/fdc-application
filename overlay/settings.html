@@ -655,7 +655,7 @@
           <div class="display-setting-row" data-display-preference role="group" aria-labelledby="speed-unit-title">
             <div class="display-setting-row__copy">
               <strong id="speed-unit-title">SPEED UNIT</strong>
-              <small>Choose how vehicle speed is shown in the HUD.</small>
+              <small>Choose how speed is shown in the HUD, Events, and Driver Analysis.</small>
             </div>
             <div class="unit-options" aria-label="Speed unit">
               <label class="unit-option">
@@ -665,6 +665,22 @@
               <label class="unit-option">
                 <input type="radio" name="speed-unit" value="mph">
                 <span>MPH</span>
+              </label>
+            </div>
+          </div>
+          <div class="display-setting-row" data-display-preference role="group" aria-labelledby="distance-unit-title">
+            <div class="display-setting-row__copy">
+              <strong id="distance-unit-title">DISTANCE UNIT</strong>
+              <small>Choose how distances are shown in Events and Driver Analysis.</small>
+            </div>
+            <div class="unit-options" aria-label="Distance unit">
+              <label class="unit-option">
+                <input type="radio" name="distance-unit" value="km">
+                <span>KM</span>
+              </label>
+              <label class="unit-option">
+                <input type="radio" name="distance-unit" value="mi">
+                <span>MI</span>
               </label>
             </div>
           </div>
@@ -688,6 +704,7 @@
   </main>
 
   <script src="vehicle.js"></script>
+  <script src="units.js"></script>
   <script src="telemetry-route.js"></script>
   <script src="shift-light-settings.js"></script>
   <script src="display-preferences.js"></script>

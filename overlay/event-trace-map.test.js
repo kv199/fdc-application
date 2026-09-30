@@ -269,3 +269,26 @@ test('slipTimeShare is time-weighted like the pedal statistics', () => {
   assert.equal(EventTraceMap.slipTimeShare(points, 10000), 30)
   assert.equal(EventTraceMap.slipTimeShare([{ elapsedMs: 0, throttle: 1 }, { elapsedMs: 100, throttle: 1 }], 200), null)
 })
+
+test('tooltipModel uses imperial units when DisplayPreferences specifies them', () => {
+  try {
+    globalThis.DisplayPreferences = {
+      read: () => ({ speedUnit: 'mph', distanceUnit: 'mi' })
+    }
+    const point = {
+      throttle: 0.5, brake: 0.2,
+      elapsedMs: 5000, distanceM: 100,
+      speedKmh: 150,
+      gear: 5,
+      rpm: 7200,
+      steer: 0.25
+    }
+    const model = EventTraceMap.tooltipModel(point, 50)
+    const distRow = model.rows.find(r => r.label === 'DIST')
+    const speedRow = model.rows.find(r => r.label === 'SPEED')
+    assert.ok(distRow.value.includes('ft'), `distance should be in feet: ${distRow.value}`)
+    assert.ok(speedRow.value.includes('mph'), `speed should be in mph: ${speedRow.value}`)
+  } finally {
+    delete globalThis.DisplayPreferences
+  }
+})

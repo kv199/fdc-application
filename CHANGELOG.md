@@ -7,11 +7,15 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ### Fixed
 
+- **Garage**: renaming a car now also updates an open Event run and no longer
+  breaks an open Driver Analysis car or drive page.
 - **Configuration**: slider titles line up with their value and RESET again,
   and every "nothing here yet" message now uses the same framed style.
 
 ### Added
 
+- **Settings**: a separate **Distance unit** (km or mi) joins the speed unit,
+  and both now apply to Events and Driver Analysis as well as the HUD.
 - **Configuration**: **HELP** at the bottom of the window opens the bug report
   form with your version filled in, GitHub Discussions for ideas, or Q&A for
   questions. Click the version to copy it.

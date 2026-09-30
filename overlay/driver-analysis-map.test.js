@@ -82,3 +82,20 @@ test('a hover near a problem segment picks the segment over a closer plain point
   assert.equal(map.nearestErrorIndex(marks, projected, 11, 0, 14), 2)
   assert.equal(map.nearestErrorIndex(marks, projected, 0, 0, 14), null)
 })
+
+test('error tooltip model uses imperial units when DisplayPreferences specifies them', () => {
+  try {
+    globalThis.DisplayPreferences = {
+      read: () => ({ speedUnit: 'mph', distanceUnit: 'mi' })
+    }
+    const points = map.tracePointsFromSamples(Array.from({ length: 30 }, (_, index) => sample(index * 100)))
+    const model = map.errorTooltipModel({
+      kind: 'front_scrub', startIndex: 12, endIndex: 18,
+      check: { startedAtMs: 1200, finishedAtMs: 1800, metrics: { steerGrowth: 0.18, peakFrontSlip: 1.12, lateralResponseLoss: 0.64, yawResponseLoss: 0.0873 } }
+    }, points)
+
+    assert.ok(model.subtitle.includes('mi'), `distance should be in miles: ${model.subtitle}`)
+  } finally {
+    delete globalThis.DisplayPreferences
+  }
+})

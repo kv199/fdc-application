@@ -5,6 +5,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   'use strict'
 
+  const FdcUnits = globalThis.FdcUnits || require('./units.js')
   const STATS_VERSION = 7
   const GRAVITY = 9.80665
   const MIN_EVENTS = 3
@@ -355,10 +356,9 @@
   function formatSummaryMetrics(stats) {
     if (!stats || typeof stats !== 'object' || finite(stats.version) === null) return []
     const metrics = []
-    const distanceKm = finite(stats.distanceM) === null ? null : stats.distanceM / 1000
-    if (distanceKm !== null && distanceKm > 0) metrics.push({ label: 'DISTANCE', value: `${distanceKm.toFixed(1)} km` })
-    if (finite(stats.avgSpeedKmh) !== null) metrics.push({ label: 'AVERAGE', value: `${Math.round(stats.avgSpeedKmh)} km/h` })
-    if (finite(stats.maxSpeedKmh) !== null) metrics.push({ label: 'TOP', value: `${Math.round(stats.maxSpeedKmh)} km/h` })
+    if (finite(stats.distanceM) !== null && stats.distanceM > 0) metrics.push({ label: 'DISTANCE', value: FdcUnits.formatDistance(stats.distanceM) })
+    if (finite(stats.avgSpeedKmh) !== null) metrics.push({ label: 'AVERAGE', value: FdcUnits.formatSpeed(stats.avgSpeedKmh) })
+    if (finite(stats.maxSpeedKmh) !== null) metrics.push({ label: 'TOP', value: FdcUnits.formatSpeed(stats.maxSpeedKmh) })
     const cornerCount = finite(stats.corners?.count)
     if (cornerCount !== null && cornerCount >= 3) metrics.push({ label: 'CORNERS', value: String(cornerCount) })
     return metrics
