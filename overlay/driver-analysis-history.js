@@ -32,10 +32,9 @@
 
   function carLabel(session) {
     const name = typeof session?.vehicleName === 'string' ? session.vehicleName.trim() : ''
-    const ordinal = finite(session?.vehicleIdentity?.ordinal)
     if (name) return name
-    if (ordinal !== null) return `#${Math.trunc(ordinal)}`
-    return 'UNKNOWN CAR'
+    const ordinal = finite(session?.vehicleIdentity?.ordinal)
+    return ordinal !== null ? `CAR #${Math.trunc(ordinal)}` : 'UNKNOWN CAR'
   }
 
   function drivetrainLabel(value) {

@@ -124,7 +124,6 @@
       ? vehicle.variants.find(variant => variant?.isCurrent) || vehicle.variants[0]
       : null
     const rawName = vehicle.name ?? vehicle.displayName ?? vehicle.carName
-    const rawCarType = vehicle.carType ?? vehicle.car_type
     const rawClass = vehicle.class ?? vehicle.carClass ?? vehicle.classLabel ?? currentVariant?.class ?? currentVariant?.carClass
     const rawPi = vehicle.pi ?? vehicle.performanceIndex ?? currentVariant?.pi
     const numericClass = Number(rawClass)
@@ -144,7 +143,6 @@
     const normalized = {
       carOrdinal,
       name: typeof rawName === 'string' && rawName.trim() ? rawName.trim() : null,
-      carType: typeof rawCarType === 'string' && rawCarType.trim() ? rawCarType.trim() : null,
       class: Number.isFinite(numericClass) ? Math.round(numericClass) : null,
       classLabel: classLabel(rawClass),
       pi: pi === null ? null : Math.round(pi),
@@ -164,6 +162,7 @@
     const car = telemetry?.car && typeof telemetry.car === 'object' ? telemetry.car : {}
     return normalizeVehicle({
       carOrdinal: car.ordinal ?? car.carOrdinal ?? telemetry?.carOrdinal ?? telemetry?.car_ordinal,
+      name: car.name ?? car.displayName ?? telemetry?.carName,
       class: car.class ?? car.carClass ?? telemetry?.class ?? telemetry?.carClass,
       pi: car.pi ?? telemetry?.pi,
       carGroup: car.carGroup ?? telemetry?.carGroup,
@@ -186,14 +185,8 @@
     return vehicle ? [vehicle] : []
   }
 
-  function vehicleLabel(name, ordinal) {
-    if (typeof name === 'string' && name.trim()) return name.trim()
-    const validOrdinal = ordinalOf(ordinal)
-    return validOrdinal !== null ? `#${Math.round(validOrdinal)}` : ''
-  }
-
   function displayName(vehicle) {
-    return vehicleLabel(vehicle?.name, vehicle?.carOrdinal)
+    return vehicle?.name || (vehicle?.carOrdinal ? String(vehicle.carOrdinal) : '')
   }
 
   function recordKey(vehicle) {
@@ -270,7 +263,6 @@
     drivetrainLabel,
     shiftLightStatus,
     normalizeShiftLightSummary,
-    vehicleLabel,
     displayName,
     createGarageRuntime
   }

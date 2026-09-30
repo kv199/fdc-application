@@ -18,7 +18,7 @@ The repository is organized around the current runtime boundaries:
 src-tauri/                 Native Tauri runtime and Direct Data Out decoder
 overlay/                   Static browser HUD and feature runtime modules
 src/shift-light/           Canonical Shift Light TypeScript source
-tools/                     Build, release notes, vehicle catalog, diagnostic, and integrity test tooling
+tools/                     Build, release notes, diagnostic, and integrity test tooling
 docs/                      Current architecture and feature documentation
 ```
 

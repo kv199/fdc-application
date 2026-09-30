@@ -300,7 +300,6 @@
       ...previous,
       ...vehicle,
       name: vehicle.name || previous?.name || null,
-      carType: vehicle.carType || previous?.carType || null,
       classLabel: vehicle.classLabel || previous?.classLabel || null,
       class: vehicle.class ?? previous?.class ?? null,
       pi: vehicle.pi ?? previous?.pi ?? null
@@ -335,10 +334,10 @@
     image.setAttribute('aria-label', `Image placeholder for ${garageDisplayName(vehicle)}`)
     const content = document.createElement('div')
     content.className = 'garage-current-car__content'
-    const name = document.createElement('h3')
+    const name = document.createElement('button')
+    name.type = 'button'
     name.className = 'garage-current-car__name'
     name.textContent = garageDisplayName(vehicle)
-    name.setAttribute('title', garageDisplayName(vehicle))
     const details = document.createElement('div')
     details.className = 'garage-current-car__details'
     appendGaragePerformance(details, vehicle)
@@ -359,15 +358,40 @@
     const carGroup = vehicle.carGroup === null || vehicle.carGroup === undefined
       ? null
       : Number(vehicle.carGroup)
-    // The catalog car type replaces the raw CarGroup number when the catalog knows it.
-    const typeText = vehicle.carType
-      || (Number.isFinite(carGroup) && carGroup > 0 ? `GROUP ${Math.round(carGroup)}` : null)
-    const type = typeText ? document.createElement('span') : null
-    if (type) {
-      type.className = 'garage-current-car__type'
-      type.textContent = typeText
+    const group = Number.isFinite(carGroup) && carGroup > 0
+      ? document.createElement('span')
+      : null
+    if (group) {
+      group.className = 'garage-current-car__group'
+      group.textContent = `GROUP ${Math.round(carGroup)}`
     }
-    content.append(name, ...(type ? [type] : []), details)
+    name.addEventListener('click', () => {
+      const input = document.createElement('input')
+      input.className = 'garage-current-car__input'
+      input.type = 'text'
+      input.maxLength = 80
+      input.value = vehicle.name || ''
+      input.placeholder = String(vehicle.carOrdinal)
+      input.setAttribute('aria-label', `Name for ${vehicle.carOrdinal}`)
+      name.replaceWith(input)
+      input.focus()
+      let cancelled = false
+      const finish = () => {
+        if (cancelled) return
+        const nextName = input.value.trim()
+        input.replaceWith(name)
+        if (nextName !== (vehicle.name || '')) void renameGarageCar(vehicle.carOrdinal, nextName)
+      }
+      input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') finish()
+        if (event.key === 'Escape') {
+          cancelled = true
+          input.replaceWith(name)
+        }
+      })
+      input.addEventListener('blur', finish, { once: true })
+    })
+    content.append(name, ...(group ? [group] : []), details)
     garageCurrentCar.append(image, content)
     renderGarageVariants(vehicle)
   }
@@ -399,9 +423,7 @@
       content.className = 'garage-card__content'
       const name = document.createElement('h4')
       name.className = 'garage-card__name'
-      const displayName = garageDisplayName(vehicle)
-      name.textContent = displayName
-      name.setAttribute('title', displayName)
+      name.textContent = garageDisplayName(vehicle)
 
       const meta = document.createElement('div')
       appendGaragePerformance(meta, vehicle)
@@ -433,6 +455,37 @@
     garageVariantsOrdinal = vehicle.carOrdinal
     garageVariantsOpen = !garageVariantsOpen
     renderGarageVariants(vehicle)
+  }
+
+  async function renameGarageCar(carOrdinal, name) {
+    const ordinal = Number(carOrdinal)
+    if (!Number.isFinite(ordinal) || ordinal <= 0) return false
+    const normalizedName = typeof name === 'string' ? name.trim() : ''
+    const vehicle = mergeGarageVehicle({ carOrdinal: ordinal, name: normalizedName || null })
+    if (vehicle) {
+      vehicle.name = normalizedName || null
+      garageVehicles.set(vehicle.carOrdinal, vehicle)
+    }
+    renderGarage()
+    try {
+      const result = await call('rename_garage_car', { carOrdinal: Math.round(ordinal), name: normalizedName })
+      const returned = garageApi?.normalizeGaragePayload?.(result)?.[0]
+      if (returned) {
+        const saved = mergeGarageVehicle(returned)
+        if (saved) {
+          saved.name = normalizedName || null
+          garageVehicles.set(saved.carOrdinal, saved)
+        }
+      }
+      renderGarage()
+      const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+      if (eventApi?.emit) await eventApi.emit('hud_garage', returned || vehicle)
+      setStatus('GARAGE NAME SAVED')
+      return true
+    } catch (error) {
+      setStatus(error.message || 'Unable to rename garage car', true)
+      return false
+    }
   }
 
   function applyGaragePayload(payload) {
@@ -1021,8 +1074,7 @@
   }
 
   function runCarName(run) {
-    const label = garageApi?.vehicleLabel?.(run.car.name, run.car.ordinal)
-    return label || 'UNKNOWN CAR'
+    return run.car.name || (run.car.ordinal ? `CAR #${run.car.ordinal}` : 'UNKNOWN CAR')
   }
 
   function runBestTimeMs(run) {
@@ -1170,7 +1222,6 @@
         const valueElement = document.createElement('span')
         valueElement.className = `event-run-row__value${label.startsWith('BEST') || label === 'SPRINT' ? ' event-run-row__time' : ''}`
         valueElement.textContent = value
-        if (label === 'CAR') valueElement.title = String(value)
         cell.append(labelElement, valueElement)
         row.append(cell)
       }
@@ -2246,10 +2297,7 @@
     }
     if (driverAnalysisDetailBody) driverAnalysisDetailBody.replaceChildren()
     if (driverAnalysisDetailSummary) driverAnalysisDetailSummary.replaceChildren()
-    if (driverAnalysisDetailTitle) {
-      driverAnalysisDetailTitle.textContent = 'RECORDING'
-      driverAnalysisDetailTitle.removeAttribute('title')
-    }
+    if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = 'RECORDING'
     if (driverAnalysisView.level === 'recording') {
       const firstSession = recording.sessions[0]
       if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = formatDriverAnalysisDate(firstSession?.recordedAt)
@@ -2319,11 +2367,7 @@
         })
         const carCell = document.createElement('th')
         carCell.scope = 'row'
-        const carName = document.createElement('span')
-        carName.className = 'driver-analysis-car-name'
-        carName.textContent = carLabel
-        carName.title = carLabel
-        carCell.append(carName)
+        carCell.textContent = carLabel
         row.append(carCell)
         const pi = Number(s?.vehicleIdentity?.pi)
         const piCell = document.createElement('td')
@@ -2361,10 +2405,7 @@
       const carLabel = globalScope.DriverAnalysisHistory?.carLabel?.(session) || 'Car'
       const pi = Number(session?.vehicleIdentity?.pi)
       const drivetrain = globalScope.DriverAnalysisHistory?.drivetrainLabel?.(session?.vehicleIdentity?.drivetrain) || ''
-      if (driverAnalysisDetailTitle) {
-        driverAnalysisDetailTitle.textContent = carLabel
-        driverAnalysisDetailTitle.title = carLabel
-      }
+      if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = carLabel
       const badges = []
       if (Number.isFinite(pi)) {
         const piBadge = document.createElement('span')
@@ -2589,9 +2630,8 @@
       if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = `DRIVE #${drive?.id || ''}`
       const badges = []
       const carBadge = document.createElement('span')
-      carBadge.className = 'events-detail-view__badge events-detail-view__badge--car'
+      carBadge.className = 'events-detail-view__badge'
       carBadge.textContent = carLabel
-      carBadge.title = carLabel
       badges.push(carBadge)
       const driveTypeBadge = document.createElement('span')
       driveTypeBadge.className = 'events-detail-view__badge'
@@ -2720,7 +2760,6 @@
         const sessionCarLabel = document.createElement('span')
         sessionCarLabel.className = 'driver-analysis-history-row__session-car'
         sessionCarLabel.textContent = carName
-        sessionCarLabel.title = carName
 
         const headline = document.createElement('strong')
         const hd = driverAnalysisHeadline(session)
@@ -3276,11 +3315,8 @@
     if (!hasProfile) return
 
     const garageVehicle = state.gameId === 'fh6' && state.carOrdinal ? garageVehicles.get(state.carOrdinal) : null
-    const shiftLightLabel = state.gameId === 'fh6' && state.carOrdinal
-      ? (garageApi?.vehicleLabel?.(garageVehicle?.name, state.carOrdinal) || '—')
-      : '—'
-    shiftLightCarKey.textContent = shiftLightLabel
-    shiftLightCarKey.title = shiftLightLabel
+    shiftLightCarKey.textContent = garageVehicle?.name
+      || (state.gameId === 'fh6' && state.carOrdinal ? `FH6 CAR #${state.carOrdinal}` : '—')
     renderShiftLightCarClass(state, garageVehicle)
     shiftLightCarRpmMax.textContent = state.rpmMax ? `${state.rpmMax} RPM` : '—'
     shiftLightUsableCeiling.textContent = state.usableCeiling
@@ -3773,7 +3809,8 @@
   garageCurrentVariantsToggle?.addEventListener('click', toggleGarageVariants)
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return
-    if (event.target?.classList?.contains('events-detail-view__title-input')) return
+    if (event.target?.classList?.contains('garage-current-car__input')
+      || event.target?.classList?.contains('events-detail-view__title-input')) return
     const isDriverAnalysisPanelVisible = !document.getElementById('driver-analysis-panel')?.hidden
     if (isDriverAnalysisPanelVisible && driverAnalysisView.level !== 'history') {
       event.preventDefault()

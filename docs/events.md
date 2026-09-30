@@ -167,7 +167,7 @@ clears its reference.
 | `Throttle`, `Brake` | Saves the pedal inputs used by the existing HUD and derives trace colors and time-weighted pedal statistics. |
 | Speed, gear, RPM, steering, acceleration, angular velocity Y | Saves the extended trace values shown when hovering the map. |
 | Tire slip angle, slip ratio, and combined slip; tire temperature; suspension travel; rumble strip; puddle depth (per wheel) | Saves the per-wheel trace values shown when hovering the map; combined slip also drives the Slip layer. |
-| Vehicle ordinal, class, PI, and drivetrain | Snapshots the vehicle recorded with the run; the name comes from the [vehicle catalog](vehicle-catalog.md). |
+| Vehicle ordinal, name, class, PI, and drivetrain | Snapshots the vehicle recorded with the run. |
 
 Forza `BestLap` is not persisted as an independent input. FDC derives a circuit
 run's best lap and its lap number from the stored `LastLap` records.
@@ -270,10 +270,9 @@ with elapsed time, distance, `position_x`, `position_y`, `position_z`,
 lap and is deleted with that lap. Trace points are omitted from
 run-list reads and loaded only for the selected run detail.
 A run snapshots the vehicle ordinal, class, PI, drivetrain, start time, run
-type, and confirmed result. Run reads resolve the car name for the ordinal from
-the [vehicle catalog](vehicle-catalog.md), or `#<ordinal>` for an unknown car, so
-a catalog update renames existing runs. Schema version 22 removes the former
-stored `car_name` column. Event schema migrations do not modify Garage or Shift Light tables. The separate
+type, and confirmed result. Run reads resolve the current Garage display name
+for the ordinal, so renaming a Garage car updates existing Event rows. Event
+schema migrations do not modify Garage or Shift Light tables. The separate
 Shift Light v15 migration preserves compatible configuration identity and
 reported-redline data but intentionally discards obsolete learning facts.
 Schema version 16 adds the nullable `deleted_at` marker used for silent Event

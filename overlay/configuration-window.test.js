@@ -40,10 +40,10 @@ test('Configuration exposes Driver Analysis second in the primary tab order', ()
   assert.doesNotMatch(settingsHtml, /ONE CARD PER CAR ORDINAL/)
   assert.doesNotMatch(settingsHtml, /garage-current-title[^]*LAST USED/)
   assert.match(settingsJs, /load_garage_snapshot/)
-  assert.doesNotMatch(settingsJs, /rename_garage_car/)
-  assert.doesNotMatch(settingsJs, /garage-current-car__input/)
+  assert.match(settingsJs, /rename_garage_car/)
+  assert.match(settingsJs, /garage-current-car__input/)
   assert.match(settingsJs, /garage-performance--/)
-  assert.match(settingsJs, /garage-current-car__type/)
+  assert.match(settingsJs, /garage-current-car__group/)
   assert.match(settingsJs, /garage-current-car__drivetrain/)
   assert.match(settingsJs, /garage-current-car__cylinders/)
   assert.match(settingsJs, /details\.append\(garageCurrentVariantsToggle\)/)
@@ -53,60 +53,19 @@ test('Configuration exposes Driver Analysis second in the primary tab order', ()
   assert.match(settingsJs, /garage-current-variants-toggle/)
   assert.match(settingsJs, /garageCurrentVariantsToggle\?\.addEventListener\('click', toggleGarageVariants\)/)
   assert.match(settingsJs, /event\.key !== 'Escape'/)
+  assert.match(settingsJs, /garage-current-car__input/)
   assert.doesNotMatch(settingsJs, /garage-shift-light/)
   assert.doesNotMatch(settingsJs, /Duplicate/u)
   assert.doesNotMatch(settingsJs, /appendGarageShiftLight/)
   assert.match(settingsJs, /garage-card--latest/)
   assert.match(settingsJs, /latest\.textContent = 'LAST USED'/)
   assert.doesNotMatch(settingsJs, /input\.className = 'garage-card__name'/)
-  assert.match(settingsJs, /vehicleLabel/)
   assert.match(settingsCss, /\.garage-variants\s*\{[\s\S]*grid-auto-rows:\s*36px[\s\S]*max-height:\s*432px[\s\S]*overflow-y:\s*auto/)
   assert.match(settingsCss, /\.garage-variants\s*\{[\s\S]*width:\s*100%[\s\S]*border:\s*1px solid/)
   assert.match(settingsCss, /\.garage-variant-row\s*\{[\s\S]*justify-content:\s*flex-start/)
   assert.match(settingsCss, /\.garage-variant-row\s*\{[\s\S]*border-left:\s*3px solid var\(--garage-rank-color\)/)
   assert.doesNotMatch(settingsCss, /\.garage-current-variants-toggle\s*\{[^}]*position:\s*absolute/)
   assert.match(settingsCss, /\.garage-current-variants-toggle\s*\{[\s\S]*margin-left:\s*auto/)
-  assert.match(settingsCss, /-webkit-line-clamp:\s*2/)
-  assert.doesNotMatch(settingsCss, /\.garage-current-car__input\s*\{/)
-})
-
-test('Catalog car names fit every place that shows them', () => {
-  function rule(selector) {
-    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const match = settingsCss.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`))
-    assert.ok(match, `${selector} has a CSS rule`)
-    return match[1]
-  }
-  const currentName = rule('.garage-current-car__name')
-  assert.match(currentName, /-webkit-line-clamp:\s*2/)
-  assert.match(currentName, /overflow:\s*hidden/)
-  assert.match(currentName, /overflow-wrap:\s*anywhere/)
-  for (const selector of [
-    '.garage-card__name',
-    '.event-run-row__value',
-    '.calibration-card output',
-    '.events-detail-view__title',
-    '.events-detail-view__badge--car',
-    '.driver-analysis-car-name',
-    '.driver-analysis-history-row__session-car'
-  ]) {
-    const body = rule(selector)
-    assert.match(body, /overflow:\s*hidden/, selector)
-    assert.match(body, /text-overflow:\s*ellipsis/, selector)
-    assert.match(body, /white-space:\s*nowrap/, selector)
-  }
-  assert.doesNotMatch(rule('.driver-analysis-history-row__session-car'), /flex-shrink:\s*0/)
-  for (const pattern of [
-    /name\.setAttribute\('title', garageDisplayName\(vehicle\)\)/,
-    /name\.setAttribute\('title', displayName\)/,
-    /if \(label === 'CAR'\) valueElement\.title = String\(value\)/,
-    /carName\.title = carLabel/,
-    /driverAnalysisDetailTitle\.title = carLabel/,
-    /carBadge\.title = carLabel/,
-    /sessionCarLabel\.title = carName/,
-    /shiftLightCarKey\.title = shiftLightLabel/
-  ]) assert.match(settingsJs, pattern)
-  assert.doesNotMatch(settingsJs, /CAR #\$\{|FH6 CAR #/)
 })
 
 test('Events keeps the existing navigation and exposes the create/detail flow', () => {
@@ -405,8 +364,7 @@ test('Settings exposes Configuration priority and speed unit preferences', () =>
   assert.ok(settingsHtml.indexOf('id="show-hud-with-telemetry"') > settingsPanelIndex)
   assert.match(settingsJs, /showHudWithTelemetry/)
   assert.match(settingsHtml, /calibration-label">CLASS<\/span>\s*<output id="shift-light-car-pi">/)
-  assert.match(settingsJs, /const shiftLightLabel = state\.gameId === 'fh6' && state\.carOrdinal[\s\S]*garageApi\?\.vehicleLabel\?\./)
-  assert.match(settingsJs, /shiftLightCarKey\.textContent = shiftLightLabel/)
+  assert.match(settingsJs, /shiftLightCarKey\.textContent = garageVehicle\?\.name\s*\|\| \(state\.gameId === 'fh6' && state\.carOrdinal \? `FH6 CAR #\$\{state\.carOrdinal\}` : '—'\)/)
   assert.match(settingsJs, /state\.carKey\.split\(':'\)\[2\]/)
   assert.match(settingsJs, /appendGaragePerformance\(shiftLightCarPi, \{ classLabel, pi \}\)/)
   assert.match(settingsJs, /set_configuration_always_on_top/)

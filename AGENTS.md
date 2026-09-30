@@ -60,7 +60,6 @@ Read only the source relevant to the current task:
 - Current system data flow: `docs/architecture.md`
 - HUD behavior, layout, and visibility: `docs/hud.md`
 - Garage behavior and contracts: `docs/garage.md`
-- Car names, car types, and the catalog update procedure: `docs/vehicle-catalog.md`
 - Driver Analysis behavior and contracts: `docs/driver-analysis.md`
 - Shift Light behavior and contracts: `docs/shift-light.md`
 - Development workflow and verification commands: `docs/development.md`

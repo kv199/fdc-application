@@ -115,14 +115,6 @@ single FDC-local `fdc.sqlite` file. It does not create another telemetry
 transport or use a car name service. Its full behavior and SQLite contract are documented in
 [Garage](garage.md).
 
-## Vehicle catalog boundary
-
-Car names and car types come from `src-tauri/data/vehicle-catalog.json`, which
-is embedded in the executable at build time. Native Garage, Events, and Driver
-Analysis reads resolve names by car ordinal; SQLite stores ordinals only. The
-catalog is generated on a developer machine by `tools/update-vehicle-catalog.mjs`
-and changes only with an FDC release. See [Vehicle catalog](vehicle-catalog.md).
-
 ## Driver Analysis boundary
 
 Driver Analysis is a browser-local consumer of `queueTelemetry`. Its map-free

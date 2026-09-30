@@ -23,7 +23,6 @@ use tauri::{
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 mod controller_input;
-mod vehicle_catalog;
 
 const SETTINGS_WINDOW_STATE_FILE: &str = "settings-window-size.json";
 #[cfg(test)]
@@ -377,7 +376,7 @@ struct ShiftLightVariantResolution {
 }
 
 const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 4;
-const HUD_SCHEMA_VERSION: i32 = 22;
+const HUD_SCHEMA_VERSION: i32 = 21;
 const MAX_SHIFT_LIGHT_CEILING_SAMPLES: usize = 3;
 const MAX_SHIFT_LIGHT_GEAR_TARGETS: usize = 9;
 const MAX_SHIFT_LIGHT_SHIFT_SAMPLES: usize = 64;
@@ -600,6 +599,7 @@ fn create_garage_tables(transaction: &Transaction<'_>) -> Result<(), String> {
                car_group INTEGER NOT NULL DEFAULT 0,
                drivetrain_type INTEGER NOT NULL DEFAULT 0,
                num_cylinders INTEGER NOT NULL DEFAULT 0,
+               display_name TEXT,
                first_seen_sequence INTEGER NOT NULL,
                last_seen_sequence INTEGER NOT NULL,
                PRIMARY KEY (game_id, car_ordinal)
@@ -654,6 +654,7 @@ fn create_event_run_tables(transaction: &Transaction<'_>) -> Result<(), String> 
                id INTEGER PRIMARY KEY,
                event_id INTEGER NOT NULL,
                car_ordinal INTEGER NOT NULL CHECK (car_ordinal > 0),
+               car_name TEXT,
                car_class INTEGER NOT NULL CHECK (car_class >= 0),
                car_pi INTEGER NOT NULL CHECK (car_pi >= 0),
                drivetrain INTEGER NOT NULL CHECK (drivetrain >= 0),
@@ -817,33 +818,6 @@ fn migrate_event_soft_delete_schema(connection: &mut Connection) -> Result<(), S
     transaction
         .commit()
         .map_err(|error| format!("unable to commit Event soft-delete schema migration: {error}"))
-}
-
-fn migrate_vehicle_catalog_schema(connection: &mut Connection) -> Result<(), String> {
-    let has_display_name = table_has_column(connection, "garage_cars", "display_name")?;
-    let has_car_name = table_has_column(connection, "event_runs", "car_name")?;
-    let transaction = connection
-        .transaction()
-        .map_err(|error| format!("unable to start Vehicle catalog schema migration: {error}"))?;
-    if has_display_name {
-        transaction
-            .execute("ALTER TABLE garage_cars DROP COLUMN display_name", [])
-            .map_err(|error| format!("unable to remove Garage display_name: {error}"))?;
-    }
-    if has_car_name {
-        transaction
-            .execute("ALTER TABLE event_runs DROP COLUMN car_name", [])
-            .map_err(|error| format!("unable to remove Event run car_name: {error}"))?;
-    }
-    transaction
-        .execute(
-            "UPDATE hud_schema_version SET version = ?1",
-            params![HUD_SCHEMA_VERSION],
-        )
-        .map_err(|error| format!("unable to update Vehicle catalog schema version: {error}"))?;
-    transaction
-        .commit()
-        .map_err(|error| format!("unable to commit Vehicle catalog schema migration: {error}"))
 }
 
 fn migrate_garage_schema(connection: &mut Connection) -> Result<(), String> {
@@ -1566,9 +1540,6 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
     }
     if version < 21 {
         migrate_driver_analysis_recordings(connection)?;
-    }
-    if version < 22 {
-        migrate_vehicle_catalog_schema(connection)?;
     }
     Ok(())
 }
@@ -2438,11 +2409,8 @@ fn history_record_from_row(
         .and_then(|text| serde_json::from_str::<JsonValue>(&text).ok())
         .filter(JsonValue::is_object);
     let recording_id: i64 = row.get(20)?;
-    let vehicle_ordinal: Option<i32> = row.get(18)?;
-    let vehicle_name = vehicle_ordinal
-        .filter(|&ordinal| ordinal > 0)
-        .map(|ordinal| vehicle_catalog::vehicle_name(ordinal));
-    let drives_recorded: i32 = row.get(21)?;
+    let vehicle_name: Option<String> = row.get(21)?;
+    let drives_recorded: i32 = row.get(22)?;
     Ok(DriverAnalysisHistoryRecord {
         id: row.get(0)?,
         recorded_at: started_at,
@@ -2477,8 +2445,11 @@ const DRIVER_ANALYSIS_HISTORY_SELECT: &str =
             sample_count, maneuver_count, opportunity_count, evidence_count,
             detector_confidence, attribution_confidence, severity, storage_bytes,
             algorithm_version, vehicle_identity, vehicle_ordinal, stats_json,
-            recording_id, drives_recorded
-       FROM driver_analysis_sessions";
+            recording_id, garage_cars.display_name, drives_recorded
+       FROM driver_analysis_sessions
+       LEFT JOIN garage_cars
+         ON garage_cars.game_id = 'fh6'
+        AND garage_cars.car_ordinal = driver_analysis_sessions.vehicle_ordinal";
 
 fn load_drives_for_session(
     connection: &Connection,
@@ -3102,6 +3073,7 @@ struct EventRunLapInput {
 struct NewEventRun {
     event_id: i64,
     car_ordinal: i32,
+    car_name: Option<String>,
     car_class: i32,
     car_pi: i32,
     drivetrain: i32,
@@ -3131,7 +3103,7 @@ struct EventRunRecord {
     id: i64,
     event_id: i64,
     car_ordinal: i32,
-    car_name: String,
+    car_name: Option<String>,
     car_class: i32,
     car_pi: i32,
     drivetrain: i32,
@@ -3313,6 +3285,17 @@ fn normalize_event_run_input(mut run: NewEventRun) -> Result<NewEventRun, String
     }
     if run.car_class < 0 || run.car_pi < 0 || run.drivetrain < 0 {
         return Err("Event run car class, PI, and drivetrain must not be negative".to_string());
+    }
+    run.car_name = run
+        .car_name
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty());
+    if run
+        .car_name
+        .as_ref()
+        .is_some_and(|name| name.chars().count() > 80)
+    {
+        return Err("Event run car name must be 80 characters or fewer".to_string());
     }
     run.started_at = run.started_at.trim().to_string();
     if run.started_at.is_empty() {
@@ -3651,6 +3634,7 @@ fn event_run_values_from_row(
     i64,
     i64,
     i32,
+    Option<String>,
     i32,
     i32,
     i32,
@@ -3672,6 +3656,7 @@ fn event_run_values_from_row(
         row.get(8)?,
         row.get(9)?,
         row.get(10)?,
+        row.get(11)?,
     ))
 }
 
@@ -3681,6 +3666,7 @@ fn event_run_from_values(
         i64,
         i64,
         i32,
+        Option<String>,
         i32,
         i32,
         i32,
@@ -3696,6 +3682,7 @@ fn event_run_from_values(
         id,
         event_id,
         car_ordinal,
+        car_name,
         car_class,
         car_pi,
         drivetrain,
@@ -3709,7 +3696,7 @@ fn event_run_from_values(
         id,
         event_id,
         car_ordinal,
-        car_name: vehicle_catalog::vehicle_name(car_ordinal),
+        car_name,
         car_class,
         car_pi,
         drivetrain,
@@ -3732,10 +3719,14 @@ fn load_event_run_from_connection(
     let mut statement = connection
         .prepare(
             "SELECT event_runs.id, event_runs.event_id, event_runs.car_ordinal,
+                    COALESCE(garage_cars.display_name, event_runs.car_name),
                     event_runs.car_class, event_runs.car_pi, event_runs.drivetrain,
                     event_runs.started_at, event_runs.run_type, event_runs.result,
                     event_runs.result_time_ms, event_runs.created_at
              FROM event_runs
+             LEFT JOIN garage_cars
+               ON garage_cars.game_id = 'fh6'
+              AND garage_cars.car_ordinal = event_runs.car_ordinal
              WHERE event_runs.id = ?1",
         )
         .map_err(|error| format!("unable to prepare Event run query: {error}"))?;
@@ -3759,10 +3750,14 @@ fn load_event_runs_from_connection(
     let mut statement = connection
         .prepare(
             "SELECT event_runs.id, event_runs.event_id, event_runs.car_ordinal,
+                    COALESCE(garage_cars.display_name, event_runs.car_name),
                     event_runs.car_class, event_runs.car_pi, event_runs.drivetrain,
                     event_runs.started_at, event_runs.run_type, event_runs.result,
                     event_runs.result_time_ms, event_runs.created_at
              FROM event_runs
+             LEFT JOIN garage_cars
+               ON garage_cars.game_id = 'fh6'
+              AND garage_cars.car_ordinal = event_runs.car_ordinal
              WHERE (?1 IS NULL OR event_runs.event_id = ?1)
              ORDER BY event_runs.started_at DESC, event_runs.id DESC",
         )
@@ -3909,15 +3904,30 @@ fn record_event_run_in_connection(
     if !event_exists {
         return Err(format!("Event {} does not exist", run.event_id));
     }
+    let car_name = match run.car_name {
+        Some(name) => Some(name),
+        None => transaction
+            .query_row(
+                "SELECT display_name
+                 FROM garage_cars
+                 WHERE game_id = 'fh6' AND car_ordinal = ?1",
+                params![run.car_ordinal],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map_err(|error| format!("unable to load Event run Garage name: {error}"))?
+            .flatten(),
+    };
     transaction
         .execute(
             "INSERT INTO event_runs
-               (event_id, car_ordinal, car_class, car_pi, drivetrain,
+               (event_id, car_ordinal, car_name, car_class, car_pi, drivetrain,
                 started_at, run_type, result, result_time_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 run.event_id,
                 run.car_ordinal,
+                car_name,
                 run.car_class,
                 run.car_pi,
                 run.drivetrain,
@@ -4146,8 +4156,7 @@ struct GarageCar {
     cylinders: i32,
     drivetrain_type: i32,
     num_cylinders: i32,
-    name: String,
-    car_type: Option<String>,
+    name: Option<String>,
     first_seen_sequence: i64,
     last_seen_sequence: i64,
     current_variant_id: Option<i64>,
@@ -4224,7 +4233,7 @@ fn load_garage_shift_light_summary(
 fn load_garage_snapshot_from_connection(connection: &Connection) -> Result<GarageSnapshot, String> {
     let mut car_statement = connection
         .prepare(
-            "SELECT car_ordinal, car_group,
+            "SELECT car_ordinal, car_group, display_name,
                     drivetrain_type, num_cylinders,
                     first_seen_sequence, last_seen_sequence
              FROM garage_cars
@@ -4237,10 +4246,11 @@ fn load_garage_snapshot_from_connection(connection: &Connection) -> Result<Garag
             Ok((
                 row.get::<_, i32>(0)?,
                 row.get::<_, u32>(1)?,
-                row.get::<_, i32>(2)?,
+                row.get::<_, Option<String>>(2)?,
                 row.get::<_, i32>(3)?,
-                row.get::<_, i64>(4)?,
+                row.get::<_, i32>(4)?,
                 row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
             ))
         })
         .map_err(|error| format!("unable to read Garage cars: {error}"))?
@@ -4257,7 +4267,15 @@ fn load_garage_snapshot_from_connection(connection: &Connection) -> Result<Garag
         )
         .map_err(|error| format!("unable to prepare Garage variant query: {error}"))?;
     let mut snapshot_cars = Vec::with_capacity(cars.len());
-    for (ordinal, car_group, drivetrain, cylinders, first_seen_sequence, last_seen_sequence) in cars
+    for (
+        ordinal,
+        car_group,
+        name,
+        drivetrain,
+        cylinders,
+        first_seen_sequence,
+        last_seen_sequence,
+    ) in cars
     {
         let variants = variant_statement
             .query_map(params![ordinal], |row| {
@@ -4302,8 +4320,7 @@ fn load_garage_snapshot_from_connection(connection: &Connection) -> Result<Garag
             cylinders,
             drivetrain_type: drivetrain,
             num_cylinders: cylinders,
-            name: vehicle_catalog::vehicle_name(ordinal),
-            car_type: vehicle_catalog::vehicle_car_type(ordinal),
+            name: name.filter(|name| !name.is_empty()),
             first_seen_sequence,
             last_seen_sequence,
             current_variant_id,
@@ -4420,6 +4437,32 @@ fn load_garage(app: AppHandle) -> Result<GarageSnapshot, String> {
 }
 
 #[tauri::command]
+fn rename_garage_car(
+    app: AppHandle,
+    car_ordinal: i32,
+    name: String,
+) -> Result<GarageSnapshot, String> {
+    if car_ordinal <= 0 {
+        return Err("Garage car ordinal must be positive".to_string());
+    }
+    let name = name.trim().to_string();
+    if name.chars().count() > 80 {
+        return Err("Garage car name must be 80 characters or fewer".to_string());
+    }
+    let connection = open_shift_light_db(&app)?;
+    let changed = connection
+        .execute(
+            "UPDATE garage_cars SET display_name = ?1
+             WHERE game_id = 'fh6' AND car_ordinal = ?2",
+            params![(!name.is_empty()).then_some(name), car_ordinal],
+        )
+        .map_err(|error| format!("unable to rename Garage car: {error}"))?;
+    if changed == 0 {
+        return Err(format!("Garage car {car_ordinal} does not exist"));
+    }
+    load_garage_snapshot_from_connection(&connection)
+}
+
 fn read_shift_light_config_identity(
     connection: &Connection,
     config_id: i64,
@@ -5464,7 +5507,8 @@ fn main() {
             load_event_absolute_best,
             record_garage_vehicle,
             load_garage_snapshot,
-            load_garage
+            load_garage,
+            rename_garage_car
         ])
         .on_window_event(|window, event| {
             if window.label() != "settings" {
@@ -5987,6 +6031,7 @@ mod tests {
         NewEventRun {
             event_id,
             car_ordinal: 260,
+            car_name: Some("  Test Car  ".to_string()),
             car_class: 8,
             car_pi: 700,
             drivetrain: 2,
@@ -6279,7 +6324,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(circuit.car_ordinal, 260);
-        assert_eq!(circuit.car_name, "1973 Porsche 911 Carrera RS");
+        assert_eq!(circuit.car_name.as_deref(), Some("Test Car"));
         assert_eq!(circuit.car_class, 8);
         assert_eq!(circuit.car_pi, 700);
         assert_eq!(circuit.drivetrain, 2);
@@ -6313,12 +6358,44 @@ mod tests {
             2
         );
 
+        connection
+            .execute(
+                "INSERT INTO garage_cars
+                   (game_id, car_ordinal, display_name, first_seen_sequence, last_seen_sequence)
+                 VALUES ('fh6', 261, 'Garage name', 1, 1)",
+                [],
+            )
+            .unwrap();
+        let mut garage_named_run = test_event_run(
+            event.id,
+            "circuit",
+            "completed",
+            None,
+            vec![EventRunLapInput {
+                lap_number: 1,
+                lap_time_ms: 90_000,
+                sector_1_time_ms: None,
+                sector_2_time_ms: None,
+                sector_3_time_ms: None,
+                trace_points: Vec::new(),
+            }],
+        );
+        garage_named_run.car_ordinal = 261;
+        garage_named_run.car_name = None;
+        assert_eq!(
+            record_event_run_in_connection(&mut connection, garage_named_run)
+                .unwrap()
+                .car_name
+                .as_deref(),
+            Some("Garage name")
+        );
+
         delete_event_in_connection(&connection, event.id).unwrap();
         assert_eq!(
             load_event_runs_from_connection(&connection, None)
                 .unwrap()
                 .len(),
-            2
+            3
         );
         assert!(
             record_event_run_in_connection(
@@ -6554,45 +6631,69 @@ mod tests {
     }
 
     #[test]
-    fn event_runs_resolve_car_name_from_catalog() {
+    fn event_runs_resolve_current_garage_name_after_run_save() {
         let mut connection = Connection::open_in_memory().unwrap();
         initialize_shift_light_schema(&mut connection).unwrap();
         let event = create_event_in_connection(
             &mut connection,
-            test_event("Catalog lookup", "Any", "Asphalt", "Any", None),
+            test_event("Garage rename", "Any", "Asphalt", "Any", None),
         )
         .unwrap();
 
-        // Ordinal 247 is "1969 Toyota 2000GT" in the catalog
         let mut run = test_event_run(event.id, "sprint", "confirmed", Some(75_000), Vec::new());
-        run.car_ordinal = 247;
+        run.car_name = None;
         let saved = record_event_run_in_connection(&mut connection, run).unwrap();
-        assert_eq!(saved.car_name, "1969 Toyota 2000GT");
+        assert_eq!(saved.car_name, None);
 
-        // Re-loading should return the same catalog name
+        // The Garage record can be created after the run has already been saved.
+        connection
+            .execute(
+                "INSERT INTO garage_cars
+                   (game_id, car_ordinal, first_seen_sequence, last_seen_sequence)
+                 VALUES ('fh6', 260, 1, 1)",
+                [],
+            )
+            .unwrap();
         assert_eq!(
             load_event_run_from_connection(&connection, saved.id)
                 .unwrap()
                 .car_name,
-            "1969 Toyota 2000GT"
-        );
-        assert_eq!(
-            load_event_runs_from_connection(&connection, Some(event.id)).unwrap()[0].car_name,
-            "1969 Toyota 2000GT"
+            None
         );
 
-        // Unknown ordinal should use the fallback format
-        let mut unknown_run =
-            test_event_run(event.id, "sprint", "confirmed", Some(120_000), Vec::new());
-        unknown_run.car_ordinal = 9999;
-        let saved_unknown = record_event_run_in_connection(&mut connection, unknown_run).unwrap();
-        assert_eq!(saved_unknown.car_name, "#9999");
-
+        connection
+            .execute(
+                "UPDATE garage_cars SET display_name = 'Named after run'
+                 WHERE game_id = 'fh6' AND car_ordinal = 260",
+                [],
+            )
+            .unwrap();
         assert_eq!(
-            load_event_run_from_connection(&connection, saved_unknown.id)
+            load_event_run_from_connection(&connection, saved.id)
                 .unwrap()
-                .car_name,
-            "#9999"
+                .car_name
+                .as_deref(),
+            Some("Named after run")
+        );
+        assert_eq!(
+            load_event_runs_from_connection(&connection, Some(event.id)).unwrap()[0]
+                .car_name
+                .as_deref(),
+            Some("Named after run")
+        );
+
+        connection
+            .execute(
+                "UPDATE garage_cars SET display_name = 'Renamed again'
+                 WHERE game_id = 'fh6' AND car_ordinal = 260",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            load_event_runs_from_connection(&connection, Some(event.id)).unwrap()[0]
+                .car_name
+                .as_deref(),
+            Some("Renamed again")
         );
     }
 
@@ -6845,7 +6946,7 @@ mod tests {
     }
 
     #[test]
-    fn garage_names_come_from_catalog() {
+    fn garage_renaming_is_persistent_and_empty_name_clears_it() {
         let mut connection = Connection::open_in_memory().unwrap();
         initialize_shift_light_schema(&mut connection).unwrap();
         let vehicle = GarageVehicle {
@@ -6857,25 +6958,25 @@ mod tests {
             cylinders: 4,
         };
         record_garage_vehicle_in_connection(&mut connection, &vehicle).unwrap();
-        let snapshot = load_garage_snapshot_from_connection(&connection).unwrap();
-        // Ordinal 260 should resolve to its catalog name
-        assert_eq!(snapshot.cars[0].name, "1973 Porsche 911 Carrera RS");
-        assert_eq!(snapshot.cars[0].car_type, Some("Rare Classics".to_string()));
+        connection
+            .execute(
+                "UPDATE garage_cars SET display_name = 'Road car'
+                 WHERE game_id = 'fh6' AND car_ordinal = 260",
+                [],
+            )
+            .unwrap();
+        let named = load_garage_snapshot_from_connection(&connection).unwrap();
+        assert_eq!(named.cars[0].name.as_deref(), Some("Road car"));
 
-        // Unknown ordinal should use fallback format
-        let unknown_vehicle = GarageVehicle {
-            ordinal: 9999,
-            class: 8,
-            pi: 600,
-            car_group: 42,
-            drivetrain: 1,
-            cylinders: 4,
-        };
-        record_garage_vehicle_in_connection(&mut connection, &unknown_vehicle).unwrap();
-        let snapshot = load_garage_snapshot_from_connection(&connection).unwrap();
-        let unknown_car = snapshot.cars.iter().find(|c| c.ordinal == 9999).unwrap();
-        assert_eq!(unknown_car.name, "#9999");
-        assert_eq!(unknown_car.car_type, None);
+        connection
+            .execute(
+                "UPDATE garage_cars SET display_name = NULL
+                 WHERE game_id = 'fh6' AND car_ordinal = 260",
+                [],
+            )
+            .unwrap();
+        let cleared = load_garage_snapshot_from_connection(&connection).unwrap();
+        assert_eq!(cleared.cars[0].name, None);
     }
 
     #[test]
@@ -7434,40 +7535,6 @@ mod tests {
     }
 
     #[test]
-    fn driver_analysis_history_names_cars_from_the_catalog() {
-        let mut connection = driver_analysis_connection();
-        let known = create_driver_analysis_session_in_connection(
-            &mut connection,
-            &driver_analysis_session_input(1_000),
-        )
-        .unwrap();
-        let mut unknown_input = driver_analysis_session_input(2_000);
-        unknown_input.vehicle_ordinal = Some(9999);
-        let unknown =
-            create_driver_analysis_session_in_connection(&mut connection, &unknown_input).unwrap();
-        let mut missing_input = driver_analysis_session_input(3_000);
-        missing_input.vehicle_ordinal = None;
-        let missing =
-            create_driver_analysis_session_in_connection(&mut connection, &missing_input).unwrap();
-
-        let history = load_driver_analysis_sessions_from_connection(&connection).unwrap();
-        let name_of = |id: i64| {
-            history
-                .iter()
-                .find(|record| record.id == id)
-                .unwrap()
-                .vehicle_name
-                .clone()
-        };
-        assert_eq!(
-            name_of(known).as_deref(),
-            Some("2023 Chevrolet Corvette Z06")
-        );
-        assert_eq!(name_of(unknown).as_deref(), Some("#9999"));
-        assert_eq!(name_of(missing), None);
-    }
-
-    #[test]
     fn driver_analysis_delete_cascades_samples_opportunities_and_evidence() {
         let mut connection = driver_analysis_connection();
         let session_id = create_driver_analysis_session_in_connection(
@@ -7588,184 +7655,6 @@ mod tests {
             })
             .unwrap();
         assert_eq!(version_after, HUD_SCHEMA_VERSION);
-    }
-
-    #[test]
-    fn v22_migration_removes_display_name_and_car_name_columns() {
-        let mut connection = Connection::open_in_memory().unwrap();
-        connection
-            .execute_batch(
-                "PRAGMA foreign_keys = ON;
-                 CREATE TABLE hud_schema_version (version INTEGER NOT NULL);
-                 INSERT INTO hud_schema_version VALUES (21);
-                 CREATE TABLE garage_cars (
-                   game_id TEXT NOT NULL,
-                   car_ordinal INTEGER NOT NULL,
-                   car_group INTEGER NOT NULL DEFAULT 0,
-                   drivetrain_type INTEGER NOT NULL DEFAULT 0,
-                   num_cylinders INTEGER NOT NULL DEFAULT 0,
-                   display_name TEXT,
-                   first_seen_sequence INTEGER NOT NULL,
-                   last_seen_sequence INTEGER NOT NULL,
-                   PRIMARY KEY (game_id, car_ordinal)
-                 );
-                 INSERT INTO garage_cars
-                   (game_id, car_ordinal, car_group, drivetrain_type, num_cylinders,
-                    first_seen_sequence, last_seen_sequence)
-                 VALUES ('fh6', 260, 42, 2, 6, 1, 3);
-                 CREATE TABLE garage_variants (
-                   id INTEGER PRIMARY KEY,
-                   game_id TEXT NOT NULL,
-                   car_ordinal INTEGER NOT NULL,
-                   car_class INTEGER NOT NULL,
-                   pi INTEGER NOT NULL,
-                   drivetrain_type INTEGER NOT NULL DEFAULT 0,
-                   num_cylinders INTEGER NOT NULL DEFAULT 0,
-                   first_seen_sequence INTEGER NOT NULL,
-                   last_seen_sequence INTEGER NOT NULL,
-                   UNIQUE (game_id, car_ordinal, car_class, pi, drivetrain_type),
-                   FOREIGN KEY (game_id, car_ordinal)
-                     REFERENCES garage_cars(game_id, car_ordinal)
-                     ON DELETE CASCADE
-                 );
-                 INSERT INTO garage_variants
-                   (id, game_id, car_ordinal, car_class, pi, drivetrain_type, num_cylinders,
-                    first_seen_sequence, last_seen_sequence)
-                 VALUES (77, 'fh6', 260, 8, 600, 2, 6, 1, 2);
-                 CREATE TABLE events (
-                   id INTEGER PRIMARY KEY,
-                   name TEXT NOT NULL CHECK (length(trim(name)) > 0),
-                   class TEXT NOT NULL,
-                   route TEXT NOT NULL,
-                   mode TEXT NOT NULL,
-                   notes TEXT,
-                   deleted_at TEXT,
-                   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                 );
-                 INSERT INTO events (name, class, route, mode) VALUES ('Test Event', 'D', 'Asphalt', 'Any');
-                 CREATE TABLE event_runs (
-                   id INTEGER PRIMARY KEY,
-                   event_id INTEGER NOT NULL,
-                   car_ordinal INTEGER NOT NULL CHECK (car_ordinal > 0),
-                   car_name TEXT,
-                   car_class INTEGER NOT NULL CHECK (car_class >= 0),
-                   car_pi INTEGER NOT NULL CHECK (car_pi >= 0),
-                   drivetrain INTEGER NOT NULL CHECK (drivetrain >= 0),
-                   started_at TEXT NOT NULL CHECK (length(trim(started_at)) > 0),
-                   run_type TEXT NOT NULL CHECK (run_type IN ('circuit', 'sprint')),
-                   result TEXT NOT NULL CHECK (result IN ('completed', 'confirmed')),
-                   result_time_ms INTEGER CHECK (result_time_ms IS NULL OR result_time_ms > 0),
-                   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                   FOREIGN KEY (event_id)
-                     REFERENCES events(id)
-                     ON DELETE CASCADE
-                 );
-                 INSERT INTO event_runs
-                   (event_id, car_ordinal, car_name, car_class, car_pi, drivetrain,
-                    started_at, run_type, result)
-                 VALUES (1, 260, 'Test Name', 8, 600, 2, '2026-08-30T12:00:00Z', 'circuit', 'completed');
-                 CREATE TABLE event_run_laps (
-                   run_id INTEGER NOT NULL,
-                   lap_number INTEGER NOT NULL CHECK (lap_number > 0),
-                   lap_time_ms INTEGER NOT NULL CHECK (lap_time_ms > 0),
-                   PRIMARY KEY (run_id, lap_number),
-                   FOREIGN KEY (run_id)
-                     REFERENCES event_runs(id)
-                     ON DELETE CASCADE
-                 );
-                 INSERT INTO event_run_laps (run_id, lap_number, lap_time_ms) VALUES (1, 1, 90000);",
-            )
-            .unwrap();
-
-        initialize_shift_light_schema(&mut connection).unwrap();
-
-        let version: i32 = connection
-            .query_row("SELECT version FROM hud_schema_version", [], |row| {
-                row.get(0)
-            })
-            .unwrap();
-        assert_eq!(version, HUD_SCHEMA_VERSION);
-
-        // Verify display_name column is removed from garage_cars
-        assert!(
-            !table_has_column(&connection, "garage_cars", "display_name")
-                .expect("unable to check garage_cars.display_name")
-        );
-
-        // Verify car_name column is removed from event_runs
-        assert!(
-            !table_has_column(&connection, "event_runs", "car_name")
-                .expect("unable to check event_runs.car_name")
-        );
-
-        // Verify rows are still present with all other data intact
-        let (car_ordinal, car_group, drivetrain_type, num_cylinders, first_seen, last_seen): (
-            i32,
-            i32,
-            i32,
-            i32,
-            i64,
-            i64,
-        ) = connection
-            .query_row(
-                "SELECT car_ordinal, car_group, drivetrain_type, num_cylinders,
-                        first_seen_sequence, last_seen_sequence
-                 FROM garage_cars WHERE game_id = 'fh6' AND car_ordinal = 260",
-                [],
-                |row| {
-                    Ok((
-                        row.get(0)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                        row.get(3)?,
-                        row.get(4)?,
-                        row.get(5)?,
-                    ))
-                },
-            )
-            .unwrap();
-        assert_eq!(
-            (
-                car_ordinal,
-                car_group,
-                drivetrain_type,
-                num_cylinders,
-                first_seen,
-                last_seen
-            ),
-            (260, 42, 2, 6, 1, 3)
-        );
-
-        let (event_id, car_ordinal, car_class, car_pi, drivetrain): (i32, i32, i32, i32, i32) =
-            connection
-                .query_row(
-                    "SELECT event_id, car_ordinal, car_class, car_pi, drivetrain FROM event_runs WHERE id = 1",
-                    [],
-                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
-                )
-                .unwrap();
-        assert_eq!(
-            (event_id, car_ordinal, car_class, car_pi, drivetrain),
-            (1, 260, 8, 600, 2)
-        );
-
-        // Verify variant and lap data survive
-        let variant_id: i64 = connection
-            .query_row("SELECT id FROM garage_variants WHERE id = 77", [], |row| {
-                row.get(0)
-            })
-            .unwrap();
-        assert_eq!(variant_id, 77);
-
-        let lap_time: i64 = connection
-            .query_row(
-                "SELECT lap_time_ms FROM event_run_laps WHERE run_id = 1 AND lap_number = 1",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(lap_time, 90000);
     }
 
     #[test]
