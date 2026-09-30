@@ -133,7 +133,8 @@ FDC receives Data Out from the local game session and keeps runtime data on
 the machine. Garage, Events, Driver Analysis, and Shift Light data are stored
 in `%APPDATA%\FDC\fdc.sqlite`; Driver Analysis recordings stay there until you
 delete them. Layout and display preferences are stored in the local
-application webview.
+application webview. FDC sends nothing over the internet; the **HELP** menu only
+opens GitHub pages in your default browser.
 
 ## Current limitations
 
@@ -175,6 +176,9 @@ branch holds the latest release and `develop` holds ongoing work. See
 Ask questions in [Q&A](https://github.com/kv199/fdc-application/discussions/categories/q-a),
 share ideas in [Ideas](https://github.com/kv199/fdc-application/discussions/categories/ideas),
 and report reproducible bugs with the [bug report form](https://github.com/kv199/fdc-application/issues/new?template=bug_report.yml).
+In FDC, **HELP** at the bottom of Configuration opens the same pages in your
+browser, and the bug form arrives with your FDC version filled in. Click the
+version next to it to copy it.
 Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md),
 never in a public issue.
 

@@ -2870,13 +2870,101 @@ h1 {
   background: #090b0e;
 }
 
+.settings-footer__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .settings-footer__version {
   flex: 0 0 auto;
+  padding: 0;
+  border: 0;
   color: #71717a;
+  background: transparent;
   font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.14em;
   white-space: nowrap;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.settings-footer__version:hover:not(:disabled),
+.settings-footer__version:focus-visible {
+  color: #f8fafc;
+  outline: 1px solid rgb(226 232 240 / 40%);
+  outline-offset: 2px;
+}
+
+.settings-footer__version:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.settings-footer__help {
+  flex: 0 0 auto;
+  position: relative;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: #71717a;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.settings-footer__help:hover,
+.settings-footer__help:focus-visible {
+  color: #f8fafc;
+  background: rgb(226 232 240 / 7%);
+  outline: none;
+}
+
+.settings-help-menu {
+  position: absolute;
+  bottom: 100%;
+  right: 30px;
+  margin-bottom: 6px;
+  min-width: 180px;
+  border: 1px solid rgb(226 232 240 / 18%);
+  border-radius: 4px;
+  background: rgb(8 10 12 / 92%);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 50%);
+  z-index: 1000;
+}
+
+.settings-help-menu[hidden] {
+  display: none;
+}
+
+.settings-help-menu button {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid rgb(226 232 240 / 10%);
+  color: #f8fafc;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 80ms ease;
+}
+
+.settings-help-menu button:last-child {
+  border-bottom: 0;
+}
+
+.settings-help-menu button:hover,
+.settings-help-menu button:focus-visible {
+  background: rgb(226 232 240 / 10%);
+  outline: none;
 }
 
 .display-settings__list {

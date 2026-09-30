@@ -681,7 +681,15 @@
 
     <footer class="settings-footer" aria-label="Configuration status">
       <p id="settings-status" class="settings-status" role="status" aria-live="polite">READY</p>
-      <span id="app-version" class="settings-footer__version">VERSION UNAVAILABLE</span>
+      <div class="settings-footer__right">
+        <button id="app-version" type="button" class="settings-footer__version" title="Click to copy" disabled>VERSION UNAVAILABLE</button>
+        <button id="settings-help-toggle" type="button" class="settings-footer__help" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-help-menu">HELP</button>
+        <div id="settings-help-menu" class="settings-help-menu" role="menu" aria-labelledby="settings-help-toggle" hidden>
+          <button type="button" role="menuitem" data-feedback-link="bug">Report a bug</button>
+          <button type="button" role="menuitem" data-feedback-link="idea">Suggest an idea</button>
+          <button type="button" role="menuitem" data-feedback-link="question">Ask a question</button>
+        </div>
+      </div>
     </footer>
   </main>
 

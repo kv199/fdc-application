@@ -23,6 +23,8 @@
   }, {})
   const invoke = globalScope.__TAURI_INTERNALS__?.invoke
   const appVersion = document.getElementById('app-version')
+  const settingsHelpToggle = document.getElementById('settings-help-toggle')
+  const settingsHelpMenu = document.getElementById('settings-help-menu')
   const settingsTitle = document.getElementById('settings-title')
   const driverAnalysisApi = globalScope.DriverAnalysis
   const driverAnalysisEnabled = document.getElementById('driver-analysis-enabled')
@@ -145,6 +147,8 @@
   const eventsById = new Map()
   let currentEventRuns = []
   let currentEventAbsoluteBestMs = null
+  let appVersionNumber = null
+  let appVersionFeedbackTimer = null
   let currentEventRun = null
   let recorderState = { eventId: null, recording: false, state: 'stopped', lapCount: 0 }
   let eventsView = 'library'
@@ -2188,6 +2192,86 @@
     status.classList.toggle('is-error', error)
   }
 
+  function showAppVersionFeedback(label) {
+    clearTimeout(appVersionFeedbackTimer)
+    appVersion.textContent = label
+    appVersionFeedbackTimer = setTimeout(() => {
+      appVersion.textContent = `v${appVersionNumber}`
+    }, 1500)
+  }
+
+  function copyTextWithSelection(text) {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    try {
+      return document.execCommand('copy')
+    } finally {
+      textarea.remove()
+    }
+  }
+
+  async function copyAppVersionToClipboard() {
+    if (!appVersionNumber) return
+    const text = `FDC ${appVersionNumber}`
+    let copied = false
+    try {
+      await navigator.clipboard.writeText(text)
+      copied = true
+    } catch {
+      copied = copyTextWithSelection(text)
+    }
+    showAppVersionFeedback(copied ? 'COPIED' : 'COPY FAILED')
+  }
+
+  function toggleHelpMenu(open) {
+    if (open === undefined) open = settingsHelpMenu.hidden
+    settingsHelpMenu.hidden = !open
+    settingsHelpToggle.setAttribute('aria-expanded', String(open))
+    if (open) {
+      const firstItem = settingsHelpMenu.querySelector('[role="menuitem"]')
+      firstItem?.focus()
+    }
+  }
+
+  function closeHelpMenu() {
+    toggleHelpMenu(false)
+    settingsHelpToggle.focus()
+  }
+
+  function handleHelpMenuKeydown(event) {
+    const items = [...settingsHelpMenu.querySelectorAll('[role="menuitem"]')]
+    const currentIndex = items.indexOf(document.activeElement)
+    let nextIndex = currentIndex
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      nextIndex = (currentIndex + 1) % items.length
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      nextIndex = (currentIndex - 1 + items.length) % items.length
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      nextIndex = 0
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      nextIndex = items.length - 1
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      closeHelpMenu()
+      return
+    } else if (event.key === 'Tab') {
+      event.preventDefault()
+      closeHelpMenu()
+      return
+    }
+
+    if (items[nextIndex]) items[nextIndex].focus()
+  }
+
   function call(command, args) {
     if (typeof invoke !== 'function') {
       return Promise.reject(new Error('Tauri commands are unavailable'))
@@ -3071,7 +3155,9 @@
       const version = await call('get_app_version')
       if (typeof version !== 'string' || !version.trim()) return
       const normalizedVersion = version.trim().replace(/^v/u, '')
+      appVersionNumber = normalizedVersion
       appVersion.textContent = `v${normalizedVersion}`
+      appVersion.disabled = false
     } catch {
       // Preserve the unavailable-version fallback when the native command is unavailable.
     }
@@ -3654,6 +3740,35 @@
   void call('set_layout_mode', { mode: layoutMode }).catch(() => undefined)
   selectSettingsTab('hud')
   void loadAppVersion()
+
+  appVersion?.addEventListener('click', () => {
+    if (!appVersion.disabled) void copyAppVersionToClipboard()
+  })
+
+  settingsHelpToggle?.addEventListener('click', () => {
+    toggleHelpMenu()
+  })
+
+  settingsHelpMenu?.addEventListener('keydown', handleHelpMenuKeydown)
+
+  for (const menuItem of settingsHelpMenu?.querySelectorAll('[role="menuitem"]') || []) {
+    menuItem.addEventListener('click', async (event) => {
+      const kind = event.target.dataset.feedbackLink
+      if (!kind) return
+      toggleHelpMenu(false)
+      try {
+        await call('open_feedback_link', { kind })
+      } catch (error) {
+        setStatus('COULD NOT OPEN THE BROWSER', true)
+      }
+    })
+  }
+
+  document.addEventListener('click', (event) => {
+    if (!settingsHelpMenu?.hidden && !settingsHelpToggle?.contains(event.target) && !settingsHelpMenu?.contains(event.target)) {
+      closeHelpMenu()
+    }
+  })
 
   displayPreferences = displayPreferencesApi?.normalize?.(displayPreferences) || displayPreferences
   renderDisplayPreferences(displayPreferences)

@@ -104,6 +104,14 @@ Garage, and Shift Light events, presents the Events library, and invokes native
 commands for configuration actions. The tray menu opens Configuration and
 provides the application exit path.
 
+The Configuration footer shows the build version, which copies `FDC <version>`
+to the clipboard when clicked, and a **HELP** menu. Its items call the native
+`open_feedback_link` command with a fixed kind (`bug`, `idea`, or `question`);
+the native layer maps each kind to a fixed GitHub page, prefilling the bug form
+with the build version, and opens it in the default browser through
+`tauri-plugin-opener`. The webview has no opener permission and cannot open
+arbitrary URLs.
+
 ## Garage boundary
 
 Garage is a browser-local `queueTelemetry` consumer with native local

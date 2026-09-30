@@ -21,6 +21,7 @@ use tauri::{
     WebviewWindow, Window, WindowEvent, menu::MenuBuilder, tray::TrayIconBuilder,
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_opener::OpenerExt;
 
 mod controller_input;
 
@@ -5415,6 +5416,30 @@ fn sync_shift_light_status(app: AppHandle) -> Result<(), String> {
     eval_main(&app, "window.HudOverlay?.syncShiftLightStatus?.()")
 }
 
+const FDC_REPOSITORY_URL: &str = "https://github.com/kv199/fdc-application";
+
+fn feedback_url(kind: &str, version: &str) -> Option<String> {
+    match kind {
+        "bug" => Some(format!(
+            "{FDC_REPOSITORY_URL}/issues/new?template=bug_report.yml&version={version}"
+        )),
+        "idea" => Some(format!(
+            "{FDC_REPOSITORY_URL}/discussions/new?category=ideas"
+        )),
+        "question" => Some(format!("{FDC_REPOSITORY_URL}/discussions/new?category=q-a")),
+        _ => None,
+    }
+}
+
+#[tauri::command]
+fn open_feedback_link(app: AppHandle, kind: String) -> Result<(), String> {
+    let url = feedback_url(&kind, env!("CARGO_PKG_VERSION"))
+        .ok_or_else(|| format!("Unknown feedback link: {kind}"))?;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|error| format!("unable to open the feedback page: {error}"))
+}
+
 #[tauri::command]
 fn get_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -5431,6 +5456,7 @@ fn main() {
                 })
                 .build(),
         )
+        .plugin(tauri_plugin_opener::init())
         .manage(DirectSourceState::default())
         .manage(DriverAnalysisHotkeyState::default())
         .invoke_handler(tauri::generate_handler![
@@ -5461,6 +5487,7 @@ fn main() {
             sync_route_status,
             sync_shift_light_status,
             get_app_version,
+            open_feedback_link,
             start_direct_source,
             stop_direct_source,
             retry_direct_source,
@@ -5626,6 +5653,32 @@ mod tests {
     #[test]
     fn exposes_the_compiled_cargo_package_version() {
         assert_eq!(get_app_version(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn feedback_urls_are_fixed_and_prefill_the_bug_version() {
+        let version = "7.20.57";
+        let bug_url = feedback_url("bug", version).unwrap();
+        assert_eq!(
+            bug_url,
+            "https://github.com/kv199/fdc-application/issues/new?template=bug_report.yml&version=7.20.57"
+        );
+
+        let idea_url = feedback_url("idea", version).unwrap();
+        assert_eq!(
+            idea_url,
+            "https://github.com/kv199/fdc-application/discussions/new?category=ideas"
+        );
+
+        let question_url = feedback_url("question", version).unwrap();
+        assert_eq!(
+            question_url,
+            "https://github.com/kv199/fdc-application/discussions/new?category=q-a"
+        );
+
+        assert_eq!(feedback_url("https://example.com", "1.0.0"), None);
+        assert_eq!(feedback_url("", "1.0.0"), None);
+        assert_eq!(feedback_url("BUG", "1.0.0"), None);
     }
 
     #[test]

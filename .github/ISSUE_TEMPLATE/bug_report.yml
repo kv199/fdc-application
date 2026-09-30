@@ -14,7 +14,7 @@ body:
     id: version
     attributes:
       label: FDC version
-      description: "Version of FDC you're running (check the installer file name or Windows Settings > Apps)"
+      description: "Filled in when you open this form from HELP in FDC. Otherwise use the version shown at the bottom of FDC Configuration."
       placeholder: "e.g., 7.16.46 or FDC_7.16.46_x64-setup.exe"
     validations:
       required: true
