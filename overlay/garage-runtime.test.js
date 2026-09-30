@@ -56,11 +56,10 @@ test('normalizes native and telemetry vehicle identity without inventing values'
     drivetrain: null,
     cylinders: null,
     drivetrainLabel: null,
-    latestUsed: false,
-    lastUsedAt: null
+    latestUsed: false
   })
   assert.equal(displayName(vehicleFromTelemetry(frame())), '123')
-  assert.deepEqual(normalizeGaragePayload({ vehicles: [{ carOrdinal: 123, name: 'Track Tool', class: 4, pi: 850 }] })[0], {
+  assert.deepEqual(normalizeGaragePayload({ carOrdinal: 123, name: 'Track Tool', class: 4, pi: 850 })[0], {
     carOrdinal: 123,
     name: 'Track Tool',
     class: 4,
@@ -70,12 +69,11 @@ test('normalizes native and telemetry vehicle identity without inventing values'
     drivetrain: null,
     cylinders: null,
     drivetrainLabel: null,
-    latestUsed: false,
-    lastUsedAt: null
+    latestUsed: false
   })
   const snapshot = normalizeGaragePayload({
     currentCarOrdinal: 456,
-    cars: [{ ordinal: 456, name: null, variants: [{ class: 5, pi: 901, drivetrain: 2, cylinders: 8, isCurrent: true }] }]
+    cars: [{ ordinal: 456, carOrdinal: 456, name: null, variants: [{ class: 5, pi: 901, drivetrain: 2, cylinders: 8, isCurrent: true }] }]
   })[0]
   assert.equal(snapshot.classLabel, 'S2')
   assert.equal(snapshot.pi, 901)
@@ -96,6 +94,7 @@ test('normalizes native and telemetry vehicle identity without inventing values'
   assert.deepEqual(normalizeGaragePayload({
     cars: [{
       ordinal: 456,
+      carOrdinal: 456,
       variants: [{
         class: 5,
         pi: 901,

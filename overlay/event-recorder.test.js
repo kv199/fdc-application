@@ -7,7 +7,7 @@ function telemetry(overrides = {}) {
   return {
     isRaceOn: true,
     speedKmh: 0,
-    car: { ordinal: 42, name: 'Test Car', classLabel: 'A', pi: 800, drivetrain: 2 },
+    car: { ordinal: 42, class: 3, pi: 800, drivetrain: 2 },
     lap: { number: 0, current: 0, last: 0, raceTime: 0, distance: 0 },
     ...overrides
   }

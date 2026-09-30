@@ -115,6 +115,27 @@ single FDC-local `fdc.sqlite` file. It does not create another telemetry
 transport or use a car name service. Its full behavior and SQLite contract are documented in
 [Garage](garage.md).
 
+## Vehicle identity and names
+
+The shared `overlay/vehicle.js` module owns the car display-name rule (the
+current Garage name, otherwise the car ordinal), the class and drivetrain
+labels, and the reader of the normalized telemetry `car` object (`ordinal`,
+`class`, `pi`, `carGroup`, `drivetrain`, `cylinders`) used by Garage and
+Events. Garage, Events, Driver Analysis, and the Shift Light settings panel
+show car names only through that rule. The native layer resolves names only
+from `garage_cars.display_name`.
+
+Each feature keeps its own persisted identity key, because each is a storage
+contract:
+
+| Feature | Identity |
+| --- | --- |
+| Garage car | `game_id` + car ordinal |
+| Garage variant | car ordinal + class + PI + drivetrain |
+| Shift Light | `fh6:<ordinal>:<class>:<pi>:<drivetrain>:<cylinders>` |
+| Driver Analysis | `<ordinal>:<pi>:<rpmMax>:<drivetrain>` |
+| Event run | car ordinal, class, PI, and drivetrain stored with the run |
+
 ## Driver Analysis boundary
 
 Driver Analysis is a browser-local consumer of `queueTelemetry`. Its map-free

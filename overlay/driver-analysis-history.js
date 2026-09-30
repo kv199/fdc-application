@@ -5,7 +5,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   'use strict'
 
-  const DRIVETRAINS = ['FWD', 'RWD', 'AWD']
+  const FdcVehicle = globalThis.FdcVehicle || require('./vehicle.js')
 
   function finite(value) {
     if (value === null || value === undefined || value === '') return null
@@ -31,15 +31,11 @@
   }
 
   function carLabel(session) {
-    const name = typeof session?.vehicleName === 'string' ? session.vehicleName.trim() : ''
-    if (name) return name
-    const ordinal = finite(session?.vehicleIdentity?.ordinal)
-    return ordinal !== null ? `CAR #${Math.trunc(ordinal)}` : 'UNKNOWN CAR'
+    return FdcVehicle.displayName(session?.vehicleName, session?.vehicleIdentity?.ordinal)
   }
 
   function drivetrainLabel(value) {
-    const index = finite(value)
-    return index !== null ? DRIVETRAINS[Math.trunc(index)] || '' : ''
+    return FdcVehicle.drivetrainLabel(value) || ''
   }
 
   function driveTypeLabel(drive) {

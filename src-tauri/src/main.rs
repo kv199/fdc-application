@@ -3073,7 +3073,6 @@ struct EventRunLapInput {
 struct NewEventRun {
     event_id: i64,
     car_ordinal: i32,
-    car_name: Option<String>,
     car_class: i32,
     car_pi: i32,
     drivetrain: i32,
@@ -3285,17 +3284,6 @@ fn normalize_event_run_input(mut run: NewEventRun) -> Result<NewEventRun, String
     }
     if run.car_class < 0 || run.car_pi < 0 || run.drivetrain < 0 {
         return Err("Event run car class, PI, and drivetrain must not be negative".to_string());
-    }
-    run.car_name = run
-        .car_name
-        .map(|name| name.trim().to_string())
-        .filter(|name| !name.is_empty());
-    if run
-        .car_name
-        .as_ref()
-        .is_some_and(|name| name.chars().count() > 80)
-    {
-        return Err("Event run car name must be 80 characters or fewer".to_string());
     }
     run.started_at = run.started_at.trim().to_string();
     if run.started_at.is_empty() {
@@ -3719,7 +3707,7 @@ fn load_event_run_from_connection(
     let mut statement = connection
         .prepare(
             "SELECT event_runs.id, event_runs.event_id, event_runs.car_ordinal,
-                    COALESCE(garage_cars.display_name, event_runs.car_name),
+                    garage_cars.display_name,
                     event_runs.car_class, event_runs.car_pi, event_runs.drivetrain,
                     event_runs.started_at, event_runs.run_type, event_runs.result,
                     event_runs.result_time_ms, event_runs.created_at
@@ -3750,7 +3738,7 @@ fn load_event_runs_from_connection(
     let mut statement = connection
         .prepare(
             "SELECT event_runs.id, event_runs.event_id, event_runs.car_ordinal,
-                    COALESCE(garage_cars.display_name, event_runs.car_name),
+                    garage_cars.display_name,
                     event_runs.car_class, event_runs.car_pi, event_runs.drivetrain,
                     event_runs.started_at, event_runs.run_type, event_runs.result,
                     event_runs.result_time_ms, event_runs.created_at
@@ -3904,30 +3892,15 @@ fn record_event_run_in_connection(
     if !event_exists {
         return Err(format!("Event {} does not exist", run.event_id));
     }
-    let car_name = match run.car_name {
-        Some(name) => Some(name),
-        None => transaction
-            .query_row(
-                "SELECT display_name
-                 FROM garage_cars
-                 WHERE game_id = 'fh6' AND car_ordinal = ?1",
-                params![run.car_ordinal],
-                |row| row.get::<_, Option<String>>(0),
-            )
-            .optional()
-            .map_err(|error| format!("unable to load Event run Garage name: {error}"))?
-            .flatten(),
-    };
     transaction
         .execute(
             "INSERT INTO event_runs
                (event_id, car_ordinal, car_name, car_class, car_pi, drivetrain,
                 started_at, run_type, result, result_time_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 run.event_id,
                 run.car_ordinal,
-                car_name,
                 run.car_class,
                 run.car_pi,
                 run.drivetrain,
@@ -6031,7 +6004,6 @@ mod tests {
         NewEventRun {
             event_id,
             car_ordinal: 260,
-            car_name: Some("  Test Car  ".to_string()),
             car_class: 8,
             car_pi: 700,
             drivetrain: 2,
@@ -6250,6 +6222,15 @@ mod tests {
         )
         .unwrap();
 
+        connection
+            .execute(
+                "INSERT INTO garage_cars
+                   (game_id, car_ordinal, display_name, first_seen_sequence, last_seen_sequence)
+                 VALUES ('fh6', 260, 'Test Car', 1, 1)",
+                [],
+            )
+            .unwrap();
+
         assert!(
             record_event_run_in_connection(
                 &mut connection,
@@ -6381,7 +6362,6 @@ mod tests {
             }],
         );
         garage_named_run.car_ordinal = 261;
-        garage_named_run.car_name = None;
         assert_eq!(
             record_event_run_in_connection(&mut connection, garage_named_run)
                 .unwrap()
@@ -6640,8 +6620,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut run = test_event_run(event.id, "sprint", "confirmed", Some(75_000), Vec::new());
-        run.car_name = None;
+        let run = test_event_run(event.id, "sprint", "confirmed", Some(75_000), Vec::new());
         let saved = record_event_run_in_connection(&mut connection, run).unwrap();
         assert_eq!(saved.car_name, None);
 
@@ -6694,6 +6673,20 @@ mod tests {
                 .car_name
                 .as_deref(),
             Some("Renamed again")
+        );
+
+        connection
+            .execute(
+                "UPDATE garage_cars SET display_name = NULL
+                 WHERE game_id = 'fh6' AND car_ordinal = 260",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            load_event_run_from_connection(&connection, saved.id)
+                .unwrap()
+                .car_name,
+            None
         );
     }
 

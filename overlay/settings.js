@@ -88,6 +88,7 @@
   const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
   const settingsPanels = [...document.querySelectorAll('[data-settings-panel]')]
   const garageApi = globalScope.HudGarageRuntime
+  const FdcVehicle = globalScope.FdcVehicle
   const garageGrid = document.getElementById('garage-grid')
   const garageGridEmpty = document.getElementById('garage-grid-empty')
   const garageCurrentCar = document.getElementById('garage-current-car')
@@ -182,7 +183,7 @@
   let driverAnalysisActionPending = false
 
   function garageDisplayName(vehicle) {
-    return garageApi?.displayName?.(vehicle) || vehicle?.name || String(vehicle?.carOrdinal || '')
+    return FdcVehicle.displayName(vehicle?.name, vehicle?.carOrdinal)
   }
 
   function garagePerformanceClass(classLabel) {
@@ -190,15 +191,7 @@
   }
 
   function garageDrivetrainLabel(vehicle) {
-    const directLabel = typeof vehicle?.drivetrainLabel === 'string' ? vehicle.drivetrainLabel.trim().toUpperCase() : ''
-    if (['FWD', 'RWD', 'AWD'].includes(directLabel)) return directLabel
-    const rawDrivetrain = vehicle?.drivetrain
-      ?? vehicle?.drivetrainType
-      ?? vehicle?.drivetrain_type
-    const normalized = garageApi?.drivetrainLabel?.(rawDrivetrain)
-    if (normalized) return normalized
-    const fallback = typeof rawDrivetrain === 'string' ? rawDrivetrain.trim().toUpperCase() : ''
-    return ['FWD', 'RWD', 'AWD'].includes(fallback) ? fallback : null
+    return FdcVehicle.drivetrainLabel(vehicle?.drivetrain)
   }
 
   function appendGaragePerformance(container, vehicle) {
@@ -467,6 +460,7 @@
       garageVehicles.set(vehicle.carOrdinal, vehicle)
     }
     renderGarage()
+    propagateGarageNames([Math.round(ordinal)])
     try {
       const result = await call('rename_garage_car', { carOrdinal: Math.round(ordinal), name: normalizedName })
       const returned = garageApi?.normalizeGaragePayload?.(result)?.[0]
@@ -478,6 +472,7 @@
         }
       }
       renderGarage()
+      propagateGarageNames([Math.round(ordinal)])
       const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
       if (eventApi?.emit) await eventApi.emit('hud_garage', returned || vehicle)
       setStatus('GARAGE NAME SAVED')
@@ -488,20 +483,48 @@
     }
   }
 
-  function applyGaragePayload(payload) {
-    const vehicles = garageApi?.normalizeGaragePayload?.(payload) || []
-    for (const vehicle of vehicles) mergeGarageVehicle(vehicle)
-    renderGarage()
+  function propagateGarageNames(ordinals) {
     let runsChanged = false
     currentEventRuns = currentEventRuns.map(run => {
       const ordinal = Number(run?.car?.ordinal)
-      if (!Number.isFinite(ordinal) || ordinal <= 0) return run
+      if (!Number.isFinite(ordinal) || ordinal <= 0 || !ordinals.includes(Math.round(ordinal))) return run
       const garageName = garageVehicles.get(Math.round(ordinal))?.name
-      if (!garageName || run.car.name === garageName) return run
+      const newName = garageName || null
+      if (run.car.name === newName) return run
       runsChanged = true
-      return { ...run, car: { ...run.car, name: garageName } }
+      return { ...run, car: { ...run.car, name: newName } }
     })
-    if (runsChanged) renderEventRuns()
+    let historyChanged = false
+    driverAnalysisHistory = driverAnalysisHistory.map(session => {
+      const ordinal = Number(session?.vehicleIdentity?.ordinal)
+      if (!Number.isFinite(ordinal) || ordinal <= 0 || !ordinals.includes(Math.round(ordinal))) return session
+      const garageName = garageVehicles.get(Math.round(ordinal))?.name
+      const newName = garageName || null
+      if (session.vehicleName === newName) return session
+      historyChanged = true
+      return { ...session, vehicleName: newName }
+    })
+    if (runsChanged) {
+      renderEventRuns()
+      if (currentEventRun) renderEventRunDetail()
+    }
+    if (historyChanged) {
+      renderDriverAnalysisHistory()
+      if (driverAnalysisView.level === 'car' || driverAnalysisView.level === 'drive') {
+        renderDriverAnalysisDetailView()
+      }
+    }
+  }
+
+  function applyGaragePayload(payload) {
+    const vehicles = garageApi?.normalizeGaragePayload?.(payload) || []
+    const ordinals = []
+    for (const vehicle of vehicles) {
+      mergeGarageVehicle(vehicle)
+      ordinals.push(vehicle.carOrdinal)
+    }
+    renderGarage()
+    propagateGarageNames(ordinals)
   }
 
   async function listenGarageEvents() {
@@ -1074,7 +1097,7 @@
   }
 
   function runCarName(run) {
-    return run.car.name || (run.car.ordinal ? `CAR #${run.car.ordinal}` : 'UNKNOWN CAR')
+    return FdcVehicle.displayName(run.car.name, run.car.ordinal)
   }
 
   function runBestTimeMs(run) {
@@ -2355,7 +2378,7 @@
         const row = document.createElement('tr')
         row.className = 'events-run-table__lap-row'
         row.tabIndex = 0
-        const carLabel = globalScope.DriverAnalysisHistory?.carLabel?.(s) || 'Car'
+        const carLabel = FdcVehicle.displayName(s?.vehicleName, s?.vehicleIdentity?.ordinal)
         row.setAttribute('aria-label', `Open ${carLabel}`)
         row.addEventListener('click', () => {
           setDriverAnalysisView({ level: 'car', recordingId: String(recording.recordingId), sessionId: String(s?.id), driveId: null })
@@ -2402,7 +2425,7 @@
       section.append(tableWrap)
       driverAnalysisDetailBody?.append(section)
     } else if (driverAnalysisView.level === 'car') {
-      const carLabel = globalScope.DriverAnalysisHistory?.carLabel?.(session) || 'Car'
+      const carLabel = FdcVehicle.displayName(session?.vehicleName, session?.vehicleIdentity?.ordinal)
       const pi = Number(session?.vehicleIdentity?.pi)
       const drivetrain = globalScope.DriverAnalysisHistory?.drivetrainLabel?.(session?.vehicleIdentity?.drivetrain) || ''
       if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = carLabel
@@ -2626,7 +2649,7 @@
         setDriverAnalysisView({ level: 'car', recordingId, sessionId, driveId: null })
         return
       }
-      const carLabel = globalScope.DriverAnalysisHistory?.carLabel?.(session) || 'Car'
+      const carLabel = FdcVehicle.displayName(session?.vehicleName, session?.vehicleIdentity?.ordinal)
       if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = `DRIVE #${drive?.id || ''}`
       const badges = []
       const carBadge = document.createElement('span')
@@ -2756,7 +2779,7 @@
         const sessionLine = document.createElement('div')
         sessionLine.className = 'driver-analysis-history-row__session-line'
 
-        const carName = globalScope.DriverAnalysisHistory?.carLabel?.(session) || 'Car'
+        const carName = FdcVehicle.displayName(session?.vehicleName, session?.vehicleIdentity?.ordinal)
         const sessionCarLabel = document.createElement('span')
         sessionCarLabel.className = 'driver-analysis-history-row__session-car'
         sessionCarLabel.textContent = carName
@@ -3315,8 +3338,7 @@
     if (!hasProfile) return
 
     const garageVehicle = state.gameId === 'fh6' && state.carOrdinal ? garageVehicles.get(state.carOrdinal) : null
-    shiftLightCarKey.textContent = garageVehicle?.name
-      || (state.gameId === 'fh6' && state.carOrdinal ? `FH6 CAR #${state.carOrdinal}` : '—')
+    shiftLightCarKey.textContent = FdcVehicle.displayName(garageVehicle?.name, state.carOrdinal)
     renderShiftLightCarClass(state, garageVehicle)
     shiftLightCarRpmMax.textContent = state.rpmMax ? `${state.rpmMax} RPM` : '—'
     shiftLightUsableCeiling.textContent = state.usableCeiling

@@ -5,6 +5,12 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+### Improved
+
+- **Garage**: a car is shown the same way everywhere — by its Garage name, or
+  by its car number when it has no name — and renaming it updates Events,
+  Driver Analysis, and Shift Light right away.
+
 ## 7.19.55 - 2026-09-30
 
 ### Fixed

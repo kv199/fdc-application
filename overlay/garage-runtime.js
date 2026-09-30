@@ -2,8 +2,8 @@
   'use strict'
 
   const GARAGE_EVENT = 'hud_garage'
-  const CLASS_LABELS = ['D', 'C', 'B', 'A', 'S1', 'S2', 'R', 'X']
-  const DRIVETRAIN_LABELS = ['FWD', 'RWD', 'AWD']
+  const FdcVehicle = globalScope.FdcVehicle || require('./vehicle.js')
+  const { CLASS_LABELS, classLabel, drivetrainLabel } = FdcVehicle
 
   function finitePositive(value) {
     const number = Number(value)
@@ -11,6 +11,7 @@
   }
 
   function finiteNonNegative(value) {
+    if (value === null || value === undefined || value === '') return null
     const number = Number(value)
     return Number.isFinite(number) && number >= 0 ? number : null
   }
@@ -18,20 +19,6 @@
   function ordinalOf(value) {
     const ordinal = finitePositive(value)
     return ordinal === null ? null : Math.round(ordinal)
-  }
-
-  function classLabel(value) {
-    if (typeof value === 'string' && value.trim()) return value.trim().toUpperCase()
-    if (value === null || value === undefined || value === '') return null
-    const numeric = Number(value)
-    if (!Number.isFinite(numeric)) return null
-    return CLASS_LABELS[Math.round(numeric)] || String(Math.round(numeric))
-  }
-
-  function drivetrainLabel(value) {
-    if (value === null || value === undefined || value === '') return null
-    const numeric = finiteNonNegative(value)
-    return numeric === null ? null : (DRIVETRAIN_LABELS[Math.round(numeric)] || null)
   }
 
   const SHIFT_LIGHT_STATUSES = ['none', 'learning', 'ready']
@@ -95,11 +82,11 @@
 
   function normalizeVariant(value) {
     const variant = value && typeof value === 'object' ? value : {}
-    const rawClass = variant.class ?? variant.carClass ?? variant.classLabel
+    const rawClass = variant.class
     const numericClass = Number(rawClass)
-    const pi = finiteNonNegative(variant.pi ?? variant.performanceIndex)
-    const drivetrain = finiteNonNegative(variant.drivetrain ?? variant.drivetrainType ?? variant.drivetrain_type)
-    const cylinders = finiteNonNegative(variant.cylinders ?? variant.numCylinders ?? variant.num_cylinders)
+    const pi = finiteNonNegative(variant.pi)
+    const drivetrain = finiteNonNegative(variant.drivetrain)
+    const cylinders = finiteNonNegative(variant.cylinders)
     const rawId = finitePositive(variant.id)
     return {
       id: rawId === null ? null : Math.round(rawId),
@@ -118,19 +105,19 @@
 
   function normalizeVehicle(value) {
     const vehicle = value && typeof value === 'object' ? value : {}
-    const carOrdinal = ordinalOf(vehicle.carOrdinal ?? vehicle.car_ordinal ?? vehicle.ordinal)
+    const carOrdinal = ordinalOf(vehicle.carOrdinal)
     if (carOrdinal === null) return null
     const currentVariant = Array.isArray(vehicle.variants)
       ? vehicle.variants.find(variant => variant?.isCurrent) || vehicle.variants[0]
       : null
-    const rawName = vehicle.name ?? vehicle.displayName ?? vehicle.carName
-    const rawClass = vehicle.class ?? vehicle.carClass ?? vehicle.classLabel ?? currentVariant?.class ?? currentVariant?.carClass
-    const rawPi = vehicle.pi ?? vehicle.performanceIndex ?? currentVariant?.pi
+    const rawName = vehicle.name
+    const rawClass = vehicle.class ?? currentVariant?.class
+    const rawPi = vehicle.pi ?? currentVariant?.pi
     const numericClass = Number(rawClass)
     const pi = finiteNonNegative(rawPi)
-    const carGroup = finiteNonNegative(vehicle.carGroup ?? vehicle.car_group)
-    const drivetrain = finiteNonNegative(vehicle.drivetrain ?? vehicle.drivetrainType ?? vehicle.drivetrain_type)
-    const cylinders = finiteNonNegative(vehicle.cylinders ?? vehicle.numCylinders ?? vehicle.num_cylinders)
+    const carGroup = finiteNonNegative(vehicle.carGroup)
+    const drivetrain = finiteNonNegative(vehicle.drivetrain)
+    const cylinders = finiteNonNegative(vehicle.cylinders)
     const variants = Array.isArray(vehicle.variants)
       ? vehicle.variants.map(normalizeVariant).filter(variant => variant.class !== null || variant.pi !== null)
       : null
@@ -150,8 +137,7 @@
       drivetrain: drivetrain === null ? null : Math.round(drivetrain),
       cylinders: cylinders === null ? null : Math.round(cylinders),
       drivetrainLabel: drivetrainLabel(drivetrain),
-      latestUsed: vehicle.latestUsed === true || vehicle.isLatestUsed === true,
-      lastUsedAt: vehicle.lastUsedAt ?? vehicle.last_seen_at ?? vehicle.lastSeenAt ?? null
+      latestUsed: vehicle.latestUsed === true
     }
     if (variants) normalized.variants = variants
     if (shiftLight) normalized.shiftLight = shiftLight
@@ -159,34 +145,34 @@
   }
 
   function vehicleFromTelemetry(telemetry) {
-    const car = telemetry?.car && typeof telemetry.car === 'object' ? telemetry.car : {}
+    const car = FdcVehicle.vehicleFromTelemetry(telemetry)
+    if (!car) return null
     return normalizeVehicle({
-      carOrdinal: car.ordinal ?? car.carOrdinal ?? telemetry?.carOrdinal ?? telemetry?.car_ordinal,
-      name: car.name ?? car.displayName ?? telemetry?.carName,
-      class: car.class ?? car.carClass ?? telemetry?.class ?? telemetry?.carClass,
-      pi: car.pi ?? telemetry?.pi,
-      carGroup: car.carGroup ?? telemetry?.carGroup,
-      drivetrain: car.drivetrain ?? telemetry?.drivetrain,
-      cylinders: car.cylinders ?? telemetry?.cylinders
+      carOrdinal: car.ordinal,
+      class: car.class,
+      pi: car.pi,
+      carGroup: car.carGroup,
+      drivetrain: car.drivetrain,
+      cylinders: car.cylinders
     })
   }
 
   function normalizeGaragePayload(value) {
     if (Array.isArray(value)) return value.map(normalizeVehicle).filter(Boolean)
     if (!value || typeof value !== 'object') return []
-    const list = value.cars ?? value.vehicles ?? value.garage ?? value.items
+    const list = value.cars
     if (Array.isArray(list)) {
-      const currentOrdinal = ordinalOf(value.currentCarOrdinal ?? value.current_car_ordinal)
+      const currentOrdinal = ordinalOf(value.currentCarOrdinal)
       return list.map(normalizeVehicle).filter(Boolean).map(vehicle => currentOrdinal === vehicle.carOrdinal
         ? { ...vehicle, latestUsed: true }
         : vehicle)
     }
-    const vehicle = normalizeVehicle(value.vehicle ?? value)
+    const vehicle = normalizeVehicle(value)
     return vehicle ? [vehicle] : []
   }
 
   function displayName(vehicle) {
-    return vehicle?.name || (vehicle?.carOrdinal ? String(vehicle.carOrdinal) : '')
+    return FdcVehicle.displayName(vehicle?.name, vehicle?.carOrdinal)
   }
 
   function recordKey(vehicle) {
@@ -227,13 +213,8 @@
         class: vehicle.class,
         pi: vehicle.pi
       }
-      const car = telemetry?.car && typeof telemetry.car === 'object' ? telemetry.car : telemetry
-      for (const [keyName, value] of [
-        ['carGroup', car?.carGroup],
-        ['drivetrain', car?.drivetrain],
-        ['cylinders', car?.cylinders]
-      ]) {
-        if (value !== undefined && value !== null) recordArgs[keyName] = value
+      for (const keyName of ['carGroup', 'drivetrain', 'cylinders']) {
+        if (vehicle[keyName] !== null) recordArgs[keyName] = vehicle[keyName]
       }
       Promise.resolve(invoke('record_garage_vehicle', recordArgs)).then(result => {
         const saved = normalizeGaragePayload(result)[0]

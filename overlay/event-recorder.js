@@ -3,6 +3,7 @@
   if (typeof module !== 'undefined' && module.exports && typeof document === 'undefined') module.exports = api
   else globalScope.HudEventRecorder = api
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
+  const FdcVehicle = globalThis.FdcVehicle || require('./vehicle.js')
   const START_MAX_MS = 2000
   const START_MAX_DISTANCE_M = 25
   const POST_FINISH_PACKET_WINDOW = 48
@@ -230,23 +231,12 @@
   }
 
   function carSnapshot(telemetry) {
-    const car = telemetry?.car && typeof telemetry.car === 'object' ? telemetry.car : {}
-    const ordinal = finite(car.ordinal ?? telemetry?.carOrdinal)
-    const pi = finite(car.pi ?? telemetry?.pi)
-    const drivetrain = finite(car.drivetrain ?? car.drivetrainType ?? telemetry?.drivetrain)
-    const classLabels = ['D', 'C', 'B', 'A', 'S1', 'S2', 'R', 'X']
-    const rawClass = car.class ?? car.classLabel ?? telemetry?.classLabel
-    const numericClass = finite(rawClass)
-    const classValue = numericClass !== null
-      ? Math.round(numericClass)
-      : classLabels.indexOf(String(rawClass || '').trim().toUpperCase())
-    const name = text(car.name ?? car.displayName ?? car.carName ?? telemetry?.carName)
+    const car = FdcVehicle.vehicleFromTelemetry(telemetry)
     return {
-      ordinal: ordinal === null ? null : Math.round(ordinal),
-      name,
-      class: classValue < 0 ? null : classValue,
-      pi: pi === null ? null : Math.round(pi),
-      drivetrain: drivetrain === null ? null : Math.round(drivetrain)
+      ordinal: car?.ordinal ?? null,
+      class: car?.class ?? null,
+      pi: car?.pi ?? null,
+      drivetrain: car?.drivetrain ?? null
     }
   }
 
@@ -501,7 +491,6 @@
         tracePoints: lap.tracePoints.map(point => ({ ...point })),
         captureRunId: run.runId,
         carOrdinal: run.car.ordinal,
-        carName: run.car.name,
         carClass: run.car.class,
         carPi: run.car.pi,
         drivetrain: run.car.drivetrain
@@ -559,10 +548,6 @@
       if (!hasPersistableResult(run)) {
         return Promise.resolve(result(run, 'discarded', 'The run has no completed laps or confirmed result.'))
       }
-      const classLabels = ['D', 'C', 'B', 'A', 'S1', 'S2', 'R', 'X']
-      const carClass = run.car.class === null ? null : Number.isFinite(Number(run.car.class))
-        ? Math.round(Number(run.car.class))
-        : classLabels.indexOf(String(run.car.class).toUpperCase())
       const laps = run.laps.map(lap => {
         const payloadLap = { lapNumber: lap.lapNumber, lapTimeMs: lap.timeMs }
         for (const key of ['sector1TimeMs', 'sector2TimeMs', 'sector3TimeMs']) {
@@ -578,8 +563,7 @@
         run: {
           eventId: Number.isFinite(Number(run.eventId)) ? Math.round(Number(run.eventId)) : run.eventId,
           carOrdinal: run.car.ordinal,
-          carName: run.car.name,
-          carClass: carClass < 0 ? null : carClass,
+          carClass: run.car.class,
           carPi: run.car.pi,
           drivetrain: run.car.drivetrain,
           startedAt: run.startedAt,

@@ -38,6 +38,12 @@ Garage is the Configuration tab immediately to the right of HUD.
 Forza Data Out does not provide a stock car name. A saved name is a local user
 label for the matching car ordinal; it does not modify the game.
 
+FDC shows a car everywhere by one rule: its current saved Garage name, or its
+numeric car ordinal when no name is saved. Garage, Events, Driver Analysis, and
+the Shift Light settings panel all read the current name, so renaming a car or
+clearing its name immediately updates the open Configuration window, including
+existing Event runs and Driver Analysis recordings.
+
 ## Data flow
 
 Garage does not add a telemetry transport. It is a local consumer of the
