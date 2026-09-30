@@ -95,12 +95,12 @@ to 100%. The default is 80%, and **RESET** restores it.
 
 ## Display settings
 
-Configuration → **Settings** contains:
+Configuration → **Settings** opens with a short intro that also notes all FDC
+data stays on this PC, and contains:
 
 - **Configuration always on top**, off by default;
 - **Show HUD with telemetry**, described above;
-- **Speed unit**: `km/h` or `mph` for the HUD speed value;
-- **Your data**: a read-only note that all FDC data stays on this PC.
+- **Speed unit**: `km/h` or `mph` for the HUD speed value.
 
 ## Persistence
 

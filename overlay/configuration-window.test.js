@@ -19,7 +19,8 @@ test('Every Configuration tab opens with a short intro and Settings states where
     assert.match(markup, /<p class="settings-section__intro">[^<]+<\/p>/, panel)
   }
   assert.match(settingsHtml, /<h2 id="settings-panel-title">SETTINGS<\/h2>/)
-  assert.match(settingsHtml, /<strong>YOUR DATA<\/strong>\s*<small>All FDC data stays on this PC\.<\/small>/)
+  assert.match(settingsHtml, /<p class="settings-section__intro">Options for the whole app\. All FDC data stays on this PC\.<\/p>/)
+  assert.doesNotMatch(settingsHtml, /YOUR DATA/)
   assert.match(settingsCss, /\.settings-section__intro\s*\{/)
   assert.doesNotMatch(settingsHtml, /VISUAL OUTPUT|RECORDED ASPHALT REVIEW|VEHICLE LIBRARY|AUTO CALIBRATION/)
 })

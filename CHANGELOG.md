@@ -24,6 +24,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Configuration**: tabs are now ordered HUD, Events, Driver, Shift Light,
   Garage, Settings, and each tab opens with a short explanation of what it
   does, with fewer technical labels and clearer empty-state hints.
+- **Settings**: the note that all FDC data stays on this PC is now part of the
+  tab's intro instead of looking like a setting.
 
 ## 7.19.55 - 2026-09-30
 
