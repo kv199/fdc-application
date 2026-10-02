@@ -74,6 +74,13 @@ the tray menu, Direct Data Out, and native persistence commands.
   profile operations, Driver Analysis recording/history operations, and reset.
 - Garage, Driver Analysis, Events, and Shift Light database commands open `fdc.sqlite` below the Tauri
   application data directory and apply the versioned schema there.
+- At startup the HUD window is sized and positioned to cover the saved HUD
+  monitor, or the primary monitor. `list_hud_displays` and `set_hud_display`
+  list the connected monitors and move the HUD to one of them. When Windows
+  moves or rescales the HUD, for example with Win+Shift+Arrow, the window is
+  refitted to the monitor its top-left corner is on, and that monitor is saved.
+- Closing the Configuration window asks the page before quitting, and
+  `quit_app` exits FDC.
 
 The native layer registers the Driver Analysis global recording hotkey (keyboard
 or game-controller button via Windows Raw Input) while Driver Analysis is
@@ -196,6 +203,8 @@ telemetry path. It provides:
   and opacity remain shared. Both modes start from the same compact responsive
   arrangement. Reset returns a target to its active-mode default size and
   position;
+- a **HUD DISPLAY** monitor selector that moves the HUD to cover the chosen
+  monitor and is unavailable during a layout edit;
 - visibility controls for the top-level overlay and HUD components, plus a
   `SHOW HUD WITH TELEMETRY` preference that defaults to enabled and shows the
   HUD and Delta only while live samples (`IsRaceOn`) arrive, and hides them

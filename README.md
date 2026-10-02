@@ -123,9 +123,10 @@ In Forza Horizon 6:
 3. Set **Data Out IP Address** to `127.0.0.1`.
 4. Set **Data Out IP Port** to `5301`.
 
-Start FDC. Configuration opens on the first launch and afterwards from the FDC
-tray icon; it shows whether Data Out is waiting, live, stale, offline, or
-unable to start. Until the game has sent data once, Configuration opens on a
+Start FDC. Configuration opens on every launch and shows whether Data Out is
+waiting, live, stale, offline, or unable to start. Minimize it to keep FDC
+running, and reopen it from the FDC tray icon; its X button quits FDC, asking
+first unless you turned that off. Until the game has sent data once, Configuration opens on a
 setup screen with these steps that switches to **CONNECTED** when data arrives.
 
 ## Local data and privacy
@@ -147,7 +148,6 @@ opens GitHub pages in your default browser.
 - Shift Light learns from live telemetry and has no manual target entry or
   car-name database.
 - Garage shows image placeholders; it does not download car images or names.
-- The HUD covers the primary monitor only.
 
 ## Build from source
 
@@ -165,7 +165,8 @@ branch holds the latest release and `develop` holds ongoing work. See
 ## Documentation
 
 - [Architecture](docs/architecture.md) — system boundary and runtime data flow.
-- [HUD](docs/hud.md) — blocks, shift cue, visibility, layout, and opacity.
+- [HUD](docs/hud.md) — blocks, shift cue, visibility, layout, monitor, and
+  opacity.
 - [Driver Analysis](docs/driver-analysis.md) — recording, analysis, and history.
 - [Shift Light](docs/shift-light.md) — learner, presentation, and persistence.
 - [Events](docs/events.md) — event library, run recording, and Delta.

@@ -114,6 +114,10 @@ Configuration → **Settings** opens with a short intro that also notes all FDC
 data stays on this PC, and contains:
 
 - **Configuration always on top**, off by default;
+- **Confirm before quitting**, on by default: the Configuration X button asks
+  **QUIT FDC?** first. From the second confirmed quit the question offers
+  **Don't ask again**, which turns this off. A Driver Analysis or Event
+  recording in progress always asks;
 - **Show HUD with telemetry**, described above;
 - **Speed unit**: `km/h` or `mph` for speeds in the HUD, Events, and Driver
   Analysis;
@@ -128,7 +132,9 @@ km/h and meters, and changing a unit immediately redraws the open views.
 
 HUD layout, block and overlay visibility, opacity, speed and distance units,
 and brightness preferences are stored in the local application webview storage. They are not
-written to `fdc.sqlite`.
+written to `fdc.sqlite`. The **HUD DISPLAY** monitor is stored in
+`hud-display.json` in the FDC application-data directory, because FDC places the
+HUD before the page loads.
 
 ## Browser demo
 
