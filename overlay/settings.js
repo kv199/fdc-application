@@ -186,6 +186,7 @@
   let driverAnalysisHotkeyCapture = false
   let driverAnalysisHistory = []
   let driverAnalysisHistoryPending = false
+  let driverAnalysisExportPending = false
   let driverAnalysisActionPending = false
 
   function garageDisplayName(vehicle) {
@@ -2795,7 +2796,7 @@
 
   async function deleteDriverAnalysisRecording(recording) {
     if (!recording || !Array.isArray(recording.sessions) || recording.sessions.length === 0) return false
-    if (driverAnalysisHistoryPending) return false
+    if (driverAnalysisHistoryPending || driverAnalysisExportPending) return false
     if (typeof globalScope.confirm === 'function' && !globalScope.confirm('Delete this Driver Analysis recording, all its cars, and saved telemetry?')) return false
     driverAnalysisHistoryPending = true
     renderDriverAnalysisHistory()
@@ -2815,6 +2816,34 @@
       return false
     } finally {
       driverAnalysisHistoryPending = false
+      renderDriverAnalysisHistory()
+    }
+  }
+
+  // GitHub rejects issue attachments above 25 MB.
+  const DRIVER_ANALYSIS_EXPORT_ATTACHMENT_LIMIT_BYTES = 25 * 1024 * 1024
+
+  async function exportDriverAnalysisRecording(recording) {
+    if (!recording || !Array.isArray(recording.sessions) || recording.sessions.length === 0) return false
+    if (driverAnalysisHistoryPending || driverAnalysisExportPending) return false
+    driverAnalysisExportPending = true
+    renderDriverAnalysisHistory()
+    try {
+      const fileName = globalScope.DriverAnalysisHistory.exportFileName(recording.sessions[0]?.recordedAt)
+      const outcome = await call('export_driver_analysis_recording', { recordingId: Number(recording.recordingId), fileName })
+      if (outcome?.cancelled) return false
+      const size = formatDriverAnalysisSize(outcome?.bytes)
+      if (Number(outcome?.bytes) > DRIVER_ANALYSIS_EXPORT_ATTACHMENT_LIMIT_BYTES) {
+        setStatus(`DRIVER ANALYSIS RECORDING EXPORTED · ${size} · TOO LARGE FOR A GITHUB ATTACHMENT`, true)
+      } else {
+        setStatus(`DRIVER ANALYSIS RECORDING EXPORTED · ${size}`)
+      }
+      return true
+    } catch (error) {
+      setStatus(error?.message || (typeof error === 'string' && error) || 'Unable to export Driver Analysis recording', true)
+      return false
+    } finally {
+      driverAnalysisExportPending = false
       renderDriverAnalysisHistory()
     }
   }
@@ -2915,15 +2944,23 @@
 
       const actions = document.createElement('div')
       actions.className = 'driver-analysis-history-row__actions'
+      const actionsBlocked = driverAnalysisHistoryPending || driverAnalysisExportPending || hasUnfinishedSessions || driverAnalysisState.recording === true
+      const firstDate = formatDriverAnalysisDate(firstSession?.recordedAt)
+      const exportButton = document.createElement('button')
+      exportButton.className = 'settings-button driver-analysis-history-row__export'
+      exportButton.type = 'button'
+      exportButton.textContent = 'EXPORT'
+      exportButton.disabled = actionsBlocked
+      exportButton.setAttribute('aria-label', `Export Driver Analysis recording from ${firstDate}`)
+      exportButton.addEventListener('click', () => void exportDriverAnalysisRecording(recording))
       const remove = document.createElement('button')
       remove.className = 'settings-button settings-button--danger driver-analysis-history-row__delete'
       remove.type = 'button'
       remove.textContent = 'DELETE'
-      remove.disabled = driverAnalysisHistoryPending || hasUnfinishedSessions || driverAnalysisState.recording === true
-      const firstDate = formatDriverAnalysisDate(firstSession?.recordedAt)
+      remove.disabled = actionsBlocked
       remove.setAttribute('aria-label', `Delete Driver Analysis recording from ${firstDate}`)
       remove.addEventListener('click', () => void deleteDriverAnalysisRecording(recording))
-      actions.append(remove)
+      actions.append(exportButton, remove)
 
       row.append(actions)
       driverAnalysisHistoryList.append(row)

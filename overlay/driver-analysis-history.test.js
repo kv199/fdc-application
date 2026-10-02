@@ -81,3 +81,9 @@ test('recording summary uses imperial units when DisplayPreferences specifies th
     delete globalThis.DisplayPreferences
   }
 })
+
+test('exportFileName uses the local start time of the recording', () => {
+  const start = new Date(2026, 9, 2, 8, 5, 30).getTime()
+  assert.equal(history.exportFileName(start), 'fdc-driver-analysis-20261002-0805.json.gz')
+  assert.equal(history.exportFileName(null, new Date(2026, 0, 31, 23, 59).getTime()), 'fdc-driver-analysis-20260131-2359.json.gz')
+})

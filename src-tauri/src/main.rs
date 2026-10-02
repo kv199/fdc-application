@@ -20,10 +20,12 @@ use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Runtime, State,
     WebviewWindow, Window, WindowEvent, menu::MenuBuilder, tray::TrayIconBuilder,
 };
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_opener::OpenerExt;
 
 mod controller_input;
+mod driver_analysis_export;
 
 const SETTINGS_WINDOW_STATE_FILE: &str = "settings-window-size.json";
 #[cfg(test)]
@@ -377,7 +379,7 @@ struct ShiftLightVariantResolution {
 }
 
 const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 4;
-const HUD_SCHEMA_VERSION: i32 = 21;
+const HUD_SCHEMA_VERSION: i32 = 22;
 const MAX_SHIFT_LIGHT_CEILING_SAMPLES: usize = 3;
 const MAX_SHIFT_LIGHT_GEAR_TARGETS: usize = 9;
 const MAX_SHIFT_LIGHT_SHIFT_SAMPLES: usize = 64;
@@ -1349,6 +1351,30 @@ fn migrate_driver_analysis_recordings(connection: &mut Connection) -> Result<(),
         .map_err(|error| format!("unable to commit Driver Analysis recordings migration: {error}"))
 }
 
+// Schema version 22 records which FDC version made each session; earlier sessions keep NULL.
+fn migrate_driver_analysis_app_version(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Driver Analysis version migration: {error}"))?;
+    if !table_has_column(&transaction, "driver_analysis_sessions", "app_version")? {
+        transaction
+            .execute(
+                "ALTER TABLE driver_analysis_sessions ADD COLUMN app_version TEXT",
+                [],
+            )
+            .map_err(|error| format!("unable to add Driver Analysis app version: {error}"))?;
+    }
+    transaction
+        .execute(
+            "UPDATE hud_schema_version SET version = ?1",
+            params![HUD_SCHEMA_VERSION],
+        )
+        .map_err(|error| format!("unable to update Driver Analysis version schema: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Driver Analysis version migration: {error}"))
+}
+
 const EVENT_TRACE_TELEMETRY_COLUMNS: [(&str, &str); 36] = [
     ("speed_kmh", "REAL"),
     ("gear", "INTEGER"),
@@ -1541,6 +1567,9 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
     }
     if version < 21 {
         migrate_driver_analysis_recordings(connection)?;
+    }
+    if version < 22 {
+        migrate_driver_analysis_app_version(connection)?;
     }
     Ok(())
 }
@@ -1866,8 +1895,8 @@ fn create_driver_analysis_session_in_connection(
         .execute(
             "INSERT INTO driver_analysis_sessions
                (started_at_ms, status, algorithm_version, vehicle_identity,
-                vehicle_ordinal, vehicle_pi, vehicle_drivetrain, vehicle_rpm_limit, recording_id)
-             VALUES (?1, 'recording', ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                vehicle_ordinal, vehicle_pi, vehicle_drivetrain, vehicle_rpm_limit, recording_id, app_version)
+             VALUES (?1, 'recording', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 input.started_at_ms,
                 algorithm_version,
@@ -1877,6 +1906,7 @@ fn create_driver_analysis_session_in_connection(
                 input.vehicle_drivetrain,
                 input.vehicle_rpm_limit,
                 recording_id,
+                env!("CARGO_PKG_VERSION"),
             ],
         )
         .map_err(|error| format!("unable to create Driver Analysis session: {error}"))?;
@@ -2848,6 +2878,55 @@ fn create_driver_analysis_recording(app: AppHandle, started_at_ms: i64) -> Resul
 fn delete_driver_analysis_recording(app: AppHandle, recording_id: i64) -> Result<(), String> {
     let mut connection = open_shift_light_db(&app)?;
     delete_driver_analysis_recording_in_connection(&mut connection, recording_id)
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DriverAnalysisExportOutcome {
+    cancelled: bool,
+    bytes: u64,
+}
+
+// The save dialog and the export run off the async runtime because both block until they finish.
+#[tauri::command]
+async fn export_driver_analysis_recording(
+    app: AppHandle,
+    recording_id: i64,
+    file_name: String,
+) -> Result<DriverAnalysisExportOutcome, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        driver_analysis_export::validate_file_name(&file_name)?;
+        driver_analysis_export::check_recording(&open_shift_light_db(&app)?, recording_id)?;
+        let Some(chosen) = app
+            .dialog()
+            .file()
+            .set_file_name(&file_name)
+            .add_filter("FDC Driver Analysis export", &["gz"])
+            .blocking_save_file()
+        else {
+            return Ok(DriverAnalysisExportOutcome {
+                cancelled: true,
+                bytes: 0,
+            });
+        };
+        let target = driver_analysis_export::export_path(
+            chosen
+                .into_path()
+                .map_err(|error| format!("unable to use the chosen export file: {error}"))?,
+        );
+        let bytes = driver_analysis_export::write_recording_export(
+            &open_shift_light_db(&app)?,
+            recording_id,
+            env!("CARGO_PKG_VERSION"),
+            &target,
+        )?;
+        Ok(DriverAnalysisExportOutcome {
+            cancelled: false,
+            bytes,
+        })
+    })
+    .await
+    .map_err(|error| format!("unable to export Driver Analysis recording: {error}"))?
 }
 
 const EVENT_CLASSES: [&str; 9] = ["Any", "D", "C", "B", "A", "S1", "S2", "R", "X"];
@@ -5457,6 +5536,7 @@ fn main() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(DirectSourceState::default())
         .manage(DriverAnalysisHotkeyState::default())
         .invoke_handler(tauri::generate_handler![
@@ -5484,6 +5564,7 @@ fn main() {
             load_driver_analysis_sessions,
             delete_driver_analysis_session,
             delete_driver_analysis_recording,
+            export_driver_analysis_recording,
             sync_route_status,
             sync_shift_light_status,
             get_app_version,
@@ -8965,5 +9046,316 @@ mod tests {
             Some(1)
         );
         assert!(!drive2_counts.contains_key("rear_slip"));
+    }
+
+    fn export_test_folder(name: &str) -> PathBuf {
+        let folder = std::env::temp_dir().join(format!("fdc-export-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&folder);
+        fs::create_dir_all(&folder).unwrap();
+        folder
+    }
+
+    fn read_export(path: &std::path::Path) -> serde_json::Value {
+        let mut text = String::new();
+        std::io::Read::read_to_string(
+            &mut flate2::read::GzDecoder::new(fs::File::open(path).unwrap()),
+            &mut text,
+        )
+        .unwrap();
+        serde_json::from_str(&text).unwrap()
+    }
+
+    fn driver_analysis_table_fingerprint(connection: &Connection) -> Vec<i64> {
+        [
+            "driver_analysis_recordings",
+            "driver_analysis_sessions",
+            "driver_analysis_samples",
+            "driver_analysis_drives",
+            "driver_analysis_opportunities",
+            "driver_analysis_evidence",
+        ]
+        .iter()
+        .map(|table| {
+            connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .unwrap()
+        })
+        .chain(std::iter::once(
+            connection
+                .query_row("SELECT total_changes()", [], |row| row.get(0))
+                .unwrap(),
+        ))
+        .collect()
+    }
+
+    fn assert_no_database_keys(value: &serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                for (key, child) in map {
+                    assert!(
+                        ![
+                            "id",
+                            "session_id",
+                            "recording_id",
+                            "legacy_id",
+                            "created_at"
+                        ]
+                        .contains(&key.as_str()),
+                        "export contains {key}"
+                    );
+                    assert_no_database_keys(child);
+                }
+            }
+            serde_json::Value::Array(items) => items.iter().for_each(assert_no_database_keys),
+            _ => {}
+        }
+    }
+
+    // Records one car with samples, a drive, two checks, and evidence through the normal save path.
+    fn record_export_car(
+        connection: &mut Connection,
+        recording_id: i64,
+        started_at_ms: i64,
+        positions: bool,
+    ) -> i64 {
+        let mut input = driver_analysis_session_input(started_at_ms);
+        input.recording_id = Some(recording_id);
+        let session_id = create_driver_analysis_session_in_connection(connection, &input).unwrap();
+        let samples: Vec<_> = (0..3)
+            .map(|sequence| DriverAnalysisSampleInput {
+                position: positions.then_some([sequence as f64, 2.5, -1.25]),
+                ..driver_analysis_sample(sequence)
+            })
+            .collect();
+        append_driver_analysis_samples_in_connection(connection, session_id, &samples).unwrap();
+        let clean = DriverAnalysisOpportunityInput {
+            maneuver_id: "m0".to_string(),
+            outcome: "clean".to_string(),
+            ..driver_analysis_opportunity()
+        };
+        let evidence = vec![DriverAnalysisEvidenceInput {
+            opportunity_index: 1,
+            problem_type: "front_scrub".to_string(),
+            primary: true,
+            detector_confidence: 0.91,
+            attribution_confidence: 0.82,
+            severity: 0.4,
+            metrics_json: Some("{\"peakFrontSlip\":1.12}".to_string()),
+        }];
+        let mut result = driver_analysis_result("issue");
+        result.stats_json = Some("{\"version\":7,\"distanceM\":1200.5}".to_string());
+        let drives = vec![DriverAnalysisDriveInput {
+            kind: "circuit".to_string(),
+            finished: true,
+            lap_count: Some(2),
+            first_sequence: 0,
+            last_sequence: 2,
+            started_at_ms: 1000,
+            finished_at_ms: 1002,
+            started_wall_ms: started_at_ms + 500,
+            distance_m: 4.5,
+        }];
+        finalize_driver_analysis_session_in_connection(
+            connection,
+            session_id,
+            &[clean, driver_analysis_opportunity()],
+            &evidence,
+            &result,
+            Some(&drives),
+        )
+        .unwrap();
+        session_id
+    }
+
+    #[test]
+    fn driver_analysis_export_writes_one_recording_in_format_v1() {
+        let mut connection = driver_analysis_connection();
+        let recording_id =
+            create_driver_analysis_recording_in_connection(&mut connection, 1_000).unwrap();
+        let first = record_export_car(&mut connection, recording_id, 1_000, true);
+        let second = record_export_car(&mut connection, recording_id, 9_000, false);
+        // Another recording in the same database must not leak into the file.
+        let other =
+            create_driver_analysis_recording_in_connection(&mut connection, 50_000).unwrap();
+        record_export_car(&mut connection, other, 50_000, true);
+        let before = driver_analysis_table_fingerprint(&connection);
+
+        let folder = export_test_folder("format");
+        let target = folder.join("fdc-driver-analysis-1.json.gz");
+        let bytes = driver_analysis_export::write_recording_export(
+            &connection,
+            recording_id,
+            "9.9.9",
+            &target,
+        )
+        .unwrap();
+
+        assert_eq!(bytes, fs::metadata(&target).unwrap().len());
+        assert_eq!(fs::read_dir(&folder).unwrap().count(), 1);
+        assert_eq!(driver_analysis_table_fingerprint(&connection), before);
+        let export = read_export(&target);
+        assert_no_database_keys(&export);
+        assert_eq!(export["format"], "fdc-driver-analysis-export");
+        assert_eq!(export["formatVersion"], 1);
+        assert_eq!(export["exportedWith"]["fdcVersion"], "9.9.9");
+        assert_eq!(export["recording"]["startedAt"], "1970-01-01T00:00:01.000Z");
+        let finished: Vec<i64> = [first, second]
+            .iter()
+            .map(|id| {
+                connection
+                    .query_row(
+                        "SELECT finished_at_ms FROM driver_analysis_sessions WHERE id = ?1",
+                        params![id],
+                        |row| row.get(0),
+                    )
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(export["recording"]["durationMs"], finished[1] - 1_000);
+
+        let sessions = export["recording"]["sessions"].as_array().unwrap();
+        assert_eq!(sessions.len(), 2);
+        let car = &sessions[1];
+        assert_eq!(car["index"], 1);
+        assert_eq!(car["startedOffsetMs"], 8_000);
+        assert_eq!(car["finishedOffsetMs"], finished[1] - 1_000);
+        assert_eq!(car["recordedWith"]["fdcVersion"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(
+            car["recordedWith"]["algorithmVersion"],
+            "driver-analysis-rules-v2"
+        );
+        assert_eq!(car["vehicle"]["identity"]["ordinal"], 3766);
+        assert_eq!(car["vehicle"]["rpmLimit"], 10_300.0);
+        assert_eq!(car["result"], "issue");
+        assert_eq!(car["counts"]["drives"], 1);
+        assert_eq!(car["stats"]["distanceM"], 1200.5);
+
+        let columns: Vec<&str> = car["samples"]["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|column| column.as_str().unwrap())
+            .collect();
+        assert_eq!(columns[..2], ["sequence", "timestamp_ms"]);
+        assert!(columns.contains(&"position_x") && columns.contains(&"rumble_rr"));
+        let column = |name: &str| {
+            &car["samples"]["values"][columns.iter().position(|c| *c == name).unwrap()]
+        };
+        assert_eq!(column("sequence"), &serde_json::json!([0, 1, 2]));
+        assert_eq!(
+            column("timestamp_ms"),
+            &serde_json::json!([1000, 1001, 1002])
+        );
+        assert_eq!(column("rumble_fl"), &serde_json::json!([0, 0, 0]));
+        assert_eq!(column("position_x"), &serde_json::json!([null, null, null]));
+        assert_eq!(
+            sessions[0]["samples"]["values"]
+                [columns.iter().position(|c| *c == "position_x").unwrap()],
+            serde_json::json!([0.0, 1.0, 2.0])
+        );
+
+        assert_eq!(car["drives"][0]["startedOffsetMs"], 8_500);
+        assert_eq!(car["drives"][0]["startedAtMs"], 1000);
+        assert_eq!(car["drives"][0]["lapCount"], 2);
+        assert_eq!(car["opportunities"][0]["maneuverId"], "m0");
+        assert_eq!(car["opportunities"][1]["index"], 1);
+        assert_eq!(car["opportunities"][1]["context"]["surface"], "clean");
+        let evidence = car["evidence"].as_array().unwrap();
+        assert_eq!(evidence.len(), 1);
+        assert_eq!(evidence[0]["opportunityIndex"], 1);
+        assert_eq!(evidence[0]["metrics"]["peakFrontSlip"], 1.12);
+        fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn driver_analysis_export_rejects_recordings_it_cannot_export() {
+        let mut connection = driver_analysis_connection();
+        let empty = create_driver_analysis_recording_in_connection(&mut connection, 1_000).unwrap();
+        let live = create_driver_analysis_recording_in_connection(&mut connection, 2_000).unwrap();
+        let mut input = driver_analysis_session_input(2_000);
+        input.recording_id = Some(live);
+        create_driver_analysis_session_in_connection(&mut connection, &input).unwrap();
+
+        let folder = export_test_folder("rejects");
+        for recording_id in [empty, live, 999] {
+            assert!(driver_analysis_export::check_recording(&connection, recording_id).is_err());
+            let target = folder.join("fdc-driver-analysis-1.json.gz");
+            assert!(
+                driver_analysis_export::write_recording_export(
+                    &connection,
+                    recording_id,
+                    "1",
+                    &target
+                )
+                .is_err()
+            );
+        }
+        assert_eq!(fs::read_dir(&folder).unwrap().count(), 0);
+        fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn driver_analysis_export_failure_leaves_no_file() {
+        let mut connection = driver_analysis_connection();
+        let recording_id =
+            create_driver_analysis_recording_in_connection(&mut connection, 1_000).unwrap();
+        record_export_car(&mut connection, recording_id, 1_000, true);
+        let folder = export_test_folder("failure");
+        let target = folder.join("missing").join("fdc-driver-analysis-1.json.gz");
+
+        assert!(
+            driver_analysis_export::write_recording_export(&connection, recording_id, "1", &target)
+                .is_err()
+        );
+        assert_eq!(fs::read_dir(&folder).unwrap().count(), 0);
+        fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn v22_migration_adds_the_recording_fdc_version_to_a_v21_database() {
+        // A released schema version 21 database with one saved session and no app_version column.
+        let mut connection = driver_analysis_connection();
+        connection
+            .execute(
+                "INSERT INTO driver_analysis_sessions (started_at_ms, status, algorithm_version, vehicle_identity)
+                 VALUES (1, 'completed', 'v1', '{}')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute_batch(
+                "ALTER TABLE driver_analysis_sessions DROP COLUMN app_version;
+                 UPDATE hud_schema_version SET version = 21;",
+            )
+            .unwrap();
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+
+        let versions: Vec<Option<String>> = connection
+            .prepare("SELECT app_version FROM driver_analysis_sessions ORDER BY id")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(session_id, 2);
+        assert_eq!(
+            versions,
+            [None, Some(env!("CARGO_PKG_VERSION").to_string())]
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT version FROM hud_schema_version", [], |row| row
+                    .get::<_, i32>(0))
+                .unwrap(),
+            HUD_SCHEMA_VERSION
+        );
     }
 }

@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Warning:** Do not attach `fdc.sqlite`, telemetry recordings, or files containing personal data or user paths.
+        **Warning:** Do not attach `fdc.sqlite`, logs, or files containing personal data or user paths. For a Driver Analysis problem, attach the `.json.gz` file created with `EXPORT` on the recording. If it is larger than 25 MB, upload it to a file-sharing service and paste the link.
 
         For security vulnerabilities, see the [security policy](https://github.com/kv199/fdc-application/security/policy) instead.
 

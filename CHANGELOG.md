@@ -14,6 +14,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ### Added
 
+- **Driver Analysis**: **EXPORT** on a recording saves it with its telemetry
+  and analysis to one file that you can attach to a bug report when a result
+  looks wrong. The file contains no personal data.
 - **Settings**: a separate **Distance unit** (km or mi) joins the speed unit,
   and both now apply to Events and Driver Analysis as well as the HUD.
 - **Configuration**: **HELP** at the bottom of the window opens the bug report

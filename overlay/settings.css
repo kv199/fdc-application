@@ -2092,9 +2092,12 @@ h1 {
 
 .driver-analysis-history-row__actions {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
 }
 
+.driver-analysis-history-row__export,
 .driver-analysis-history-row__delete {
   min-width: 84px;
 }

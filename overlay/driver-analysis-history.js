@@ -94,11 +94,20 @@
     return parts.join(' · ')
   }
 
+  // The suggested export file name carries the local start time of the recording, or the current time without one.
+  function exportFileName(recordedAt, now = Date.now()) {
+    const start = new Date(finite(recordedAt) ?? now)
+    const pad = value => String(value).padStart(2, '0')
+    const day = `${start.getFullYear()}${pad(start.getMonth() + 1)}${pad(start.getDate())}`
+    return `fdc-driver-analysis-${day}-${pad(start.getHours())}${pad(start.getMinutes())}.json.gz`
+  }
+
   return {
     carLabel,
     driveErrorCount,
     driveTypeLabel,
     drivetrainLabel,
+    exportFileName,
     formatDriveDuration,
     groupRecordings,
     recordingDurationMs,

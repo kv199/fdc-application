@@ -45,8 +45,8 @@ OFF → READY → WAITING → RECORDING → FINALIZING → READY
   empty database recording or session is created.
 - The first valid sample creates the local recording and the session of the
   current car and enters `RECORDING`. While it records, the history shows the
-  recording as `RECORDING IN PROGRESS` with a `LIVE` duration and a disabled
-  `DELETE` control.
+  recording as `RECORDING IN PROGRESS` with a `LIVE` duration and disabled
+  `EXPORT` and `DELETE` controls.
 - Samples are appended to SQLite in ordered batches rather than one command per
   packet. Forza sends packets in pairs that share a game timestamp; only the
   first packet at a timestamp is analyzed and stored. Each stored sample also
@@ -321,6 +321,8 @@ The native layer stores data in the application-data `fdc.sqlite` database:
 Foreign keys use cascading deletion. There is no automatic retention limit.
 The user deletes a recording with `DELETE`; after confirmation all of its
 sessions, samples, opportunities, evidence, and drives are removed together.
+Each session also stores the FDC version that recorded it; sessions recorded
+before this was added have none.
 Schema version 21 moves every earlier session into its own recording; those
 sessions have no drives and no positions.
 
@@ -332,6 +334,47 @@ When the analysis algorithm version changes, completed recordings with saved
 samples are replayed locally once. Their raw samples, timestamps, vehicle
 identity, drives, and storage metadata are preserved; only derived
 opportunities, evidence, and the summary result are replaced transactionally.
+
+## Export for feedback
+
+Each history card has `EXPORT` above `DELETE`. It is unavailable in the same
+cases as `DELETE`: while recording, while the recording has an unfinished car,
+and while the history is busy. `EXPORT` opens the Windows save dialog with the
+suggested name `fdc-driver-analysis-YYYYMMDD-HHMM.json.gz`, the local start
+time of the recording. Cancelling the dialog changes nothing. After saving, the
+status line shows `DRIVER ANALYSIS RECORDING EXPORTED` with the file size and
+marks it as an error when the file is larger than 25 MB, the GitHub attachment
+limit; such a file is shared through a file-sharing link instead. A two-hour
+recording is about 40 MB. Exporting only reads the database; a failure shows an error and leaves
+the recording unchanged, and no partial file is left behind.
+
+The file is gzip-compressed JSON with `format` set to
+`fdc-driver-analysis-export` and `formatVersion` set to `1`. It holds one
+recording with every car and contains:
+
+- the FDC version that exported it and, per car, the FDC version that recorded
+  it (or `null`) and the analysis algorithm version;
+- the car ordinal, PI, drivetrain, rev limit, and vehicle identity;
+- the saved result, counts, confidences, severity, and statistics;
+- every saved sample with all of its columns, including the position, stored
+  column by column with the column names;
+- the drives, opportunities, and evidence of each car.
+
+The recording start is the only absolute time, in UTC. Other wall-clock times
+are offsets from it. Game telemetry times are exported unchanged so the
+analysis can be replayed exactly. Database ids are replaced by positions in
+the file. Garage names, settings, paths, and other recordings are not
+exported.
+
+Drives are exported as saved and cannot be recomputed from the file, because
+the non-live packets they depend on are not stored.
+
+`tools/replay-driver-analysis.mjs` replays an exported file or a database
+recording through the current analysis. Checks, their outcomes, and the result
+reproduce exactly; evidence numbers and statistics can differ slightly, for
+example because telemetry interruptions that reset the live analysis are not
+stored. See
+[Development](development.md#driver-analysis-replay).
 
 ## Current limitations
 
