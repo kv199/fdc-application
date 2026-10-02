@@ -80,6 +80,8 @@
   const redlineBrightnessReset = document.getElementById('redline-brightness-reset')
   const shiftLightBrightness = document.getElementById('shift-light-brightness')
   const shiftLightBrightnessValue = document.getElementById('shift-light-brightness-value')
+  const hudDisplay = document.getElementById('hud-display')
+  const hudDisplayMissing = document.getElementById('hud-display-missing')
   const hudOpacity = document.getElementById('hud-opacity')
   const hudOpacityValue = document.getElementById('hud-opacity-value')
   const hudOpacityReset = document.getElementById('hud-opacity-reset')
@@ -169,6 +171,7 @@
   let driveMapLayerSelection = [...(globalScope.DriverAnalysisMap?.ERROR_TYPES || []), 'clean']
   let eventsSortValue = 'id-desc'
   let editingTarget = null
+  let hudDisplayCount = 0
   let layoutMode = 'grouped'
   let shiftLightResetPending = false
   let displayPreferencesPending = false
@@ -2196,6 +2199,24 @@
     }
   }
 
+  function syncHudDisplayDisabled() {
+    if (hudDisplay) hudDisplay.disabled = hudDisplayCount <= 1 || Boolean(editingTarget)
+  }
+
+  async function refreshHudDisplay() {
+    if (!hudDisplay) return
+    try {
+      const displayList = await call('list_hud_displays')
+      hudDisplay.replaceChildren(...displayList.displays.map(display => new Option(display.label, display.name)))
+      if (displayList.selected) hudDisplay.value = displayList.selected
+      hudDisplayCount = displayList.displays.length
+      hudDisplayMissing.hidden = !displayList.savedMissing
+      syncHudDisplayDisabled()
+    } catch (error) {
+      setStatus(error.message || 'Unable to list monitors', true)
+    }
+  }
+
   function selectSettingsTab(tabName) {
     for (const tab of settingsTabs) {
       const isActive = tab.dataset.settingsTab === tabName
@@ -2207,6 +2228,7 @@
       panel.hidden = panel.dataset.settingsPanel !== tabName
     }
     updateSettingsWindowContext(tabName)
+    if (tabName === 'hud') void refreshHudDisplay()
     if (tabName === 'events' && eventsView === 'library') void loadEvents()
     if (tabName === 'driver-analysis') {
       void loadDriverAnalysisHistory()
@@ -3712,6 +3734,7 @@
       row.querySelector('[data-layout-action="save"]').hidden = !isEditing
       row.classList.toggle('is-editing', isEditing)
     }
+    syncHudDisplayDisabled()
   }
 
   async function selectLayoutTarget(target) {
@@ -3987,6 +4010,15 @@
     )
   })
 
+  hudDisplay?.addEventListener('change', async () => {
+    try {
+      await call('set_hud_display', { name: hudDisplay.value })
+    } catch (error) {
+      setStatus(error.message || 'Unable to move the HUD', true)
+    }
+    await refreshHudDisplay()
+  })
+
   eventsCreateToggle?.addEventListener('click', () => {
     if (eventsCreateOpen) requestEventsCreateClose()
     else setEventsCreateOpen(true)
@@ -4051,6 +4083,9 @@
   })
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && driverAnalysisHotkeyCapture) void setDriverAnalysisHotkeyCapture(false)
+  })
+  window.addEventListener('focus', () => {
+    void refreshHudDisplay()
   })
   document.addEventListener('keydown', event => {
     if (!driverAnalysisHotkeyCapture) return
@@ -4142,6 +4177,7 @@
     openEventDetail,
     closeEventDetail,
     openEventRun,
-    closeEventRun
+    closeEventRun,
+    refreshHudDisplay
   }
 })(typeof globalThis === 'undefined' ? this : globalThis)

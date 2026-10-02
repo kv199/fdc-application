@@ -5,6 +5,12 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+### Added
+
+- **HUD**: **HUD DISPLAY** on the HUD tab chooses which monitor the HUD covers,
+  and FDC remembers it. Moving the HUD to another monitor with Win+Shift+Arrow
+  now fills that whole monitor.
+
 ## 7.22.61 - 2026-10-02
 
 ### Fixed

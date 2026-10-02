@@ -50,7 +50,18 @@
         <h2 id="hud-title">HUD</h2>
       </div>
       <p class="settings-section__intro">Live telemetry on top of the game: tires, pedals, steering, gear, speed, RPM, boost, and an input graph. Choose which blocks to show, how they are arranged, and how see-through they are.</p>
-      <p class="settings-section__intro">The HUD is click-through and covers the primary monitor. With Show HUD with telemetry on (Settings), it hides in menus.</p>
+      <p class="settings-section__intro">The HUD is click-through and covers the monitor chosen in HUD DISPLAY. With Show HUD with telemetry on (Settings), it hides in menus.</p>
+
+      <section class="shift-light-brightness-card hud-display-card" aria-labelledby="hud-display-title">
+        <div class="shift-light-brightness-card__heading">
+          <div>
+            <h3 id="hud-display-title">HUD DISPLAY</h3>
+            <p class="hud-display-card__description">Monitor the HUD is shown on.</p>
+          </div>
+        </div>
+        <select id="hud-display" aria-labelledby="hud-display-title"></select>
+        <p id="hud-display-missing" class="hud-display-card__missing" hidden>The saved monitor is not connected. The HUD is on the primary monitor.</p>
+      </section>
 
       <section class="shift-light-brightness-card hud-opacity-card" data-display-preference aria-labelledby="hud-opacity-title">
         <div class="shift-light-brightness-card__heading">

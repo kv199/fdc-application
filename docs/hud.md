@@ -9,7 +9,7 @@ has no other data source.
 ## Overlay window
 
 - The HUD window is transparent, always on top, frameless, and never takes
-  focus. At startup it covers the primary monitor.
+  focus. It covers the monitor chosen in **HUD DISPLAY**.
 - During normal driving the whole window is click-through, so mouse input
   reaches the game.
 - Only an active layout edit makes the window accept pointer input; Save,
@@ -87,6 +87,19 @@ By default the telemetry HUD sits centered near the bottom of the screen with
 Delta directly above it. Positions are stored relative to the screen size, so
 they survive a resolution change. Switching modes keeps each mode's own saved
 positions.
+
+## HUD display
+
+**HUD DISPLAY** on the HUD tab lists every connected monitor by its Windows
+display number and resolution, and marks the primary monitor. Choosing one
+moves the HUD to cover that monitor immediately, and FDC remembers the choice.
+Until a monitor is chosen, the HUD covers the primary monitor. If the saved
+monitor is not connected at startup, the HUD covers the primary monitor and the
+card says so. The list is unavailable while a layout edit is active.
+
+When Windows moves the HUD to another monitor, for example with
+Win+Shift+Arrow, FDC resizes it to cover that whole monitor and remembers it as
+the choice.
 
 ## HUD opacity
 

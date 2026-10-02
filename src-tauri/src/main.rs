@@ -28,6 +28,7 @@ mod controller_input;
 mod driver_analysis_export;
 
 const SETTINGS_WINDOW_STATE_FILE: &str = "settings-window-size.json";
+const HUD_DISPLAY_STATE_FILE: &str = "hud-display.json";
 #[cfg(test)]
 const SETTINGS_DEFAULT_WIDTH: u32 = 820;
 #[cfg(test)]
@@ -5094,6 +5095,210 @@ fn persist_settings_window_state<R: Runtime>(
     Ok(())
 }
 
+#[derive(Default)]
+struct HudDisplayRuntimeState {
+    current: Mutex<Option<String>>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct HudDisplayState {
+    name: String,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HudDisplayOption {
+    name: String,
+    label: String,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    primary: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HudDisplayList {
+    displays: Vec<HudDisplayOption>,
+    selected: Option<String>,
+    saved_missing: bool,
+}
+
+fn hud_display_number(name: &str) -> Option<u32> {
+    let digits_start = name.trim_end_matches(|c: char| c.is_ascii_digit()).len();
+    name[digits_start..].parse().ok()
+}
+
+fn hud_display_label(number: u32, width: u32, height: u32, primary: bool) -> String {
+    let label = format!("Display {number} · {width} × {height}");
+    if primary {
+        format!("{label} · Primary")
+    } else {
+        label
+    }
+}
+
+fn find_saved_hud_display(saved: &HudDisplayState, displays: &[HudDisplayOption]) -> Option<usize> {
+    displays
+        .iter()
+        .position(|display| display.name == saved.name)
+        .or_else(|| {
+            displays.iter().position(|display| {
+                display.x == saved.x
+                    && display.y == saved.y
+                    && display.width == saved.width
+                    && display.height == saved.height
+            })
+        })
+}
+
+fn choose_hud_display(
+    saved: Option<&HudDisplayState>,
+    displays: &[HudDisplayOption],
+) -> Option<usize> {
+    saved
+        .and_then(|saved| find_saved_hud_display(saved, displays))
+        .or_else(|| displays.iter().position(|display| display.primary))
+        .or_else(|| (!displays.is_empty()).then_some(0))
+}
+
+fn hud_display_options<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Vec<HudDisplayOption>> {
+    let primary = app.primary_monitor()?;
+    Ok(app
+        .available_monitors()?
+        .iter()
+        .enumerate()
+        .map(|(index, monitor)| {
+            let position = *monitor.position();
+            let size = *monitor.size();
+            let name = monitor
+                .name()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| format!("Display {}", index + 1));
+            let is_primary = primary
+                .as_ref()
+                .is_some_and(|primary| *primary.position() == position && *primary.size() == size);
+            let number = hud_display_number(&name).unwrap_or(index as u32 + 1);
+            HudDisplayOption {
+                label: hud_display_label(number, size.width, size.height, is_primary),
+                name,
+                x: position.x,
+                y: position.y,
+                width: size.width,
+                height: size.height,
+                primary: is_primary,
+            }
+        })
+        .collect())
+}
+
+fn hud_display_state_path<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
+    Ok(app.path().app_data_dir()?.join(HUD_DISPLAY_STATE_FILE))
+}
+
+fn load_hud_display_state<R: Runtime>(app: &AppHandle<R>) -> Option<HudDisplayState> {
+    let contents = fs::read_to_string(hud_display_state_path(app).ok()?).ok()?;
+    serde_json::from_str(&contents).ok()
+}
+
+fn persist_hud_display<R: Runtime>(
+    app: &AppHandle<R>,
+    display: &HudDisplayOption,
+) -> tauri::Result<()> {
+    let state = HudDisplayState {
+        name: display.name.clone(),
+        x: display.x,
+        y: display.y,
+        width: display.width,
+        height: display.height,
+    };
+    let path = hud_display_state_path(app)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let contents = serde_json::to_vec(&state).map_err(std::io::Error::other)?;
+    fs::write(path, contents)?;
+    Ok(())
+}
+
+fn fit_hud_window<R: Runtime>(
+    window: &WebviewWindow<R>,
+    display: &HudDisplayOption,
+) -> tauri::Result<()> {
+    let position = PhysicalPosition::new(display.x, display.y);
+    let size = PhysicalSize::new(display.width, display.height);
+    // Move first so the top-left corner is already on the target monitor when
+    // Windows rescales the window for that monitor's DPI.
+    if window.outer_position()? != position {
+        window.set_position(position)?;
+    }
+    if window.inner_size()? != size {
+        window.set_size(size)?;
+    }
+    Ok(())
+}
+
+fn place_hud_window<R: Runtime>(
+    app: &AppHandle<R>,
+    display: &HudDisplayOption,
+) -> tauri::Result<()> {
+    *app.state::<HudDisplayRuntimeState>()
+        .current
+        .lock()
+        .expect("HUD display state poisoned") = Some(display.name.clone());
+    if let Some(window) = app.get_webview_window("main") {
+        fit_hud_window(&window, display)?;
+    }
+    Ok(())
+}
+
+/// Keeps the HUD covering the whole monitor its top-left corner is on after
+/// Windows moves or rescales it, for example with Win+Shift+Arrow.
+fn follow_hud_window_monitor<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    let Some(window) = app.get_webview_window("main") else {
+        return Ok(());
+    };
+    let position = window.outer_position()?;
+    let displays = hud_display_options(app)?;
+    let Some(display) = displays.iter().find(|display| {
+        is_position_on_monitor(
+            position,
+            PhysicalPosition::new(display.x, display.y),
+            PhysicalSize::new(display.width, display.height),
+        )
+    }) else {
+        return Ok(());
+    };
+
+    let state = app.state::<HudDisplayRuntimeState>();
+    let changed = {
+        let mut current = state.current.lock().expect("HUD display state poisoned");
+        // The HUD has not been placed yet during startup.
+        let Some(name) = current.as_ref() else {
+            return Ok(());
+        };
+        let changed = *name != display.name;
+        if changed {
+            *current = Some(display.name.clone());
+        }
+        changed
+    };
+
+    fit_hud_window(&window, display)?;
+    if changed {
+        persist_hud_display(app, display)?;
+        if let Some(settings) = app.get_webview_window("settings") {
+            let _ = settings.eval("window.SettingsController?.refreshHudDisplay?.()");
+        }
+    }
+    Ok(())
+}
+
 fn show_settings<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let Some(window) = app.get_webview_window("settings") else {
         return Ok(());
@@ -5520,6 +5725,38 @@ fn open_feedback_link(app: AppHandle, kind: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn list_hud_displays(
+    app: AppHandle,
+    state: State<'_, HudDisplayRuntimeState>,
+) -> Result<HudDisplayList, String> {
+    let displays = hud_display_options(&app).map_err(|error| error.to_string())?;
+    let saved_missing = load_hud_display_state(&app)
+        .is_some_and(|saved| find_saved_hud_display(&saved, &displays).is_none());
+    let selected = state
+        .current
+        .lock()
+        .expect("HUD display state poisoned")
+        .clone();
+    Ok(HudDisplayList {
+        displays,
+        selected,
+        saved_missing,
+    })
+}
+
+#[tauri::command]
+fn set_hud_display(app: AppHandle, name: String) -> Result<(), String> {
+    let displays = hud_display_options(&app).map_err(|error| error.to_string())?;
+    let display = displays
+        .iter()
+        .find(|display| display.name == name)
+        .ok_or_else(|| "This monitor is no longer connected".to_string())?;
+    place_hud_window(&app, display).map_err(|error| error.to_string())?;
+    persist_hud_display(&app, display)
+        .map_err(|error| format!("unable to save the HUD monitor: {error}"))
+}
+
+#[tauri::command]
 fn get_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
@@ -5539,6 +5776,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .manage(DirectSourceState::default())
         .manage(DriverAnalysisHotkeyState::default())
+        .manage(HudDisplayRuntimeState::default())
         .invoke_handler(tauri::generate_handler![
             set_window_edit_mode,
             notify_layout_state,
@@ -5589,34 +5827,46 @@ fn main() {
             record_garage_vehicle,
             load_garage_snapshot,
             load_garage,
-            rename_garage_car
+            rename_garage_car,
+            list_hud_displays,
+            set_hud_display
         ])
-        .on_window_event(|window, event| {
-            if window.label() != "settings" {
-                return;
-            }
+        .on_window_event(|window, event| match window.label() {
+            "settings" => {
+                if matches!(event, WindowEvent::Resized(_) | WindowEvent::Moved(_)) {
+                    let app = window.app_handle();
+                    let result = settings_window_state(window)
+                        .and_then(|state| persist_settings_window_state(&app, state));
+                    if let Err(error) = result {
+                        eprintln!("unable to persist Configuration window state: {error}");
+                    }
+                    return;
+                }
 
-            if matches!(event, WindowEvent::Resized(_) | WindowEvent::Moved(_)) {
-                let app = window.app_handle();
-                let result = settings_window_state(window)
-                    .and_then(|state| persist_settings_window_state(&app, state));
-                if let Err(error) = result {
-                    eprintln!("unable to persist Configuration window state: {error}");
-                }
-                return;
-            }
-
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let app = window.app_handle();
-                if let Some(main) = app.get_webview_window("main") {
-                    let _ = main.eval("window.HudLayout?.cancelEditMode?.()");
-                }
-                if let Some(settings) = app.get_webview_window("settings") {
-                    let _ = settings.eval("window.SettingsController?.cancelEdit?.()");
-                    let _ = settings.hide();
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let app = window.app_handle();
+                    if let Some(main) = app.get_webview_window("main") {
+                        let _ = main.eval("window.HudLayout?.cancelEditMode?.()");
+                    }
+                    if let Some(settings) = app.get_webview_window("settings") {
+                        let _ = settings.eval("window.SettingsController?.cancelEdit?.()");
+                        let _ = settings.hide();
+                    }
                 }
             }
+            "main" => {
+                if matches!(
+                    event,
+                    WindowEvent::Moved(_)
+                        | WindowEvent::Resized(_)
+                        | WindowEvent::ScaleFactorChanged { .. }
+                ) && let Err(error) = follow_hud_window_monitor(window.app_handle())
+                {
+                    eprintln!("unable to fit the HUD to its monitor: {error}");
+                }
+            }
+            _ => {}
         })
         .setup(|app| {
             let window = app
@@ -5633,15 +5883,10 @@ fn main() {
                 eprintln!("unable to recover Driver Analysis sessions: {error}");
             }
 
-            if let Some(monitor) = app.primary_monitor()? {
-                let monitor_position = monitor.position();
-                let monitor_size = monitor.size();
-
-                window.set_size(*monitor_size)?;
-                window.set_position(PhysicalPosition::new(
-                    monitor_position.x,
-                    monitor_position.y,
-                ))?;
+            let displays = hud_display_options(app.handle())?;
+            let saved_display = load_hud_display_state(app.handle());
+            if let Some(index) = choose_hud_display(saved_display.as_ref(), &displays) {
+                place_hud_window(app.handle(), &displays[index])?;
             }
 
             let menu = MenuBuilder::new(app)
@@ -9357,5 +9602,71 @@ mod tests {
                 .unwrap(),
             HUD_SCHEMA_VERSION
         );
+    }
+
+    fn hud_display(name: &str, x: i32, width: u32, height: u32, primary: bool) -> HudDisplayOption {
+        HudDisplayOption {
+            name: name.to_string(),
+            label: String::new(),
+            x,
+            y: 0,
+            width,
+            height,
+            primary,
+        }
+    }
+
+    #[test]
+    fn numbers_hud_displays_from_the_windows_monitor_name() {
+        assert_eq!(hud_display_number(r"\\.\DISPLAY1"), Some(1));
+        assert_eq!(hud_display_number(r"\\.\DISPLAY12"), Some(12));
+        assert_eq!(hud_display_number("Generic Monitor"), None);
+        assert_eq!(hud_display_number(""), None);
+    }
+
+    #[test]
+    fn labels_hud_displays_with_resolution_and_primary_suffix() {
+        assert_eq!(
+            hud_display_label(1, 3840, 2160, true),
+            "Display 1 · 3840 × 2160 · Primary"
+        );
+        assert_eq!(
+            hud_display_label(2, 2560, 1440, false),
+            "Display 2 · 2560 × 1440"
+        );
+    }
+
+    #[test]
+    fn chooses_the_saved_hud_display_by_name_then_position_then_primary() {
+        let displays = [
+            hud_display(r"\\.\DISPLAY1", 0, 3840, 2160, true),
+            hud_display(r"\\.\DISPLAY2", 3840, 2560, 1440, false),
+        ];
+        let saved = |name: &str, x: i32, width: u32, height: u32| HudDisplayState {
+            name: name.to_string(),
+            x,
+            y: 0,
+            width,
+            height,
+        };
+
+        let by_name = saved(r"\\.\DISPLAY2", 0, 1, 1);
+        assert_eq!(choose_hud_display(Some(&by_name), &displays), Some(1));
+        let by_position = saved(r"\\.\DISPLAY9", 3840, 2560, 1440);
+        assert_eq!(choose_hud_display(Some(&by_position), &displays), Some(1));
+        let missing = saved(r"\\.\DISPLAY9", 9999, 1920, 1080);
+        assert_eq!(find_saved_hud_display(&missing, &displays), None);
+        assert_eq!(choose_hud_display(Some(&missing), &displays), Some(0));
+        assert_eq!(choose_hud_display(None, &displays), Some(0));
+    }
+
+    #[test]
+    fn falls_back_to_the_first_hud_display_without_a_primary() {
+        let displays = [
+            hud_display(r"\\.\DISPLAY1", 0, 1920, 1080, false),
+            hud_display(r"\\.\DISPLAY2", 1920, 2560, 1440, false),
+        ];
+        assert_eq!(choose_hud_display(None, &displays), Some(0));
+        assert_eq!(choose_hud_display(None, &[]), None);
     }
 }

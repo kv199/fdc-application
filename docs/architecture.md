@@ -89,8 +89,9 @@ HUD preference, Tauri event, Garage, Shift Light, and overlay modules in depende
 order. The Tauri configuration uses `overlay/` as the frontend distribution.
 
 The main window is a transparent, always-on-top HUD positioned across the
-primary monitor. The browser layer renders the current telemetry HUD, lap time,
-Delta, Garage persistence, and Shift Light presentation. Driver Analysis runs
+monitor chosen in **HUD DISPLAY**. The browser layer renders the current
+telemetry HUD, lap time, Delta, Garage persistence, and Shift Light
+presentation. Driver Analysis runs
 without a HUD widget and records only when explicitly started. Event
 recording initially configures Delta from the saved Event best, then replaces
 that reference in memory when a faster completed circuit lap or Sprint result
@@ -235,7 +236,9 @@ recordings and results live in `fdc.sqlite`. Configuration and layout preference
 keys listed above. The Configuration window size and last valid on-screen
 position are stored separately in the FDC application-data directory so a
 user-resized and moved window is restored on the next launch. A saved position
-outside the available monitors is ignored.
+outside the available monitors is ignored. The HUD monitor is stored in the
+same directory as its Windows name, physical position, and size; the position
+and size identify it when the name no longer matches.
 
 ## Generated assets
 

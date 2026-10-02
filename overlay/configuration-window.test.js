@@ -643,6 +643,20 @@ test('Settings re-renders unit-dependent views when units change', () => {
   assert.match(settingsJs, /if \(unitsChanged\) \{\s*renderUnitDependentViews\(\)/)
 })
 
+test('HUD DISPLAY card allows selecting which monitor the HUD covers', () => {
+  const hudPanel = settingsHtml.slice(settingsHtml.indexOf('id="hud-panel"'), settingsHtml.indexOf('id="hud-panel"') + 4000)
+  assert.match(hudPanel, /id="hud-display-title">HUD DISPLAY/)
+  assert.match(hudPanel, /Monitor the HUD is shown on/)
+  assert.match(hudPanel, /id="hud-display"[^>]*><\/select>/)
+  assert.match(hudPanel, /id="hud-display-missing"[^>]*hidden/)
+  assert.ok(hudPanel.indexOf('HUD DISPLAY') < hudPanel.indexOf('HUD OPACITY'))
+  assert.match(settingsJs, /async function refreshHudDisplay/)
+  assert.match(settingsJs, /call\('list_hud_displays'\)/)
+  assert.match(settingsJs, /call\('set_hud_display'/)
+  assert.match(settingsJs, /hudDisplay\.disabled = hudDisplayCount <= 1 \|\| Boolean\(editingTarget\)/)
+  assert.match(settingsJs, /globalScope\.SettingsController[\s\S]*refreshHudDisplay/)
+})
+
 test('HUD uses FdcUnits for speed formatting and reads fresh display preferences on update', () => {
   assert.match(overlayHtml, /src="units.js"/)
   assert.match(overlayHtml, /src="vehicle.js"/)
