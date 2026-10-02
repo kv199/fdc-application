@@ -5,6 +5,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+## 7.22.61 - 2026-10-02
+
 ### Fixed
 
 - **Garage**: renaming a car now also updates an open Event run and no longer
