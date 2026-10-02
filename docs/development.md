@@ -91,6 +91,33 @@ the recording start time plus the telemetry time since its first sample. For
 each wheel, the report prints slip angle, slip ratio, and combined slip in the
 middle of that second and the maximum within it.
 
+## Driver Analysis replay
+
+`tools/replay-driver-analysis.mjs` replays saved Driver Analysis recordings
+through the current analysis and compares the result with what was saved. It
+reads a file saved with `EXPORT` or an `fdc.sqlite` file read-only, writes
+nothing, and requires Node.js with the built-in `node:sqlite` module.
+
+```powershell
+node tools/replay-driver-analysis.mjs path\to\fdc-driver-analysis-20261002-1830.json.gz
+node tools/replay-driver-analysis.mjs --db path\to\fdc.sqlite --recording 3
+```
+
+Without `--recording`, every recording in the database is replayed. `--json`
+prints the full comparison instead of the text report. The tool rejects files
+whose `format` or `formatVersion` it does not support.
+
+For each car, the report compares four sections. `opportunities` and `result`
+must reproduce exactly; a difference is reported as `DIFF` and makes the tool
+exit with code 1. Evidence numbers and statistics can differ slightly, for
+example because telemetry interruptions that reset the live analysis are not
+stored. Such differences are reported as `DEVIATION` with their count, the
+largest relative difference, and an example, and do not fail the car. Invalid
+input
+exits with code 2. When a car was recorded with another analysis version, the
+report says so; replay the file with the release that recorded it for an exact
+comparison.
+
 ## Configuration UI conventions
 
 Each Configuration tab starts with a heading block and one
