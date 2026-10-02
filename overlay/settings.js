@@ -120,10 +120,10 @@
   const eventsDiscardDialog = document.getElementById('events-discard-dialog')
   const eventsDiscardYes = document.getElementById('events-discard-yes')
   const eventsDiscardNo = document.getElementById('events-discard-no')
-  const deleteConfirmDialog = document.getElementById('delete-confirm-dialog')
-  const deleteConfirmMessage = document.getElementById('delete-confirm-message')
-  const deleteConfirmYes = document.getElementById('delete-confirm-yes')
-  const deleteConfirmNo = document.getElementById('delete-confirm-no')
+  const destructiveConfirmDialog = document.getElementById('destructive-confirm-dialog')
+  const destructiveConfirmMessage = document.getElementById('destructive-confirm-message')
+  const destructiveConfirmYes = document.getElementById('destructive-confirm-yes')
+  const destructiveConfirmNo = document.getElementById('destructive-confirm-no')
   const eventsDetailBack = document.getElementById('events-detail-back')
   const eventsDetailTitle = document.getElementById('events-detail-title')
   const eventsDetailSummary = document.getElementById('events-detail-summary')
@@ -844,28 +844,28 @@
       .some(field => field?.value.trim())
   }
 
-  // Every delete asks here first. NO has focus, and Escape or a click outside the box also answers NO.
-  let resolveDeleteConfirm = null
-  let deleteConfirmReturnFocus = null
+  // Every delete or reset of saved data asks here first. NO has focus, and Escape or a click outside the box also answers NO.
+  let resolveDestructiveConfirm = null
+  let destructiveConfirmReturnFocus = null
 
-  function closeDeleteConfirm(confirmed) {
-    if (!resolveDeleteConfirm) return
-    const resolve = resolveDeleteConfirm
-    resolveDeleteConfirm = null
-    deleteConfirmDialog.hidden = true
-    deleteConfirmReturnFocus?.focus?.()
-    deleteConfirmReturnFocus = null
+  function closeDestructiveConfirm(confirmed) {
+    if (!resolveDestructiveConfirm) return
+    const resolve = resolveDestructiveConfirm
+    resolveDestructiveConfirm = null
+    destructiveConfirmDialog.hidden = true
+    destructiveConfirmReturnFocus?.focus?.()
+    destructiveConfirmReturnFocus = null
     resolve(confirmed)
   }
 
-  function confirmDelete(message) {
-    if (!deleteConfirmDialog) return Promise.resolve(false)
-    closeDeleteConfirm(false)
-    deleteConfirmReturnFocus = document.activeElement
-    deleteConfirmMessage.textContent = message
-    deleteConfirmDialog.hidden = false
-    deleteConfirmNo.focus()
-    return new Promise(resolve => { resolveDeleteConfirm = resolve })
+  function confirmDestructive(message) {
+    if (!destructiveConfirmDialog) return Promise.resolve(false)
+    closeDestructiveConfirm(false)
+    destructiveConfirmReturnFocus = document.activeElement
+    destructiveConfirmMessage.textContent = message
+    destructiveConfirmDialog.hidden = false
+    destructiveConfirmNo.focus()
+    return new Promise(resolve => { resolveDestructiveConfirm = resolve })
   }
 
   function setEventsDiscardConfirmOpen(open) {
@@ -2183,7 +2183,7 @@
   async function deleteCurrentEvent() {
     const event = currentEventId === null ? null : eventsById.get(currentEventId)
     if (!event) return false
-    if (!(await confirmDelete(`Delete event “${event.name}”?`))) return false
+    if (!(await confirmDestructive(`Delete event “${event.name}”?`))) return false
     try {
       await call('delete_event', { eventId: nativeEventId(event.id) })
       eventsById.delete(event.id)
@@ -2825,7 +2825,7 @@
   async function deleteDriverAnalysisRecording(recording) {
     if (!recording || !Array.isArray(recording.sessions) || recording.sessions.length === 0) return false
     if (driverAnalysisHistoryPending || driverAnalysisExportPending) return false
-    if (!(await confirmDelete('Delete this Driver Analysis recording, all its cars, and saved telemetry?'))) return false
+    if (!(await confirmDestructive('Delete this Driver Analysis recording, all its cars, and saved telemetry?'))) return false
     if (driverAnalysisHistoryPending || driverAnalysisExportPending) return false
     driverAnalysisHistoryPending = true
     renderDriverAnalysisHistory()
@@ -3599,11 +3599,19 @@
     }
   }
 
-  function requestShiftLightReset() {
-    if (shiftLightResetPending || !latestShiftLightState?.carKey) return
+  async function requestShiftLightReset() {
+    const carKey = latestShiftLightState?.carKey
+    if (shiftLightResetPending || !carKey) return
     const reset = globalScope.__TAURI_INTERNALS__?.invoke
     if (typeof reset !== 'function') {
       setStatus('TAURI COMMANDS ARE UNAVAILABLE', true)
+      return
+    }
+    if (!(await confirmDestructive('Reset the calibration of the current car? Its learned shift points are deleted and learning starts again.'))) return
+    if (shiftLightResetPending) return
+    // The answer was given for the car shown when the question opened; a different car is never reset.
+    if (latestShiftLightState?.carKey !== carKey) {
+      setStatus('CURRENT CAR CHANGED. CALIBRATION NOT RESET', true)
       return
     }
     shiftLightResetPending = true
@@ -3932,7 +3940,7 @@
   }
 
   shiftLightReset.addEventListener('click', () => {
-    requestShiftLightReset()
+    void requestShiftLightReset()
   })
   redlineBrightness.addEventListener('input', () => {
     renderRedlineBrightness(redlineBrightness.value)
@@ -3984,26 +3992,26 @@
     else setEventsCreateOpen(true)
   })
   eventsCreateCancel?.addEventListener('click', requestEventsCreateClose)
-  deleteConfirmYes?.addEventListener('click', () => closeDeleteConfirm(true))
-  deleteConfirmNo?.addEventListener('click', () => closeDeleteConfirm(false))
-  deleteConfirmDialog?.addEventListener('click', event => {
-    if (event.target === deleteConfirmDialog) closeDeleteConfirm(false)
+  destructiveConfirmYes?.addEventListener('click', () => closeDestructiveConfirm(true))
+  destructiveConfirmNo?.addEventListener('click', () => closeDestructiveConfirm(false))
+  destructiveConfirmDialog?.addEventListener('click', event => {
+    if (event.target === destructiveConfirmDialog) closeDestructiveConfirm(false)
   })
   // A click on the question text keeps the focused answer, so Enter still means NO unless YES was chosen.
-  deleteConfirmDialog?.addEventListener('mousedown', event => {
+  destructiveConfirmDialog?.addEventListener('mousedown', event => {
     if (!event.target.closest('button')) event.preventDefault()
   })
   // Captured before every other shortcut, so Escape only closes the question and focus stays on its two answers.
   document.addEventListener('keydown', event => {
-    if (!resolveDeleteConfirm) return
+    if (!resolveDestructiveConfirm) return
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopImmediatePropagation()
-      closeDeleteConfirm(false)
+      closeDestructiveConfirm(false)
     } else if (event.key === 'Tab') {
       event.preventDefault()
       event.stopImmediatePropagation()
-      ;(document.activeElement === deleteConfirmNo ? deleteConfirmYes : deleteConfirmNo).focus()
+      ;(document.activeElement === destructiveConfirmNo ? destructiveConfirmYes : destructiveConfirmNo).focus()
     }
   }, true)
   eventsDiscardYes?.addEventListener('click', closeEventsCreate)

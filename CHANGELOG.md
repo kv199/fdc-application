@@ -29,6 +29,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   **ARE YOU SURE?** with **NO** selected; Escape or a click outside the
   question keeps everything. On a Driver Analysis recording, **DETAILS** now
   sits above **EXPORT** and **DELETE**.
+- **Shift Light**: **RESET CURRENT CALIBRATION** now asks **ARE YOU SURE?**
+  first, and never resets another car if you switch cars while it asks.
 - **Garage**: a car is shown the same way everywhere — by its Garage name, or
   by its car number when it has no name — and renaming it updates Events,
   Driver Analysis, and Shift Light right away.

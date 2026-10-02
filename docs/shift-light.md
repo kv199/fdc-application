@@ -191,6 +191,10 @@ changed.
 Reset deletes the active configuration's ceiling samples, gear targets and
 shift samples, and clears its usable ceiling. It preserves the configuration
 row and reported redline. Other configurations are untouched.
+`RESET CURRENT CALIBRATION` first asks `ARE YOU SURE?` with `YES` and `NO`.
+`NO` is selected, and Escape or a click outside the question also answers
+`NO`. If the current car changes while the question is open, `YES` resets
+nothing and the status line says so.
 
 ## Native persistence contract
 
