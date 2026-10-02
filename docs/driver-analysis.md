@@ -233,6 +233,8 @@ A card with a single car adds a one-line summary below: distance, average
 speed, top speed, and corner count. A card with several cars leaves it out,
 because totals across different cars say little.
 
+The action column on the right holds `DETAILS`, `EXPORT`, and `DELETE`, top
+to bottom; `DETAILS` is shown once every car of the recording is finished.
 `DETAILS` opens the recording page, and the history is replaced by pages like
 the Events tab, with the same tables and metrics: each page has `BACK`, and
 Escape also goes up one level. The recording page shows the date, duration,
@@ -319,7 +321,9 @@ The native layer stores data in the application-data `fdc.sqlite` database:
   metrics.
 
 Foreign keys use cascading deletion. There is no automatic retention limit.
-The user deletes a recording with `DELETE`; after confirmation all of its
+The user deletes a recording with `DELETE`, which asks `ARE YOU SURE?` with
+`YES` and `NO`. `NO` is selected, and Escape or a click outside the question
+also answers `NO`. After `YES`, all of its
 sessions, samples, opportunities, evidence, and drives are removed together.
 Each session also stores the FDC version that recorded it; sessions recorded
 before this was added have none.
@@ -337,7 +341,7 @@ opportunities, evidence, and the summary result are replaced transactionally.
 
 ## Export for feedback
 
-Each history card has `EXPORT` above `DELETE`. It is unavailable in the same
+Each history card has `EXPORT` between `DETAILS` and `DELETE`. It is unavailable in the same
 cases as `DELETE`: while recording, while the recording has an unfinished car,
 and while the history is busy. `EXPORT` opens the Windows save dialog with the
 suggested name `fdc-driver-analysis-YYYYMMDD-HHMM.json.gz`, the local start

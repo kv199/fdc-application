@@ -137,6 +137,13 @@ directly; `overlay/units-guard.test.js` fails when one appears outside
 `units.js`. To add a quantity, add it to `FdcUnits.QUANTITIES` with a
 `<quantity>Unit` preference and a Settings row.
 
+Every delete asks first through `confirmDelete(message)` in
+`overlay/settings.js`: the shared `ARE YOU SURE?` dialog with **YES** and
+**NO**, where **NO** has focus and Escape or a click outside the dialog answers
+**NO**. Do not use the browser `confirm()`;
+`overlay/delete-confirm-guard.test.js` fails when it appears or when a
+`delete_` command is called without `confirmDelete`.
+
 ## Release verification cycle
 
 Verification is cumulative for the current change set and is performed once

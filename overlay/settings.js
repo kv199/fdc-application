@@ -120,6 +120,10 @@
   const eventsDiscardDialog = document.getElementById('events-discard-dialog')
   const eventsDiscardYes = document.getElementById('events-discard-yes')
   const eventsDiscardNo = document.getElementById('events-discard-no')
+  const deleteConfirmDialog = document.getElementById('delete-confirm-dialog')
+  const deleteConfirmMessage = document.getElementById('delete-confirm-message')
+  const deleteConfirmYes = document.getElementById('delete-confirm-yes')
+  const deleteConfirmNo = document.getElementById('delete-confirm-no')
   const eventsDetailBack = document.getElementById('events-detail-back')
   const eventsDetailTitle = document.getElementById('events-detail-title')
   const eventsDetailSummary = document.getElementById('events-detail-summary')
@@ -838,6 +842,30 @@
   function eventCreateFormHasContent() {
     return [eventName, eventMode, eventRouteType, eventClass, eventNotes]
       .some(field => field?.value.trim())
+  }
+
+  // Every delete asks here first. NO has focus, and Escape or a click outside the box also answers NO.
+  let resolveDeleteConfirm = null
+  let deleteConfirmReturnFocus = null
+
+  function closeDeleteConfirm(confirmed) {
+    if (!resolveDeleteConfirm) return
+    const resolve = resolveDeleteConfirm
+    resolveDeleteConfirm = null
+    deleteConfirmDialog.hidden = true
+    deleteConfirmReturnFocus?.focus?.()
+    deleteConfirmReturnFocus = null
+    resolve(confirmed)
+  }
+
+  function confirmDelete(message) {
+    if (!deleteConfirmDialog) return Promise.resolve(false)
+    closeDeleteConfirm(false)
+    deleteConfirmReturnFocus = document.activeElement
+    deleteConfirmMessage.textContent = message
+    deleteConfirmDialog.hidden = false
+    deleteConfirmNo.focus()
+    return new Promise(resolve => { resolveDeleteConfirm = resolve })
   }
 
   function setEventsDiscardConfirmOpen(open) {
@@ -2155,7 +2183,7 @@
   async function deleteCurrentEvent() {
     const event = currentEventId === null ? null : eventsById.get(currentEventId)
     if (!event) return false
-    if (typeof globalScope.confirm === 'function' && !globalScope.confirm(`Delete event “${event.name}”?`)) return false
+    if (!(await confirmDelete(`Delete event “${event.name}”?`))) return false
     try {
       await call('delete_event', { eventId: nativeEventId(event.id) })
       eventsById.delete(event.id)
@@ -2797,7 +2825,8 @@
   async function deleteDriverAnalysisRecording(recording) {
     if (!recording || !Array.isArray(recording.sessions) || recording.sessions.length === 0) return false
     if (driverAnalysisHistoryPending || driverAnalysisExportPending) return false
-    if (typeof globalScope.confirm === 'function' && !globalScope.confirm('Delete this Driver Analysis recording, all its cars, and saved telemetry?')) return false
+    if (!(await confirmDelete('Delete this Driver Analysis recording, all its cars, and saved telemetry?'))) return false
+    if (driverAnalysisHistoryPending || driverAnalysisExportPending) return false
     driverAnalysisHistoryPending = true
     renderDriverAnalysisHistory()
     const sessionIds = recording.sessions.map(s => Number(s?.id)).filter(id => Number.isSafeInteger(id) && id > 0)
@@ -2925,6 +2954,10 @@
         finding.append(summary)
       }
 
+      row.append(meta, finding)
+
+      const actions = document.createElement('div')
+      actions.className = 'driver-analysis-history-row__actions'
       if (recording.sessions.length > 0 && !hasUnfinishedSessions) {
         const detailsButton = document.createElement('button')
         detailsButton.type = 'button'
@@ -2937,13 +2970,9 @@
             setDriverAnalysisView({ level: 'recording', recordingId, sessionId: null, driveId: null })
           }
         })
-        finding.append(detailsButton)
+        actions.append(detailsButton)
       }
 
-      row.append(meta, finding)
-
-      const actions = document.createElement('div')
-      actions.className = 'driver-analysis-history-row__actions'
       const actionsBlocked = driverAnalysisHistoryPending || driverAnalysisExportPending || hasUnfinishedSessions || driverAnalysisState.recording === true
       const firstDate = formatDriverAnalysisDate(firstSession?.recordedAt)
       const exportButton = document.createElement('button')
@@ -3955,6 +3984,28 @@
     else setEventsCreateOpen(true)
   })
   eventsCreateCancel?.addEventListener('click', requestEventsCreateClose)
+  deleteConfirmYes?.addEventListener('click', () => closeDeleteConfirm(true))
+  deleteConfirmNo?.addEventListener('click', () => closeDeleteConfirm(false))
+  deleteConfirmDialog?.addEventListener('click', event => {
+    if (event.target === deleteConfirmDialog) closeDeleteConfirm(false)
+  })
+  // A click on the question text keeps the focused answer, so Enter still means NO unless YES was chosen.
+  deleteConfirmDialog?.addEventListener('mousedown', event => {
+    if (!event.target.closest('button')) event.preventDefault()
+  })
+  // Captured before every other shortcut, so Escape only closes the question and focus stays on its two answers.
+  document.addEventListener('keydown', event => {
+    if (!resolveDeleteConfirm) return
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      closeDeleteConfirm(false)
+    } else if (event.key === 'Tab') {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      ;(document.activeElement === deleteConfirmNo ? deleteConfirmYes : deleteConfirmNo).focus()
+    }
+  }, true)
   eventsDiscardYes?.addEventListener('click', closeEventsCreate)
   eventsDiscardNo?.addEventListener('click', () => {
     setEventsDiscardConfirmOpen(false)

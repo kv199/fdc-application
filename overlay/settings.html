@@ -417,13 +417,13 @@
         </section>
         <div id="events-grid" class="events-grid" aria-live="polite"></div>
         <p id="events-grid-empty" class="settings-empty">No events yet. Press CREATE to add a race you want to track.</p>
-        <section id="events-discard-dialog" class="events-discard-dialog" role="alertdialog" aria-modal="true" aria-labelledby="events-discard-title" aria-describedby="events-discard-message" hidden>
-          <div class="events-discard-dialog__content">
+        <section id="events-discard-dialog" class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="events-discard-title" aria-describedby="events-discard-message" hidden>
+          <div class="confirm-dialog__content">
             <h3 id="events-discard-title">DISCARD EVENT?</h3>
             <p id="events-discard-message">You have unsaved changes. Close this form?</p>
-            <div class="events-discard-dialog__actions">
-              <button id="events-discard-yes" class="settings-button events-discard-dialog__yes" type="button">YES</button>
-              <button id="events-discard-no" class="settings-button events-discard-dialog__no" type="button">NO</button>
+            <div class="confirm-dialog__actions">
+              <button id="events-discard-yes" class="settings-button confirm-dialog__yes" type="button">YES</button>
+              <button id="events-discard-no" class="settings-button confirm-dialog__no" type="button">NO</button>
             </div>
           </div>
         </section>
@@ -718,6 +718,16 @@
   <script src="driver-analysis.js"></script>
   <script src="event-trace-map.js"></script>
   <script src="hud-widgets.js"></script>
+  <section id="delete-confirm-dialog" class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-confirm-title" aria-describedby="delete-confirm-message" hidden>
+    <div class="confirm-dialog__content">
+      <h3 id="delete-confirm-title">ARE YOU SURE?</h3>
+      <p id="delete-confirm-message"></p>
+      <div class="confirm-dialog__actions">
+        <button id="delete-confirm-yes" class="settings-button confirm-dialog__yes" type="button">YES</button>
+        <button id="delete-confirm-no" class="settings-button confirm-dialog__no" type="button">NO</button>
+      </div>
+    </div>
+  </section>
   <script src="settings.js"></script>
 </body>
 </html>

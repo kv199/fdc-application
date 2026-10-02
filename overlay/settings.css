@@ -817,11 +817,11 @@ h1 {
   min-width: 120px;
 }
 
-.events-discard-dialog[hidden] {
+.confirm-dialog[hidden] {
   display: none;
 }
 
-.events-discard-dialog {
+.confirm-dialog {
   position: fixed;
   z-index: 20;
   inset: 0;
@@ -831,7 +831,7 @@ h1 {
   background: rgb(0 0 0 / 62%);
 }
 
-.events-discard-dialog__content {
+.confirm-dialog__content {
   width: min(100%, 390px);
   padding: 18px;
   border: 1px solid rgb(226 232 240 / 24%);
@@ -839,46 +839,46 @@ h1 {
   box-shadow: 0 20px 50px rgb(0 0 0 / 55%);
 }
 
-.events-discard-dialog__content h3 {
+.confirm-dialog__content h3 {
   margin: 0;
   color: #f8fafc;
   font-size: 13px;
   letter-spacing: 0.16em;
 }
 
-.events-discard-dialog__content p {
+.confirm-dialog__content p {
   margin: 10px 0 18px;
   color: #a1a1aa;
   font-size: 14px;
   line-height: 1.45;
 }
 
-.events-discard-dialog__actions {
+.confirm-dialog__actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 }
 
-.events-discard-dialog .events-discard-dialog__no {
+.confirm-dialog .confirm-dialog__no {
   border-color: #69e83f;
   color: #090b0e;
   background: #69e83f;
 }
 
-.events-discard-dialog .events-discard-dialog__no:hover,
-.events-discard-dialog .events-discard-dialog__no:focus-visible {
+.confirm-dialog .confirm-dialog__no:hover,
+.confirm-dialog .confirm-dialog__no:focus-visible {
   border-color: #88f166;
   background: #88f166;
 }
 
-.events-discard-dialog .events-discard-dialog__yes {
+.confirm-dialog .confirm-dialog__yes {
   border-color: #ef4444;
   color: #fecaca;
   background: transparent;
 }
 
-.events-discard-dialog .events-discard-dialog__yes:hover,
-.events-discard-dialog .events-discard-dialog__yes:focus-visible {
+.confirm-dialog .confirm-dialog__yes:hover,
+.confirm-dialog .confirm-dialog__yes:focus-visible {
   border-color: #ef4444;
   color: #fff;
   background: #ef4444;
@@ -2053,11 +2053,6 @@ h1 {
   line-height: 1.4;
 }
 
-.driver-analysis-history-row__details-toggle {
-  margin-top: 12px;
-  min-width: 78px;
-}
-
 
 .driver-analysis-stats {
   display: grid;
@@ -2097,6 +2092,7 @@ h1 {
   gap: 6px;
 }
 
+.driver-analysis-history-row__details-toggle,
 .driver-analysis-history-row__export,
 .driver-analysis-history-row__delete {
   min-width: 84px;

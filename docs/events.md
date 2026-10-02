@@ -128,8 +128,10 @@ The tab opens with a short intro and contains:
   discarded, or could not be stored. A saved circuit reports its latest stored
   completed lap as **LAST**; a saved Sprint reports its stored final result as
   **RESULT**. The feedback never uses the live clock after the game resets it.
-- **DELETE** asks for confirmation, then hides the event from the active list
-  while retaining its row and saved runs in SQLite, and returns to the list.
+- **DELETE** asks `ARE YOU SURE?` with **YES** and **NO**. **NO** is selected,
+  and Escape or a click outside the question also answers **NO**. **YES** hides
+  the event from the active list while retaining its row and saved runs in
+  SQLite, and returns to the list.
 
 ## Telemetry recording
 
