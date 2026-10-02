@@ -521,6 +521,19 @@ test('tray has one Configuration action and no calibration reset action', () => 
   assert.match(tauriMain, /\.text\("quit", "Quit"\)/)
 })
 
+test('the Configuration X button asks QUIT FDC? through the shared dialog', () => {
+  assert.match(tauriMain, /CloseRequested[\s\S]*?prevent_close\(\)[\s\S]*?SettingsController\?\.requestQuit\?\.\(\)/)
+  assert.match(tauriMain, /fn quit_app\(app: AppHandle\) \{\s*app\.exit\(0\);/)
+  assert.doesNotMatch(tauriMain, /settings\.hide\(\)/)
+  assert.ok(settingsHtml.indexOf('src="quit-confirmation.js"') < settingsHtml.indexOf('src="settings.js"'))
+  assert.match(settingsHtml, /id="destructive-confirm-option" class="confirm-dialog__option" hidden/)
+  assert.match(settingsHtml, /CONFIRM BEFORE QUITTING[\s\S]*?id="confirm-before-quit"/)
+  assert.match(settingsJs, /title: 'QUIT FDC\?'[\s\S]*?yes: 'QUIT'[\s\S]*?no: 'CANCEL'/)
+  assert.match(settingsJs, /driverAnalysisState\.recording === true \|\| recorderState\.recording === true/)
+  assert.match(settingsJs, /call\('quit_app'\)/)
+  assert.match(settingsJs, /globalScope\.SettingsController[\s\S]*requestQuit/)
+})
+
 test('Configuration replays Shift Light state and waits for the real reset result', () => {
   assert.match(settingsJs, /hud_shift_light_reset_result/)
   assert.match(settingsJs, /call\('sync_shift_light_status'\)/)

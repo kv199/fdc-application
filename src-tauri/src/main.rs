@@ -5757,6 +5757,11 @@ fn set_hud_display(app: AppHandle, name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
+#[tauri::command]
 fn get_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
@@ -5829,7 +5834,8 @@ fn main() {
             load_garage,
             rename_garage_car,
             list_hud_displays,
-            set_hud_display
+            set_hud_display,
+            quit_app
         ])
         .on_window_event(|window, event| match window.label() {
             "settings" => {
@@ -5843,15 +5849,11 @@ fn main() {
                     return;
                 }
 
+                // Configuration asks before quitting; its QUIT answer calls quit_app.
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    let app = window.app_handle();
-                    if let Some(main) = app.get_webview_window("main") {
-                        let _ = main.eval("window.HudLayout?.cancelEditMode?.()");
-                    }
-                    if let Some(settings) = app.get_webview_window("settings") {
-                        let _ = settings.eval("window.SettingsController?.cancelEdit?.()");
-                        let _ = settings.hide();
+                    if let Some(settings) = window.app_handle().get_webview_window("settings") {
+                        let _ = settings.eval("window.SettingsController?.requestQuit?.()");
                     }
                 }
             }

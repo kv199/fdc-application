@@ -855,6 +855,25 @@ h1 {
   line-height: 1.45;
 }
 
+.confirm-dialog__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 18px;
+  color: #d4d4d8;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.confirm-dialog__option[hidden] {
+  display: none;
+}
+
+.confirm-dialog__option input {
+  margin: 0;
+  accent-color: #69e83f;
+}
+
 .confirm-dialog__actions {
   display: flex;
   justify-content: flex-end;

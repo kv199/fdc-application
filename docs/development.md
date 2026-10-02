@@ -143,7 +143,9 @@ Every delete or reset of saved data asks first through
 Escape or a click outside the dialog answers **NO**. Do not use the browser
 `confirm()`; `overlay/destructive-confirm-guard.test.js` fails when it appears
 or when a `delete_` or `reset_` command is invoked without
-`confirmDestructive`.
+`confirmDestructive`. Quitting from the Configuration X button uses the same
+dialog through `askConfirm`, with its own title, button labels, and an optional
+checkbox.
 
 ## Release verification cycle
 

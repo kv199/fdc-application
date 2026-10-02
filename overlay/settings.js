@@ -60,6 +60,7 @@
   const shiftLightHelp = document.getElementById('shift-light-help')
   const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
   const displayPreferencesApi = globalScope.DisplayPreferences
+  const quitConfirmationApi = globalScope.QuitConfirmation
   const DEFAULT_REDLINE_BRIGHTNESS = displayPreferencesApi?.DEFAULTS?.redlineBrightness ?? 80
   const DEFAULT_HUD_OPACITY = displayPreferencesApi?.DEFAULTS?.hudOpacity ?? 80
   const SETTINGS_WINDOW_CONTEXTS = Object.freeze({
@@ -73,6 +74,7 @@
   const speedUnitInputs = [...document.querySelectorAll('input[name="speed-unit"]')]
   const distanceUnitInputs = [...document.querySelectorAll('input[name="distance-unit"]')]
   const configurationAlwaysOnTop = document.getElementById('configuration-always-on-top')
+  const confirmBeforeQuit = document.getElementById('confirm-before-quit')
   const showHudWithTelemetry = document.getElementById('show-hud-with-telemetry')
   const fdcShiftLightEnabled = document.getElementById('fdc-shift-light-enabled')
   const redlineBrightness = document.getElementById('redline-brightness')
@@ -123,7 +125,11 @@
   const eventsDiscardYes = document.getElementById('events-discard-yes')
   const eventsDiscardNo = document.getElementById('events-discard-no')
   const destructiveConfirmDialog = document.getElementById('destructive-confirm-dialog')
+  const destructiveConfirmTitle = document.getElementById('destructive-confirm-title')
   const destructiveConfirmMessage = document.getElementById('destructive-confirm-message')
+  const destructiveConfirmOption = document.getElementById('destructive-confirm-option')
+  const destructiveConfirmOptionInput = document.getElementById('destructive-confirm-option-input')
+  const destructiveConfirmOptionLabel = document.getElementById('destructive-confirm-option-label')
   const destructiveConfirmYes = document.getElementById('destructive-confirm-yes')
   const destructiveConfirmNo = document.getElementById('destructive-confirm-no')
   const eventsDetailBack = document.getElementById('events-detail-back')
@@ -847,7 +853,7 @@
       .some(field => field?.value.trim())
   }
 
-  // Every delete or reset of saved data asks here first. NO has focus, and Escape or a click outside the box also answers NO.
+  // Every delete or reset of saved data asks here first, and so does quitting. NO has focus, and Escape or a click outside the box also answers NO.
   let resolveDestructiveConfirm = null
   let destructiveConfirmReturnFocus = null
 
@@ -858,17 +864,55 @@
     destructiveConfirmDialog.hidden = true
     destructiveConfirmReturnFocus?.focus?.()
     destructiveConfirmReturnFocus = null
-    resolve(confirmed)
+    resolve({ confirmed, option: !destructiveConfirmOption.hidden && destructiveConfirmOptionInput.checked })
   }
 
-  function confirmDestructive(message) {
-    if (!destructiveConfirmDialog) return Promise.resolve(false)
+  function askConfirm({ title = 'ARE YOU SURE?', message, yes = 'YES', no = 'NO', option = '' }) {
+    if (!destructiveConfirmDialog) return Promise.resolve({ confirmed: false, option: false })
     closeDestructiveConfirm(false)
     destructiveConfirmReturnFocus = document.activeElement
+    destructiveConfirmTitle.textContent = title
     destructiveConfirmMessage.textContent = message
+    destructiveConfirmYes.textContent = yes
+    destructiveConfirmNo.textContent = no
+    destructiveConfirmOption.hidden = !option
+    destructiveConfirmOptionInput.checked = false
+    destructiveConfirmOptionLabel.textContent = option
     destructiveConfirmDialog.hidden = false
     destructiveConfirmNo.focus()
     return new Promise(resolve => { resolveDestructiveConfirm = resolve })
+  }
+
+  async function confirmDestructive(message) {
+    return (await askConfirm({ message })).confirmed
+  }
+
+  // The X button of this window lands here. QUIT exits FDC; minimizing keeps it running.
+  async function requestQuit() {
+    if (!quitConfirmationApi) return
+    const preferences = quitConfirmationApi.read()
+    const recording = driverAnalysisState.recording === true || recorderState.recording === true
+    const question = quitConfirmationApi.question(preferences, recording)
+    if (question) {
+      const answer = await askConfirm({
+        title: 'QUIT FDC?',
+        message: question.message,
+        yes: 'QUIT',
+        no: 'CANCEL',
+        option: question.offerDontAsk ? 'Don\'t ask again' : ''
+      })
+      if (!answer.confirmed) return
+      quitConfirmationApi.write(quitConfirmationApi.afterQuit(preferences, answer.option))
+    }
+    try {
+      await call('quit_app')
+    } catch (error) {
+      setStatus(error.message || 'Unable to quit FDC', true)
+    }
+  }
+
+  function renderQuitConfirmation() {
+    if (confirmBeforeQuit && quitConfirmationApi) updateOverlayToggle(confirmBeforeQuit, quitConfirmationApi.read().confirm)
   }
 
   function setEventsDiscardConfirmOpen(open) {
@@ -3893,6 +3937,14 @@
   displayPreferences = displayPreferencesApi?.normalize?.(displayPreferences) || displayPreferences
   renderDisplayPreferences(displayPreferences)
   void updateConfigurationAlwaysOnTop(displayPreferences.configurationAlwaysOnTop, false)
+  renderQuitConfirmation()
+  confirmBeforeQuit?.addEventListener('click', () => {
+    if (!quitConfirmationApi) return
+    const preferences = quitConfirmationApi.read()
+    const next = quitConfirmationApi.write({ ...preferences, confirm: !preferences.confirm })
+    renderQuitConfirmation()
+    setStatus(next.confirm ? 'FDC ASKS BEFORE QUITTING' : 'X QUITS FDC WITHOUT ASKING')
+  })
   configurationAlwaysOnTop?.addEventListener('click', () => {
     void updateConfigurationAlwaysOnTop(displayPreferences.configurationAlwaysOnTop === false)
   })
@@ -4031,9 +4083,9 @@
   })
   // A click on the question text keeps the focused answer, so Enter still means NO unless YES was chosen.
   destructiveConfirmDialog?.addEventListener('mousedown', event => {
-    if (!event.target.closest('button')) event.preventDefault()
+    if (!event.target.closest('button, label')) event.preventDefault()
   })
-  // Captured before every other shortcut, so Escape only closes the question and focus stays on its two answers.
+  // Captured before every other shortcut, so Escape only closes the question and focus stays on its answers.
   document.addEventListener('keydown', event => {
     if (!resolveDestructiveConfirm) return
     if (event.key === 'Escape') {
@@ -4043,7 +4095,9 @@
     } else if (event.key === 'Tab') {
       event.preventDefault()
       event.stopImmediatePropagation()
-      ;(document.activeElement === destructiveConfirmNo ? destructiveConfirmYes : destructiveConfirmNo).focus()
+      const answers = [destructiveConfirmOption.hidden ? null : destructiveConfirmOptionInput, destructiveConfirmYes, destructiveConfirmNo].filter(Boolean)
+      const index = answers.indexOf(document.activeElement)
+      answers[(index + (event.shiftKey ? answers.length - 1 : 1)) % answers.length].focus()
     }
   }, true)
   eventsDiscardYes?.addEventListener('click', closeEventsCreate)
@@ -4178,6 +4232,7 @@
     closeEventDetail,
     openEventRun,
     closeEventRun,
-    refreshHudDisplay
+    refreshHudDisplay,
+    requestQuit
   }
 })(typeof globalThis === 'undefined' ? this : globalThis)

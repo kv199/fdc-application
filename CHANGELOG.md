@@ -11,6 +11,13 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   and FDC remembers it. Moving the HUD to another monitor with Win+Shift+Arrow
   now fills that whole monitor.
 
+### Improved
+
+- **Configuration**: the X button now quits FDC after asking **QUIT FDC?**;
+  minimize the window to keep the HUD running. From the second quit on, the
+  question offers **Don't ask again**, and **CONFIRM BEFORE QUITTING** in
+  Settings turns it back on. A recording in progress always asks.
+
 ## 7.22.61 - 2026-10-02
 
 ### Fixed

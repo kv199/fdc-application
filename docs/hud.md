@@ -14,7 +14,9 @@ has no other data source.
   reaches the game.
 - Only an active layout edit makes the window accept pointer input; Save,
   Cancel, or Escape restores click-through.
-- The FDC tray icon offers **Configuration** and **Quit**.
+- The FDC tray icon offers **Configuration** and **Quit**. The X button of the
+  Configuration window also quits FDC, which closes the HUD; minimizing the
+  window keeps the HUD running.
 
 ## Blocks
 

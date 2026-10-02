@@ -103,7 +103,9 @@ rather than each feature subscribing to the UDP source independently.
 The settings window is a separate browser page. It observes route status,
 Garage, and Shift Light events, presents the Events library, and invokes native
 commands for configuration actions. The tray menu opens Configuration and
-provides the application exit path.
+quits FDC. Closing the Configuration window asks the page through
+`SettingsController.requestQuit`; a confirmed quit calls the native
+`quit_app` command.
 
 The Configuration footer shows the build version, which copies `FDC <version>`
 to the clipboard when clicked, and a **HELP** menu. Its items call the native
@@ -206,6 +208,10 @@ telemetry path. It provides:
 - standard minimize and maximize controls, a persisted Configuration
   always-on-top preference that defaults to disabled, and a persisted window
   size (default `820 × 620` logical pixels) and last valid on-screen position;
+- a close button that quits FDC after **QUIT FDC?**. **Don't ask again** is
+  offered from the second confirmed quit and turns off the persisted
+  **CONFIRM BEFORE QUITTING** preference; a Driver Analysis or Event recording
+  in progress always asks;
 - Garage current-car and saved-car views, including local name editing and the
   current car's configuration list;
 - the Events library with local event creation, management, and run records;
@@ -214,7 +220,8 @@ telemetry path. It provides:
 
 Layout, visibility, and display choices are kept in versioned browser storage
 keys (`fdc.layout.v2`, `fdc.layout-mode.v1`, `fdc.hud-visibility.v1`,
-`fdc.overlay-visibility.v1`, and `fdc.display-preferences.v1`). The prior
+`fdc.overlay-visibility.v1`, `fdc.display-preferences.v1`, and
+`fdc.quit-confirmation.v1`). The prior
 `fdc.layout.v1` position is intentionally not migrated. Commands that affect
 the native window or Shift Light database cross the Tauri IPC boundary.
 

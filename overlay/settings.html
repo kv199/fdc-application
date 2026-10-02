@@ -654,6 +654,15 @@
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
           </div>
+          <div class="display-setting-row">
+            <div class="display-setting-row__copy">
+              <strong>CONFIRM BEFORE QUITTING</strong>
+              <small>Ask before the X button quits FDC. A recording in progress always asks.</small>
+            </div>
+            <button id="confirm-before-quit" class="visibility-toggle" type="button" aria-label="Confirm before quitting FDC" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
+          </div>
           <div class="display-setting-row" data-display-preference>
             <div class="display-setting-row__copy">
               <strong>SHOW HUD WITH TELEMETRY</strong>
@@ -719,6 +728,7 @@
   <script src="telemetry-route.js"></script>
   <script src="shift-light-settings.js"></script>
   <script src="display-preferences.js"></script>
+  <script src="quit-confirmation.js"></script>
   <script src="tauri-events.js"></script>
   <script src="garage-runtime.js"></script>
   <script src="event-recorder.js"></script>
@@ -733,6 +743,10 @@
     <div class="confirm-dialog__content">
       <h3 id="destructive-confirm-title">ARE YOU SURE?</h3>
       <p id="destructive-confirm-message"></p>
+      <label id="destructive-confirm-option" class="confirm-dialog__option" hidden>
+        <input id="destructive-confirm-option-input" type="checkbox">
+        <span id="destructive-confirm-option-label"></span>
+      </label>
       <div class="confirm-dialog__actions">
         <button id="destructive-confirm-yes" class="settings-button confirm-dialog__yes" type="button">YES</button>
         <button id="destructive-confirm-no" class="settings-button confirm-dialog__no" type="button">NO</button>
