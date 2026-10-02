@@ -9,6 +9,7 @@ const storageSources = [
   'driver-analysis.js',
   'display-preferences.js',
   'quit-confirmation.js',
+  'connection-guide.js',
   'hud-preferences.js',
   'settings.js'
 ].map(file => fs.readFileSync(path.join(__dirname, file), 'utf8')).join('\n')
@@ -19,6 +20,7 @@ test('FDC uses only current versioned browser storage keys', () => {
     'fdc.layout-mode.v1',
     'fdc.display-preferences.v1',
     'fdc.quit-confirmation.v1',
+    'fdc.connection-guide.v1',
     'fdc.hud-visibility.v1',
     'fdc.overlay-visibility.v1',
     'fdc.driver-analysis.settings.v1'

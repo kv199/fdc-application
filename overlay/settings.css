@@ -819,6 +819,172 @@ h1 {
   min-width: 120px;
 }
 
+.connect-guide[hidden] {
+  display: none;
+}
+
+.connect-guide {
+  position: fixed;
+  z-index: 15;
+  inset: 0;
+  display: grid;
+  overflow-y: auto;
+  padding: 24px 16px;
+  background: rgb(5 6 8 / 96%);
+}
+
+.connect-guide__content {
+  width: min(100%, 520px);
+  margin: auto;
+  padding: 22px;
+  border: 1px solid rgb(226 232 240 / 24%);
+  border-left: 4px solid #69e83f;
+  background:
+    linear-gradient(90deg, rgb(105 232 63 / 8%), transparent 42%),
+    #090b0e;
+  box-shadow: 0 20px 50px rgb(0 0 0 / 55%);
+}
+
+.connect-guide__content h2 {
+  margin: 8px 0 0;
+  color: #f8fafc;
+  font-size: 20px;
+  letter-spacing: 0.08em;
+}
+
+.connect-guide__intro {
+  margin: 10px 0 16px;
+  color: #a1a1aa;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.connect-guide__steps {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding-left: 20px;
+  color: #d4d4d8;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.connect-guide__steps li::marker {
+  color: #69e83f;
+  font-weight: 800;
+}
+
+.connect-guide__steps li {
+  padding-left: 4px;
+}
+
+.connect-guide__steps strong {
+  color: #f8fafc;
+  font-weight: 700;
+}
+
+.connect-guide__value {
+  display: block;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border: 1px solid rgb(105 232 63 / 55%);
+  border-radius: 3px;
+  color: #69e83f;
+  background: rgb(105 232 63 / 8%);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  user-select: text;
+}
+
+.connect-guide__status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgb(251 191 36 / 35%);
+  background: rgb(251 191 36 / 6%);
+  color: #fbbf24;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.connect-guide__dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fbbf24;
+  box-shadow: 0 0 8px rgb(251 191 36 / 70%);
+}
+
+.connect-guide[data-stage='waiting'] .connect-guide__dot {
+  animation: connect-guide-pulse 1.4s ease-in-out infinite;
+}
+
+.connect-guide[data-stage='connected'] .connect-guide__status {
+  border-color: rgb(105 232 63 / 55%);
+  background: rgb(105 232 63 / 8%);
+  color: #69e83f;
+}
+
+.connect-guide[data-stage='connected'] .connect-guide__dot {
+  background: #69e83f;
+  box-shadow: 0 0 8px rgb(105 232 63 / 75%);
+}
+
+.connect-guide[data-stage='problem'] .connect-guide__status {
+  border-color: rgb(255 49 43 / 45%);
+  background: rgb(255 49 43 / 7%);
+  color: #ff827d;
+}
+
+.connect-guide[data-stage='problem'] .connect-guide__dot {
+  background: #ff312b;
+  box-shadow: 0 0 8px rgb(255 49 43 / 65%);
+}
+
+@keyframes connect-guide-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connect-guide[data-stage='waiting'] .connect-guide__dot {
+    animation: none;
+  }
+}
+
+.connect-guide__hint {
+  margin: 10px 0 18px;
+  color: #a1a1aa;
+  font-size: 13px;
+  line-height: 1.45;
+  user-select: text;
+}
+
+.connect-guide__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.connect-guide .connect-guide__done {
+  border-color: #69e83f;
+  color: #090b0e;
+  background: #69e83f;
+}
+
+.connect-guide .connect-guide__done:hover,
+.connect-guide .connect-guide__done:focus-visible {
+  border-color: #88f166;
+  background: #88f166;
+}
+
 .confirm-dialog[hidden] {
   display: none;
 }

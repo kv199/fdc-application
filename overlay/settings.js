@@ -47,6 +47,12 @@
   const telemetryStatusLabel = document.getElementById('telemetry-status-label')
   const telemetryRouteCard = document.getElementById('telemetry-route-card')
   const telemetryRouteRetry = document.getElementById('telemetry-route-retry')
+  const connectGuide = document.getElementById('connect-guide')
+  const connectGuideStatusLabel = document.getElementById('connect-guide-status-label')
+  const connectGuideHint = document.getElementById('connect-guide-hint')
+  const connectGuideRetry = document.getElementById('connect-guide-retry')
+  const connectGuideSkip = document.getElementById('connect-guide-skip')
+  const connectGuideDone = document.getElementById('connect-guide-done')
   const shiftLightEmpty = document.getElementById('shift-light-empty')
   const shiftLightProfile = document.getElementById('shift-light-profile')
   const shiftLightCarKey = document.getElementById('shift-light-car-key')
@@ -61,6 +67,16 @@
   const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
   const displayPreferencesApi = globalScope.DisplayPreferences
   const quitConfirmationApi = globalScope.QuitConfirmation
+  const connectionGuideApi = globalScope.ConnectionGuide
+  const CONNECTION_GUIDE_LABELS = Object.freeze({
+    waiting: 'WAITING FOR DATA FROM FORZA…',
+    connected: 'CONNECTED',
+    problem: 'FDC CANNOT RECEIVE DATA OUT'
+  })
+  const CONNECTION_GUIDE_HINTS = Object.freeze({
+    waiting: 'This screen updates as soon as the game sends data.',
+    connected: 'FDC is receiving data from Forza Horizon 6.'
+  })
   const DEFAULT_REDLINE_BRIGHTNESS = displayPreferencesApi?.DEFAULTS?.redlineBrightness ?? 80
   const DEFAULT_HUD_OPACITY = displayPreferencesApi?.DEFAULTS?.hudOpacity ?? 80
   const SETTINGS_WINDOW_CONTEXTS = Object.freeze({
@@ -194,6 +210,10 @@
   let latestShiftLightState = null
   let latestRouteRevision = -1
   let latestRouteStatus = globalScope.HudTelemetryRoute?.normalizeRouteStatus?.({ phase: 'offline' })
+  let connectionGuideChecked = false
+  let connectionGuideOpen = false
+  let connectionGuideStage = null
+  let routeStatusReceived = false
   let driverAnalysisSettings = driverAnalysisApi?.readSettings?.() || { enabled: false, hotkey: 'Ctrl+Shift+F9' }
   let driverAnalysisState = { enabled: driverAnalysisSettings.enabled, recording: false, startedAt: null, sampleCount: 0, hotkey: driverAnalysisSettings.hotkey }
   let driverAnalysisHotkeyCapture = false
@@ -562,6 +582,44 @@
     } catch {
       renderGarage()
     }
+    openConnectionGuideIfNeverConnected()
+  }
+
+  // Until Forza has sent Data Out once, Configuration opens on a setup guide.
+  function openConnectionGuideIfNeverConnected() {
+    if (!connectionGuideApi || connectionGuideChecked) return
+    connectionGuideChecked = true
+    connectionGuideOpen = connectionGuideApi.shouldShow(connectionGuideApi.read(), garageVehicles.size > 0)
+    renderConnectionGuide()
+  }
+
+  function renderConnectionGuide() {
+    if (!connectGuide || !connectionGuideApi) return
+    const presentation = globalScope.HudTelemetryRoute?.getRoutePresentation?.(latestRouteStatus)
+    // The page starts from a placeholder offline status, so wait for the real one.
+    const stage = routeStatusReceived ? connectionGuideApi.stage(presentation?.tone) : 'waiting'
+    if (stage === 'connected' && !connectionGuideApi.read().connected) connectionGuideApi.write({ connected: true })
+
+    const opening = connectionGuideOpen && connectGuide.hidden
+    const stageChanged = stage !== connectionGuideStage
+    connectionGuideStage = stage
+    connectGuide.hidden = !connectionGuideOpen
+    connectGuide.dataset.stage = stage
+    connectGuideStatusLabel.textContent = CONNECTION_GUIDE_LABELS[stage]
+    connectGuideHint.textContent = stage === 'problem' ? presentation?.detail || '' : CONNECTION_GUIDE_HINTS[stage]
+    connectGuideRetry.hidden = stage !== 'problem'
+    connectGuideSkip.hidden = stage === 'connected'
+    connectGuideDone.hidden = stage !== 'connected'
+    if (connectionGuideOpen && (opening || stageChanged)) {
+      ;(stage === 'connected' ? connectGuideDone : stage === 'problem' ? connectGuideRetry : connectGuideSkip).focus()
+    }
+  }
+
+  function closeConnectionGuide() {
+    if (!connectionGuideOpen) return
+    connectionGuideOpen = false
+    renderConnectionGuide()
+    settingsTabs.find(tab => tab.classList.contains('is-active'))?.focus()
   }
 
   async function listenEventRecorderEvents() {
@@ -3494,6 +3552,7 @@
     telemetryStatusLabel.textContent = presentation.statusLabel
     telemetryRouteCard.dataset.tone = presentation.tone
     telemetryRouteRetry.hidden = !presentation.canRetry
+    renderConnectionGuide()
   }
 
   async function updateConfigurationAlwaysOnTop(alwaysOnTop, showStatus = true) {
@@ -3717,7 +3776,10 @@
   async function listenRouteEvents() {
     const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
     if (!eventApi || typeof eventApi.listen !== 'function') return
-    await eventApi.listen('hud_route_status', event => renderRouteStatus(event.payload))
+    await eventApi.listen('hud_route_status', event => {
+      routeStatusReceived = true
+      renderRouteStatus(event.payload)
+    })
     await call('sync_route_status')
   }
 
@@ -4206,6 +4268,16 @@
 
   telemetryRouteRetry.addEventListener('click', () => {
     void retryDirectSource()
+  })
+  connectGuideRetry?.addEventListener('click', () => {
+    void retryDirectSource()
+  })
+  connectGuideSkip?.addEventListener('click', closeConnectionGuide)
+  connectGuideDone?.addEventListener('click', closeConnectionGuide)
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !connectionGuideOpen || resolveDestructiveConfirm) return
+    event.preventDefault()
+    closeConnectionGuide()
   })
 
   renderRouteStatus(latestRouteStatus)

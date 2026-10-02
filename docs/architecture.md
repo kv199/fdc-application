@@ -216,12 +216,19 @@ telemetry path. It provides:
   current car's configuration list;
 - the Events library with local event creation, management, and run records;
 - Direct Data Out status and retry;
+- a **CONNECT FORZA HORIZON 6** setup screen that covers Configuration while
+  FDC has never received Data Out. It is skipped when the persisted
+  `fdc.connection-guide.v1` flag is set or the Garage already has a car, shows
+  the Data Out steps with `127.0.0.1` and `5301`, and follows the route
+  status: waiting, **CONNECTED** with **START USING FDC**, or a receiver problem
+  with **RETRY DATA OUT**. The first live status sets the flag; **SKIP FOR
+  NOW** or Escape closes it until the next launch;
 - current Shift Light diagnostics and reset.
 
 Layout, visibility, and display choices are kept in versioned browser storage
 keys (`fdc.layout.v2`, `fdc.layout-mode.v1`, `fdc.hud-visibility.v1`,
-`fdc.overlay-visibility.v1`, `fdc.display-preferences.v1`, and
-`fdc.quit-confirmation.v1`). The prior
+`fdc.overlay-visibility.v1`, `fdc.display-preferences.v1`,
+`fdc.quit-confirmation.v1`, and `fdc.connection-guide.v1`). The prior
 `fdc.layout.v1` position is intentionally not migrated. Commands that affect
 the native window or Shift Light database cross the Tauri IPC boundary.
 

@@ -534,6 +534,20 @@ test('the Configuration X button asks QUIT FDC? through the shared dialog', () =
   assert.match(settingsJs, /globalScope\.SettingsController[\s\S]*requestQuit/)
 })
 
+test('Configuration opens on the connection guide until Forza first sends Data Out', () => {
+  assert.ok(settingsHtml.indexOf('src="connection-guide.js"') < settingsHtml.indexOf('src="settings.js"'))
+  const guide = settingsHtml.slice(settingsHtml.indexOf('id="connect-guide"'), settingsHtml.indexOf('id="destructive-confirm-dialog"'))
+  assert.match(guide, /role="dialog" aria-modal="true"[^>]*hidden/)
+  assert.match(guide, /Settings → HUD and Gameplay → Telemetry/)
+  assert.match(guide, /<code class="connect-guide__value">127\.0\.0\.1<\/code>/)
+  assert.match(guide, /<code class="connect-guide__value">5301<\/code>/)
+  for (const id of ['connect-guide-retry', 'connect-guide-skip', 'connect-guide-done']) assert.match(guide, new RegExp('id="' + id + '"'))
+  assert.match(settingsJs, /applyGaragePayload\(await call\('load_garage_snapshot'\)\)[\s\S]*?openConnectionGuideIfNeverConnected\(\)/)
+  assert.match(settingsJs, /connectionGuideApi\.shouldShow\(connectionGuideApi\.read\(\), garageVehicles\.size > 0\)/)
+  assert.match(settingsJs, /telemetryRouteRetry\.hidden = !presentation\.canRetry\s*renderConnectionGuide\(\)/)
+  assert.match(settingsCss, /\.connect-guide \{[^}]*z-index: 15;/)
+})
+
 test('Configuration replays Shift Light state and waits for the real reset result', () => {
   assert.match(settingsJs, /hud_shift_light_reset_result/)
   assert.match(settingsJs, /call\('sync_shift_light_status'\)/)

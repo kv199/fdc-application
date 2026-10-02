@@ -125,7 +125,8 @@ In Forza Horizon 6:
 
 Start FDC. Configuration opens on the first launch and afterwards from the FDC
 tray icon; it shows whether Data Out is waiting, live, stale, offline, or
-unable to start.
+unable to start. Until the game has sent data once, Configuration opens on a
+setup screen with these steps that switches to **CONNECTED** when data arrives.
 
 ## Local data and privacy
 

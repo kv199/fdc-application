@@ -10,6 +10,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **HUD**: **HUD DISPLAY** on the HUD tab chooses which monitor the HUD covers,
   and FDC remembers it. Moving the HUD to another monitor with Win+Shift+Arrow
   now fills that whole monitor.
+- **Configuration**: until Forza has sent data once, FDC opens on a
+  **CONNECT FORZA HORIZON 6** screen that shows the Data Out settings to enter
+  in the game, `127.0.0.1` and port `5301`, and switches to **CONNECTED** as
+  soon as data arrives.
 
 ### Improved
 

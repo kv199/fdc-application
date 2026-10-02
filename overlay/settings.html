@@ -729,6 +729,7 @@
   <script src="shift-light-settings.js"></script>
   <script src="display-preferences.js"></script>
   <script src="quit-confirmation.js"></script>
+  <script src="connection-guide.js"></script>
   <script src="tauri-events.js"></script>
   <script src="garage-runtime.js"></script>
   <script src="event-recorder.js"></script>
@@ -739,6 +740,29 @@
   <script src="driver-analysis.js"></script>
   <script src="event-trace-map.js"></script>
   <script src="hud-widgets.js"></script>
+  <section id="connect-guide" class="connect-guide" role="dialog" aria-modal="true" aria-labelledby="connect-guide-title" aria-describedby="connect-guide-intro" data-stage="waiting" hidden>
+    <div class="connect-guide__content">
+      <p class="settings-eyebrow">FIRST SETUP</p>
+      <h2 id="connect-guide-title">CONNECT FORZA HORIZON 6</h2>
+      <p id="connect-guide-intro" class="connect-guide__intro">FDC shows live data that Forza sends to this PC. Turn it on once in the game:</p>
+      <ol class="connect-guide__steps">
+        <li><span>Open <strong>Settings → HUD and Gameplay → Telemetry</strong>.</span></li>
+        <li><span>Set <strong>Data Out</strong> to <strong>On</strong>.</span></li>
+        <li><span>Set <strong>Data Out IP Address</strong> to</span><code class="connect-guide__value">127.0.0.1</code></li>
+        <li><span>Set <strong>Data Out IP Port</strong> to</span><code class="connect-guide__value">5301</code></li>
+      </ol>
+      <div class="connect-guide__status" role="status" aria-live="polite">
+        <span class="connect-guide__dot" aria-hidden="true"></span>
+        <span id="connect-guide-status-label">WAITING FOR DATA FROM FORZA…</span>
+      </div>
+      <p id="connect-guide-hint" class="connect-guide__hint">This screen updates as soon as the game sends data.</p>
+      <div class="connect-guide__actions">
+        <button id="connect-guide-retry" class="settings-button" type="button" hidden>RETRY DATA OUT</button>
+        <button id="connect-guide-skip" class="settings-button" type="button">SKIP FOR NOW</button>
+        <button id="connect-guide-done" class="settings-button connect-guide__done" type="button" hidden>START USING FDC</button>
+      </div>
+    </div>
+  </section>
   <section id="destructive-confirm-dialog" class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="destructive-confirm-title" aria-describedby="destructive-confirm-message" hidden>
     <div class="confirm-dialog__content">
       <h3 id="destructive-confirm-title">ARE YOU SURE?</h3>
