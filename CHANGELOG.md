@@ -5,6 +5,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+## 7.24.62 - 2026-10-05
+
 ### Added
 
 - **HUD**: **HUD DISPLAY** on the HUD tab chooses which monitor the HUD covers,
