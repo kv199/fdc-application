@@ -67,10 +67,12 @@ Race Time of at most two seconds and a travelled distance of at most 25 metres,
 the same start that Events use. It ends at another clean start that sets the
 race clock back, when driving continues after the finish line, when the
 travelled distance falls back by more than 100 metres together with a lap change
-or a reset lap clock, at a car change, or when recording stops. A smaller fall
-back without those signals is an in-race rewind and the drive continues; pauses
-continue the drive too. A clean start while Current Lap and Current Race Time
-keep running forward, as during online race starts, continues the drive.
+or a reset lap clock, at a car change, or when recording stops. After such a
+fall back the drive goes on if the same lap returns with its lap clock still
+running, as after the car is reset to the track. A smaller fall back without
+those signals is an in-race rewind and the drive continues; pauses continue the
+drive too. A clean start while Current Lap and Current Race Time keep running
+forward, as during online race starts, continues the drive.
 
 Telemetry does not identify the race type, so a drive is classified from its
 laps:

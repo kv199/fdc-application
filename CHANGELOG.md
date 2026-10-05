@@ -15,6 +15,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Driver Analysis**: online circuit races that reach the finish are now
   saved as finished with all their laps instead of unfinished and one lap
   short.
+- **Driver Analysis**: resetting the car to the track during a race no longer
+  ends the drive; the rest of the race stays in the same drive.
 
 ### Improved
 

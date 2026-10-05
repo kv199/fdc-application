@@ -69,6 +69,7 @@
         lastLiveCurrent: null,
         lastLiveRaceTime: null,
         zeroedExit: false,
+        suspended: null,
         pendingSprintCurrent: null,
         firstSequence: null,
         lastSequence: null,
@@ -186,12 +187,24 @@
       active.pendingSprintCurrent = null
       const distance = finite(telemetry?.lap?.distance)
       const lapNumber = finite(telemetry?.lap?.number)
+      const current = finite(telemetry?.lap?.current)
+      const fellBack = distance === null || distance < active.lastDistance - DISTANCE_RESET_M
+      // A car reset to the track drops the distance and lap clock for a few packets; the race goes on when the same
+      // lap returns with its clock still running. Anything else after the drop ends the race.
+      if (active.suspended) {
+        const resumes = lapNumber !== null && lapNumber === active.suspended.lapNumber
+          && current !== null && active.suspended.current !== null && current >= active.suspended.current
+        if (!resumes) {
+          if (!fellBack) close()
+          return
+        }
+        active.suspended = null
+      }
       if (distance !== null && distance < active.lastDistance - DISTANCE_RESET_M) {
-        const current = finite(telemetry?.lap?.current)
         const raceOver = (lapNumber !== null && active.lastLapNumber !== null && lapNumber !== active.lastLapNumber)
           || (current !== null && current < 1)
         if (raceOver) {
-          close()
+          active.suspended = { lapNumber: active.lastLapNumber, current: active.lastLiveCurrent }
           return
         }
         // In-race rewind: continue from the rewound position and forget a boundary that was rewound past.
@@ -201,7 +214,6 @@
       } else if (distance !== null) {
         active.lastDistance = Math.max(active.lastDistance, distance)
       }
-      const current = finite(telemetry?.lap?.current)
       const raceTime = finite(telemetry?.lap?.raceTime)
       if (current !== null) active.lastLiveCurrent = current
       if (raceTime !== null) active.lastLiveRaceTime = raceTime
