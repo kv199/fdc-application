@@ -72,6 +72,37 @@ test('a restart ends an unfinished circuit and starts the next drive', () => {
   assert.equal(drives[1].firstSequence, drives[0].lastSequence + 1)
 })
 
+test('an online start that reports distance while the race clock runs on stays one drive', () => {
+  const packets = []
+  for (let index = 0; index <= 120; index++) {
+    const clock = index * 0.016
+    // Every fourth packet reports a distance ahead of the others, like FH6 online starts.
+    packets.push(live(index % 4 === 3 ? 40 : 0, { current: clock, raceTime: clock }))
+  }
+  for (let distance = 100; distance <= 3000; distance += 50) {
+    packets.push(live(distance, { current: 2 + distance / 50, raceTime: 2 + distance / 50 }))
+  }
+  packets.push(result({ number: 1, last: 61.2 }))
+  const drives = run(packets)
+
+  assert.equal(drives.length, 1)
+  assert.equal(drives[0].firstSequence, 0)
+  assert.equal(drives[0].kind, 'sprint')
+  assert.equal(drives[0].finished, true)
+})
+
+test('a clean start after the race clock went back still starts a new drive', () => {
+  const drives = run([
+    ...drive(0, 1000),
+    ...drive(0, 400)
+  ])
+
+  assert.equal(drives.length, 2)
+  assert.equal(drives[0].distanceM, 1000)
+  assert.equal(drives[1].distanceM, 400)
+  assert.equal(drives[1].firstSequence, drives[0].lastSequence + 1)
+})
+
 test('an in-race rewind and a pause keep one drive', () => {
   const drives = run([
     ...drive(0, 1500),

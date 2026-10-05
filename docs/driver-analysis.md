@@ -64,11 +64,13 @@ OFF → READY → WAITING → RECORDING → FINALIZING → READY
 While recording, each car's telemetry is split into drives, one per race. A
 drive starts at a clean race start: live telemetry with Current Lap and Current
 Race Time of at most two seconds and a travelled distance of at most 25 metres,
-the same start that Events use. It ends at another clean start, when driving
-continues after the finish line, when the travelled distance falls back by more
-than 100 metres together with a lap change or a reset lap clock, at a car
-change, or when recording stops. A smaller fall back without those signals is
-an in-race rewind and the drive continues; pauses continue the drive too.
+the same start that Events use. It ends at another clean start that sets the
+race clock back, when driving continues after the finish line, when the
+travelled distance falls back by more than 100 metres together with a lap change
+or a reset lap clock, at a car change, or when recording stops. A smaller fall
+back without those signals is an in-race rewind and the drive continues; pauses
+continue the drive too. A clean start while Current Lap and Current Race Time
+keep running forward, as during online race starts, continues the drive.
 
 Telemetry does not identify the race type, so a drive is classified from its
 laps:

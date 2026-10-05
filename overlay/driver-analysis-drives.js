@@ -94,6 +94,15 @@
       })
     }
 
+    // Online race starts report clean-start packets while the race clock keeps running; only a clock that starts
+    // over is a new race. Free roam keeps the clock at zero, so it never counts as running on.
+    function clockRunsOn(telemetry) {
+      const current = finite(telemetry?.lap?.current)
+      const raceTime = finite(telemetry?.lap?.raceTime)
+      if (current === null || current <= 0 || active.lastLiveCurrent === null || current < active.lastLiveCurrent) return false
+      return raceTime === null || active.lastLiveRaceTime === null || raceTime >= active.lastLiveRaceTime
+    }
+
     // A boundary seen while racing may be a circuit lap; one seen on the non-live result packets is the finish line.
     function noteBoundary(telemetry, live) {
       const lapNumber = finite(telemetry?.lap?.number)
@@ -113,7 +122,7 @@
       const live = telemetry.isRaceOn === true
       if (isCleanStart(telemetry)) {
         const progressed = active && (active.lastDistance - active.startDistance > START_MAX_DISTANCE_M || active.confirmedLaps > 0)
-        if (progressed) close()
+        if (progressed && !clockRunsOn(telemetry)) close()
         if (!active) open(telemetry)
       }
       if (!active) return
