@@ -196,11 +196,13 @@ was collected, regardless of its result. They describe what happened in this
 recording only. There are no reference values, grades, scores, or
 recommendations. The statistics are computed by
 `overlay/driver-analysis-stats.js` from the same normalized samples and phases
-that feed the maneuver analysis. Samples separated by a telemetry gap do not
-contribute time or distance, and a braking event or corner interrupted by a gap
-is discarded. Acceleration peaks use a 150 ms moving average, and each event's
-peak is the 95th percentile of those smoothed values, so single-frame spikes
-such as curb or contact impacts do not dominate the result.
+that feed the maneuver analysis. Distance and average speed are integrated
+from speed, because the game's travelled distance is not in metres in every
+race. Samples separated by a telemetry gap do not contribute time or distance,
+and a braking event or corner interrupted by a gap is discarded. Acceleration
+peaks use a 150 ms moving average, and each event's peak is the 95th percentile
+of those smoothed values, so single-frame spikes such as curb or contact
+impacts do not dominate the result.
 
 | Row | Content |
 | --- | --- |

@@ -5,6 +5,12 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+### Fixed
+
+- **Driver Analysis**: a recording's distance and average speed no longer
+  come out wrong after online races, where the average could exceed the top
+  speed. Saved recordings are corrected the next time FDC starts.
+
 ## 7.24.62 - 2026-10-05
 
 ### Added
