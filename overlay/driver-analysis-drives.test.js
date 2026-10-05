@@ -58,6 +58,42 @@ test('a circuit counts laps that the race continued past and its finish lap', ()
   assert.deepEqual([drives[0].kind, drives[0].finished, drives[0].lapCount], ['circuit', true, 3])
 })
 
+test('an online circuit that stops one lap past its last boundary is finished', () => {
+  const drives = run([
+    ...drive(0, 1000, 50, { number: 0 }),
+    ...drive(1050, 2000, 50, { number: 1, last: 30 }),
+    ...drive(2050, 3050, 50, { number: 2, last: 29 }),
+    ...drive(0, 400, 50, { number: 0, last: 0 })
+  ])
+
+  assert.equal(drives.length, 2)
+  assert.deepEqual([drives[0].kind, drives[0].finished, drives[0].lapCount], ['circuit', true, 3])
+})
+
+test('an online circuit that stops mid-lap stays unfinished', () => {
+  const drives = run([
+    ...drive(0, 1000, 50, { number: 0 }),
+    ...drive(1050, 2000, 50, { number: 1, last: 30 }),
+    ...drive(2050, 2600, 50, { number: 2, last: 29 }),
+    ...drive(0, 400, 50, { number: 0, last: 0 })
+  ])
+
+  assert.equal(drives.length, 2)
+  assert.deepEqual([drives[0].kind, drives[0].finished, drives[0].lapCount], ['circuit', false, 2])
+})
+
+test('an online circuit finish allows a small distance difference', () => {
+  const drives = run([
+    ...drive(0, 1000, 50, { number: 0 }),
+    ...drive(1050, 2000, 50, { number: 1, last: 30 }),
+    ...drive(2050, 3030, 10, { number: 2, last: 29 }),
+    ...drive(0, 400, 50, { number: 0, last: 0 })
+  ])
+
+  assert.equal(drives.length, 2)
+  assert.deepEqual([drives[0].kind, drives[0].finished, drives[0].lapCount], ['circuit', true, 3])
+})
+
 test('a restart ends an unfinished circuit and starts the next drive', () => {
   const drives = run([
     ...drive(0, 1000, 50, { number: 0 }),

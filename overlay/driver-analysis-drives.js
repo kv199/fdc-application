@@ -12,6 +12,9 @@
   const LAP_CONFIRM_DISTANCE_M = 100
   // Travelled distance falling back by more than this ends the race unless it is an in-race rewind.
   const DISTANCE_RESET_M = 100
+  // Online circuits end without result packets; a drive that stops one lap length past its last lap boundary,
+  // within this share of a lap, reached the finish line.
+  const LAP_FINISH_TOLERANCE = 0.03
 
   function finite(value) {
     if (value === null || value === undefined || value === '') return null
@@ -60,6 +63,7 @@
         lastLapNumber: finite(telemetry?.lap?.number),
         lastLapValue: lastLapValue(telemetry),
         confirmedLaps: 0,
+        boundaryDistances: [],
         pendingBoundaryDistance: null,
         finishLine: false,
         lastLiveCurrent: null,
@@ -73,6 +77,16 @@
       }
     }
 
+    // The finish of a circuit whose result packets never arrived: one lap length past the last lap boundary.
+    function reachedFinishDistance(drive) {
+      const boundaries = drive.boundaryDistances
+      if (boundaries.length === 0) return false
+      const last = boundaries[boundaries.length - 1]
+      const lapLength = last - (boundaries.length > 1 ? boundaries[boundaries.length - 2] : drive.startDistance)
+      if (!(lapLength > 0)) return false
+      return Math.abs(drive.lastDistance - (last + lapLength)) <= lapLength * LAP_FINISH_TOLERANCE
+    }
+
     function close() {
       const drive = active
       active = null
@@ -81,6 +95,7 @@
       if (drive.lastDistance - drive.startDistance <= START_MAX_DISTANCE_M) return
       const kind = drive.confirmedLaps > 0 ? 'circuit' : 'sprint'
       const finished = drive.finishLine || drive.pendingBoundaryDistance !== null || (kind === 'sprint' && drive.zeroedExit)
+        || (kind === 'circuit' && reachedFinishDistance(drive))
       drives.push({
         kind,
         finished,
@@ -193,6 +208,7 @@
       noteBoundary(telemetry, true)
       if (active.pendingBoundaryDistance !== null && active.lastDistance >= active.pendingBoundaryDistance + LAP_CONFIRM_DISTANCE_M) {
         active.confirmedLaps += 1
+        active.boundaryDistances.push(active.pendingBoundaryDistance)
         active.pendingBoundaryDistance = null
       }
       if (persisted) {

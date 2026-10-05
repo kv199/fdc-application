@@ -85,6 +85,10 @@ laps:
   travelled distance all cleared, once the drive has covered more than 25
   metres; live driving after a zeroed result that does not continue the race
   clock and distance ends the drive;
+- online circuits send no result packets, so a circuit drive that ends within
+  3% of a lap length of one lap past its last lap boundary reached the finish
+  line too; the lap length is the distance between its last two lap
+  boundaries, or from the drive start to its only one;
 - a drive with at least one completed circuit lap is a circuit whose lap count
   includes the finish lap when it was reached; any other drive is a sprint, so
   a one-lap circuit appears as a sprint;

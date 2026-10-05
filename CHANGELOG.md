@@ -12,6 +12,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   speed. Saved recordings are corrected the next time FDC starts.
 - **Driver Analysis**: online races no longer add short phantom sprint drives
   at the start; the race is recorded as one drive from its first second.
+- **Driver Analysis**: online circuit races that reach the finish are now
+  saved as finished with all their laps instead of unfinished and one lap
+  short.
 
 ### Improved
 
