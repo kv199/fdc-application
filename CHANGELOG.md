@@ -13,6 +13,14 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Driver Analysis**: online races no longer add short phantom sprint drives
   at the start; the race is recorded as one drive from its first second.
 
+### Improved
+
+- **Delta**: the Delta strip now appears only while recording with a known
+  reference (immediately for an Event with a saved Absolute Best trace; from
+  the second circuit lap or the next Sprint attempt for a new Event). The Event
+  page's Absolute Best time updates silently as Delta accepts a faster result,
+  before the run is saved.
+
 ## 7.24.62 - 2026-10-05
 
 ### Added

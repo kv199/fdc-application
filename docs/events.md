@@ -37,8 +37,9 @@ The tab opens with a short intro and contains:
   shows a purple **Absolute Best**: the quickest actual saved circuit lap or
   confirmed Sprint result across that Event. When the Event has saved traces,
   only results whose trace covers at least 97% of the Event's longest traced
-  distance are eligible. The top-left **BACK** action and
-  Escape both return to the Events list.
+  distance are eligible. During a recording, Absolute Best updates immediately
+  when Delta accepts a faster result, before the run is saved. The top-left
+  **BACK** action and Escape both return to the Events list.
 - Selecting the event title starts inline renaming. Enter or leaving the input
   saves a non-empty name; Escape cancels that rename without leaving the page.
 - An event page has one green **RECORD RUN** control. Selecting it changes the same
@@ -147,8 +148,10 @@ trace becomes the in-memory reference before the next lap or attempt is
 processed; a slower result leaves the reference unchanged. A trace that covers
 less than 97% of the active reference distance never replaces it, and a trace
 that covers noticeably more distance replaces a partial reference regardless
-of time. Circuit rows remain
-part of the active unsaved run until **STOP** or a confirmed restart.
+of time. When Delta accepts a faster reference, the Event page's purple
+**Absolute Best** time updates immediately and silently (no badge or message)
+before the run is saved. Circuit rows remain part of the active unsaved run
+until **STOP** or a confirmed restart.
 
 In a live race Delta interpolates the active reference trace's elapsed time at
 the current lap distance and shows current elapsed time minus reference elapsed
@@ -156,8 +159,8 @@ time. Negative values are ahead and green; positive values are behind and red.
 The center-out bar reaches its corresponding edge at one second in either
 direction. The top-right **BEST** value is the official completed time that
 selected the active trace, not the final sampled trace timestamp. An Event
-without a usable recorded reference leaves Delta inactive; stopping capture
-clears its reference.
+without a usable recorded reference leaves Delta inactive and hidden; stopping
+capture clears its reference.
 
 | Forza field | Current Events use |
 | --- | --- |

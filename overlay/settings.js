@@ -675,6 +675,17 @@
         setStatus(message, true)
       }
     })
+    await eventApi.listen('event_recorder_reference', event => {
+      const payload = event?.payload
+      if (!payload || typeof payload !== 'object') return
+      if (eventKey(payload.eventId) !== currentEventId || currentEventId === null) return
+      const timeMs = payload.timeMs
+      if (typeof timeMs !== 'number' || !Number.isFinite(timeMs)) return
+      if (currentEventAbsoluteBestMs === null || timeMs < currentEventAbsoluteBestMs) {
+        currentEventAbsoluteBestMs = timeMs
+        renderEventAbsoluteBest()
+      }
+    })
     await eventApi.emit('event_recorder_status_request')
   }
 

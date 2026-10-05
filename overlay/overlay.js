@@ -616,6 +616,7 @@ async function listenEventRecorderEvents() {
     } else if (payload.action === 'stop') {
       deltaReferenceRequest += 1
       deltaRuntime?.clearReference?.()
+      syncDeltaVisibility()
       scheduleTelemetryRender()
       void eventRecorder.stop()
     }
@@ -628,6 +629,7 @@ async function configureDeltaReference(eventId) {
   deltaRuntime?.clearReference?.()
   const nativeEventId = Number(eventId)
   if (!Number.isSafeInteger(nativeEventId) || nativeEventId <= 0) {
+    syncDeltaVisibility()
     scheduleTelemetryRender()
     console.warn('[hud] unable to load Event delta reference: invalid Event ID', eventId)
     return
@@ -639,6 +641,7 @@ async function configureDeltaReference(eventId) {
     scheduleTelemetryRender()
   } catch (error) {
     if (request !== deltaReferenceRequest) return
+    syncDeltaVisibility()
     scheduleTelemetryRender()
     console.warn('[hud] unable to load Event delta reference', error)
   }
@@ -696,6 +699,10 @@ async function listenDriverAnalysisEvents() {
   void publishDriverAnalysisHistory()
 }
 
+function syncDeltaVisibility() {
+  window.HudPreferences?.setDeltaReferenceActive?.(Boolean(deltaRuntime?.getState?.().reference))
+}
+
 function installBetterDeltaReference(candidate) {
   const normalized = window.HudDelta?.normalizeReference?.(candidate)
   if (!normalized || !deltaRuntime) return false
@@ -706,6 +713,10 @@ function installBetterDeltaReference(candidate) {
   if (!window.HudDelta?.isBetterReference?.(normalized, current)) return false
 
   deltaRuntime.setReference?.(normalized)
+  if (Number.isFinite(normalized.timeMs)) {
+    void emitRecorderEvent('event_recorder_reference', { eventId: normalized.eventId, timeMs: normalized.timeMs })
+  }
+  syncDeltaVisibility()
   scheduleTelemetryRender()
   return true
 }
@@ -795,6 +806,7 @@ window.HudOverlay = {
 
 applyDisplayPreferences()
 publishRouteStatus({}, true)
+syncDeltaVisibility()
 void listenEventRecorderEvents()
 void listenDriverAnalysisEvents()
 void reanalyzeStoredDriverAnalysisSessions()

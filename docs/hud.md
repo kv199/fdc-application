@@ -31,9 +31,18 @@ The telemetry HUD has six blocks. A separate Delta strip belongs to Events.
 | Engine / Boost | Boost in bar, power in HP, and torque in N·m. Negative values show as zero, and all three show zero while the throttle is released. |
 | Input Graph | The last eight seconds of throttle (green) and brake (red) input. |
 
-**Delta** compares the current lap with the active Event reference. It is
-active only while an Event is recording and has a usable reference; see
-[Events](events.md#telemetry-recording).
+**Delta** compares the current lap with the active Event reference. It appears
+only while recording an Event with a known reference:
+
+- For an Event with a saved Absolute Best trace, Delta is visible immediately.
+- For a new Event on a circuit, Delta is hidden during lap 1; from lap 2 onward,
+  it shows the best lap so far once that lap completes.
+- For a new Event in a sprint, Delta is hidden during the first attempt; from
+  the second attempt onward, it shows the best result so far.
+- Saved runs recorded before trace storage do not have a trace, so Delta starts
+  only after the first new lap (circuit) or attempt (sprint) in that case.
+
+See [Events](events.md#telemetry-recording).
 
 ### Shift cue
 
@@ -51,7 +60,8 @@ Light Brightness settings. How targets are learned is described in
 ## Visibility
 
 - With **Show HUD with telemetry** enabled (the default), the HUD and Delta are
-  visible only while Forza reports live driving. Forza keeps sending Data Out
+  visible only while Forza reports live driving; Delta additionally needs an
+  active Event reference. Forza keeps sending Data Out
   in the pause menu, garage, and other menus but reports that racing is not
   on, so the HUD hides there. A 500 ms hold keeps a single non-live packet from
   making it blink.
