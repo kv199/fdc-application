@@ -2,7 +2,8 @@
   --settings-footer-height: 52px;
   color: var(--text);
   background: var(--bg);
-  font-family: "Bahnschrift", "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
+  font-size: var(--type-body);
   font-synthesis: none;
 }
 
@@ -28,18 +29,37 @@ input {
   font: inherit;
 }
 
+/* Keyboard focus is always visible: a lime outline outside the control. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .settings-shell {
   width: 100%;
   min-height: 100vh;
-  padding: 28px 30px calc(26px + var(--settings-footer-height));
-  background:
-    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent) 8%, transparent), transparent 34%),
-    var(--bg);
+  padding: var(--space-5) var(--space-5) calc(var(--space-5) + var(--settings-footer-height));
+  background: var(--bg);
 }
 
+/* Painted application header: the only textured surface in FDC. */
 .settings-header {
-  padding-bottom: 24px;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 14%, transparent);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 16px 22px 18px;
+  border: 1px solid var(--line-strong);
+  background: var(--paint);
+}
+
+.settings-header::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: url('assets/textures/paint.jpg') center / cover;
+  opacity: var(--paint-texture-opacity);
+  content: '';
+  pointer-events: none;
 }
 
 .settings-header__topline {
@@ -55,16 +75,37 @@ input {
 }
 
 .settings-header__connection {
-  width: min(100%, 390px);
-  min-width: 0;
+  flex: 0 0 auto;
   margin-left: auto;
 }
 
-.settings-header__connection > .telemetry-status {
-  display: flex;
-  justify-content: flex-end;
-  width: 100%;
-  margin-bottom: 10px;
+/* The tab's one-paragraph description, under the title. */
+.settings-header__intro {
+  max-width: 62ch;
+  margin-top: 12px;
+}
+
+.settings-header__intro p {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-header__intro p[hidden] {
+  display: none;
+}
+
+/* The connection status is a button: it opens the connection guide. */
+.telemetry-status-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.telemetry-status-button:hover .telemetry-status {
+  border-color: var(--accent);
 }
 
 .settings-eyebrow,
@@ -77,27 +118,43 @@ input {
 }
 
 .settings-eyebrow {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
   margin: 0;
-  color: var(--accent);
+  color: var(--text);
+  font-size: var(--type-label);
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.settings-brand {
+  font-family: var(--font-readout);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .telemetry-status {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
   color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: 0.12em;
+  background: var(--surface-deep);
+  font-size: var(--type-label);
+  font-weight: 600;
+  letter-spacing: 0.1em;
   white-space: nowrap;
 }
 
 .telemetry-status__dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--text-subtle);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--text-subtle) 50%, transparent);
 }
 
 .telemetry-status[data-state='live'] {
@@ -106,7 +163,6 @@ input {
 
 .telemetry-status[data-state='live'] .telemetry-status__dot {
   background: var(--accent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 75%, transparent);
 }
 
 .telemetry-status[data-state='connected'] {
@@ -115,7 +171,6 @@ input {
 
 .telemetry-status[data-state='connected'] .telemetry-status__dot {
   background: var(--warning);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--warning) 70%, transparent);
 }
 
 .telemetry-status[data-state='offline'] {
@@ -124,7 +179,6 @@ input {
 
 .telemetry-status[data-state='offline'] .telemetry-status__dot {
   background: var(--alert);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--alert) 65%, transparent);
 }
 
 h1,
@@ -135,51 +189,124 @@ p {
 }
 
 h1 {
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-family: var(--font-readout);
+  font-size: var(--type-page-title);
+  font-weight: 500;
+  letter-spacing: 0.02em;
   line-height: 1;
+  text-transform: uppercase;
 }
 
 .settings-header__brand h1 {
   margin-top: 14px;
 }
 
+/* Drill-down views (an event, a run, a Driver Analysis recording, car, or
+   drive) turn the header into one compact row: FDC, then a path with a back
+   link naming the parent and the page name, as in "← RECORDING / CAR". */
+.settings-header__path,
+.settings-header__path > .detail-back,
+.settings-header__page {
+  display: none;
+}
+
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header__brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 18px;
+}
+
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-eyebrow__name,
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header__brand h1,
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header__intro {
+  display: none;
+}
+
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header__path {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-header__path-separator {
+  color: var(--text-muted);
+}
+
+.settings-header__page {
+  font-family: var(--font-readout);
+  font-size: var(--type-detail-title);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.settings-shell:has(#events-panel:not([hidden]) #events-detail-view:not([hidden])) #events-detail-back,
+.settings-shell:has(#events-panel:not([hidden]) #events-detail-view:not([hidden])) [data-detail-page='event'],
+.settings-shell:has(#events-panel:not([hidden]) #events-run-view:not([hidden])) #events-run-back,
+.settings-shell:has(#events-panel:not([hidden]) #events-run-view:not([hidden])) [data-detail-page='run'],
+.settings-shell:has(#driver-analysis-panel:not([hidden]) #driver-analysis-detail-view:not([hidden])) #driver-analysis-detail-back,
+.settings-shell:has(#driver-analysis-panel:not([hidden]) #driver-analysis-detail-view:not([hidden])[data-level='recording']) [data-detail-page='recording'],
+.settings-shell:has(#driver-analysis-panel:not([hidden]) #driver-analysis-detail-view:not([hidden])[data-level='car']) [data-detail-page='car'],
+.settings-shell:has(#driver-analysis-panel:not([hidden]) #driver-analysis-detail-view:not([hidden])[data-level='drive']) [data-detail-page='drive'] {
+  display: inline-block;
+}
+
+@media (max-width: 560px) {
+  .settings-header {
+    padding: 14px 16px;
+  }
+
+  .settings-header__brand h1 {
+    margin-top: 10px;
+    font-size: 36px;
+  }
+}
+
 .settings-tabs {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 22px;
-  padding: 4px;
-  border: 1px solid color-mix(in srgb, var(--line) 14%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--shade) 68%, transparent);
+  gap: 5px;
+  margin: 12px 0 0;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface-deep);
 }
 
 .settings-tab {
-  min-height: 34px;
-  padding: 8px 12px;
+  min-height: 36px;
+  padding: 8px 6px;
   border: 1px solid transparent;
-  border-radius: 3px;
-  color: var(--text-subtle);
+  border-radius: 0;
+  color: var(--text-muted);
   background: transparent;
   font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   cursor: pointer;
 }
 
-.settings-tab:hover,
-.settings-tab:focus-visible {
+.settings-tab:hover {
+  border-color: var(--accent);
   color: var(--text);
-  background: color-mix(in srgb, var(--line) 7%, transparent);
-  outline: none;
 }
 
+.settings-tab:focus-visible {
+  outline-offset: -2px;
+}
+
+/* The selected tab keeps its lime fill without hover. */
 .settings-tab.is-active {
-  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  background: var(--accent);
 }
 
 .settings-section__intro {
@@ -194,10 +321,10 @@ h1 {
 .settings-empty {
   margin: 0;
   padding: 18px 16px;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  border-radius: 4px;
+  border: 1px solid var(--line);
+  border-radius: 0;
   color: var(--text-subtle);
-  background: color-mix(in srgb, var(--shade) 68%, transparent);
+  background: var(--surface);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.45;
@@ -220,8 +347,8 @@ h1 {
 .garage-current {
   margin-bottom: 24px;
   padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  background: color-mix(in srgb, var(--line) 5%, transparent);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
 }
 
 .garage-section-heading {
@@ -245,25 +372,9 @@ h1 {
 .garage-current-car {
   position: relative;
   display: grid;
-  grid-template-columns: 124px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 16px;
-}
-
-.garage-current-car__image,
-.garage-card__image {
-  display: grid;
-  place-items: center;
-  color: var(--text-subtle);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--line) 8%, transparent), color-mix(in srgb, var(--line) 2%, transparent));
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-}
-
-.garage-current-car__image {
-  width: 124px;
-  height: 124px;
 }
 
 .garage-current-car__content {
@@ -280,8 +391,11 @@ h1 {
   color: var(--text);
   background: transparent;
   cursor: pointer;
-  font-size: clamp(20px, 3vw, 30px);
-  font-weight: 800;
+  font-family: var(--font-readout);
+  font-size: var(--type-detail-title);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -290,7 +404,6 @@ h1 {
 .garage-current-car__name:hover,
 .garage-current-car__name:focus-visible {
   color: var(--accent);
-  outline: none;
 }
 
 .garage-current-car__input {
@@ -303,8 +416,9 @@ h1 {
   color: var(--text);
   background: transparent;
   font: inherit;
-  font-size: clamp(20px, 3vw, 30px);
-  font-weight: 800;
+  font-family: var(--font-readout);
+  font-size: var(--type-detail-title);
+  font-weight: 500;
 }
 
 .garage-current-car__details {
@@ -319,20 +433,20 @@ h1 {
   margin-left: auto;
   min-height: 28px;
   padding: 5px 9px;
-  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: var(--surface);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.12em;
   cursor: pointer;
 }
 
 .garage-current-variants-toggle:hover,
 .garage-current-variants-toggle:focus-visible {
-  color: var(--text);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  outline: none;
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  background: var(--accent);
 }
 
 .garage-variants {
@@ -345,8 +459,8 @@ h1 {
   margin-top: 12px;
   overflow-y: auto;
   padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  background: color-mix(in srgb, var(--line) 5%, transparent);
+  border: 1px solid var(--line);
+  background: var(--surface);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--shade) 40%, transparent);
 }
 
@@ -362,9 +476,9 @@ h1 {
   gap: 12px;
   min-height: 0;
   padding: 3px 8px;
-  border: 1px solid color-mix(in srgb, var(--garage-rank-color) 34%, color-mix(in srgb, var(--line) 16%, transparent));
+  border: 1px solid color-mix(in srgb, var(--garage-rank-color) 34%, var(--line));
   border-left: 3px solid var(--garage-rank-color);
-  background: color-mix(in srgb, var(--shade) 65%, transparent);
+  background: var(--surface);
 }
 
 .garage-variant-row[data-car-class="D"] { --garage-rank-color: var(--class-d); }
@@ -382,9 +496,9 @@ h1 {
   align-items: center;
   min-height: 27px;
   padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--line) 22%, transparent);
+  border: 1px solid var(--line);
   color: var(--text);
-  background: color-mix(in srgb, var(--shade) 65%, transparent);
+  background: var(--surface-deep);
   font-size: 14px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -403,9 +517,9 @@ h1 {
   align-items: center;
   min-height: 27px;
   padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--line) 22%, transparent);
+  border: 1px solid var(--line);
   color: var(--text);
-  background: color-mix(in srgb, var(--shade) 65%, transparent);
+  background: var(--surface-deep);
   font-size: 14px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -421,18 +535,12 @@ h1 {
   --garage-rank-color: var(--text-muted);
   position: relative;
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   height: 82px;
-  border: 1px solid color-mix(in srgb, var(--garage-rank-color) 34%, color-mix(in srgb, var(--line) 16%, transparent));
+  border: 1px solid color-mix(in srgb, var(--garage-rank-color) 34%, var(--line));
   border-left: 3px solid var(--garage-rank-color);
-  background: color-mix(in srgb, var(--shade) 65%, transparent);
-}
-
-.garage-card__image {
-  width: 82px;
-  height: 82px;
-  align-self: stretch;
+  background: var(--surface);
 }
 
 .garage-card__content {
@@ -487,7 +595,7 @@ h1 {
   min-width: 32px;
   min-height: 27px;
   padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--line-light) 12%, transparent);
+  border: 1px solid var(--line-subtle);
 }
 
 /* Forza-style paired rank + PI badges. */
@@ -500,7 +608,7 @@ h1 {
 
 .garage-performance__pi {
   min-width: 48px;
-  border-color: color-mix(in srgb, var(--line-light) 20%, transparent);
+  border-color: var(--line);
   color: var(--text-bright);
   background: var(--shade-deep);
   font-size: 14px;
@@ -568,19 +676,18 @@ h1 {
 .hud-display-card select {
   min-height: 34px;
   padding: 6px 8px;
-  border: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
-  border-radius: 3px;
-  color: var(--text-soft);
-  background: color-mix(in srgb, var(--line) 6%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface-deep);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
   letter-spacing: 0.04em;
 }
 
 .events-sort-control select:focus-visible,
 .hud-display-card select:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
-  outline: none;
+  border-color: var(--accent);
 }
 
 .events-grid {
@@ -600,9 +707,9 @@ h1 {
   --events-mode-color: var(--notice);
   position: relative;
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--events-mode-color) 34%, color-mix(in srgb, var(--line) 16%, transparent));
+  border: 1px solid color-mix(in srgb, var(--events-mode-color) 34%, var(--line));
   border-left: 3px solid var(--events-mode-color);
-  background: color-mix(in srgb, var(--shade) 65%, transparent);
+  background: var(--surface);
 }
 
 .events-card__open {
@@ -620,12 +727,7 @@ h1 {
 }
 
 .events-card__open:hover {
-  background: color-mix(in srgb, var(--line) 3%, transparent);
-}
-
-.events-card__open:focus-visible {
-  outline: 1px solid var(--events-mode-color);
-  outline-offset: -1px;
+  background: var(--surface-hover);
 }
 
 .events-card__id {
@@ -634,7 +736,7 @@ h1 {
   width: 82px;
   min-height: 82px;
   color: var(--text);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--line) 8%, transparent), color-mix(in srgb, var(--line) 2%, transparent));
+  background: var(--surface-deep);
   font-size: 28px;
   font-weight: 800;
   letter-spacing: -0.04em;
@@ -670,9 +772,9 @@ h1 {
   align-items: center;
   min-height: 27px;
   padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--line) 22%, transparent);
+  border: 1px solid var(--line);
   color: var(--text);
-  background: color-mix(in srgb, var(--shade) 65%, transparent);
+  background: var(--surface-deep);
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -723,20 +825,18 @@ h1 {
 
 .events-grid .events-card:hover,
 .events-grid .events-card:focus-visible {
-  outline: none;
   border-color: var(--events-mode-color);
-  background: color-mix(in srgb, var(--line) 9%, transparent);
+  background: var(--surface-hover);
 }
 
 .events-create-area {
   margin-bottom: 24px;
   padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
 }
 
-.events-create-area__heading,
-.events-detail-view__header {
+.events-create-area__heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -787,10 +887,10 @@ h1 {
   width: 100%;
   min-height: 34px;
   padding: 7px 9px;
-  border: 1px solid color-mix(in srgb, var(--line) 24%, transparent);
-  border-radius: 3px;
+  border: 1px solid var(--line);
+  border-radius: 0;
   color: var(--text);
-  background: color-mix(in srgb, var(--shade) 80%, transparent);
+  background: var(--surface-deep);
   font-size: 14px;
   font-weight: 650;
   letter-spacing: 0.02em;
@@ -837,19 +937,18 @@ h1 {
   width: min(100%, 520px);
   margin: auto;
   padding: 22px;
-  border: 1px solid color-mix(in srgb, var(--line) 24%, transparent);
-  border-left: 4px solid var(--accent);
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 42%),
-    var(--bg);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
   box-shadow: 0 20px 50px color-mix(in srgb, var(--shadow) 55%, transparent);
 }
 
 .connect-guide__content h2 {
   margin: 8px 0 0;
   color: var(--text);
-  font-size: 20px;
-  letter-spacing: 0.08em;
+  font-family: var(--font-readout);
+  font-size: var(--type-heading);
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .connect-guide__intro {
@@ -870,8 +969,8 @@ h1 {
 }
 
 .connect-guide__steps li::marker {
-  color: var(--accent);
-  font-weight: 800;
+  color: var(--text-muted);
+  font-weight: 600;
 }
 
 .connect-guide__steps li {
@@ -888,12 +987,13 @@ h1 {
   width: fit-content;
   margin-top: 6px;
   padding: 6px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  border-radius: 3px;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  font-size: 22px;
-  font-weight: 800;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface-deep);
+  font-family: var(--font-readout);
+  font-size: 24px;
+  font-weight: 600;
   letter-spacing: 0.06em;
   user-select: text;
 }
@@ -917,7 +1017,6 @@ h1 {
   height: 10px;
   border-radius: 50%;
   background: var(--warning);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--warning) 70%, transparent);
 }
 
 .connect-guide[data-stage='waiting'] .connect-guide__dot {
@@ -932,7 +1031,6 @@ h1 {
 
 .connect-guide[data-stage='connected'] .connect-guide__dot {
   background: var(--accent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 75%, transparent);
 }
 
 .connect-guide[data-stage='problem'] .connect-guide__status {
@@ -943,7 +1041,6 @@ h1 {
 
 .connect-guide[data-stage='problem'] .connect-guide__dot {
   background: var(--alert);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--alert) 65%, transparent);
 }
 
 @keyframes connect-guide-pulse {
@@ -979,8 +1076,8 @@ h1 {
   background: var(--accent);
 }
 
-.connect-guide .connect-guide__done:hover,
-.connect-guide .connect-guide__done:focus-visible {
+.connect-guide .settings-button.connect-guide__done:not(:disabled):hover,
+.connect-guide .settings-button.connect-guide__done:not(:disabled):focus-visible {
   border-color: var(--accent-hover);
   background: var(--accent-hover);
 }
@@ -1002,16 +1099,18 @@ h1 {
 .confirm-dialog__content {
   width: min(100%, 390px);
   padding: 18px;
-  border: 1px solid color-mix(in srgb, var(--line) 24%, transparent);
-  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
   box-shadow: 0 20px 50px color-mix(in srgb, var(--shadow) 55%, transparent);
 }
 
 .confirm-dialog__content h3 {
   margin: 0;
   color: var(--text);
-  font-size: 13px;
-  letter-spacing: 0.16em;
+  font-family: var(--font-readout);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .confirm-dialog__content p {
@@ -1052,8 +1151,8 @@ h1 {
   background: var(--accent);
 }
 
-.confirm-dialog .confirm-dialog__no:hover,
-.confirm-dialog .confirm-dialog__no:focus-visible {
+.confirm-dialog .settings-button.confirm-dialog__no:not(:disabled):hover,
+.confirm-dialog .settings-button.confirm-dialog__no:not(:disabled):focus-visible {
   border-color: var(--accent-hover);
   background: var(--accent-hover);
 }
@@ -1064,8 +1163,8 @@ h1 {
   background: transparent;
 }
 
-.confirm-dialog .confirm-dialog__yes:hover,
-.confirm-dialog .confirm-dialog__yes:focus-visible {
+.confirm-dialog .settings-button.confirm-dialog__yes:not(:disabled):hover,
+.confirm-dialog .settings-button.confirm-dialog__yes:not(:disabled):focus-visible {
   border-color: var(--danger);
   color: var(--text-on-danger);
   background: var(--danger);
@@ -1108,8 +1207,8 @@ h1 {
 }
 
 .events-run-view__metric--run {
-  border-color: color-mix(in srgb, var(--line) 18%, transparent);
-  background: color-mix(in srgb, var(--line) 4%, transparent);
+  border-color: var(--line);
+  background: var(--surface);
 }
 
 .events-run-view__metric-label {
@@ -1121,8 +1220,9 @@ h1 {
 
 .events-run-view__metric-value {
   color: var(--best);
-  font-size: 21px;
-  font-weight: 850;
+  font-family: var(--font-readout);
+  font-size: 24px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
   white-space: nowrap;
@@ -1135,8 +1235,8 @@ h1 {
 
 .events-run-table-section {
   padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  background: color-mix(in srgb, var(--line) 5%, transparent);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
 }
 
 .events-run-table-section__heading {
@@ -1163,8 +1263,8 @@ h1 {
 
 .events-run-table-wrap {
   overflow-x: auto;
-  border: 1px solid color-mix(in srgb, var(--line) 14%, transparent);
-  background: color-mix(in srgb, var(--shade) 58%, transparent);
+  border: 1px solid var(--line-subtle);
+  background: var(--surface-deep);
 }
 
 .events-run-table {
@@ -1207,7 +1307,7 @@ h1 {
 }
 
 .events-run-table tbody tr + tr {
-  border-top: 1px solid color-mix(in srgb, var(--line) 10%, transparent);
+  border-top: 1px solid var(--line-subtle);
 }
 
 .events-run-table__lap-row {
@@ -1219,12 +1319,11 @@ h1 {
 .events-run-table__lap-row:focus-visible,
 .events-run-table__lap-row[aria-expanded="true"] {
   background: color-mix(in srgb, var(--best) 7%, transparent);
-  outline: none;
 }
 
 .events-lap-detail-row {
   border-top: 1px solid color-mix(in srgb, var(--best) 22%, transparent);
-  background: color-mix(in srgb, var(--shade) 78%, transparent);
+  background: var(--surface-deep);
 }
 
 .events-lap-detail-row > td {
@@ -1240,7 +1339,7 @@ h1 {
 
 .events-lap-detail__map {
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--line) 12%, transparent);
+  border: 1px solid var(--line-subtle);
   background: var(--shade);
 }
 
@@ -1329,7 +1428,7 @@ h1 {
   align-items: stretch;
   gap: 8px;
   padding: 10px 11px 11px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 9%, transparent);
+  border-top: 1px solid var(--line-subtle);
 }
 
 .events-lap-detail__stat {
@@ -1337,8 +1436,8 @@ h1 {
   align-items: center;
   gap: 9px;
   padding: 7px 11px;
-  border: 1px solid color-mix(in srgb, var(--line) 12%, transparent);
-  border-radius: 2px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 0;
   background: transparent;
   font: inherit;
   cursor: pointer;
@@ -1347,13 +1446,13 @@ h1 {
 }
 
 .events-lap-detail__stat[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--line) 26%, transparent);
+  border-color: var(--line-strong);
   opacity: 1;
 }
 
 .events-lap-detail__stat:hover:not(:disabled),
 .events-lap-detail__stat:focus-visible {
-  border-color: color-mix(in srgb, var(--line) 40%, transparent);
+  border-color: var(--line-strong);
   opacity: 1;
 }
 
@@ -1365,7 +1464,7 @@ h1 {
 .events-lap-detail__swatch {
   width: 9px;
   height: 9px;
-  border-radius: 1px;
+  border-radius: 0;
 }
 
 .events-lap-detail__swatch--throttle { background: var(--trace-throttle); }
@@ -1447,8 +1546,8 @@ h1 {
   align-items: center;
   gap: 9px;
   padding: 6px 10px;
-  border: 1px solid color-mix(in srgb, var(--line) 10%, transparent);
-  border-radius: 2px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 0;
   color: var(--text-soft);
   background: transparent;
   font: inherit;
@@ -1462,7 +1561,7 @@ h1 {
 .events-lap-detail__error:hover,
 .events-lap-detail__error:focus-visible,
 .events-lap-detail__error[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--line) 40%, transparent);
+  border-color: var(--line-strong);
 }
 
 .events-lap-detail__error-where {
@@ -1495,8 +1594,8 @@ h1 {
 .events-lap-detail__legend-all {
   margin-left: auto;
   padding: 7px 13px;
-  border: 1px solid color-mix(in srgb, var(--line) 12%, transparent);
-  border-radius: 2px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 0;
   color: var(--text-muted);
   background: transparent;
   font: inherit;
@@ -1509,7 +1608,7 @@ h1 {
 .events-lap-detail__legend-all:hover,
 .events-lap-detail__legend-all:focus-visible {
   color: var(--text);
-  border-color: color-mix(in srgb, var(--line) 40%, transparent);
+  border-color: var(--line-strong);
 }
 
 .events-lap-detail__tooltip {
@@ -1518,9 +1617,9 @@ h1 {
   left: 10px;
   max-width: 280px;
   padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--line) 15%, transparent);
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--shade) 95%, transparent);
+  border: 1px solid var(--line-subtle);
+  border-radius: 0;
+  background: var(--panel);
   backdrop-filter: blur(4px);
   font-size: 11px;
   font-weight: 600;
@@ -1544,7 +1643,8 @@ h1 {
 
 .events-lap-detail__tooltip-value {
   color: var(--text);
-  font-family: monospace;
+  font-family: var(--font-readout);
+  font-variant-numeric: tabular-nums;
   text-align: right;
   flex-shrink: 0;
 }
@@ -1561,14 +1661,15 @@ h1 {
   color: var(--text-muted);
   font-weight: 800;
   text-align: center;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 9%, transparent);
+  border-bottom: 1px solid var(--line-subtle);
 }
 
 .events-lap-detail__tooltip-table td {
   padding: 2px 3px;
   color: var(--text);
   text-align: center;
-  font-family: monospace;
+  font-family: var(--font-readout);
+  font-variant-numeric: tabular-nums;
   font-size: 10px;
 }
 
@@ -1582,7 +1683,7 @@ h1 {
 .events-lap-detail__tooltip-caption {
   padding-top: 3px;
   margin-top: 4px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 9%, transparent);
+  border-top: 1px solid var(--line-subtle);
   color: var(--text-slate);
   font-size: 9px;
   font-weight: 600;
@@ -1611,7 +1712,6 @@ h1 {
 .events-run-table__sort[aria-sort="ascending"],
 .events-run-table__sort[aria-sort="descending"] {
   color: var(--accent);
-  outline: none;
 }
 
 .events-run-table__sort[aria-sort="ascending"]::after { content: ' ↑'; }
@@ -1619,7 +1719,9 @@ h1 {
 
 .events-run-table__time {
   color: var(--text);
-  font-weight: 750;
+  font-family: var(--font-readout);
+  font-size: 15px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -1627,8 +1729,8 @@ h1 {
 .events-run-table__time[data-tone="second"] { color: var(--accent); }
 .events-run-table__time.is-missing { color: var(--text-faint); }
 
-
 .events-detail-view__actions {
+  margin-left: auto;
   display: flex;
   gap: 8px;
 }
@@ -1638,9 +1740,23 @@ h1 {
   margin-top: 0;
 }
 
-.events-detail-view__header {
-  padding-bottom: 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 14%, transparent);
+
+/* Back to the immediate parent, named: ← EVENTS, ← EVENT, ← RECORDING. */
+.detail-back {
+  padding: 4px 0;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.detail-back:hover,
+.detail-back:focus-visible {
+  color: var(--accent);
 }
 
 .events-detail-view__heading {
@@ -1671,8 +1787,9 @@ h1 {
 
 .events-detail-view__absolute-best-value {
   color: var(--best);
-  font-size: 21px;
-  font-weight: 850;
+  font-family: var(--font-readout);
+  font-size: 24px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
   white-space: nowrap;
@@ -1697,7 +1814,6 @@ h1 {
 .events-detail-view__title:hover,
 .events-detail-view__title:focus-visible {
   color: var(--accent);
-  outline: none;
 }
 
 .events-detail-view__title-input {
@@ -1732,9 +1848,9 @@ h1 {
   align-items: center;
   min-height: 27px;
   padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--line) 22%, transparent);
+  border: 1px solid var(--line);
   color: var(--text);
-  background: color-mix(in srgb, var(--shade) 65%, transparent);
+  background: var(--surface-deep);
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -1765,8 +1881,8 @@ h1 {
 .events-detail-view__notes {
   width: min(100%, 680px);
   padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  background: color-mix(in srgb, var(--line) 5%, transparent);
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .events-detail-view__notes[hidden] {
@@ -1793,8 +1909,8 @@ h1 {
 .event-recorder {
   margin-top: 24px;
   padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  background: color-mix(in srgb, var(--line) 5%, transparent);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
 }
 
 .event-recorder__heading,
@@ -1838,7 +1954,7 @@ h1 {
 .event-recorder__status[data-state="stopped"] { color: var(--danger); }
 .event-recorder__status[hidden] { display: none; }
 
-.event-recorder__record {
+.settings-button.event-recorder__record {
   width: auto;
   margin-top: 0;
   border-color: var(--accent);
@@ -1846,8 +1962,11 @@ h1 {
   background: var(--accent);
 }
 
-.event-recorder__record:hover,
-.event-recorder__record:focus-visible { background: var(--accent-hover); }
+.settings-button.event-recorder__record:not(:disabled):hover,
+.settings-button.event-recorder__record:not(:disabled):focus-visible {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
 
 .event-recorder__controls .settings-button--danger { width: auto; margin-top: 0; }
 
@@ -1876,7 +1995,7 @@ h1 {
 .event-recorder__feedback[hidden] { display: none; }
 
 .event-runs {
-  border-top: 1px solid color-mix(in srgb, var(--line) 12%, transparent);
+  border-top: 1px solid var(--line-subtle);
   padding-top: 13px;
 }
 
@@ -1901,7 +2020,6 @@ h1 {
 .event-run-row__sort[aria-sort="ascending"],
 .event-run-row__sort[aria-sort="descending"] {
   color: var(--accent);
-  outline: none;
 }
 .event-run-row__sort[aria-sort="ascending"]::after { content: ' ↑'; }
 .event-run-row__sort[aria-sort="descending"]::after { content: ' ↓'; }
@@ -1915,8 +2033,8 @@ h1 {
   gap: 10px;
   min-height: 42px;
   padding: 7px 9px;
-  border: 1px solid color-mix(in srgb, var(--line) 14%, transparent);
-  background: color-mix(in srgb, var(--shade) 55%, transparent);
+  border: 1px solid var(--line-subtle);
+  background: var(--surface-deep);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -1926,14 +2044,13 @@ h1 {
 .event-run-row:hover,
 .event-run-row:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 58%, transparent);
-  background: color-mix(in srgb, var(--line) 8%, transparent);
-  outline: none;
+  background: var(--surface-hover);
 }
 
 .event-run-row__cell { min-width: 0; color: var(--text); font-size: 13px; }
 .event-run-row__label { display: block; margin-bottom: 3px; color: var(--text-subtle); font-size: 10px; font-weight: 800; letter-spacing: 0.1em; }
 .event-run-row__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.event-run-row__time { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 800; }
+.event-run-row__time { color: var(--accent); font-family: var(--font-readout); font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 600; }
 
 @media (max-width: 760px) {
   .event-run-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1989,19 +2106,6 @@ h1 {
   }
 }
 
-
-@media (max-width: 620px) {
-  .garage-current-car {
-    grid-template-columns: 92px minmax(0, 1fr);
-    gap: 12px;
-  }
-
-  .garage-current-car__image {
-    width: 92px;
-    height: 92px;
-  }
-}
-
 .settings-tab-panel {
   min-height: 0;
   margin-top: 24px;
@@ -2031,7 +2135,7 @@ h1 {
 .driver-analysis-warning {
   padding: 14px 16px;
   border: 1px solid color-mix(in srgb, var(--notice) 48%, transparent);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--notice-soft);
   background: color-mix(in srgb, var(--notice) 8%, transparent);
 }
@@ -2053,9 +2157,9 @@ h1 {
 .driver-analysis-recorder {
   margin-top: 14px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--shade) 68%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: var(--panel);
 }
 
 .driver-analysis-recorder__main,
@@ -2120,20 +2224,20 @@ h1 {
   min-width: 102px;
 }
 
-.driver-analysis-record--ready {
-  border-color: color-mix(in srgb, var(--accent) 68%, transparent);
+.settings-button.driver-analysis-record--ready {
+  border-color: var(--accent);
   color: var(--text-on-accent-deep);
   background: var(--accent);
 }
 
-.driver-analysis-record--ready:hover,
-.driver-analysis-record--ready:focus-visible {
+.settings-button.driver-analysis-record--ready:not(:disabled):hover,
+.settings-button.driver-analysis-record--ready:not(:disabled):focus-visible {
   border-color: var(--accent-pressed);
   background: var(--accent-pressed);
 }
 
 .driver-analysis-hotkey {
-  border-top: 1px solid color-mix(in srgb, var(--line) 12%, transparent);
+  border-top: 1px solid var(--line-subtle);
 }
 
 .driver-analysis-hotkey__control output {
@@ -2146,7 +2250,6 @@ h1 {
   text-align: right;
 }
 
-
 .driver-analysis-history-view[hidden],
 .driver-analysis-detail-view[hidden] {
   display: none;
@@ -2158,9 +2261,9 @@ h1 {
 
 .driver-analysis-history__list {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--shade) 68%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
 }
 
 .driver-analysis-history__list:empty {
@@ -2176,7 +2279,7 @@ h1 {
 }
 
 .driver-analysis-history-row + .driver-analysis-history-row {
-  border-top: 1px solid color-mix(in srgb, var(--line) 12%, transparent);
+  border-top: 1px solid var(--line-subtle);
 }
 
 .driver-analysis-history-row__meta time,
@@ -2200,7 +2303,6 @@ h1 {
   font-weight: 800;
   letter-spacing: 0.08em;
 }
-
 
 /* Every headline carries its own result: a recording card lists several cars. */
 .driver-analysis-history-row strong[data-result='insufficient'],
@@ -2240,14 +2342,13 @@ h1 {
   line-height: 1.4;
 }
 
-
 .driver-analysis-stats {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 6px 14px;
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 10%, transparent);
+  border-top: 1px solid var(--line-subtle);
   font-size: 12px;
   line-height: 1.35;
 }
@@ -2285,7 +2386,6 @@ h1 {
   min-width: 84px;
 }
 
-
 /* Recording grouping: meta column, cars/drives label */
 .driver-analysis-history-row__cars-drives {
   display: block;
@@ -2319,8 +2419,6 @@ h1 {
   letter-spacing: 0.08em;
   flex-shrink: 0;
 }
-
-
 
 .driver-analysis-detail-view__body {
   display: grid;
@@ -2384,14 +2482,15 @@ h1 {
   gap: 6px;
   min-width: 0;
   padding: 10px 14px;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  background: color-mix(in srgb, var(--line) 4%, transparent);
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .driver-analysis-detail-view__overview-metric strong {
   color: var(--text);
-  font-size: 16px;
-  font-weight: 850;
+  font-family: var(--font-readout);
+  font-size: 18px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
   white-space: nowrap;
@@ -2437,8 +2536,30 @@ h1 {
 
 .settings-section__heading h2 {
   color: var(--text);
-  font-size: 14px;
-  letter-spacing: 0.18em;
+  font-family: var(--font-readout);
+  font-size: var(--type-heading);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+/* The header title already names the tab, so the panel's page heading is
+   kept for assistive technology only. Its row keeps any actions, right-aligned. */
+.settings-page-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.settings-section__heading:has(> .settings-page-title) {
+  justify-content: flex-end;
+}
+
+.settings-section__heading:has(> .settings-page-title:only-child) {
+  margin: 0;
 }
 
 .settings-section__heading span {
@@ -2453,16 +2574,16 @@ h1 {
 
 .calibration-help-button {
   display: inline-grid;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  border-radius: 50%;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface);
   place-items: center;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
 }
@@ -2470,16 +2591,22 @@ h1 {
 .calibration-help-button:hover,
 .calibration-help-button:focus-visible {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  outline: none;
+  color: var(--text-on-accent);
+  background: var(--accent);
 }
 
 .layout-list,
 .visibility-list {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--shade) 68%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+}
+
+/* The HUD layout list is the HUD page's raised plate. */
+.layout-list {
+  border-color: var(--line-strong);
+  background: var(--panel);
 }
 
 .layout-list[hidden],
@@ -2489,61 +2616,6 @@ h1 {
 
 .hud-layout-mode {
   margin: 24px 0 16px;
-}
-
-.hud-layout-mode__options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.hud-layout-mode__option {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
-  padding: 12px 13px;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--shade) 68%, transparent);
-  cursor: pointer;
-}
-
-.hud-layout-mode__option:has(input:checked) {
-  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-
-.hud-layout-mode__option:focus-within {
-  outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  outline-offset: 2px;
-}
-
-.hud-layout-mode__option input {
-  flex: 0 0 auto;
-  width: 15px;
-  height: 15px;
-  margin: 2px 0 0;
-  accent-color: var(--accent);
-}
-
-.hud-layout-mode__option strong,
-.hud-layout-mode__option small {
-  display: block;
-}
-
-.hud-layout-mode__option strong {
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-}
-
-.hud-layout-mode__option small {
-  margin-top: 5px;
-  color: var(--text-subtle);
-  font-size: 12px;
-  line-height: 1.35;
 }
 
 .layout-row,
@@ -2566,7 +2638,7 @@ h1 {
 
 .layout-row + .layout-row,
 .visibility-row + .visibility-row {
-  border-top: 1px solid color-mix(in srgb, var(--line) 12%, transparent);
+  border-top: 1px solid var(--line-subtle);
 }
 
 .layout-row h3,
@@ -2621,7 +2693,6 @@ h1 {
 }
 
 .layout-row__expand:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
   outline-offset: 4px;
 }
 
@@ -2647,50 +2718,66 @@ h1 {
 
 .accordion-panel {
   padding: 0 16px 16px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 12%, transparent);
+  border-top: 1px solid var(--line-subtle);
 }
 
 .accordion-panel .settings-section__heading {
   margin-top: 14px;
 }
 
+/* Actions are dark at rest and fill with lime on hover or keyboard focus. */
 .settings-button {
   min-width: 70px;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
-  border-radius: 3px;
-  color: var(--text-soft);
-  background: color-mix(in srgb, var(--line) 6%, transparent);
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface);
   font-size: 13px;
-  font-weight: 750;
-  letter-spacing: 0.14em;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   cursor: pointer;
 }
 
-.settings-button:hover,
-.settings-button:focus-visible {
-  border-color: color-mix(in srgb, var(--line) 58%, transparent);
-  background: color-mix(in srgb, var(--line) 14%, transparent);
-  outline: none;
+.settings-button:not(:disabled):hover,
+.settings-button:not(:disabled):focus-visible {
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  background: var(--accent);
 }
 
 .settings-button:disabled,
 .visibility-toggle:disabled {
-  border-color: color-mix(in srgb, var(--line) 14%, transparent);
+  border-color: var(--line-subtle);
   color: var(--text-faint);
-  background: color-mix(in srgb, var(--line) 4%, transparent);
+  background: var(--surface-deep);
   cursor: not-allowed;
 }
 
-.settings-button--primary {
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  color: var(--accent);
+/* The one next step of a screen is filled with lime at rest. The compound
+   selector keeps it above the base button rules. */
+.settings-button.settings-button--ready {
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+
+.settings-button.settings-button--ready:not(:disabled):hover,
+.settings-button.settings-button--ready:not(:disabled):focus-visible {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.settings-button.settings-button--ready:disabled {
+  border-color: var(--line-subtle);
+  color: var(--text-faint);
+  background: var(--surface-deep);
 }
 
 .hud-opacity-reset:disabled {
-  border-color: color-mix(in srgb, var(--line) 14%, transparent);
+  border-color: var(--line-subtle);
   color: var(--text-faint);
-  background: color-mix(in srgb, var(--line) 4%, transparent);
+  background: var(--surface-deep);
   cursor: not-allowed;
 }
 
@@ -2706,22 +2793,21 @@ h1 {
   background: color-mix(in srgb, var(--caution) 16%, transparent);
 }
 
+/* Switch: a square knob, lime and on the right when on. */
 .visibility-toggle {
-  width: 70px;
-  height: 31px;
+  width: 56px;
+  height: 30px;
   flex: 0 0 auto;
   padding: 4px;
-  border: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--line) 6%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: var(--surface-deep);
   cursor: pointer;
 }
 
-.visibility-toggle:hover,
-.visibility-toggle:focus-visible {
-  border-color: color-mix(in srgb, var(--line) 58%, transparent);
-  background: color-mix(in srgb, var(--line) 14%, transparent);
-  outline: none;
+.visibility-toggle:not(:disabled):hover {
+  border-color: var(--accent);
+  background: var(--surface-hover);
 }
 
 .visibility-toggle__track {
@@ -2730,8 +2816,8 @@ h1 {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--line) 12%, transparent);
+  border-radius: 0;
+  background: var(--surface-deep);
 }
 
 .visibility-toggle__thumb {
@@ -2740,37 +2826,20 @@ h1 {
   top: 0;
   left: 0;
   width: 20px;
-  height: 21px;
+  height: 20px;
   border-radius: 0;
-  background: var(--text);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--shadow) 45%, transparent);
+  background: var(--text-subtle);
   transform: translateX(0);
   transition: transform 140ms ease, background-color 140ms ease;
 }
 
 .visibility-toggle[data-state='on'] .visibility-toggle__thumb {
-  background: var(--text);
-  transform: translateX(40px);
+  background: var(--accent);
+  transform: translateX(26px);
 }
 
-.visibility-toggle[data-state='on'] {
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-
-.visibility-toggle[data-state='on'] .visibility-toggle__track {
-  background: color-mix(in srgb, var(--accent) 48%, transparent);
-}
-
-.visibility-toggle[data-state='off'] {
-  border-color: color-mix(in srgb, var(--line) 28%, transparent);
-  background: color-mix(in srgb, var(--line) 6%, transparent);
-}
-
-.visibility-toggle[data-state='off']:hover,
-.visibility-toggle[data-state='off']:focus-visible {
-  border-color: color-mix(in srgb, var(--line) 58%, transparent);
-  background: color-mix(in srgb, var(--line) 14%, transparent);
+.visibility-toggle:disabled .visibility-toggle__thumb {
+  background: var(--text-faint);
 }
 
 .settings-button[hidden] {
@@ -2782,7 +2851,7 @@ h1 {
 }
 
 .visibility-row:hover {
-  background: color-mix(in srgb, var(--line) 5%, transparent);
+  background: var(--surface-hover);
 }
 
 .visibility-row input {
@@ -2794,9 +2863,9 @@ h1 {
 }
 
 .calibration-card {
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--shade) 68%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: var(--panel);
 }
 
 .calibration-card {
@@ -2806,19 +2875,19 @@ h1 {
 .calibration-help {
   margin: -2px 0 10px;
   padding: 13px 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
-  border-radius: 4px;
+  border: 1px solid var(--line);
+  border-radius: 0;
   color: var(--text-muted);
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  background: var(--surface-deep);
   font-size: 13px;
   line-height: 1.4;
 }
 
 .calibration-help__title {
   margin-bottom: 9px;
-  color: var(--accent);
+  color: var(--text);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.16em;
 }
 
@@ -2886,8 +2955,8 @@ h1 {
 
 .calibration-table-wrap {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--line) 12%, transparent);
-  border-radius: 3px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 0;
 }
 
 .calibration-table {
@@ -2937,7 +3006,7 @@ h1 {
 }
 
 .calibration-table tbody tr + tr {
-  border-top: 1px solid color-mix(in srgb, var(--line) 10%, transparent);
+  border-top: 1px solid var(--line-subtle);
 }
 
 .calibration-table td:first-child {
@@ -2999,16 +3068,18 @@ h1 {
   color: var(--danger-text);
 }
 
-.settings-button--danger:hover,
-.settings-button--danger:focus-visible {
-  border-color: color-mix(in srgb, var(--alert) 75%, transparent);
-  background: color-mix(in srgb, var(--alert) 10%, transparent);
+/* Destructive actions fill red, never lime, on hover or keyboard focus. */
+.settings-button--danger:not(:disabled):hover,
+.settings-button--danger:not(:disabled):focus-visible {
+  border-color: var(--danger);
+  color: var(--text-on-danger);
+  background: var(--danger);
 }
 
 .settings-button--danger:disabled {
-  border-color: color-mix(in srgb, var(--line) 14%, transparent);
+  border-color: var(--line-subtle);
   color: var(--text-faint);
-  background: color-mix(in srgb, var(--line) 4%, transparent);
+  background: var(--surface-deep);
   cursor: not-allowed;
 }
 
@@ -3040,7 +3111,7 @@ h1 {
   gap: 16px;
   height: var(--settings-footer-height);
   padding: 0 30px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
+  border-top: 1px solid var(--line);
   background: var(--bg);
 }
 
@@ -3068,7 +3139,7 @@ h1 {
 .settings-footer__version:hover:not(:disabled),
 .settings-footer__version:focus-visible {
   color: var(--text);
-  outline: 1px solid color-mix(in srgb, var(--line) 40%, transparent);
+  outline: 1px solid var(--line-strong);
   outline-offset: 2px;
 }
 
@@ -3082,7 +3153,7 @@ h1 {
   position: relative;
   padding: 4px 8px;
   border: 1px solid transparent;
-  border-radius: 3px;
+  border-radius: 0;
   color: var(--text-subtle);
   background: transparent;
   font-size: 11px;
@@ -3095,8 +3166,7 @@ h1 {
 .settings-footer__help:hover,
 .settings-footer__help:focus-visible {
   color: var(--text);
-  background: color-mix(in srgb, var(--line) 7%, transparent);
-  outline: none;
+  background: var(--surface-hover);
 }
 
 .settings-help-menu {
@@ -3105,9 +3175,9 @@ h1 {
   right: 30px;
   margin-bottom: 6px;
   min-width: 180px;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--shade) 92%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel);
   box-shadow: 0 10px 30px color-mix(in srgb, var(--shadow) 50%, transparent);
   z-index: 1000;
 }
@@ -3121,7 +3191,7 @@ h1 {
   width: 100%;
   padding: 10px 14px;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 10%, transparent);
+  border-bottom: 1px solid var(--line-subtle);
   color: var(--text);
   background: transparent;
   font-size: 13px;
@@ -3137,15 +3207,14 @@ h1 {
 
 .settings-help-menu button:hover,
 .settings-help-menu button:focus-visible {
-  background: color-mix(in srgb, var(--line) 10%, transparent);
-  outline: none;
+  background: var(--surface-hover);
 }
 
 .display-settings__list {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--shade) 68%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
 }
 
 .display-setting-row {
@@ -3160,7 +3229,7 @@ h1 {
 }
 
 .display-setting-row + .display-setting-row {
-  border-top: 1px solid color-mix(in srgb, var(--line) 12%, transparent);
+  border-top: 1px solid var(--line-subtle);
 }
 
 .display-setting-row__copy {
@@ -3193,9 +3262,9 @@ h1 {
   flex: 0 0 auto;
   gap: 4px;
   padding: 3px;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--shade) 72%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface-deep);
 }
 
 .unit-option {
@@ -3215,10 +3284,10 @@ h1 {
   display: block;
   padding: 7px 10px;
   border: 1px solid transparent;
-  border-radius: 2px;
-  color: var(--text-subtle);
+  border-radius: 0;
+  color: var(--text-muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.12em;
   text-align: center;
 }
@@ -3226,37 +3295,32 @@ h1 {
 .unit-option:hover span,
 .unit-option input:focus-visible + span {
   color: var(--text);
-  background: color-mix(in srgb, var(--line) 7%, transparent);
+  background: var(--surface-hover);
 }
 
 .unit-option input:focus-visible + span {
-  outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
+/* The selected unit keeps its lime fill without hover. */
 .unit-option input:checked + span {
-  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  background: var(--accent);
 }
 
 .shift-light-brightness-card {
   margin-bottom: 18px;
-  padding: 15px 16px 14px;
-  border: 1px solid color-mix(in srgb, var(--line) 24%, transparent);
-  border-left: 4px solid var(--accent);
+  padding: 16px 18px;
+  border: 1px solid var(--line);
   border-radius: 0;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 42%),
-    color-mix(in srgb, var(--shade) 82%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--shade) 76%, transparent);
+  background: var(--surface);
 }
 
+/* The redline setting keeps a red edge: it controls the red alert. */
 .shift-light-brightness-card--redline {
-  border-left-color: var(--alert);
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--alert) 8%, transparent), transparent 42%),
-    color-mix(in srgb, var(--shade) 82%, transparent);
+  border-left: 4px solid var(--alert);
 }
 
 .shift-light-brightness-card--redline .shift-light-brightness-card__heading span {
@@ -3283,8 +3347,8 @@ h1 {
 
 .shift-light-cue-toggle {
   margin-bottom: 18px;
-  border: 1px solid color-mix(in srgb, var(--line) 18%, transparent);
-  background: color-mix(in srgb, var(--shade) 68%, transparent);
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .shift-light-brightness-card__heading {
@@ -3331,7 +3395,7 @@ h1 {
 
 .brightness-control {
   width: 100%;
-  padding: 4px 0;
+  padding: 10px 0 6px;
 }
 
 .brightness-control input {
@@ -3340,9 +3404,9 @@ h1 {
   appearance: none;
   display: block;
   width: 100%;
-  height: 28px;
+  height: 8px;
   margin: 0;
-  border: 1px solid color-mix(in srgb, var(--line) 34%, transparent);
+  border: 0;
   border-radius: 0;
   background: linear-gradient(
     90deg,
@@ -3353,39 +3417,38 @@ h1 {
 }
 
 .brightness-control input::-webkit-slider-runnable-track {
-  height: 26px;
+  height: 8px;
   border: 0;
   background: transparent;
 }
 
 .brightness-control input::-webkit-slider-thumb {
   appearance: none;
-  width: 13px;
-  height: 36px;
-  margin-top: -5px;
-  border: 2px solid var(--text);
+  width: 12px;
+  height: 22px;
+  margin-top: -7px;
+  border: 0;
   border-radius: 0;
-  background: var(--bg);
-  box-shadow: 0 0 0 1px var(--bg);
+  background: var(--text);
+  box-shadow: 0 0 0 2px var(--surface);
 }
 
 .brightness-control input::-moz-range-track {
-  height: 26px;
+  height: 8px;
   border: 0;
   background: transparent;
 }
 
 .brightness-control input::-moz-range-thumb {
-  width: 13px;
-  height: 36px;
-  border: 2px solid var(--text);
+  width: 12px;
+  height: 22px;
+  border: 0;
   border-radius: 0;
-  background: var(--bg);
+  background: var(--text);
 }
 
 .brightness-control input:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 82%, transparent);
-  outline-offset: 3px;
+  outline-offset: 8px;
 }
 
 .brightness-control input:disabled {
@@ -3412,7 +3475,8 @@ h1 {
 }
 
 .hud-display-card select:disabled {
-  opacity: 0.6;
+  border-color: var(--line-subtle);
+  color: var(--text-faint);
   cursor: not-allowed;
 }
 
@@ -3423,49 +3487,6 @@ h1 {
   line-height: 1.3;
 }
 
-.telemetry-route-card {
-  margin-top: 0;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--line) 16%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--shade) 68%, transparent);
-}
-
-#telemetry-route-detail {
-  margin-top: 0;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.4;
-  user-select: text;
-}
-
-.telemetry-setup-guide__title {
-  margin: 0 0 7px;
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-}
-
-.telemetry-setup-guide ol {
-  margin: 0;
-  padding-left: 17px;
-}
-
-.telemetry-setup-guide li + li {
-  margin-top: 4px;
-}
-
-.telemetry-setup-guide strong {
-  color: var(--text-soft);
-  font-weight: 650;
-}
-
-#telemetry-route-retry {
-  width: 100%;
-  margin-top: 10px;
-}
-
 @media (max-width: 620px) {
   .settings-header__topline {
     align-items: stretch;
@@ -3473,7 +3494,6 @@ h1 {
   }
 
   .settings-header__connection {
-    width: 100%;
+    margin-left: 0;
   }
-
 }

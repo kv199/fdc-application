@@ -45,8 +45,8 @@
   const status = document.getElementById('settings-status')
   const telemetryStatus = document.getElementById('telemetry-status')
   const telemetryStatusLabel = document.getElementById('telemetry-status-label')
-  const telemetryRouteCard = document.getElementById('telemetry-route-card')
-  const telemetryRouteRetry = document.getElementById('telemetry-route-retry')
+  const telemetryStatusButton = document.getElementById('telemetry-status-button')
+  const settingsIntros = [...document.querySelectorAll('[data-settings-intro]')]
   const connectGuide = document.getElementById('connect-guide')
   const connectGuideStatusLabel = document.getElementById('connect-guide-status-label')
   const connectGuideHint = document.getElementById('connect-guide-hint')
@@ -361,10 +361,6 @@
       renderGarageVariants(null)
       return
     }
-    const image = document.createElement('div')
-    image.className = 'garage-current-car__image'
-    image.textContent = 'IMAGE'
-    image.setAttribute('aria-label', `Image placeholder for ${garageDisplayName(vehicle)}`)
     const content = document.createElement('div')
     content.className = 'garage-current-car__content'
     const name = document.createElement('button')
@@ -425,7 +421,7 @@
       input.addEventListener('blur', finish, { once: true })
     })
     content.append(name, ...(group ? [group] : []), details)
-    garageCurrentCar.append(image, content)
+    garageCurrentCar.append(content)
     renderGarageVariants(vehicle)
   }
 
@@ -447,11 +443,6 @@
       card.dataset.carOrdinal = String(vehicle.carOrdinal)
       card.dataset.carClass = vehicle.classLabel || 'unknown'
 
-      const image = document.createElement('div')
-      image.className = 'garage-card__image'
-      image.textContent = 'IMAGE'
-      image.setAttribute('aria-label', `Image placeholder for ${garageDisplayName(vehicle)}`)
-
       const content = document.createElement('div')
       content.className = 'garage-card__content'
       const name = document.createElement('h4')
@@ -469,7 +460,7 @@
       }
 
       content.append(name, meta)
-      card.append(image, content)
+      card.append(content)
       garageGrid.append(card)
     }
     renderGarageCurrent()
@@ -613,6 +604,14 @@
     if (connectionGuideOpen && (opening || stageChanged)) {
       ;(stage === 'connected' ? connectGuideDone : stage === 'problem' ? connectGuideRetry : connectGuideSkip).focus()
     }
+  }
+
+  // The header status opens the same guide at any time: the steps, the live
+  // stage, and RETRY DATA OUT when the receiver has a problem.
+  function openConnectionGuide() {
+    if (!connectGuide || !connectionGuideApi || connectionGuideOpen) return
+    connectionGuideOpen = true
+    renderConnectionGuide()
   }
 
   function closeConnectionGuide() {
@@ -2355,6 +2354,7 @@
     if (!context) return
     const activeTab = settingsTabs.find(tab => tab.dataset.settingsTab === tabName)
     if (settingsTitle) settingsTitle.textContent = activeTab?.textContent.trim() || context
+    for (const intro of settingsIntros) intro.hidden = intro.dataset.settingsIntro !== tabName
     document.title = `FDC · ${context}`
     void call('set_settings_window_context', { context: tabName }).catch(() => undefined)
   }
@@ -2533,27 +2533,49 @@
   const expandedDriverAnalysisStats = new Set()
   const driverAnalysisDriveMaps = new Map()
 
+  const DRIVER_ANALYSIS_BACK_LABELS = {
+    history: { text: '← HISTORY', ariaLabel: 'Back to history' },
+    recording: { text: '← RECORDING', ariaLabel: 'Back to the recording' },
+    car: { text: '← CAR', ariaLabel: 'Back to the car' }
+  }
+
   function setDriverAnalysisView(next) {
     driverAnalysisView = next
     if (driverAnalysisHistoryView) driverAnalysisHistoryView.hidden = next.level !== 'history'
     if (driverAnalysisDetailView) driverAnalysisDetailView.hidden = next.level === 'history'
+    // The header path names the page from this level (RECORDING, CAR, DRIVE).
+    if (driverAnalysisDetailView) driverAnalysisDetailView.dataset.level = next.level
+    if (driverAnalysisDetailBack && next.level !== 'history') {
+      const label = DRIVER_ANALYSIS_BACK_LABELS[driverAnalysisParentLevel(next)]
+      driverAnalysisDetailBack.textContent = label.text
+      driverAnalysisDetailBack.setAttribute('aria-label', label.ariaLabel)
+    }
     renderDriverAnalysisView()
     if (next.level !== 'history' && driverAnalysisDetailBack) driverAnalysisDetailBack.focus()
   }
 
+  // The level BACK leads to. The back label and closeDriverAnalysisLevel both
+  // use it, so they cannot disagree. A recording with one car opens its car
+  // page directly, so that car page leads back to the history.
+  function driverAnalysisParentLevel(view) {
+    if (view.level === 'drive') return 'car'
+    if (view.level === 'car') {
+      const recordings = globalScope.DriverAnalysisHistory?.groupRecordings?.(driverAnalysisHistory) || []
+      const recording = recordings.find(r => String(r.recordingId) === view.recordingId)
+      return recording && recording.sessions.length > 1 ? 'recording' : 'history'
+    }
+    return 'history'
+  }
+
   function closeDriverAnalysisLevel() {
     const { level, recordingId, sessionId } = driverAnalysisView
-    if (level === 'drive') {
+    if (level === 'history') return
+    const parentLevel = driverAnalysisParentLevel(driverAnalysisView)
+    if (parentLevel === 'car') {
       setDriverAnalysisView({ level: 'car', recordingId, sessionId, driveId: null })
-    } else if (level === 'car') {
-      const recordings = globalScope.DriverAnalysisHistory?.groupRecordings?.(driverAnalysisHistory) || []
-      const recording = recordings.find(r => String(r.recordingId) === recordingId)
-      if (recording && recording.sessions.length > 1) {
-        setDriverAnalysisView({ level: 'recording', recordingId, sessionId: null, driveId: null })
-      } else {
-        setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
-      }
-    } else if (level === 'recording') {
+    } else if (parentLevel === 'recording') {
+      setDriverAnalysisView({ level: 'recording', recordingId, sessionId: null, driveId: null })
+    } else {
       setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
     }
   }
@@ -3096,7 +3118,7 @@
       if (recording.sessions.length > 0 && !hasUnfinishedSessions) {
         const detailsButton = document.createElement('button')
         detailsButton.type = 'button'
-        detailsButton.className = 'settings-button driver-analysis-history-row__details-toggle'
+        detailsButton.className = 'settings-button settings-button--ready driver-analysis-history-row__details-toggle'
         detailsButton.textContent = 'DETAILS'
         detailsButton.addEventListener('click', () => {
           if (recording.sessions.length === 1) {
@@ -3561,8 +3583,6 @@
         ? 'connected'
         : 'offline'
     telemetryStatusLabel.textContent = presentation.statusLabel
-    telemetryRouteCard.dataset.tone = presentation.tone
-    telemetryRouteRetry.hidden = !presentation.canRetry
     renderConnectionGuide()
   }
 
@@ -4277,9 +4297,7 @@
     closeDriverAnalysisLevel()
   })
 
-  telemetryRouteRetry.addEventListener('click', () => {
-    void retryDirectSource()
-  })
+  telemetryStatusButton?.addEventListener('click', openConnectionGuide)
   connectGuideRetry?.addEventListener('click', () => {
     void retryDirectSource()
   })

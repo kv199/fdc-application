@@ -128,6 +128,7 @@ waiting, live, stale, offline, or unable to start. Minimize it to keep FDC
 running, and reopen it from the FDC tray icon; its X button quits FDC, asking
 first unless you turned that off. Until the game has sent data once, Configuration opens on a
 setup screen with these steps that switches to **CONNECTED** when data arrives.
+Select the Data Out status in the Configuration header to open it again.
 
 ## Local data and privacy
 
@@ -183,6 +184,12 @@ browser, and the bug form arrives with your FDC version filled in. Click the
 version next to it to copy it.
 Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md),
 never in a public issue.
+
+## Third-party assets
+
+FDC bundles the Barlow and Barlow Condensed typefaces, licensed under the
+SIL Open Font License 1.1. Copyright 2017 The Barlow Project Authors. The font
+files and their license texts are in `overlay/assets/fonts/`.
 
 ## License
 

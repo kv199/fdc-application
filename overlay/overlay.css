@@ -1,11 +1,10 @@
 :root {
   color: var(--hud-text);
   background: transparent;
-  font-family: "Bahnschrift", "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
   font-synthesis: none;
   --gas: var(--telemetry-throttle);
   --brake: var(--telemetry-brake);
-  --rule: var(--hud-rule);
   --panel: var(--hud-panel);
   --redline-background: var(--hud-redline-background);
   --shift-light-brightness-scale: 1;
@@ -78,6 +77,8 @@ body {
   height: 69px;
   overflow: hidden;
   background: var(--panel);
+  /* Grouped is one strip: only its outer top-left and bottom-right are cut. */
+  clip-path: polygon(var(--hud-cut-grouped) 0, 100% 0, 100% calc(100% - var(--hud-cut-grouped)), calc(100% - var(--hud-cut-grouped)) 100%, 0 100%, 0 var(--hud-cut-grouped));
   transform: scale(var(--hud-scale)) scale(var(--hud-user-scale));
   transform-origin: center;
 }
@@ -85,6 +86,10 @@ body {
 .hud > section {
   min-width: 0;
   height: 100%;
+}
+
+.hud:not([data-layout-mode='freeform']) > section + section {
+  box-shadow: inset 1px 0 0 var(--hud-divider);
 }
 
 .tires {
@@ -106,9 +111,10 @@ body {
 
 .tire__temp {
   color: var(--hud-text-subtle);
-  font-size: 12px;
+  font-family: var(--font-readout);
+  font-size: 13px;
   font-style: normal;
-  font-weight: 650;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   white-space: nowrap;
@@ -188,7 +194,8 @@ body {
   position: relative;
   z-index: 1;
   color: var(--hud-text-bright);
-  font-size: 12px;
+  font-family: var(--font-readout);
+  font-size: 13px;
   font-weight: 500;
   line-height: 1;
 }
@@ -197,10 +204,12 @@ body {
   position: relative;
   z-index: 1;
   color: var(--hud-text-bright);
-  font-size: 30px;
-  font-weight: 650;
+  font-family: var(--font-readout);
+  font-size: 32px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  text-box: trim-both cap alphabetic;
 }
 
 .hud.is-redline .gear::before {
@@ -252,8 +261,8 @@ body {
   overflow: hidden;
   color: var(--hud-text-muted);
   font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   line-height: 1;
 }
 
@@ -261,8 +270,9 @@ body {
   min-width: 0;
   overflow: hidden;
   color: var(--hud-text);
-  font-size: 12px;
-  font-weight: 650;
+  font-family: var(--font-readout);
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1;
   text-align: right;
   text-overflow: clip;
@@ -308,12 +318,24 @@ body {
 
 .delta-strip {
   --delta-user-scale: 1;
+  --delta-cut: calc(var(--hud-cut-widget) * var(--delta-user-scale));
   position: relative;
+  isolation: isolate;
   width: 100%;
   padding: calc(8px * var(--delta-user-scale)) calc(12px * var(--delta-user-scale)) calc(10px * var(--delta-user-scale));
-  background: color-mix(in srgb, var(--hud-shade) 74%, transparent);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
+}
+
+/* The cut surface sits on a layer behind Delta, so the strip itself is never
+   clipped and its edit tools and resize handles stay visible. */
+.delta-strip::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--hud-shade) 74%, transparent);
+  clip-path: polygon(var(--delta-cut) 0, 100% 0, 100% calc(100% - var(--delta-cut)), calc(100% - var(--delta-cut)) 100%, 0 100%, 0 var(--delta-cut));
+  content: '';
 }
 
 .hud-stack .delta-strip {
@@ -332,8 +354,9 @@ body {
 .delta-strip__lap-time {
   flex: 0 0 auto;
   color: var(--hud-text);
-  font-size: calc(15px * var(--delta-user-scale));
-  font-weight: 800;
+  font-family: var(--font-readout);
+  font-size: calc(16px * var(--delta-user-scale));
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 }
@@ -342,8 +365,9 @@ body {
   display: block;
   margin: calc(5px * var(--delta-user-scale)) auto calc(4px * var(--delta-user-scale));
   color: var(--hud-text);
-  font-size: calc(18px * var(--delta-user-scale));
-  font-weight: 900;
+  font-family: var(--font-readout);
+  font-size: calc(20px * var(--delta-user-scale));
+  font-weight: 600;
   line-height: 1;
   text-align: center;
   white-space: nowrap;
@@ -358,7 +382,7 @@ body {
   gap: calc(6px * var(--delta-user-scale));
   color: color-mix(in srgb, var(--hud-text) 72%, transparent);
   font-size: calc(11px * var(--delta-user-scale));
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1;
   letter-spacing: 0.08em;
   white-space: nowrap;
@@ -370,7 +394,8 @@ body {
 
 .delta-strip__best-time {
   color: var(--hud-text);
-  font-size: calc(13px * var(--delta-user-scale));
+  font-family: var(--font-readout);
+  font-size: calc(14px * var(--delta-user-scale));
   letter-spacing: 0;
 }
 
@@ -474,9 +499,9 @@ body {
   gap: 8px;
   min-width: max-content;
   padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--hud-edit-line) 30%, transparent);
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--hud-shade) 94%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface-deep);
   pointer-events: auto;
 }
 
@@ -485,41 +510,72 @@ body {
 }
 
 .layout-edit__hint {
-  color: var(--hud-text-muted);
-  font-size: 13px;
-  font-weight: 750;
-  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
 }
 
+/* Layout editor controls match Configuration: dark at rest, lime on hover. */
 .layout-edit__button {
   min-width: 64px;
-  padding: 5px 8px;
-  border: 1px solid color-mix(in srgb, var(--hud-edit-line) 46%, transparent);
-  border-radius: 3px;
-  color: var(--hud-text);
-  background: color-mix(in srgb, var(--hud-edit-line) 10%, transparent);
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface);
   font: inherit;
-  font-size: 14px;
-  font-weight: 750;
-  letter-spacing: 0.04em;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   cursor: pointer;
 }
 
 .layout-edit__button:hover,
 .layout-edit__button:focus-visible {
-  background: color-mix(in srgb, var(--hud-edit-line) 20%, transparent);
-  outline: none;
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  background: var(--accent);
 }
 
+.layout-edit__button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Layout editor roles: SAVE commits the edit, CANCEL reverts it, and RESET
+   restores the default placement, so it is set apart in the caution color. */
 .layout-edit__button--primary {
-  border-color: color-mix(in srgb, var(--hud-edit-accent) 70%, transparent);
-  color: var(--gas);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+
+.layout-edit__button--primary:hover,
+.layout-edit__button--primary:focus-visible {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: var(--text-on-accent);
+}
+
+.layout-edit__button--reset {
+  margin-right: 8px;
+  border-color: var(--caution);
+  color: var(--caution);
+  background: var(--surface);
+}
+
+.layout-edit__button--reset:hover,
+.layout-edit__button--reset:focus-visible {
+  border-color: var(--caution);
+  color: var(--text-on-accent);
+  background: var(--caution);
 }
 
 .delta-strip.is-editing,
 .hud-frame.is-editing {
   pointer-events: auto;
-  outline: 2px dashed color-mix(in srgb, var(--hud-edit-guide) 80%, transparent);
+  outline: 2px dashed var(--caution);
   outline-offset: 5px;
   cursor: grab;
 }
@@ -533,12 +589,12 @@ body {
   position: absolute;
   z-index: 6;
   display: none;
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   padding: 0;
-  border: 2px solid color-mix(in srgb, var(--hud-edit-guide) 95%, transparent);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--hud-shade) 92%, transparent);
+  border: 2px solid var(--caution);
+  border-radius: 0;
+  background: var(--surface-deep);
   pointer-events: auto;
   touch-action: none;
 }
@@ -559,6 +615,7 @@ body {
   height: 100vh;
   overflow: visible;
   background: transparent;
+  clip-path: none;
   transform: none;
 }
 
@@ -568,6 +625,7 @@ body {
   height: 69px;
   min-width: 0;
   background: var(--panel);
+  clip-path: polygon(var(--hud-cut-widget) 0, 100% 0, 100% calc(100% - var(--hud-cut-widget)), calc(100% - var(--hud-cut-widget)) 100%, 0 100%, 0 var(--hud-cut-widget));
   transform: scale(calc(var(--hud-scale) * var(--hud-widget-scale, 1)));
   transform-origin: top left;
 }
@@ -591,7 +649,7 @@ body {
 .hud-widget-editor-frame {
   position: absolute;
   z-index: 8;
-  outline: 2px dashed color-mix(in srgb, var(--hud-edit-guide) 80%, transparent);
+  outline: 2px dashed var(--caution);
   outline-offset: 5px;
   pointer-events: none;
 }
@@ -606,25 +664,25 @@ body {
 }
 
 .layout-resize-handle--top-left {
-  top: -13px;
-  left: -13px;
+  top: -10px;
+  left: -10px;
   cursor: nwse-resize;
 }
 
 .layout-resize-handle--top-right {
-  top: -13px;
-  right: -13px;
+  top: -10px;
+  right: -10px;
   cursor: nesw-resize;
 }
 
 .layout-resize-handle--bottom-left {
-  bottom: -13px;
-  left: -13px;
+  bottom: -10px;
+  left: -10px;
   cursor: nesw-resize;
 }
 
 .layout-resize-handle--bottom-right {
-  right: -13px;
-  bottom: -13px;
+  right: -10px;
+  bottom: -10px;
   cursor: nwse-resize;
 }

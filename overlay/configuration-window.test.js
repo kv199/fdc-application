@@ -6,23 +6,31 @@ const { readResolvedStylesheet } = require('../tools/stylesheet-tokens.cjs')
 
 const settingsHtml = fs.readFileSync(path.join(__dirname, 'settings.html'), 'utf8')
 const settingsCss = readResolvedStylesheet('settings.css')
+// Interface roles are asserted by token; preserved meanings (modes, classes, map layers) by value.
+const settingsStyles = fs.readFileSync(path.join(__dirname, 'settings.css'), 'utf8')
 const settingsJs = fs.readFileSync(path.join(__dirname, 'settings.js'), 'utf8')
 const overlayHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8')
 const tauriConfig = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'tauri.conf.json'), 'utf8')
 const cargoManifest = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'Cargo.toml'), 'utf8')
 
-test('Every Configuration tab opens with a short intro and Settings states where data lives', () => {
+test('Every Configuration tab has a one-paragraph intro in the header and Settings states where data lives', () => {
+  const header = settingsHtml.slice(settingsHtml.indexOf('<header class="settings-header">'), settingsHtml.indexOf('</header>'))
   for (const panel of ['hud', 'events', 'driver-analysis', 'shift-light', 'garage', 'settings']) {
+    const intros = header.match(new RegExp(`<p data-settings-intro="${panel}"( hidden)?>[^<]+</p>`, 'g')) || []
+    assert.equal(intros.length, 1, panel)
     const start = settingsHtml.indexOf(`data-settings-panel="${panel}"`)
     const next = settingsHtml.indexOf('data-settings-panel="', start + 1)
     const markup = settingsHtml.slice(start, next === -1 ? undefined : next)
-    assert.match(markup, /<p class="settings-section__intro">[^<]+<\/p>/, panel)
+    assert.doesNotMatch(markup, /data-settings-intro/, panel)
   }
-  assert.match(settingsHtml, /<h2 id="settings-panel-title">SETTINGS<\/h2>/)
-  assert.match(settingsHtml, /<p class="settings-section__intro">Options for the whole app\. All FDC data stays on this PC\.<\/p>/)
+  // Only the active tab's intro shows; drill-down views hide it with the compact header.
+  assert.match(settingsHtml, /<p data-settings-intro="hud">/)
+  assert.match(settingsJs, /for \(const intro of settingsIntros\) intro\.hidden = intro\.dataset\.settingsIntro !== tabName/)
+  assert.match(settingsCss, /:is\(\.events-detail-view, \.events-run-view, \.driver-analysis-detail-view\):not\(\[hidden\]\)\)\s*\.settings-header__intro\s*\{\s*display: none;/)
+  assert.match(settingsHtml, /<h2 id="settings-panel-title" class="settings-page-title">SETTINGS<\/h2>/)
+  assert.match(settingsHtml, /<p data-settings-intro="settings" hidden>Options for the whole app\. Everything FDC records stays on this PC\.<\/p>/)
   assert.doesNotMatch(settingsHtml, /YOUR DATA/)
-  assert.match(settingsCss, /\.settings-section__intro\s*\{/)
   assert.doesNotMatch(settingsHtml, /VISUAL OUTPUT|RECORDED ASPHALT REVIEW|VEHICLE LIBRARY|AUTO CALIBRATION/)
 })
 
@@ -103,7 +111,7 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.ok(eventsForm.indexOf('id="event-route-type"') < eventsForm.indexOf('id="event-class"'))
   assert.ok(eventsForm.indexOf('id="event-class"') < eventsForm.indexOf('id="event-notes"'))
   assert.match(settingsHtml, /id="events-detail-view"[^>]+hidden/)
-  assert.match(settingsHtml, /id="events-detail-back"[^>]*>BACK<\/button>/)
+  assert.match(settingsHtml, /id="events-detail-back"[^>]*class="detail-back"[^>]*>← EVENTS<\/button>/)
   assert.match(settingsHtml, /id="events-detail-title"/)
   assert.match(settingsHtml, /id="events-detail-summary"[^>]+aria-label="Event details"/)
   assert.match(settingsHtml, /id="events-detail-notes"[^>]+hidden/)
@@ -112,7 +120,7 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.doesNotMatch(settingsHtml, /id="events-detail-archive"/)
   assert.match(settingsHtml, /id="events-detail-delete"/)
   assert.match(settingsHtml, /id="events-run-view"[^>]+hidden/)
-  assert.match(settingsHtml, /id="events-run-back"[^>]*>BACK<\/button>/)
+  assert.match(settingsHtml, /id="events-run-back"[^>]*class="detail-back"[^>]*>← EVENT<\/button>/)
   assert.match(settingsHtml, /id="events-run-title"/)
   assert.match(settingsHtml, /id="events-run-summary"[^>]+aria-label="Event details"/)
   assert.match(settingsHtml, /id="events-run-bht"/)
@@ -156,8 +164,8 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsCss, /\.settings-tabs\s*\{[\s\S]*grid-template-columns:\s*repeat\(6,/)
   assert.match(settingsCss, /\.events-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit/)
   assert.match(settingsCss, /\.events-card__id\s*\{[\s\S]*font-size:\s*28px/)
-  assert.match(settingsCss, /\.confirm-dialog \.confirm-dialog__no\s*\{[\s\S]*background:\s*#69e83f/)
-  assert.match(settingsCss, /\.confirm-dialog \.confirm-dialog__yes:hover[\s\S]*background:\s*#ef4444/)
+  assert.match(settingsStyles, /\.confirm-dialog \.confirm-dialog__no\s*\{[^}]*background:\s*var\(--accent\)/)
+  assert.match(settingsStyles, /\.confirm-dialog \.settings-button\.confirm-dialog__yes:not\(:disabled\):hover[^{]*\{[^}]*background:\s*var\(--danger\)/)
   assert.doesNotMatch(settingsCss, /events-card__image/)
   assert.doesNotMatch(settingsCss, /events-card__copy/)
   assert.match(settingsCss, /\.events-card\[data-event-mode="any"\][\s\S]*#f97316/)
@@ -171,9 +179,9 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsCss, /\.events-card__badge--class\[data-event-class="B"\][\s\S]*#f97316/)
   assert.match(settingsCss, /\.events-detail-view__badge--class\[data-event-class="A"\][\s\S]*#ef4444/)
   assert.match(settingsCss, /\.events-detail-view__badge--class\[data-event-class="S1"\][\s\S]*#c084fc/)
-  assert.match(settingsCss, /\.events-run-table__time\[data-tone="best"\][\s\S]*#c084fc/)
-  assert.match(settingsCss, /\.events-run-table__time\[data-tone="second"\][\s\S]*#69e83f/)
-  assert.match(settingsCss, /\.events-detail-view__absolute-best-value\s*\{[\s\S]*#c084fc/)
+  assert.match(settingsStyles, /\.events-run-table__time\[data-tone="best"\]\s*\{[^}]*var\(--best\)/)
+  assert.match(settingsStyles, /\.events-run-table__time\[data-tone="second"\]\s*\{[^}]*var\(--accent\)/)
+  assert.match(settingsStyles, /\.events-detail-view__absolute-best-value\s*\{[^}]*var\(--best\)/)
 })
 
 test('Event recorder uses the compact idle control and local run timestamps', () => {
@@ -186,11 +194,11 @@ test('Event recorder uses the compact idle control and local run timestamps', ()
   assert.match(settingsHtml, /data-tone="warning"[^>]*>Sprint: keep recording armed between attempts, then press STOP\.<\/p>/)
   assert.match(settingsJs, /Sprint: keep recording armed between attempts, then press STOP\./)
   assert.match(settingsJs, /eventRecorderHint\.dataset\.tone = !recordingAnotherEvent && !finalizing \? 'warning' : ''/)
-  assert.match(settingsCss, /\.event-recorder__hint\[data-tone="warning"\][\s\S]*#f97316/)
+  assert.match(settingsStyles, /\.event-recorder__hint\[data-tone="warning"\]\s*\{[^}]*var\(--notice\)/)
   assert.match(settingsJs, /getHours\(\).*getMinutes\(\).*getSeconds\(\)/s)
-  assert.match(settingsCss, /\.event-recorder\s*\{[\s\S]*border: 1px solid rgb\(226 232 240 \/ 18%\);[\s\S]*background: rgb\(226 232 240 \/ 5%\)/)
-  assert.match(settingsCss, /\.event-recorder__record\s*\{[\s\S]*background: #69e83f/)
-  assert.match(settingsCss, /\.settings-button--danger[\s\S]*color: #ff827d/)
+  assert.match(settingsStyles, /\.event-recorder\s*\{[^}]*border: 1px solid var\(--line-strong\);[^}]*background: var\(--panel\)/)
+  assert.match(settingsStyles, /\.event-recorder__record\s*\{[^}]*background: var\(--accent\)/)
+  assert.match(settingsStyles, /\.settings-button--danger\s*\{[^}]*color: var\(--danger-text\)/)
 })
 
 test('Events expose deterministic persisted list sorting and in-memory run sorting', () => {
@@ -245,8 +253,8 @@ test('Event lap rows expose trace details and time-weighted pedal statistics', (
   assert.match(settingsCss, /\.events-lap-detail__trace--throttle\s*\{\s*stroke: #69e83f;/)
   assert.match(settingsCss, /\.events-lap-detail__trace--brake\s*\{\s*stroke: #ef4444;/)
   assert.match(settingsCss, /\.events-lap-detail__trace--coast\s*\{\s*stroke: #facc15;/)
-  assert.match(settingsCss, /\.events-lap-detail__sector-tick\s*\{\s*stroke: #f8fafc;/)
-  assert.match(settingsCss, /\.events-lap-detail__sector-label\s*\{\s*fill: #f8fafc;/)
+  assert.match(settingsStyles, /\.events-lap-detail__sector-tick\s*\{\s*stroke: var\(--text\);/)
+  assert.match(settingsStyles, /\.events-lap-detail__sector-label\s*\{\s*fill: var\(--text\);/)
   assert.match(settingsCss, /\.events-lap-detail__legend\s*\{/)
   assert.match(settingsCss, /\.events-lap-detail__svg\s*\{[\s\S]*max-height: 560px;/)
   assert.match(settingsCss, /\.events-lap-detail__tooltip/)
@@ -276,7 +284,9 @@ test('Engine visibility is part of the safe HUD component contract', () => {
 })
 
 test('HUD layout exposes grouped and freeform modes with independent widget controls', () => {
-  assert.match(settingsHtml, /role="radiogroup"[^>]+aria-labelledby="hud-layout-mode-title"/)
+  // The mode is a TELEMETRY ARRANGEMENT row inside the layout list, as a segmented choice.
+  assert.match(settingsHtml, /<div class="layout-list">\s*<div class="layout-row layout-row--arrangement">[\s\S]*?id="hud-layout-arrangement-title">TELEMETRY ARRANGEMENT<[\s\S]*?class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title"/)
+  assert.doesNotMatch(settingsHtml, /Press EDIT, drag to move/)
   assert.match(settingsHtml, /data-layout-mode="grouped" checked/)
   assert.match(settingsHtml, /data-layout-mode="freeform"/)
 
@@ -292,27 +302,18 @@ test('HUD layout exposes grouped and freeform modes with independent widget cont
   assert.match(tauriMain, /"delta" \| "hud" \| "tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
 })
 
-test('telemetry status stays separate and right-aligned above the setup card', () => {
-  const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
-  const telemetryStatusIndex = settingsHtml.indexOf('id="telemetry-status"')
-  const routeCardIndex = settingsHtml.indexOf('id="telemetry-route-card"')
-  const headerIndex = settingsHtml.indexOf('class="settings-header"')
-
-  assert.ok(settingsPanelIndex >= 0)
-  assert.ok(headerIndex >= 0)
-  assert.ok(telemetryStatusIndex > headerIndex)
-  assert.ok(routeCardIndex > telemetryStatusIndex)
-  assert.ok(telemetryStatusIndex < settingsPanelIndex)
-  assert.ok(routeCardIndex < settingsPanelIndex)
-  assert.match(settingsHtml, /class="settings-header__connection"[\s\S]*id="telemetry-status"[\s\S]*id="telemetry-route-card"/)
-  assert.match(settingsCss, /\.settings-header__connection > \.telemetry-status[\s\S]*justify-content: flex-end[\s\S]*width: 100%/)
-  assert.match(settingsCss, /#telemetry-route-detail\s*\{\s*margin-top: 0;/)
-  assert.match(settingsHtml, /class="telemetry-setup-guide"[\s\S]*Settings → HUD and Gameplay → Telemetry/)
-  assert.match(settingsHtml, /Data Out IP Address[\s\S]*127\.0\.0\.1/)
-  assert.match(settingsHtml, /Data Out IP Port[\s\S]*5301/)
-  const setupGuide = settingsHtml.slice(settingsHtml.indexOf('class="telemetry-setup-guide"'), settingsHtml.indexOf('id="telemetry-route-retry"'))
-  assert.equal((setupGuide.match(/<li>/g) || []).length, 4)
-  assert.doesNotMatch(setupGuide, /Return to the game and start driving/u)
+test('the header status opens the connection guide instead of a permanent setup card', () => {
+  const header = settingsHtml.slice(settingsHtml.indexOf('<header class="settings-header">'), settingsHtml.indexOf('</header>'))
+  assert.match(header, /class="settings-header__connection"[\s\S]*<button id="telemetry-status-button"[^>]*type="button"[\s\S]*id="telemetry-status"[^>]*role="status"/)
+  assert.doesNotMatch(settingsHtml, /telemetry-route-card|telemetry-setup-guide|telemetry-route-retry|HOW TO CONNECT/)
+  assert.doesNotMatch(settingsJs, /telemetryRouteCard|telemetryRouteRetry/)
+  assert.match(settingsJs, /telemetryStatusButton\?\.addEventListener\('click', openConnectionGuide\)/)
+  assert.match(settingsJs, /function openConnectionGuide\(\) \{[\s\S]*?connectionGuideOpen = true[\s\S]*?renderConnectionGuide\(\)/)
+  // The guide keeps the steps and RETRY DATA OUT for a receiver problem.
+  const guide = settingsHtml.slice(settingsHtml.indexOf('class="connect-guide"'), settingsHtml.indexOf('id="connect-guide-done"'))
+  assert.match(guide, /Data Out IP Address[\s\S]*127\.0\.0\.1/)
+  assert.match(guide, /Data Out IP Port[\s\S]*5301/)
+  assert.match(guide, /id="connect-guide-retry"/)
   assert.doesNotMatch(settingsHtml, /id="telemetry-route-endpoint"|id="telemetry-route-label"/)
   assert.doesNotMatch(settingsJs, /telemetryRouteEndpoint|telemetryRouteLabel|telemetryRouteDetail|telemetryRouteWarning/u)
   assert.doesNotMatch(overlayHtml, /telemetry-route-badge/)
@@ -436,7 +437,7 @@ test('HUD opacity appears before HUD controls and resets to its 80 percent defau
   assert.match(settingsHtml, /id="hud-opacity-reset" class="settings-button hud-opacity-reset" type="button" disabled>RESET<\/button>/)
   assert.match(settingsJs, /HUD OPACITY RESET TO \$\{next\.hudOpacity\}%/)
   assert.match(settingsJs, /hudOpacityReset\.disabled = pending \|\| displayPreferences\.hudOpacity === DEFAULT_HUD_OPACITY/)
-  assert.match(settingsCss, /\.hud-opacity-reset\.is-dirty:not\(:disabled\)[\s\S]*?#facc15/)
+  assert.match(settingsStyles, /\.hud-opacity-reset\.is-dirty:not\(:disabled\)\s*\{[^}]*var\(--caution\)/)
 })
 
 test('HUD heading has no redundant position and visibility label, and status uses a fixed footer', () => {
@@ -471,8 +472,8 @@ test('HUD heading has no redundant position and visibility label, and status use
   assert.match(cargoManifest, /^version = "\d+\.\d+\.\d+"$/m)
   assert.equal(Object.hasOwn(JSON.parse(tauriConfig), 'version'), false)
   assert.match(settingsCss, /--settings-footer-height:\s*52px;/)
-  assert.match(settingsCss, /\.settings-shell\s*{[\s\S]*?padding:\s*28px 30px calc\(26px \+ var\(--settings-footer-height\)\);/)
-  assert.match(settingsCss, /\.settings-footer\s*{[\s\S]*?position:\s*fixed;[\s\S]*?height:\s*var\(--settings-footer-height\);[\s\S]*?border-top:[\s\S]*?background:\s*#090b0e;/)
+  assert.match(settingsStyles, /\.settings-shell\s*{[^}]*padding:[^;]*calc\([^;]*\+ var\(--settings-footer-height\)\);/)
+  assert.match(settingsStyles, /\.settings-footer\s*{[\s\S]*?position:\s*fixed;[\s\S]*?height:\s*var\(--settings-footer-height\);[\s\S]*?border-top:[\s\S]*?background:\s*var\(--bg\);/)
   assert.match(settingsCss, /\.settings-footer__right\s*{[\s\S]*?margin-left:\s*auto/)
   assert.match(settingsCss, /\.settings-footer__version\s*{[\s\S]*?cursor:\s*pointer/)
   assert.match(settingsCss, /\.settings-footer__help\s*{[\s\S]*?font-weight:\s*800/)
@@ -545,7 +546,7 @@ test('Configuration opens on the connection guide until Forza first sends Data O
   for (const id of ['connect-guide-retry', 'connect-guide-skip', 'connect-guide-done']) assert.match(guide, new RegExp('id="' + id + '"'))
   assert.match(settingsJs, /applyGaragePayload\(await call\('load_garage_snapshot'\)\)[\s\S]*?openConnectionGuideIfNeverConnected\(\)/)
   assert.match(settingsJs, /connectionGuideApi\.shouldShow\(connectionGuideApi\.read\(\), garageVehicles\.size > 0\)/)
-  assert.match(settingsJs, /telemetryRouteRetry\.hidden = !presentation\.canRetry\s*renderConnectionGuide\(\)/)
+  assert.match(settingsJs, /telemetryStatusLabel\.textContent = presentation\.statusLabel\s*renderConnectionGuide\(\)/)
   assert.match(settingsCss, /\.connect-guide \{[^}]*z-index: 15;/)
 })
 
@@ -564,7 +565,7 @@ test('Driver Analysis heading spacing does not affect toggle internals', () => {
 test('Driver Analysis history cards open drill-down pages for recording, car, and drive', () => {
   assert.match(settingsHtml, /id="driver-analysis-history-view"[\s\S]*class="driver-analysis-history-view"/)
   assert.match(settingsHtml, /id="driver-analysis-detail-view"[\s\S]*class="driver-analysis-detail-view"/)
-  assert.match(settingsHtml, /id="driver-analysis-detail-back"[\s\S]*class="settings-button"[\s\S]*>BACK<\/button>/)
+  assert.match(settingsHtml, /id="driver-analysis-detail-back"[\s\S]*class="detail-back"[\s\S]*><\/button>/)
   assert.match(settingsHtml, /id="driver-analysis-detail-title"[\s\S]*class="events-detail-view__title/)
   assert.match(settingsHtml, /id="driver-analysis-detail-summary"[\s\S]*class="events-detail-view__summary"/)
   assert.match(settingsHtml, /id="driver-analysis-detail-body"[\s\S]*class="driver-analysis-detail-view__body"/)
@@ -611,6 +612,33 @@ test('Driver Analysis history cards open drill-down pages for recording, car, an
   assert.match(settingsCss, /\.driver-analysis-history-row__summary\s*\{[\s\S]*margin-top:\s*8px/)
   assert.match(settingsCss, /\.driver-analysis-detail-view__body[\s\S]*display:\s*grid/)
   assert.match(settingsCss, /\.driver-analysis-detail-view__overview\s*\{[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/)
+})
+
+test('Back buttons on drill-down views name their parent and use detail-back class', () => {
+  assert.match(settingsHtml, /id="events-detail-back"[^>]*class="detail-back"/)
+  assert.match(settingsHtml, /id="events-detail-back"[^>]*aria-label="Back to Events"/)
+  assert.match(settingsHtml, /id="events-detail-back"[^>]*>← EVENTS</)
+  assert.match(settingsHtml, /id="events-run-back"[^>]*class="detail-back"/)
+  assert.match(settingsHtml, /id="events-run-back"[^>]*aria-label="Back to the event"/)
+  assert.match(settingsHtml, /id="events-run-back"[^>]*>← EVENT</)
+  assert.match(settingsHtml, /id="driver-analysis-detail-back"[^>]*class="detail-back"/)
+  // One rule decides where BACK leads; the label and the navigation both use it.
+  assert.match(settingsJs, /function driverAnalysisParentLevel\(view\)/)
+  assert.match(settingsJs, /DRIVER_ANALYSIS_BACK_LABELS\[driverAnalysisParentLevel\(next\)\]/)
+  const closeLevel = settingsJs.match(/function closeDriverAnalysisLevel\(\) \{[\s\S]*?\r?\n  \}\r?\n/)[0]
+  assert.match(closeLevel, /const parentLevel = driverAnalysisParentLevel\(driverAnalysisView\)/)
+  assert.doesNotMatch(closeLevel, /groupRecordings/)
+  assert.match(settingsJs, /driverAnalysisDetailBack\.textContent = label\.text/)
+  assert.match(settingsJs, /driverAnalysisDetailBack\.setAttribute\('aria-label', label\.ariaLabel\)/)
+  assert.match(settingsJs, /← HISTORY/)
+  assert.match(settingsJs, /← RECORDING/)
+  assert.match(settingsJs, /← CAR/)
+})
+
+test('Garage does not create image placeholders for current car or saved cars', () => {
+  assert.doesNotMatch(settingsJs, /garage-current-car__image/)
+  assert.doesNotMatch(settingsJs, /garage-card__image/)
+  assert.doesNotMatch(settingsJs, /image\.textContent = 'IMAGE'[\s\S]*garageDisplayName/)
 })
 
 test('Configuration only calls render functions it defines, with the run they need', () => {
@@ -692,4 +720,29 @@ test('HUD uses FdcUnits for speed formatting and reads fresh display preferences
   const overlaySource = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
   assert.match(overlaySource, /window\.FdcUnits\.formatSpeed\([\s\S]*?\{ unit: displayPreferences\.speedUnit \}/)
   assert.match(overlaySource, /window\.DisplayPreferences\.write\(\{\s*\.\.\.window\.DisplayPreferences\.read\(\),/)
+})
+
+test('Drill-down views show a back link and page name in the header path', () => {
+  const header = settingsHtml.slice(settingsHtml.indexOf('<header class="settings-header">'), settingsHtml.indexOf('</header>'))
+  const path = header.slice(header.indexOf('class="settings-header__path"'), header.indexOf('</nav>'))
+  for (const id of ['events-detail-back', 'events-run-back', 'driver-analysis-detail-back']) {
+    assert.match(path, new RegExp(`id="${id}" class="detail-back"`), id)
+    assert.equal(settingsHtml.split(`id="${id}"`).length, 2, `${id} appears once`)
+  }
+  for (const page of ['event', 'run', 'recording', 'car', 'drive']) {
+    assert.match(path, new RegExp(`data-detail-page="${page}"`), page)
+  }
+  assert.doesNotMatch(settingsHtml, /class="events-detail-view__header"/)
+  assert.match(settingsHtml, /class="events-detail-view__heading">\s*<button id="events-detail-title"[\s\S]*?class="events-detail-view__actions">\s*<button id="events-detail-delete"/)
+  assert.match(settingsJs, /driverAnalysisDetailView\.dataset\.level = next\.level/)
+  assert.match(settingsCss, /#driver-analysis-detail-view:not\(\[hidden\]\)\[data-level='car'\]\)\s*\[data-detail-page='car'\]/)
+})
+
+test('The one next step of a screen uses the lime ready button', () => {
+  assert.match(settingsHtml, /id="events-create-toggle" class="settings-button settings-button--ready"/)
+  assert.match(settingsHtml, /id="events-create-submit" class="settings-button settings-button--ready"/)
+  assert.match(settingsJs, /detailsButton\.className = 'settings-button settings-button--ready driver-analysis-history-row__details-toggle'/)
+  assert.doesNotMatch(settingsHtml, /settings-button--primary/)
+  assert.match(settingsStyles, /\.settings-button\.settings-button--ready\s*\{[^}]*background: var\(--accent\)/)
+  assert.match(settingsStyles, /\.settings-button\.settings-button--ready:disabled\s*\{[^}]*background: var\(--surface-deep\)/)
 })
