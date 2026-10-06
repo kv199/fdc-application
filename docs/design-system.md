@@ -13,6 +13,8 @@ direction; there is no light theme or theme switch.
   color literal or on a custom property that is defined nowhere.
 - `overlay/token-contrast.test.js` keeps text and control contrast at WCAG AA
   for the token pairs the interface uses.
+- `overlay/hud-design-contract.test.js` keeps the HUD geometry, cuts, and
+  fonts above.
 
 ## Choosing a token
 
@@ -112,6 +114,36 @@ The application header is the only textured surface: it shows
 - Show a named state, such as WAITING or a specific unavailable message.
   Never show illustrative values as live telemetry.
 - Use the shared `.settings-empty` pattern for empty lists.
+
+## In-game HUD and Delta
+
+- The HUD and Delta are dark-only and use even, untextured fills. Their
+  surfaces use `--hud-panel` (and `--hud-delta-panel` while waiting or
+  offline), tinted with the application's dark green and kept translucent so
+  the game shows through; HUD Opacity (1-100%, default 80%) applies on top to
+  the whole HUD and Delta, readings included.
+- Telemetry colors keep their meanings and values: throttle and "ahead"
+  `--telemetry-throttle`, brake and "behind" `--telemetry-brake`, tire
+  temperature ranges, the redline red, and the learned-shift purple
+  (`--hud-shift-alert`).
+- Shape: in Grouped, the six blocks join into one 736 x 69 px strip with no
+  gaps; only its outer top-left and bottom-right corners are cut
+  (`--hud-cut-grouped`, 14 px at base scale), and `--hud-divider` lines
+  separate the blocks. In Freeform, each widget is cut at its top-left and
+  bottom-right corners (`--hud-cut-widget`, 7 px at base scale). Delta uses
+  the same 7 px cut, scaled with its own size, and keeps its full-width strip.
+- Cuts scale with the HUD and never clip the layout editor: frames, resize
+  handles, and edit tools sit outside the clipped surface.
+- Type: Barlow Condensed (`--font-readout`) for speed, gear, RPM, engine
+  values, tire temperatures, and Delta times; Barlow (`--font-ui`) for labels.
+  The HUD preloads its fonts so the first frame does not use a fallback font.
+- The block composition does not change: Tires with four temperatures and tire
+  shapes, vertical Brake and Throttle bars, the Steering wheel, one
+  Speed/Gear/RPM block, Engine (boost, power, torque), and the Input Graph;
+  Delta is a separate target.
+- The layout editor uses the Configuration controls: square buttons that fill
+  with `--accent` on hover, and a dashed `--caution` outline with square
+  resize handles around the edited target.
 
 ## Checklist for a new screen or feature
 

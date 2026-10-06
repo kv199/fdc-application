@@ -139,24 +139,27 @@
   /* In-game HUD telemetry */
   --telemetry-throttle: #69e83f;
   --telemetry-brake: #ff312b;
-  --hud-text: #f8fafc;
-  --hud-text-bright: #fafafa;
+  --hud-text: #edf0df;
+  --hud-text-bright: #f6f8ec;
   --hud-text-white: #ffffff;
-  --hud-text-muted: #a1a1aa;
-  --hud-text-subtle: #71717a;
+  --hud-text-muted: #b0bcae;
+  --hud-text-subtle: #8d9a8c;
   --hud-redline-text: #ffd4d2;
   --hud-redline-label: #ff827d;
-  --hud-shade: #080a0c;
+  --hud-shade: #101b15;
+  --hud-panel: rgb(16 27 21 / 56%);
+  --hud-delta-panel: rgb(16 27 21 / 49%);
+  --hud-divider: #344238;
   --hud-track: rgb(3 5 7 / 30%);
   --hud-pedal-track: rgb(3 5 7 / 34%);
   --hud-bar-track: #030507;
-  --hud-rule: rgb(226 232 240 / 42%);
-  --hud-panel: rgb(8 10 12 / 56%);
-  --hud-delta-panel: rgb(8 10 12 / 49%);
   --hud-redline-background: rgb(217 42 37 / 96%);
   --hud-shift-alert: rgb(168 85 247 / 96%);
   --hud-shift-alert-flash: rgb(185 118 248 / 98%);
-  --hud-edit-line: #e2e8f0;
-  --hud-edit-accent: #69e83f;
-  --hud-edit-guide: #fbbf24;
+
+  /* In-game HUD geometry: cut corners at base scale. Grouped cuts only the
+     outer top-left and bottom-right of the whole strip; Freeform cuts each
+     widget and Delta. */
+  --hud-cut-grouped: 14px;
+  --hud-cut-widget: 7px;
 }
