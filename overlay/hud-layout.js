@@ -139,7 +139,7 @@
       const root = document.createElement('div')
       root.className = 'layout-edit-tools'
       root.hidden = true
-      root.innerHTML = `<span class="layout-edit__hint">DRAG ${name.toUpperCase()} OR A CORNER TO RESIZE</span><button class="layout-edit__button" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
+      root.innerHTML = `<span class="layout-edit__hint">DRAG ${name.toUpperCase()} TO MOVE · CORNER TO RESIZE · ESC CANCELS</span><button class="layout-edit__button layout-edit__button--reset" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
       const editorFrame = FREEFORM_TARGETS.includes(name) ? document.createElement('div') : null
       const editorSurface = editorFrame || elements[name]
       if (editorFrame) {

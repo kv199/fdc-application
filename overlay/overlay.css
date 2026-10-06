@@ -209,6 +209,7 @@ body {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  text-box: trim-both cap alphabetic;
 }
 
 .hud.is-redline .gear::before {
@@ -542,9 +543,33 @@ body {
   outline-offset: 2px;
 }
 
+/* Layout editor roles: SAVE commits the edit, CANCEL reverts it, and RESET
+   restores the default placement, so it is set apart in the caution color. */
 .layout-edit__button--primary {
-  border-color: var(--line-strong);
-  background: var(--surface-deep);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+
+.layout-edit__button--primary:hover,
+.layout-edit__button--primary:focus-visible {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: var(--text-on-accent);
+}
+
+.layout-edit__button--reset {
+  margin-right: 8px;
+  border-color: var(--caution);
+  color: var(--caution);
+  background: var(--surface);
+}
+
+.layout-edit__button--reset:hover,
+.layout-edit__button--reset:focus-visible {
+  border-color: var(--caution);
+  color: var(--text-on-accent);
+  background: var(--caution);
 }
 
 .delta-strip.is-editing,

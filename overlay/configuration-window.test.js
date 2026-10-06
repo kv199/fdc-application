@@ -284,7 +284,9 @@ test('Engine visibility is part of the safe HUD component contract', () => {
 })
 
 test('HUD layout exposes grouped and freeform modes with independent widget controls', () => {
-  assert.match(settingsHtml, /role="radiogroup"[^>]+aria-labelledby="hud-layout-mode-title"/)
+  // The mode is a TELEMETRY ARRANGEMENT row inside the layout list, as a segmented choice.
+  assert.match(settingsHtml, /<div class="layout-list">\s*<div class="layout-row layout-row--arrangement">[\s\S]*?id="hud-layout-arrangement-title">TELEMETRY ARRANGEMENT<[\s\S]*?class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title"/)
+  assert.doesNotMatch(settingsHtml, /Press EDIT, drag to move/)
   assert.match(settingsHtml, /data-layout-mode="grouped" checked/)
   assert.match(settingsHtml, /data-layout-mode="freeform"/)
 
@@ -718,4 +720,29 @@ test('HUD uses FdcUnits for speed formatting and reads fresh display preferences
   const overlaySource = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
   assert.match(overlaySource, /window\.FdcUnits\.formatSpeed\([\s\S]*?\{ unit: displayPreferences\.speedUnit \}/)
   assert.match(overlaySource, /window\.DisplayPreferences\.write\(\{\s*\.\.\.window\.DisplayPreferences\.read\(\),/)
+})
+
+test('Drill-down views show a back link and page name in the header path', () => {
+  const header = settingsHtml.slice(settingsHtml.indexOf('<header class="settings-header">'), settingsHtml.indexOf('</header>'))
+  const path = header.slice(header.indexOf('class="settings-header__path"'), header.indexOf('</nav>'))
+  for (const id of ['events-detail-back', 'events-run-back', 'driver-analysis-detail-back']) {
+    assert.match(path, new RegExp(`id="${id}" class="detail-back"`), id)
+    assert.equal(settingsHtml.split(`id="${id}"`).length, 2, `${id} appears once`)
+  }
+  for (const page of ['event', 'run', 'recording', 'car', 'drive']) {
+    assert.match(path, new RegExp(`data-detail-page="${page}"`), page)
+  }
+  assert.doesNotMatch(settingsHtml, /class="events-detail-view__header"/)
+  assert.match(settingsHtml, /class="events-detail-view__heading">\s*<button id="events-detail-title"[\s\S]*?class="events-detail-view__actions">\s*<button id="events-detail-delete"/)
+  assert.match(settingsJs, /driverAnalysisDetailView\.dataset\.level = next\.level/)
+  assert.match(settingsCss, /#driver-analysis-detail-view:not\(\[hidden\]\)\[data-level='car'\]\)\s*\[data-detail-page='car'\]/)
+})
+
+test('The one next step of a screen uses the lime ready button', () => {
+  assert.match(settingsHtml, /id="events-create-toggle" class="settings-button settings-button--ready"/)
+  assert.match(settingsHtml, /id="events-create-submit" class="settings-button settings-button--ready"/)
+  assert.match(settingsJs, /detailsButton\.className = 'settings-button settings-button--ready driver-analysis-history-row__details-toggle'/)
+  assert.doesNotMatch(settingsHtml, /settings-button--primary/)
+  assert.match(settingsStyles, /\.settings-button\.settings-button--ready\s*\{[^}]*background: var\(--accent\)/)
+  assert.match(settingsStyles, /\.settings-button\.settings-button--ready:disabled\s*\{[^}]*background: var\(--surface-deep\)/)
 })

@@ -65,6 +65,9 @@ test('WCAG 2.x contrast ratios for text on semantic fills', () => {
   assertContrast(textOnAccentHex, tokens.get('--accent'), 4.5, '--text-on-accent on --accent')
   assertContrast(textOnAccentHex, tokens.get('--accent-hover'), 4.5, '--text-on-accent on --accent-hover')
 
+  // Text on caution (reset button hover fill)
+  assertContrast(textOnAccentHex, tokens.get('--caution'), 4.5, '--text-on-accent on --caution')
+
   // Text on danger
   const textOnDangerHex = tokens.get('--text-on-danger')
   assertContrast(textOnDangerHex, tokens.get('--danger'), 4.5, '--text-on-danger on --danger')

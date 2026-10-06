@@ -52,7 +52,7 @@ The application header is the only textured surface: it shows
 
 - `--line-subtle`: dividers between rows and quiet card edges.
 - `--line`: default card and control borders.
-- `--line-strong`: emphasized edges, the header frame, primary buttons and
+- `--line-strong`: emphasized edges, the header frame, raised plates, and
   switches at rest.
 - Borders are 1px. Corners are square; only status dots are round.
 
@@ -70,9 +70,12 @@ The application header is the only textured surface: it shows
 - Lime `--accent` is for interaction: hover fills, selected tabs and choices,
   switches that are on, slider fills, and the focus outline. As text it is
   reserved for sparse ready, positive, or timing values, never decoration.
-- A few ready actions are filled with lime at rest because they are the one
-  next step on their screen: RECORD RUN, a ready Driver Analysis RECORD, the
-  safe NO in confirmation dialogs, and the connection guide's final action.
+- Ready actions use `.settings-button--ready`, filled with `--accent` and
+  `--text-on-accent` at rest and with `--accent-hover` on hover or focus. They
+  mark the one next step: CREATE and CREATE EVENT in Events, DETAILS in
+  Driver Analysis history, SAVE while editing the HUD layout, RECORD RUN on an
+  event page, a ready RECORD in Driver Analysis, the safe NO or CANCEL in
+  confirmation dialogs, and START USING FDC in the connection guide.
 - `--best` (purple) marks best results and the learned Shift Light cue.
 - `--danger` and `--danger-text` mark destructive actions and errors.
 - `--caution` and `--warning` mark attention and unsaved state.
@@ -115,10 +118,15 @@ The application header is the only textured surface: it shows
   Light calibration card, and the Garage current car. The Events library,
   Driver Analysis drill-down pages, and Settings have none.
 - Drill-down views (an event, a run, and the Driver Analysis recording, car,
-  and drive pages) start with a back link (`.detail-back`) that names the
-  immediate parent, such as `← EVENTS`, `← EVENT`, `← HISTORY`, `← RECORDING`,
-  or `← CAR`. Their title uses `--font-readout` at `--type-detail-title`, and
-  the application header turns compact while such a view is open.
+  and drive pages) show a compact header row: the FDC brand, a back link that
+  names the parent, a slash, and the page name at `--type-detail-title` in
+  `--font-readout`: `← EVENTS / EVENT`, `← EVENT / RUN`,
+  `← HISTORY / RECORDING`, `← RECORDING / CAR` (`← HISTORY / CAR` when the
+  recording has a single car), and `← CAR / DRIVE`. The Direct Data Out status
+  stays on the right; the tab title and description are hidden. The object's
+  own name (event name or car) stays as the large title in the page content,
+  and an event page's DELETE sits at the end of that title row. Escape goes up
+  one level.
 - Lap, sector, and run times and the headline metrics of runs and Driver
   Analysis pages use `--font-readout` with tabular numerals.
 
@@ -126,7 +134,8 @@ The application header is the only textured surface: it shows
 
 - Buttons (`.settings-button`) rest on `--surface` with a `--line` border.
   On hover or keyboard focus they fill with `--accent` and `--text-on-accent`.
-  Primary buttons rest on `--surface-deep` with a `--line-strong` border.
+  Ready actions (`.settings-button--ready`) fill with `--accent` and
+  `--text-on-accent` at rest; disabled, they look like any disabled control.
 - Destructive buttons (`.settings-button--danger`) keep `--danger-text` at rest
   and fill with `--danger` and `--text-on-danger` on hover or focus.
 - Disabled controls use `--surface-deep`, `--line-subtle`, and `--text-faint`,
@@ -146,8 +155,9 @@ The application header is the only textured surface: it shows
   border and `--text`; focus turns the border `--accent`.
 - Dialogs (`.confirm-dialog`) float: their content sits on `--panel` with a
   `--line-strong` border over a dark backdrop, and their title uses
-  `--font-readout`. The safe answer (NO, CANCEL) is the lime-filled action;
-  the destructive answer keeps `--danger-text` and fills red on hover.
+  `--font-readout`. The safe answer (NO, CANCEL) uses `.settings-button--ready`
+  with lime fill; the destructive answer keeps `--danger-text` and fills red
+  on hover.
 - A button with an extra state class still carries `.settings-button`; give
   the state rule a compound selector (for example
   `.settings-button.event-recorder__record`) so the base button rule, which
@@ -185,9 +195,14 @@ The application header is the only textured surface: it shows
   shapes, vertical Brake and Throttle bars, the Steering wheel, one
   Speed/Gear/RPM block, Engine (boost, power, torque), and the Input Graph;
   Delta is a separate target.
-- The layout editor uses the Configuration controls: square buttons that fill
-  with `--accent` on hover, and a dashed `--caution` outline with square
-  resize handles around the edited target.
+- Configuration's HUD LAYOUT section offers a `TELEMETRY ARRANGEMENT` segmented
+  choice: GROUPED (moves the HUD as one block) or FREEFORM (moves and resizes
+  each block individually). The selected option keeps a lime fill.
+- The layout editor shows an edit toolbar with RESET (restores default layout,
+  styled with `--caution` text and border, fills `--caution` on hover), CANCEL
+  (neutral dark, fills lime on hover), and SAVE (filled with lime at rest).
+  The toolbar displays the hint text `DRAG <TARGET> TO MOVE · CORNER TO RESIZE
+  · ESC CANCELS`.
 
 ## Checklist for a new screen or feature
 

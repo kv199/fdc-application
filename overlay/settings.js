@@ -2543,6 +2543,8 @@
     driverAnalysisView = next
     if (driverAnalysisHistoryView) driverAnalysisHistoryView.hidden = next.level !== 'history'
     if (driverAnalysisDetailView) driverAnalysisDetailView.hidden = next.level === 'history'
+    // The header path names the page from this level (RECORDING, CAR, DRIVE).
+    if (driverAnalysisDetailView) driverAnalysisDetailView.dataset.level = next.level
     if (driverAnalysisDetailBack && next.level !== 'history') {
       const label = DRIVER_ANALYSIS_BACK_LABELS[driverAnalysisParentLevel(next)]
       driverAnalysisDetailBack.textContent = label.text
@@ -3116,7 +3118,7 @@
       if (recording.sessions.length > 0 && !hasUnfinishedSessions) {
         const detailsButton = document.createElement('button')
         detailsButton.type = 'button'
-        detailsButton.className = 'settings-button driver-analysis-history-row__details-toggle'
+        detailsButton.className = 'settings-button settings-button--ready driver-analysis-history-row__details-toggle'
         detailsButton.textContent = 'DETAILS'
         detailsButton.addEventListener('click', () => {
           if (recording.sessions.length === 1) {

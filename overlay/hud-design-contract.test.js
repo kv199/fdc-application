@@ -184,3 +184,66 @@ test('Font preloads: index.html preloads all required fonts before tokens.css', 
     assert.ok(preloadIndex >= 0 && preloadIndex < tokensIndex, `Expected font preload for ${font} to appear before tokens.css link`)
   }
 })
+
+test('Layout editor: all RESET buttons have layout-edit__button--reset class', () => {
+  // Check index.html RESET buttons
+  assert.ok(overlayHtml.includes('id="delta-reset" class="layout-edit__button layout-edit__button--reset"'), 'Expected delta-reset to have layout-edit__button--reset class')
+  assert.ok(overlayHtml.includes('id="hud-reset" class="layout-edit__button layout-edit__button--reset"'), 'Expected hud-reset to have layout-edit__button--reset class')
+})
+
+test('Layout editor: all SAVE buttons have layout-edit__button--primary class', () => {
+  // Check index.html SAVE buttons
+  assert.ok(overlayHtml.includes('id="delta-save" class="layout-edit__button layout-edit__button--primary"'), 'Expected delta-save to have layout-edit__button--primary class')
+  assert.ok(overlayHtml.includes('id="hud-save" class="layout-edit__button layout-edit__button--primary"'), 'Expected hud-save to have layout-edit__button--primary class')
+})
+
+test('Layout editor: hint texts follow the pattern DRAG <TARGET> TO MOVE · CORNER TO RESIZE · ESC CANCELS', () => {
+  const hintPattern = /DRAG\s+\w+\s+TO\s+MOVE\s+·\s+CORNER\s+TO\s+RESIZE\s+·\s+ESC\s+CANCELS/
+  assert.match(overlayHtml, hintPattern, 'Expected hint text to follow pattern with DRAG TO MOVE · CORNER TO RESIZE · ESC CANCELS')
+})
+
+test('Layout editor: .layout-edit__button--primary has accent colors and comes after generic hover rule', () => {
+  const bodies = ruleBodies(overlayCss, '.layout-edit__button--primary')
+  const found = bodies.some(body =>
+    body.includes('border-color: var(--accent)') &&
+    body.includes('color: var(--text-on-accent)') &&
+    body.includes('background: var(--accent)')
+  )
+  assert.ok(found, 'Expected .layout-edit__button--primary to contain accent border/color/background')
+})
+
+test('Layout editor: .layout-edit__button--primary:hover has accent-hover colors', () => {
+  const bodies = ruleBodies(overlayCss, '.layout-edit__button--primary:hover')
+  const found = bodies.some(body =>
+    body.includes('border-color: var(--accent-hover)') &&
+    body.includes('background: var(--accent-hover)')
+  )
+  assert.ok(found, 'Expected .layout-edit__button--primary:hover to contain accent-hover colors')
+})
+
+test('Layout editor: .layout-edit__button--reset has caution colors', () => {
+  const bodies = ruleBodies(overlayCss, '.layout-edit__button--reset')
+  const found = bodies.some(body =>
+    body.includes('border-color: var(--caution)') &&
+    body.includes('color: var(--caution)') &&
+    body.includes('background: var(--surface)') &&
+    body.includes('margin-right: 8px')
+  )
+  assert.ok(found, 'Expected .layout-edit__button--reset to contain caution border/color, surface background, and margin-right: 8px')
+})
+
+test('Layout editor: .layout-edit__button--reset:hover has caution background and text-on-accent text color', () => {
+  const bodies = ruleBodies(overlayCss, '.layout-edit__button--reset:hover')
+  const found = bodies.some(body =>
+    body.includes('border-color: var(--caution)') &&
+    body.includes('color: var(--text-on-accent)') &&
+    body.includes('background: var(--caution)')
+  )
+  assert.ok(found, 'Expected .layout-edit__button--reset:hover to contain caution border/background and text-on-accent color')
+})
+
+test('Gear: .gear__value contains text-box: trim-both cap alphabetic', () => {
+  const bodies = ruleBodies(overlayCss, '.gear__value')
+  const found = bodies.some(body => /text-box:\s*trim-both\s+cap\s+alphabetic/.test(body))
+  assert.ok(found, 'Expected .gear__value to contain text-box: trim-both cap alphabetic')
+})

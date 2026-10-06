@@ -38,8 +38,8 @@ The tab opens with a short intro and contains:
   confirmed Sprint result across that Event. When the Event has saved traces,
   only results whose trace covers at least 97% of the Event's longest traced
   distance are eligible. During a recording, Absolute Best updates immediately
-  when Delta accepts a faster result, before the run is saved. The top-left
-  **← EVENTS** button and Escape both return to the Events list.
+  when Delta accepts a faster result, before the run is saved. The header shows
+  a back link `← EVENTS` and Escape both return to the Events list.
 - Selecting the event title starts inline renaming. Enter or leaving the input
   saves a non-empty name; Escape cancels that rename without leaving the page.
 - An event page has one green **RECORD RUN** control. Selecting it changes the same

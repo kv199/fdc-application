@@ -72,15 +72,13 @@ Light Brightness settings. How targets are learned is described in
 
 ## Layout
 
-Configuration → **HUD** opens with a short intro and offers two layout modes:
-
-- **Grouped** (default) keeps the visible blocks side by side in one panel. The
-  **Telemetry HUD** row moves and resizes that panel as a whole and lists the
-  visible blocks as checkboxes.
-- **Freeform** gives each block its own row with **EDIT** and a visibility
-  switch, so every block can be placed and sized independently.
-
-Delta is positioned independently in both modes.
+Configuration → **HUD** opens with a short intro and shows the `TELEMETRY
+ARRANGEMENT` segmented choice with GROUPED (default) and FREEFORM options; the
+selected one keeps a lime fill. Grouped keeps the visible blocks side by side
+in one panel and moves and resizes that panel as a whole. Freeform gives each
+block its own row with **EDIT** and a visibility switch, so every block can be
+placed and sized independently. Delta is positioned independently in both
+modes. The visible blocks are listed as checkboxes in Grouped mode.
 
 | Grouped | Freeform |
 | --- | --- |
@@ -90,10 +88,14 @@ Delta is positioned independently in both modes.
 
 - the edited target stays visible for the whole edit, even when **Show HUD
   with telemetry** or a visibility switch would otherwise hide it;
+- the edit toolbar displays `DRAG <TARGET> TO MOVE · CORNER TO RESIZE · ESC
+  CANCELS`;
 - drag the target to move it;
 - drag a corner to resize it between 0.5× and 2× of its default size;
-- **SAVE** keeps the change, **CANCEL** or Escape restores the previous
-  position, and **RESET** returns the target to its default placement.
+- **SAVE** (filled with lime at rest) keeps the change; **CANCEL** (neutral
+  dark, fills lime on hover) or Escape restores the previous position; **RESET**
+  (caution text and border, fills caution on hover) returns the target to its
+  default placement and sits apart with extra space.
 
 By default the telemetry HUD sits centered near the bottom of the screen with
 Delta directly above it. Positions are stored relative to the screen size, so

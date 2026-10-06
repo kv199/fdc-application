@@ -202,19 +202,60 @@ h1 {
 }
 
 /* Drill-down views (an event, a run, a Driver Analysis recording, car, or
-   drive) keep the header compact so the detail starts higher. */
+   drive) turn the header into one compact row: FDC, then a path with a back
+   link naming the parent and the page name, as in "← RECORDING / CAR". */
+.settings-header__path,
+.settings-header__path > .detail-back,
+.settings-header__page {
+  display: none;
+}
+
 .settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header {
-  padding-top: 10px;
+  padding-top: 12px;
   padding-bottom: 12px;
 }
 
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header__brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 18px;
+}
+
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-eyebrow__name,
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header__brand h1,
 .settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header__intro {
   display: none;
 }
 
-.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header__brand h1 {
-  margin-top: 6px;
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header__path {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-header__path-separator {
+  color: var(--text-muted);
+}
+
+.settings-header__page {
+  font-family: var(--font-readout);
   font-size: var(--type-detail-title);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.settings-shell:has(#events-panel:not([hidden]) #events-detail-view:not([hidden])) #events-detail-back,
+.settings-shell:has(#events-panel:not([hidden]) #events-detail-view:not([hidden])) [data-detail-page='event'],
+.settings-shell:has(#events-panel:not([hidden]) #events-run-view:not([hidden])) #events-run-back,
+.settings-shell:has(#events-panel:not([hidden]) #events-run-view:not([hidden])) [data-detail-page='run'],
+.settings-shell:has(#driver-analysis-panel:not([hidden]) #driver-analysis-detail-view:not([hidden])) #driver-analysis-detail-back,
+.settings-shell:has(#driver-analysis-panel:not([hidden]) #driver-analysis-detail-view:not([hidden])[data-level='recording']) [data-detail-page='recording'],
+.settings-shell:has(#driver-analysis-panel:not([hidden]) #driver-analysis-detail-view:not([hidden])[data-level='car']) [data-detail-page='car'],
+.settings-shell:has(#driver-analysis-panel:not([hidden]) #driver-analysis-detail-view:not([hidden])[data-level='drive']) [data-detail-page='drive'] {
+  display: inline-block;
 }
 
 @media (max-width: 560px) {
@@ -795,8 +836,7 @@ h1 {
   background: var(--panel);
 }
 
-.events-create-area__heading,
-.events-detail-view__header {
+.events-create-area__heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1690,6 +1730,7 @@ h1 {
 .events-run-table__time.is-missing { color: var(--text-faint); }
 
 .events-detail-view__actions {
+  margin-left: auto;
   display: flex;
   gap: 8px;
 }
@@ -1699,20 +1740,17 @@ h1 {
   margin-top: 0;
 }
 
-.events-detail-view__header {
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line-subtle);
-}
 
 /* Back to the immediate parent, named: ← EVENTS, ← EVENT, ← RECORDING. */
 .detail-back {
-  padding: 6px 0;
+  padding: 4px 0;
   border: 0;
   color: var(--text);
   background: transparent;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -2580,76 +2618,6 @@ h1 {
   margin: 24px 0 16px;
 }
 
-.hud-layout-mode__options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.hud-layout-mode__option {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
-  padding: 12px 13px;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--surface);
-  cursor: pointer;
-}
-
-.hud-layout-mode__option:hover {
-  border-color: var(--line-strong);
-  background: var(--surface-hover);
-}
-
-/* The selected choice keeps its lime fill without hover. */
-.hud-layout-mode__option:has(input:checked) {
-  border-color: var(--accent);
-  background: var(--accent);
-}
-
-.hud-layout-mode__option:has(input:checked) strong,
-.hud-layout-mode__option:has(input:checked) small {
-  color: var(--text-on-accent);
-}
-
-.hud-layout-mode__option:has(input:checked) input {
-  accent-color: var(--text-on-accent);
-}
-
-.hud-layout-mode__option:has(input:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.hud-layout-mode__option input {
-  flex: 0 0 auto;
-  width: 15px;
-  height: 15px;
-  margin: 2px 0 0;
-  accent-color: var(--accent);
-}
-
-.hud-layout-mode__option strong,
-.hud-layout-mode__option small {
-  display: block;
-}
-
-.hud-layout-mode__option strong {
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-}
-
-.hud-layout-mode__option small {
-  margin-top: 5px;
-  color: var(--text-subtle);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
 .layout-row,
 .visibility-row {
   display: flex;
@@ -2786,8 +2754,23 @@ h1 {
   cursor: not-allowed;
 }
 
-.settings-button--primary {
-  border-color: var(--line-strong);
+/* The one next step of a screen is filled with lime at rest. The compound
+   selector keeps it above the base button rules. */
+.settings-button.settings-button--ready {
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+
+.settings-button.settings-button--ready:not(:disabled):hover,
+.settings-button.settings-button--ready:not(:disabled):focus-visible {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.settings-button.settings-button--ready:disabled {
+  border-color: var(--line-subtle);
+  color: var(--text-faint);
   background: var(--surface-deep);
 }
 
