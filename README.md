@@ -184,6 +184,12 @@ version next to it to copy it.
 Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md),
 never in a public issue.
 
+## Third-party assets
+
+FDC bundles the Barlow and Barlow Condensed typefaces, licensed under the
+SIL Open Font License 1.1. Copyright 2017 The Barlow Project Authors. The font
+files and their license texts are in `overlay/assets/fonts/`.
+
 ## License
 
 FDC is available under the [MIT License](LICENSE).
