@@ -52,20 +52,20 @@ window.FDC_FOUNDATIONS = [
         <p class="muted">These locally bundled open-license fonts keep controls readable and changing numbers compact. Their use does not claim the identity of another brand's instrument typeface.</p>
         <div class="grid2">
           <article class="plate">
-            <div class="row"><span class="label">BARLOW</span><span class="badge green">PROPOSED UI FONT</span></div>
+            <div class="row"><span class="label">BARLOW</span><span class="badge green">UI FONT</span></div>
             <div class="barlow-sample"><div class="num" style="font-size:42px">N 1 4 7 0 8</div><div class="metric">84°C <span class="muted">· 82°C</span></div><div class="num">0.4 bar · 6240 RPM</div><div class="metric">01:08.953</div></div>
             <p class="muted">Balanced proportions for controls, labels and general UI text.</p>
           </article>
           <article class="plate">
-            <div class="row"><span class="label">BARLOW CONDENSED</span><span class="badge green">PROPOSED READOUT FONT</span></div>
+            <div class="row"><span class="label">BARLOW CONDENSED</span><span class="badge green">READOUT FONT</span></div>
             <div class="num condensed" style="font-size:42px">N 1 4 7 0 8</div><div class="metric condensed">84°C <span class="muted">· 82°C</span></div><div class="num condensed">0.4 bar · 6240 RPM</div><div class="metric condensed">01:08.953</div>
             <p class="muted">Narrower footprint for speed, gear, RPM and lap time emphasis.</p>
           </article>
         </div>
       </section>
       <div class="grid2">
-        <section class="panel"><div class="label">PROPOSED PAIRING</div><h2>Barlow UI + Barlow Condensed readouts</h2><p>Use Barlow for navigation, helper text, forms and tables. Reserve Barlow Condensed for prominent live values and lap times. Keep tabular numerals on every column of changing data.</p><div class="row"><span>Regular UI</span><span class="num">16 / 24</span></div><div class="row"><span>Section label</span><span class="label">11 · TRACKED</span></div><div class="row"><span>Primary value</span><span class="metric condensed">184 km/h</span></div></section>
-        <section class="panel"><div class="label">DISTRIBUTION & SCOPE</div><p>The four font files are bundled locally under <code>fonts/</code>, so the prototype does not fetch a web font at runtime. Keep the included OFL notices with any redistribution.</p><p class="muted">These samples cover Latin letters and numerals used by the current English UI. Cyrillic fallback and small-size legibility still need a deliberate product decision.</p><div class="row"><a href="https://github.com/google/fonts/tree/main/ofl/barlow">Barlow source</a><a href="fonts/barlow-OFL.txt">OFL notice</a></div><div class="row"><a href="https://github.com/google/fonts/tree/main/ofl/barlowcondensed">Barlow Condensed source</a><a href="fonts/barlowcondensed-OFL.txt">OFL notice</a></div></section>
+        <section class="panel"><div class="label">PAIRING</div><h2>Barlow UI + Barlow Condensed readouts</h2><p>Use Barlow for navigation, helper text, forms and tables. Reserve Barlow Condensed for prominent live values and lap times. Keep tabular numerals on every column of changing data.</p><div class="row"><span>Regular UI</span><span class="num">16 / 24</span></div><div class="row"><span>Section label</span><span class="label">11 · TRACKED</span></div><div class="row"><span>Primary value</span><span class="metric condensed">184 km/h</span></div></section>
+        <section class="panel"><div class="label">DISTRIBUTION & SCOPE</div><p>The four font files are bundled locally under <code>overlay/assets/fonts/</code>, so FDC and this book never fetch a web font. Keep the included OFL notices with any redistribution.</p><p class="muted">These samples cover Latin letters and numerals used by the current English UI. Windows fonts in the fallback stack cover glyphs Barlow lacks, such as Cyrillic in user-entered names.</p><div class="row"><a href="https://github.com/google/fonts/tree/main/ofl/barlow">Barlow source</a><a href="../../overlay/assets/fonts/barlow-OFL.txt">OFL notice</a></div><div class="row"><a href="https://github.com/google/fonts/tree/main/ofl/barlowcondensed">Barlow Condensed source</a><a href="../../overlay/assets/fonts/barlowcondensed-OFL.txt">OFL notice</a></div></section>
       </div>`
   },
   {
@@ -109,8 +109,8 @@ window.FDC_FOUNDATIONS = [
     section: 'FOUNDATIONS',
     description: 'Design reference: a checklist of the screens in this book and the product behavior each screen must preserve when implementation begins.',
     html: `
-      <section class="panel"><span class="label">DESIGN REFERENCE / SCREEN MAP</span><h2>What this book covers</h2><p>Each row below names one area of FDC, links to its proposed screen, and lists the behavior that the later implementation must keep. Use this as a review checklist; it is not an extra screen in the app.</p></section>
-      <section class="panel"><div class="row"><div><div class="label">SIX APP AREAS</div><h2>Proposed screens and retained behavior</h2></div><span class="badge amber">DESIGN PROPOSAL · NOT SHIPPED</span></div>
+      <section class="panel"><span class="label">DESIGN REFERENCE / SCREEN MAP</span><h2>What this book covers</h2><p>Each row below names one area of FDC, links to its screen, and lists the behavior the implementation keeps. Use this as a review checklist; it is not an extra screen in the app.</p></section>
+      <section class="panel"><div class="row"><div><div class="label">SIX APP AREAS</div><h2>Screens and retained behavior</h2></div><span class="badge amber">IMPLEMENTED ON THE REDESIGN BRANCH</span></div>
         <div class="table coverage-map">
           <div class="row"><span class="label">AREA</span><span class="label">INCLUDED VIEWS</span><span class="label">BEHAVIOR TO RETAIN</span><span class="label">STATUS</span></div>
           <div class="row"><a href="?board=hud-live">HUD ↗</a><span>Grouped, six individual widgets, Delta and shift states</span><span>Current data placement, vertical pedals, one Speed / Gear / RPM block, visibility and layout modes</span><span class="badge green">REDESIGN</span></div>
@@ -133,7 +133,7 @@ window.FDC_FOUNDATIONS = [
         <section class="panel"><div class="label">SOURCES FOR THIS PLAN</div><h2>Current code is the behavior source</h2>
           <p>Page structure and controls were mapped from the current <code>overlay/settings.html</code> and <code>overlay/settings.js</code>. The HUD arrangement follows <code>overlay/index.html</code> and <code>docs/hud.md</code>. Driver and Events pages follow their current code and feature guides.</p>
           <p>The supplied screenshots provide visible examples for Driver Analysis history, Shift Light, Garage, Settings, and the Events library, event details, lap table and trace expansion. A sample table on this canvas reproduces visible lap figures as a static layout fixture.</p>
-          <div class="callout"><b>Implementation boundary</b><p>The book is a visual proposal. Current code and feature guides remain the authority for live behavior, data ownership and control flows.</p></div>
+          <div class="callout"><b>Implementation boundary</b><p>The book shows the implemented design with fixture data. Current code and feature guides remain the authority for live behavior, data ownership and control flows.</p></div>
           <p class="muted">No new telemetry claims, track identity, ideal line, driving score, exact time loss, external transport or persistence behavior is proposed here.</p>
         </section>
       </div>`

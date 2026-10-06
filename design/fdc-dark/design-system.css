@@ -1,88 +1,39 @@
-/* FDC Dark design proposal 04. This file is the visual token source for the book.
-   Runtime CSS remains unchanged until the design is approved for implementation. */
-@font-face { font-family: Barlow; src: url(fonts/Barlow-Regular.ttf); font-weight: 400; }
-@font-face { font-family: Barlow; src: url(fonts/Barlow-SemiBold.ttf); font-weight: 600; }
-@font-face { font-family: Condensed; src: url(fonts/BarlowCondensed-Medium.ttf); font-weight: 500; }
-@font-face { font-family: Condensed; src: url(fonts/BarlowCondensed-SemiBold.ttf); font-weight: 600; }
+/* FDC Dark design book styles. Colors, fonts, type, and spacing come from the
+   application itself: index.html loads overlay/tokens.css, so the book always
+   shows the values the app uses. This file only maps the book's older token
+   names onto those roles and adds book-specific layout. */
+@font-face { font-family: Condensed; src: url(../../overlay/assets/fonts/BarlowCondensed-Medium.ttf); font-weight: 500; }
+@font-face { font-family: Condensed; src: url(../../overlay/assets/fonts/BarlowCondensed-SemiBold.ttf); font-weight: 600; }
 
 :root {
-  /* Surfaces and type */
-  --bg: #101715;
-  --surface: #1e2a22;
-  --panel: #2c3b2f;
-  --surface-deep: #152019;
-  --surface-hover: #354b38;
-  --line-subtle: #405346;
-  --paint: #576a5b;
-  --instrument: #101b15;
-  --hud-casing: #19241d;
-  --hud-surface: #101b15;
-  --hud-divider: #344238;
-  --text: #edf0df;
-  --text-on-accent: #162314;
-  --text-on-danger: #271615;
-  --muted: #b0bcae;
-  --line: #58695c;
-  --line-strong: #8c9b82;
+  /* Book names for application roles (see overlay/tokens.css). */
+  --muted: var(--text-muted);
+  --lime: var(--accent);
+  --purple: var(--best);
+  --red: var(--danger);
+  --amber: var(--warning);
+  --cyan: var(--trace-slip);
+  --coast: var(--trace-coast);
+  --wear: var(--paint-texture-opacity);
+  --instrument: var(--hud-shade);
+  --hud-surface: var(--hud-panel);
+  --hud-casing: transparent;
+  --type-page: var(--type-page-title);
+  --cut-widget: var(--hud-cut-widget);
+  --cut-grouped: var(--hud-cut-grouped);
+  --problem-scrub: var(--problem-front-scrub);
+  --problem-wheelspin: var(--problem-exit-wheelspin);
+  --problem-release: var(--problem-abrupt-release);
+  --problem-clean: var(--text-muted);
 
-  /* Actions and telemetry meanings */
-  --lime: #c3ed83;
-  --purple: #c39be7;
-  --red: #f2877f;
-  --amber: #e2c876;
-  --cyan: #7dd3fc;
-  --coast: #facc15;
-  --wear: .9;
-
-  /* Fixed in-game HUD telemetry colors, kept from the current overlay. */
-  --telemetry-throttle: #69e83f;
-  --telemetry-brake: #ff312b;
+  /* HUD tire temperature colors are set by overlay/overlay.js, not by tokens. */
   --tire-cold: #38bdf8;
   --tire-normal: #69e83f;
   --tire-warm: #ffd400;
   --tire-hot: #ff312b;
 
-  /* Event mode colors: these retain the runtime mapping. */
-  --mode-any: #f97316;
-  --mode-rivals: #7dd3fc;
-  --mode-online: #facc15;
-  --mode-eventlab: #ffffff;
-  --mode-official: #ef4444;
-  --mode-blueprint: #c084fc;
-
-  /* Vehicle classes: these retain the runtime mapping. */
-  --class-d: #7dd3fc;
-  --class-c: #facc15;
-  --class-b: #f97316;
-  --class-a: #ef4444;
-  --class-s1: #c084fc;
-  --class-s2: #2563eb;
-  --class-r: #ec4899;
-  --class-x: #22c55e;
-
-  /* Driver Analysis map markers retain their current distinctions. */
-  --problem-scrub: #fb923c;
-  --problem-wheelspin: #f472b6;
-  --problem-brake-steering: #818cf8;
-  --problem-release: #d8b4fe;
-  --problem-clean: #a1a1aa;
-
-  /* Typography, rhythm and physical geometry */
-  --font-ui: Barlow, Arial, sans-serif;
-  --font-readout: Condensed, Barlow, sans-serif;
-  --type-body: 14px;
-  --type-label: 11px;
-  --type-heading: 28px;
-  --type-page: 44px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 18px;
-  --space-5: 24px;
-  --space-6: 36px;
+  /* Book-only HUD specimen geometry. */
   --stroke: 1px;
-  --cut-widget: 7px;
-  --cut-grouped: 14px;
   --hud-data-width: 736px;
   --hud-data-height: 69px;
   --hud-gap: 0px;
@@ -130,7 +81,7 @@
 .appmast__path > span { color: var(--muted); }
 .appmast--compact .appmast__path h1 { min-width: 0; margin: 0; font: 500 27px/1 var(--font-readout); letter-spacing: .02em; text-transform: uppercase; }
 .app--detail .appnav { margin-bottom: 16px; }
-.material-sample::before { position: absolute; inset: 0; z-index: -1; background: url(paint.png) center / cover; opacity: var(--wear); content: ''; pointer-events: none; }
+.material-sample::before { position: absolute; inset: 0; z-index: -1; background: url(../../overlay/assets/textures/paint.jpg) center / cover; opacity: var(--wear); content: ''; pointer-events: none; }
 
 /* In-game HUD surfaces stay dark and texture-free. The same opacity applies
    to their backgrounds and readings; the preview starts at the runtime 80%. */
@@ -287,3 +238,41 @@
   .spec-rule { grid-template-columns: 1fr; gap: 5px; }
   .journey-summary, .map-hover-sample { grid-template-columns: 1fr 1fr; }
 }
+
+/* Implemented details. These follow overlay/settings.css and
+   overlay/overlay.css; docs/design-system.md describes the rules. */
+.appmast__intro { max-width: 62ch; margin: 12px 0 0; color: var(--text); font-size: 13px; line-height: 1.45; }
+.appmast .connection { display: inline-flex; align-items: center; gap: 8px; font: 600 11px var(--font-ui); letter-spacing: .1em; color: var(--warning); background: var(--surface-deep); border: 1px solid var(--line); padding: 7px 10px; cursor: pointer; }
+.appmast .connection:hover { border-color: var(--accent); background: var(--surface-deep); }
+.app .button.ready { border-color: var(--accent); color: var(--text-on-accent); background: var(--accent); }
+.app .button.ready:not(:disabled):hover { border-color: var(--accent-hover); background: var(--accent-hover); }
+.history-actions { display: flex; flex-direction: column; gap: 6px; min-width: 96px; }
+.history-actions .button { width: 100%; }
+.hud-spec-stage .hud-spec-delta { width: var(--hud-data-width); max-width: 100%; }
+
+/* The layout editor toolbar shown over the HUD target while editing. */
+.edit-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; padding: 8px 10px; border: 1px solid var(--line); background: var(--surface-deep); }
+.edit-toolbar span { margin-right: auto; color: var(--text-muted); font-size: 12px; font-weight: 600; letter-spacing: .1em; }
+.edit-toolbar button { padding: 6px 10px; border: 1px solid var(--line); color: var(--text); background: var(--surface); font-size: 13px; font-weight: 600; letter-spacing: .1em; }
+.edit-toolbar button:hover { border-color: var(--accent); color: var(--text-on-accent); background: var(--accent); }
+.edit-toolbar .edit-toolbar__reset { margin-right: 8px; border-color: var(--caution); color: var(--caution); }
+.edit-toolbar .edit-toolbar__reset:hover { border-color: var(--caution); color: var(--text-on-accent); background: var(--caution); }
+.edit-toolbar .edit-toolbar__save { border-color: var(--accent); color: var(--text-on-accent); background: var(--accent); }
+.edit-toolbar .edit-toolbar__save:hover { border-color: var(--accent-hover); background: var(--accent-hover); }
+
+/* Floating surfaces: dialogs and the connection guide sit on the raised plate. */
+.overlay-stage { display: grid; place-items: center; padding: 28px; background: color-mix(in srgb, var(--shadow) 62%, transparent); border: 1px solid var(--line-subtle); margin-bottom: 18px; }
+.overlay-card { width: min(100%, 460px); padding: 22px; border: 1px solid var(--line-strong); background: var(--panel); }
+.overlay-card h3 { margin: 0 0 10px; font: 500 24px/1.1 var(--font-readout); letter-spacing: .02em; }
+.overlay-card p { margin: 10px 0 18px; color: var(--text-muted); font-size: 13px; }
+.overlay-card .actions { display: flex; justify-content: flex-end; gap: 8px; }
+.overlay-card .check { display: flex; align-items: center; gap: 8px; margin: 0 0 18px; font-size: 13px; }
+.overlay-card .check input { accent-color: var(--accent); }
+.overlay-card .danger-answer { border-color: var(--danger); color: var(--danger-soft); background: transparent; }
+.overlay-card .danger-answer:not(:disabled):hover { border-color: var(--danger); color: var(--text-on-danger); background: var(--danger); }
+.overlay-card ol { margin: 0 0 16px; padding-left: 20px; line-height: 1.7; }
+.overlay-card .value { display: inline-block; margin: 4px 0; padding: 4px 12px; border: 1px solid var(--line); background: var(--surface-deep); font: 600 24px var(--font-readout); }
+.overlay-card .guide-status { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--caution) 55%, transparent); color: var(--caution); background: color-mix(in srgb, var(--caution) 8%, transparent); font-size: 12px; font-weight: 600; letter-spacing: .1em; }
+.overlay-card .guide-status i { width: 8px; height: 8px; border-radius: 50%; background: var(--caution); }
+.event-identity h2 { margin-right: 0; }
+.event-identity { gap: 12px; }

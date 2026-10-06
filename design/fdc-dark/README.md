@@ -1,44 +1,59 @@
-# FDC design book — FDC Dark · Proposal 04
+# FDC design book — FDC Dark
 
-An isolated HTML design proposal. Open `index.html` directly. The local
-`outputs/` preview also has an optional `serve.cjs` helper. The overview links
-to full-size boards. All assets and fonts are local. No connection to
-telemetry, SQLite, or the running application.
+The design book shows the FDC Dark design as it is implemented in the app,
+with fixture data. It lives on the `design` branch only and never merges into
+`develop` or `main`; bring it up to date by merging the implementation branch
+into `design`.
 
-The versioned source for a future implementation agent is `design/fdc-dark/`.
-The `outputs/fdc-design-book/` preview is local and ignored by Git. Read
-`IMPLEMENTATION.md` for source precedence, design rules, the board-to-runtime
-map, and implementation acceptance. The tracked source does not include the
-local `serve.cjs` helper, `reference/` material, or generated `canvas.json`.
-Run `node design/fdc-dark/verify.cjs` from the repository root to check boards,
-links, assets, and values without generating files.
+## Open it
 
-## Scope and evidence
+```
+node design/preview/serve.cjs
+```
 
-Sixteen application boards cover HUD configuration, Grouped and Freeform geometry, shift states, Driver history/recording/car/drive pages, Shift Light, Garage, Events library/create/detail/run/map, and Settings. Five supporting boards cover an exact style specification, materials, typography, component states, and migration rules. Use **Exact style specification** in the overview for the agreed values and `design-system.css` for their CSS definitions.
+Then open `http://127.0.0.1:5320/`. The book loads the app's own stylesheet
+and fonts through `../../overlay/`, so it needs the server (browsers block font
+files opened from disk). The overview links to every board and to live
+previews of the real Configuration and HUD; see `design/preview/README.md`.
 
-The second overview group contains design references, not extra FDC screens: **App finish & HUD surface** explains where texture appears; **Fonts & readouts** shows the two selected font families; **Screen map & design rules** links to the covered app areas and records behavior to retain. The Garage proposal uses text, badges and variant rows without vehicle image slots.
+Run `node design/fdc-dark/verify.cjs` to check boards, links, app assets, and
+the tokens named on the specification board.
 
-Sources: user-supplied FDC screenshots; current overlay/index.html, overlay/overlay.css, overlay/settings.html and overlay/settings.js; HUD, Garage, Driver Analysis and Events behavior documentation; an earlier read-only view of the Driver Analysis release window. Populated states and telemetry are illustrative fixtures, not current user data. Both map paths are schematic, not recorded routes or track identities.
+## One source of values
 
-The presentation borrows the artboard overview / foundations / component inventory format from https://github.com/primo-browser/design-book. All FDC boards are proposed, not implemented runtime changes. Controls demonstrate local appearance; Record, Delete, Reset, Create and Change actions do not act on real data. Map legend buttons demonstrate selected states; the schematic paths do not change.
+- Colors, fonts, the type scale, and spacing come from `overlay/tokens.css`,
+  which `index.html` loads before the book's own styles. The book has no copy
+  of the palette.
+- `design-system.css` maps the book's older token names onto those roles
+  (for example `--lime` is `--accent`, `--muted` is `--text-muted`) and adds
+  book-specific layout. `book.css` holds the artboard and specimen layout.
+- The fonts (`overlay/assets/fonts/`, with their SIL Open Font License texts)
+  and the header texture (`overlay/assets/textures/paint.jpg`) are the app's
+  files.
+- The **Exact style specification** board reads each token's value from the
+  loaded stylesheet, so it always shows what the app uses.
+
+`docs/design-system.md` (on the implementation branch) is the rulebook for the
+tokens and components; the book illustrates it.
+
+## Boards
+
+Sixteen application boards cover HUD configuration, Grouped and Freeform
+geometry and shift states, Driver history, recording, car, and drive pages,
+Shift Light, Garage, Events library, create, event, run, and map, and Settings.
+Six reference boards cover the exact style specification, materials, fonts,
+the component and state kit, the screen map, and the connection guide with the
+confirmation dialogs.
+
+Boards follow the implemented app: the tab description and the Direct Data Out
+status in the header, the compact drill-down path such as `← RECORDING / CAR`,
+lime ready actions (CREATE, DETAILS, SAVE, RECORD RUN, a dialog's safe answer),
+the TELEMETRY ARRANGEMENT row, the layout editor toolbar, the translucent HUD
+surfaces, and the full-width Delta strip. Values on the boards are fixtures,
+never live telemetry; map paths are schematic and identify no track.
 
 ## Fonts
 
-Barlow and Barlow Condensed are the two selected families for UI text, headings and numeric readouts, including the agreed HUD. These are not identified as Porsche's instrument typeface. Four unmodified font files are bundled with their SIL Open Font License notices in fonts/. OFL permits bundling with commercial software subject to its conditions; preserve the copyright and license notices. See https://openfontlicense.org/ofl-faq/ and the included licenses. This proposal uses English/Latin UI; Cyrillic coverage is not established.
-
-## Material and color
-
-The B texture remains at 0.90 opacity on the application header only; the material reference page shows it as a sample. Ordinary cards, forms and tables have even dark fills. The in-game HUD and Delta have no paint texture: their flat dark backgrounds and readings share the existing HUD opacity setting (1–100%, default 80%). Warm white, muted green paint, dark instrument surfaces and lime interaction states establish the application palette. The exact style page distinguishes Configuration accents from the current in-game throttle, brake, tire and Delta colors. Event mode, vehicle-class and Driver Analysis map colors retain their meanings.
-
-The app background remains `#101715`; ordinary surfaces are `#1e2a22` and raised panels `#2c3b2f`. Top-level page headers use a 44 px title. Driver and Events detail pages use a compact 27 px title with a link to the immediate parent. Repeated surface, border and hover colors are defined in `design-system.css`. In the interaction trial, primary and secondary action buttons gain lime fill with dark text on hover; destructive buttons gain red fill with dark text. Their resting styles still distinguish primary, secondary and destructive actions. Selected navigation and segmented choices remain visibly selected without hover; keyboard focus keeps its lime outline. This book contains one dark application direction; no theme switch or light palette is proposed.
-
-Use a raised olive plate for the main working area or principal result; put supporting metrics and details on ordinary surfaces. Keep lime text sparse for ready states, positive results and meaningful timing values. Purple means best or the learned Shift Light cue. Within each data context, preserve one stable meaning per semantic color rather than introducing a new color for every comparison. The Settings board includes the current speed and distance unit choices. The top-level navigation follows the current Configuration order: HUD, Events, Driver, Shift Light, Garage, Settings.
-
-## HUD geometry contract
-
-The in-game data arrangement follows the current six HUD blocks. Tires retain four temperatures and their tire shapes. Brake and throttle remain vertical bars. Steering remains a wheel. Speed, gear and RPM remain one block and preserve their redline and learned shift states. Engine/Boost keeps boost, power and torque; Input Graph keeps pedal history. Delta remains a separate target. In Freeform, each widget and Delta has a top-left and bottom-right cut. Grouped joins all six data areas into one 736 × 69 px dark strip with no internal gaps or cuts; only the top-left and bottom-right corners of the entire strip are cut. The local opacity sliders on the HUD boards preview the same opacity on backgrounds and readings.
-
-The style guide uses `design-system.css` as the token source. `book.css` contains legacy and general layout rules. `screens-current.js` applies the updated HUD and post-September-23 Driver and Events proposal boards over the original fixture set; `style-spec.js` adds the exact style page.
-
-The files in this export are separate from FDC runtime. They do not change its version, persistence, telemetry contracts, or installed executable.
+Barlow and Barlow Condensed are bundled by the app under the SIL Open Font
+License 1.1. The UI is English; Windows fonts in the fallback stack cover
+glyphs Barlow lacks, such as Cyrillic in user-entered names.
