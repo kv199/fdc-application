@@ -1,13 +1,13 @@
 :root {
-  color: #f8fafc;
+  color: var(--hud-text);
   background: transparent;
   font-family: "Bahnschrift", "Segoe UI Variable", "Segoe UI", sans-serif;
   font-synthesis: none;
-  --gas: #69e83f;
-  --brake: #ff312b;
-  --rule: rgb(226 232 240 / 42%);
-  --panel: rgb(8 10 12 / 56%);
-  --redline-background: rgb(217 42 37 / 96%);
+  --gas: var(--telemetry-throttle);
+  --brake: var(--telemetry-brake);
+  --rule: var(--hud-rule);
+  --panel: var(--hud-panel);
+  --redline-background: var(--hud-redline-background);
   --shift-light-brightness-scale: 1;
   --hud-opacity: 0.8;
   --hud-scale: min(2, calc((100vw - 16px) / 736px));
@@ -101,11 +101,11 @@ body {
   width: 12px;
   height: 19px;
   border-radius: 3px;
-  background: rgb(3 5 7 / 30%);
+  background: var(--hud-track);
 }
 
 .tire__temp {
-  color: #71717a;
+  color: var(--hud-text-subtle);
   font-size: 12px;
   font-style: normal;
   font-weight: 650;
@@ -132,7 +132,7 @@ body {
   height: 100%;
   overflow: hidden;
   border-radius: 2px;
-  background: rgb(3 5 7 / 34%);
+  background: var(--hud-pedal-track);
 }
 
 .pedal__fill {
@@ -187,7 +187,7 @@ body {
 .gear__rpm {
   position: relative;
   z-index: 1;
-  color: #fafafa;
+  color: var(--hud-text-bright);
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
@@ -196,7 +196,7 @@ body {
 .gear__value {
   position: relative;
   z-index: 1;
-  color: #fafafa;
+  color: var(--hud-text-bright);
   font-size: 30px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
@@ -209,11 +209,11 @@ body {
 
 .hud.is-redline .gear__speed,
 .hud.is-redline .gear__rpm {
-  color: #ffd4d2;
+  color: var(--hud-redline-text);
 }
 
 .hud.is-redline .gear__value {
-  color: #ff827d;
+  color: var(--hud-redline-label);
 }
 
 .hud.is-shift .gear::before {
@@ -223,11 +223,11 @@ body {
 
 .hud.is-shift .gear__speed,
 .hud.is-shift .gear__rpm {
-  color: #ffffff;
+  color: var(--hud-text-white);
 }
 
 .hud.is-shift .gear__value {
-  color: #ffffff;
+  color: var(--hud-text-white);
 }
 
 .engine {
@@ -250,7 +250,7 @@ body {
 
 .engine__label {
   overflow: hidden;
-  color: #a1a1aa;
+  color: var(--hud-text-muted);
   font-size: 11px;
   font-weight: 750;
   letter-spacing: 0.04em;
@@ -260,7 +260,7 @@ body {
 .engine__value {
   min-width: 0;
   overflow: hidden;
-  color: #f8fafc;
+  color: var(--hud-text);
   font-size: 12px;
   font-weight: 650;
   line-height: 1;
@@ -273,12 +273,12 @@ body {
   0%,
   44%,
   100% {
-    background: rgb(168 85 247 / 96%);
+    background: var(--hud-shift-alert);
   }
 
   45%,
   72% {
-    background: rgb(185 118 248 / 98%);
+    background: var(--hud-shift-alert-flash);
   }
 }
 
@@ -297,7 +297,7 @@ body {
 
 .hud.is-waiting,
 .hud.is-offline {
-  --panel: rgb(8 10 12 / 49%);
+  --panel: var(--hud-delta-panel);
 }
 
 @media (max-width: 684px) {
@@ -311,7 +311,7 @@ body {
   position: relative;
   width: 100%;
   padding: calc(8px * var(--delta-user-scale)) calc(12px * var(--delta-user-scale)) calc(10px * var(--delta-user-scale));
-  background: rgb(8 10 12 / 74%);
+  background: color-mix(in srgb, var(--hud-shade) 74%, transparent);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
@@ -331,7 +331,7 @@ body {
 
 .delta-strip__lap-time {
   flex: 0 0 auto;
-  color: #f8fafc;
+  color: var(--hud-text);
   font-size: calc(15px * var(--delta-user-scale));
   font-weight: 800;
   line-height: 1;
@@ -341,7 +341,7 @@ body {
 .delta-strip__value {
   display: block;
   margin: calc(5px * var(--delta-user-scale)) auto calc(4px * var(--delta-user-scale));
-  color: #f8fafc;
+  color: var(--hud-text);
   font-size: calc(18px * var(--delta-user-scale));
   font-weight: 900;
   line-height: 1;
@@ -356,7 +356,7 @@ body {
   display: flex;
   align-items: baseline;
   gap: calc(6px * var(--delta-user-scale));
-  color: rgb(248 250 252 / 72%);
+  color: color-mix(in srgb, var(--hud-text) 72%, transparent);
   font-size: calc(11px * var(--delta-user-scale));
   font-weight: 800;
   line-height: 1;
@@ -369,7 +369,7 @@ body {
 }
 
 .delta-strip__best-time {
-  color: #f8fafc;
+  color: var(--hud-text);
   font-size: calc(13px * var(--delta-user-scale));
   letter-spacing: 0;
 }
@@ -387,14 +387,14 @@ body {
   width: 100%;
   height: calc(10px * var(--delta-user-scale));
   overflow: hidden;
-  background: #030507;
+  background: var(--hud-bar-track);
 }
 
 .delta-strip__bar::before {
   position: absolute;
   inset: 0 auto 0 50%;
   width: max(1px, calc(1px * var(--delta-user-scale)));
-  background: rgb(248 250 252 / 76%);
+  background: color-mix(in srgb, var(--hud-text) 76%, transparent);
   content: '';
   transform: translateX(-50%);
   z-index: 1;
@@ -474,9 +474,9 @@ body {
   gap: 8px;
   min-width: max-content;
   padding: 8px 10px;
-  border: 1px solid rgb(226 232 240 / 30%);
+  border: 1px solid color-mix(in srgb, var(--hud-edit-line) 30%, transparent);
   border-radius: 3px;
-  background: rgb(8 10 12 / 94%);
+  background: color-mix(in srgb, var(--hud-shade) 94%, transparent);
   pointer-events: auto;
 }
 
@@ -485,7 +485,7 @@ body {
 }
 
 .layout-edit__hint {
-  color: #a1a1aa;
+  color: var(--hud-text-muted);
   font-size: 13px;
   font-weight: 750;
   letter-spacing: 0.08em;
@@ -494,10 +494,10 @@ body {
 .layout-edit__button {
   min-width: 64px;
   padding: 5px 8px;
-  border: 1px solid rgb(226 232 240 / 46%);
+  border: 1px solid color-mix(in srgb, var(--hud-edit-line) 46%, transparent);
   border-radius: 3px;
-  color: #f8fafc;
-  background: rgb(226 232 240 / 10%);
+  color: var(--hud-text);
+  background: color-mix(in srgb, var(--hud-edit-line) 10%, transparent);
   font: inherit;
   font-size: 14px;
   font-weight: 750;
@@ -507,19 +507,19 @@ body {
 
 .layout-edit__button:hover,
 .layout-edit__button:focus-visible {
-  background: rgb(226 232 240 / 20%);
+  background: color-mix(in srgb, var(--hud-edit-line) 20%, transparent);
   outline: none;
 }
 
 .layout-edit__button--primary {
-  border-color: rgb(105 232 63 / 70%);
+  border-color: color-mix(in srgb, var(--hud-edit-accent) 70%, transparent);
   color: var(--gas);
 }
 
 .delta-strip.is-editing,
 .hud-frame.is-editing {
   pointer-events: auto;
-  outline: 2px dashed rgb(251 191 36 / 80%);
+  outline: 2px dashed color-mix(in srgb, var(--hud-edit-guide) 80%, transparent);
   outline-offset: 5px;
   cursor: grab;
 }
@@ -536,9 +536,9 @@ body {
   width: 24px;
   height: 24px;
   padding: 0;
-  border: 2px solid rgb(251 191 36 / 95%);
+  border: 2px solid color-mix(in srgb, var(--hud-edit-guide) 95%, transparent);
   border-radius: 50%;
-  background: rgb(8 10 12 / 92%);
+  background: color-mix(in srgb, var(--hud-shade) 92%, transparent);
   pointer-events: auto;
   touch-action: none;
 }
@@ -591,7 +591,7 @@ body {
 .hud-widget-editor-frame {
   position: absolute;
   z-index: 8;
-  outline: 2px dashed rgb(251 191 36 / 80%);
+  outline: 2px dashed color-mix(in srgb, var(--hud-edit-guide) 80%, transparent);
   outline-offset: 5px;
   pointer-events: none;
 }

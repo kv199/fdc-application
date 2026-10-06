@@ -147,6 +147,18 @@ or when a `delete_` or `reset_` command is invoked without
 dialog through `askConfirm`, with its own title, button labels, and an optional
 checkbox.
 
+Stylesheet colors are role tokens in `overlay/tokens.css`, which both pages
+load before their own stylesheet. `overlay/settings.css` and
+`overlay/overlay.css` reference them with `var(--token)`, and a translucent
+variant mixes the role with transparent:
+`color-mix(in srgb, var(--token) N%, transparent)`. Pick the token by meaning,
+not by value: vehicle classes, event modes, map layers, and HUD telemetry have
+their own tokens even where they share a value with another role.
+`overlay/color-tokens-guard.test.js` fails when a color literal or an undefined
+custom property appears in those stylesheets. Tests that assert a color
+contract read the stylesheet through `tools/stylesheet-tokens.cjs`, which
+resolves tokens to their values.
+
 ## Release verification cycle
 
 Verification is cumulative for the current change set and is performed once

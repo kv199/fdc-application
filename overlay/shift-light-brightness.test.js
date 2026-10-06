@@ -2,8 +2,9 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { readResolvedStylesheet } = require('../tools/stylesheet-tokens.cjs')
 
-const overlayCss = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
+const overlayCss = readResolvedStylesheet('overlay.css')
 
 test('Redline color and FDC Shift Light brightness affect their own alert layers only', () => {
   assert.match(overlayCss, /:root\s*{[^}]*--redline-background:\s*rgb\(217 42 37 \/ 96%\);/s)
