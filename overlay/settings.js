@@ -45,8 +45,8 @@
   const status = document.getElementById('settings-status')
   const telemetryStatus = document.getElementById('telemetry-status')
   const telemetryStatusLabel = document.getElementById('telemetry-status-label')
-  const telemetryRouteCard = document.getElementById('telemetry-route-card')
-  const telemetryRouteRetry = document.getElementById('telemetry-route-retry')
+  const telemetryStatusButton = document.getElementById('telemetry-status-button')
+  const settingsIntros = [...document.querySelectorAll('[data-settings-intro]')]
   const connectGuide = document.getElementById('connect-guide')
   const connectGuideStatusLabel = document.getElementById('connect-guide-status-label')
   const connectGuideHint = document.getElementById('connect-guide-hint')
@@ -604,6 +604,14 @@
     if (connectionGuideOpen && (opening || stageChanged)) {
       ;(stage === 'connected' ? connectGuideDone : stage === 'problem' ? connectGuideRetry : connectGuideSkip).focus()
     }
+  }
+
+  // The header status opens the same guide at any time: the steps, the live
+  // stage, and RETRY DATA OUT when the receiver has a problem.
+  function openConnectionGuide() {
+    if (!connectGuide || !connectionGuideApi || connectionGuideOpen) return
+    connectionGuideOpen = true
+    renderConnectionGuide()
   }
 
   function closeConnectionGuide() {
@@ -2346,6 +2354,7 @@
     if (!context) return
     const activeTab = settingsTabs.find(tab => tab.dataset.settingsTab === tabName)
     if (settingsTitle) settingsTitle.textContent = activeTab?.textContent.trim() || context
+    for (const intro of settingsIntros) intro.hidden = intro.dataset.settingsIntro !== tabName
     document.title = `FDC · ${context}`
     void call('set_settings_window_context', { context: tabName }).catch(() => undefined)
   }
@@ -3572,8 +3581,6 @@
         ? 'connected'
         : 'offline'
     telemetryStatusLabel.textContent = presentation.statusLabel
-    telemetryRouteCard.dataset.tone = presentation.tone
-    telemetryRouteRetry.hidden = !presentation.canRetry
     renderConnectionGuide()
   }
 
@@ -4288,9 +4295,7 @@
     closeDriverAnalysisLevel()
   })
 
-  telemetryRouteRetry.addEventListener('click', () => {
-    void retryDirectSource()
-  })
+  telemetryStatusButton?.addEventListener('click', openConnectionGuide)
   connectGuideRetry?.addEventListener('click', () => {
     void retryDirectSource()
   })

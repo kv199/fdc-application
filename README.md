@@ -128,6 +128,7 @@ waiting, live, stale, offline, or unable to start. Minimize it to keep FDC
 running, and reopen it from the FDC tray icon; its X button quits FDC, asking
 first unless you turned that off. Until the game has sent data once, Configuration opens on a
 setup screen with these steps that switches to **CONNECTED** when data arrives.
+Select the Data Out status in the Configuration header to open it again.
 
 ## Local data and privacy
 

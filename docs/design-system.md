@@ -100,6 +100,11 @@ The application header is the only textured surface: it shows
 
 ## Pages and navigation
 
+- The application header holds the page identity: the tab title, the tab's
+  one-paragraph description in `--text` under it, and the Direct Data Out
+  status, which is a button that opens the connection guide. Tab content has
+  no page-level description text; keep a new tab's description to one
+  paragraph of about two lines.
 - The header title names the active tab. A tab's own page heading
   (`.settings-page-title`) is kept for assistive technology only, and the
   actions in its row stay right-aligned. A heading that labels a control, such

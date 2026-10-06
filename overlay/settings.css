@@ -75,23 +75,37 @@ input {
 }
 
 .settings-header__connection {
-  width: min(100%, 390px);
-  min-width: 0;
+  flex: 0 0 auto;
   margin-left: auto;
 }
 
-.settings-header__connection {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+/* The tab's one-paragraph description, under the title. */
+.settings-header__intro {
+  max-width: 62ch;
+  margin-top: 12px;
 }
 
-.settings-header__connection > .telemetry-status {
-  margin-bottom: 10px;
+.settings-header__intro p {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
-.settings-header__connection > .telemetry-route-card {
-  align-self: stretch;
+.settings-header__intro p[hidden] {
+  display: none;
+}
+
+/* The connection status is a button: it opens the connection guide. */
+.telemetry-status-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.telemetry-status-button:hover .telemetry-status {
+  border-color: var(--accent);
 }
 
 .settings-eyebrow,
@@ -192,6 +206,10 @@ h1 {
 .settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header {
   padding-top: 10px;
   padding-bottom: 12px;
+}
+
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header__intro {
+  display: none;
 }
 
 .settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header__brand h1 {
@@ -2502,6 +2520,10 @@ h1 {
   justify-content: flex-end;
 }
 
+.settings-section__heading:has(> .settings-page-title:only-child) {
+  margin: 0;
+}
+
 .settings-section__heading span {
   font-size: 12px;
 }
@@ -3482,49 +3504,6 @@ h1 {
   line-height: 1.3;
 }
 
-.telemetry-route-card {
-  margin-top: 0;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--surface-deep);
-}
-
-#telemetry-route-detail {
-  margin-top: 0;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.4;
-  user-select: text;
-}
-
-.telemetry-setup-guide__title {
-  margin: 0 0 7px;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-}
-
-.telemetry-setup-guide ol {
-  margin: 0;
-  padding-left: 17px;
-}
-
-.telemetry-setup-guide li + li {
-  margin-top: 4px;
-}
-
-.telemetry-setup-guide strong {
-  color: var(--text-soft);
-  font-weight: 650;
-}
-
-#telemetry-route-retry {
-  width: 100%;
-  margin-top: 10px;
-}
-
 @media (max-width: 620px) {
   .settings-header__topline {
     align-items: stretch;
@@ -3532,7 +3511,6 @@ h1 {
   }
 
   .settings-header__connection {
-    width: 100%;
+    margin-left: 0;
   }
-
 }

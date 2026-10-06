@@ -14,17 +14,23 @@ const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src',
 const tauriConfig = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'tauri.conf.json'), 'utf8')
 const cargoManifest = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'Cargo.toml'), 'utf8')
 
-test('Every Configuration tab opens with a short intro and Settings states where data lives', () => {
+test('Every Configuration tab has a one-paragraph intro in the header and Settings states where data lives', () => {
+  const header = settingsHtml.slice(settingsHtml.indexOf('<header class="settings-header">'), settingsHtml.indexOf('</header>'))
   for (const panel of ['hud', 'events', 'driver-analysis', 'shift-light', 'garage', 'settings']) {
+    const intros = header.match(new RegExp(`<p data-settings-intro="${panel}"( hidden)?>[^<]+</p>`, 'g')) || []
+    assert.equal(intros.length, 1, panel)
     const start = settingsHtml.indexOf(`data-settings-panel="${panel}"`)
     const next = settingsHtml.indexOf('data-settings-panel="', start + 1)
     const markup = settingsHtml.slice(start, next === -1 ? undefined : next)
-    assert.match(markup, /<p class="settings-section__intro">[^<]+<\/p>/, panel)
+    assert.doesNotMatch(markup, /data-settings-intro/, panel)
   }
+  // Only the active tab's intro shows; drill-down views hide it with the compact header.
+  assert.match(settingsHtml, /<p data-settings-intro="hud">/)
+  assert.match(settingsJs, /for \(const intro of settingsIntros\) intro\.hidden = intro\.dataset\.settingsIntro !== tabName/)
+  assert.match(settingsCss, /:is\(\.events-detail-view, \.events-run-view, \.driver-analysis-detail-view\):not\(\[hidden\]\)\)\s*\.settings-header__intro\s*\{\s*display: none;/)
   assert.match(settingsHtml, /<h2 id="settings-panel-title" class="settings-page-title">SETTINGS<\/h2>/)
-  assert.match(settingsHtml, /<p class="settings-section__intro">Options for the whole app\. All FDC data stays on this PC\.<\/p>/)
+  assert.match(settingsHtml, /<p data-settings-intro="settings" hidden>Options for the whole app\. Everything FDC records stays on this PC\.<\/p>/)
   assert.doesNotMatch(settingsHtml, /YOUR DATA/)
-  assert.match(settingsCss, /\.settings-section__intro\s*\{/)
   assert.doesNotMatch(settingsHtml, /VISUAL OUTPUT|RECORDED ASPHALT REVIEW|VEHICLE LIBRARY|AUTO CALIBRATION/)
 })
 
@@ -294,27 +300,18 @@ test('HUD layout exposes grouped and freeform modes with independent widget cont
   assert.match(tauriMain, /"delta" \| "hud" \| "tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
 })
 
-test('telemetry status stays separate and right-aligned above the setup card', () => {
-  const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
-  const telemetryStatusIndex = settingsHtml.indexOf('id="telemetry-status"')
-  const routeCardIndex = settingsHtml.indexOf('id="telemetry-route-card"')
-  const headerIndex = settingsHtml.indexOf('class="settings-header"')
-
-  assert.ok(settingsPanelIndex >= 0)
-  assert.ok(headerIndex >= 0)
-  assert.ok(telemetryStatusIndex > headerIndex)
-  assert.ok(routeCardIndex > telemetryStatusIndex)
-  assert.ok(telemetryStatusIndex < settingsPanelIndex)
-  assert.ok(routeCardIndex < settingsPanelIndex)
-  assert.match(settingsHtml, /class="settings-header__connection"[\s\S]*id="telemetry-status"[\s\S]*id="telemetry-route-card"/)
-  assert.match(settingsCss, /\.settings-header__connection > \.telemetry-status[\s\S]*justify-content: flex-end[\s\S]*width: 100%/)
-  assert.match(settingsCss, /#telemetry-route-detail\s*\{\s*margin-top: 0;/)
-  assert.match(settingsHtml, /class="telemetry-setup-guide"[\s\S]*Settings → HUD and Gameplay → Telemetry/)
-  assert.match(settingsHtml, /Data Out IP Address[\s\S]*127\.0\.0\.1/)
-  assert.match(settingsHtml, /Data Out IP Port[\s\S]*5301/)
-  const setupGuide = settingsHtml.slice(settingsHtml.indexOf('class="telemetry-setup-guide"'), settingsHtml.indexOf('id="telemetry-route-retry"'))
-  assert.equal((setupGuide.match(/<li>/g) || []).length, 4)
-  assert.doesNotMatch(setupGuide, /Return to the game and start driving/u)
+test('the header status opens the connection guide instead of a permanent setup card', () => {
+  const header = settingsHtml.slice(settingsHtml.indexOf('<header class="settings-header">'), settingsHtml.indexOf('</header>'))
+  assert.match(header, /class="settings-header__connection"[\s\S]*<button id="telemetry-status-button"[^>]*type="button"[\s\S]*id="telemetry-status"[^>]*role="status"/)
+  assert.doesNotMatch(settingsHtml, /telemetry-route-card|telemetry-setup-guide|telemetry-route-retry|HOW TO CONNECT/)
+  assert.doesNotMatch(settingsJs, /telemetryRouteCard|telemetryRouteRetry/)
+  assert.match(settingsJs, /telemetryStatusButton\?\.addEventListener\('click', openConnectionGuide\)/)
+  assert.match(settingsJs, /function openConnectionGuide\(\) \{[\s\S]*?connectionGuideOpen = true[\s\S]*?renderConnectionGuide\(\)/)
+  // The guide keeps the steps and RETRY DATA OUT for a receiver problem.
+  const guide = settingsHtml.slice(settingsHtml.indexOf('class="connect-guide"'), settingsHtml.indexOf('id="connect-guide-done"'))
+  assert.match(guide, /Data Out IP Address[\s\S]*127\.0\.0\.1/)
+  assert.match(guide, /Data Out IP Port[\s\S]*5301/)
+  assert.match(guide, /id="connect-guide-retry"/)
   assert.doesNotMatch(settingsHtml, /id="telemetry-route-endpoint"|id="telemetry-route-label"/)
   assert.doesNotMatch(settingsJs, /telemetryRouteEndpoint|telemetryRouteLabel|telemetryRouteDetail|telemetryRouteWarning/u)
   assert.doesNotMatch(overlayHtml, /telemetry-route-badge/)
@@ -547,7 +544,7 @@ test('Configuration opens on the connection guide until Forza first sends Data O
   for (const id of ['connect-guide-retry', 'connect-guide-skip', 'connect-guide-done']) assert.match(guide, new RegExp('id="' + id + '"'))
   assert.match(settingsJs, /applyGaragePayload\(await call\('load_garage_snapshot'\)\)[\s\S]*?openConnectionGuideIfNeverConnected\(\)/)
   assert.match(settingsJs, /connectionGuideApi\.shouldShow\(connectionGuideApi\.read\(\), garageVehicles\.size > 0\)/)
-  assert.match(settingsJs, /telemetryRouteRetry\.hidden = !presentation\.canRetry\s*renderConnectionGuide\(\)/)
+  assert.match(settingsJs, /telemetryStatusLabel\.textContent = presentation\.statusLabel\s*renderConnectionGuide\(\)/)
   assert.match(settingsCss, /\.connect-guide \{[^}]*z-index: 15;/)
 })
 
