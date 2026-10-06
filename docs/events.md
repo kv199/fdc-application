@@ -39,7 +39,7 @@ The tab opens with a short intro and contains:
   only results whose trace covers at least 97% of the Event's longest traced
   distance are eligible. During a recording, Absolute Best updates immediately
   when Delta accepts a faster result, before the run is saved. The top-left
-  **BACK** action and Escape both return to the Events list.
+  **← EVENTS** button and Escape both return to the Events list.
 - Selecting the event title starts inline renaming. Enter or leaving the input
   saves a non-empty name; Escape cancels that rename without leaving the page.
 - An event page has one green **RECORD RUN** control. Selecting it changes the same
@@ -73,7 +73,7 @@ The tab opens with a short intro and contains:
   distinct value is green, and all remaining values are white. Selecting a lap
   row expands it beneath the table; selecting the same row again collapses it.
   The expanded row shows a full-width top-down X/Z trace map shaped to the
-  track, at most 560 px tall, with a legend row beneath it. The first Escape collapses an open row; **BACK** or
+  track, at most 560 px tall, with a legend row beneath it. The first Escape collapses an open row; **← EVENT** or
   a following Escape returns to the Event page.
 - The trace map draws a thin white track outline under its layers. Pedal
   segments use green for throttle, red for brake, and yellow for coasting.

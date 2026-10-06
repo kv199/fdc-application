@@ -361,10 +361,6 @@
       renderGarageVariants(null)
       return
     }
-    const image = document.createElement('div')
-    image.className = 'garage-current-car__image'
-    image.textContent = 'IMAGE'
-    image.setAttribute('aria-label', `Image placeholder for ${garageDisplayName(vehicle)}`)
     const content = document.createElement('div')
     content.className = 'garage-current-car__content'
     const name = document.createElement('button')
@@ -425,7 +421,7 @@
       input.addEventListener('blur', finish, { once: true })
     })
     content.append(name, ...(group ? [group] : []), details)
-    garageCurrentCar.append(image, content)
+    garageCurrentCar.append(content)
     renderGarageVariants(vehicle)
   }
 
@@ -447,11 +443,6 @@
       card.dataset.carOrdinal = String(vehicle.carOrdinal)
       card.dataset.carClass = vehicle.classLabel || 'unknown'
 
-      const image = document.createElement('div')
-      image.className = 'garage-card__image'
-      image.textContent = 'IMAGE'
-      image.setAttribute('aria-label', `Image placeholder for ${garageDisplayName(vehicle)}`)
-
       const content = document.createElement('div')
       content.className = 'garage-card__content'
       const name = document.createElement('h4')
@@ -469,7 +460,7 @@
       }
 
       content.append(name, meta)
-      card.append(image, content)
+      card.append(content)
       garageGrid.append(card)
     }
     renderGarageCurrent()
@@ -2533,27 +2524,47 @@
   const expandedDriverAnalysisStats = new Set()
   const driverAnalysisDriveMaps = new Map()
 
+  const DRIVER_ANALYSIS_BACK_LABELS = {
+    history: { text: '← HISTORY', ariaLabel: 'Back to history' },
+    recording: { text: '← RECORDING', ariaLabel: 'Back to the recording' },
+    car: { text: '← CAR', ariaLabel: 'Back to the car' }
+  }
+
   function setDriverAnalysisView(next) {
     driverAnalysisView = next
     if (driverAnalysisHistoryView) driverAnalysisHistoryView.hidden = next.level !== 'history'
     if (driverAnalysisDetailView) driverAnalysisDetailView.hidden = next.level === 'history'
+    if (driverAnalysisDetailBack && next.level !== 'history') {
+      const label = DRIVER_ANALYSIS_BACK_LABELS[driverAnalysisParentLevel(next)]
+      driverAnalysisDetailBack.textContent = label.text
+      driverAnalysisDetailBack.setAttribute('aria-label', label.ariaLabel)
+    }
     renderDriverAnalysisView()
     if (next.level !== 'history' && driverAnalysisDetailBack) driverAnalysisDetailBack.focus()
   }
 
+  // The level BACK leads to. The back label and closeDriverAnalysisLevel both
+  // use it, so they cannot disagree. A recording with one car opens its car
+  // page directly, so that car page leads back to the history.
+  function driverAnalysisParentLevel(view) {
+    if (view.level === 'drive') return 'car'
+    if (view.level === 'car') {
+      const recordings = globalScope.DriverAnalysisHistory?.groupRecordings?.(driverAnalysisHistory) || []
+      const recording = recordings.find(r => String(r.recordingId) === view.recordingId)
+      return recording && recording.sessions.length > 1 ? 'recording' : 'history'
+    }
+    return 'history'
+  }
+
   function closeDriverAnalysisLevel() {
     const { level, recordingId, sessionId } = driverAnalysisView
-    if (level === 'drive') {
+    if (level === 'history') return
+    const parentLevel = driverAnalysisParentLevel(driverAnalysisView)
+    if (parentLevel === 'car') {
       setDriverAnalysisView({ level: 'car', recordingId, sessionId, driveId: null })
-    } else if (level === 'car') {
-      const recordings = globalScope.DriverAnalysisHistory?.groupRecordings?.(driverAnalysisHistory) || []
-      const recording = recordings.find(r => String(r.recordingId) === recordingId)
-      if (recording && recording.sessions.length > 1) {
-        setDriverAnalysisView({ level: 'recording', recordingId, sessionId: null, driveId: null })
-      } else {
-        setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
-      }
-    } else if (level === 'recording') {
+    } else if (parentLevel === 'recording') {
+      setDriverAnalysisView({ level: 'recording', recordingId, sessionId: null, driveId: null })
+    } else {
       setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
     }
   }

@@ -64,6 +64,9 @@ The application header is the only textured surface: it shows
 - Lime `--accent` is for interaction: hover fills, selected tabs and choices,
   switches that are on, slider fills, and the focus outline. As text it is
   reserved for sparse ready, positive, or timing values, never decoration.
+- A few ready actions are filled with lime at rest because they are the one
+  next step on their screen: RECORD RUN, a ready Driver Analysis RECORD, the
+  safe NO in confirmation dialogs, and the connection guide's final action.
 - `--best` (purple) marks best results and the learned Shift Light cue.
 - `--danger` and `--danger-text` mark destructive actions and errors.
 - `--caution` and `--warning` mark attention and unsaved state.
@@ -88,6 +91,25 @@ The application header is the only textured surface: it shows
 ## Spacing
 
 `--space-1` to `--space-6` are 4, 8, 12, 18, 24, and 36 px.
+
+## Pages and navigation
+
+- The header title names the active tab. A tab's own page heading
+  (`.settings-page-title`) is kept for assistive technology only, and the
+  actions in its row stay right-aligned. A heading that labels a control, such
+  as the Driver Analysis switch, stays visible.
+- The raised plate (`--panel` with a `--line-strong` border) marks one area
+  per view: the HUD layout list, the Events create form, the event's run
+  recorder, the run's lap breakdown, the Driver Analysis recorder, the Shift
+  Light calibration card, and the Garage current car. The Events library,
+  Driver Analysis drill-down pages, and Settings have none.
+- Drill-down views (an event, a run, and the Driver Analysis recording, car,
+  and drive pages) start with a back link (`.detail-back`) that names the
+  immediate parent, such as `← EVENTS`, `← EVENT`, `← HISTORY`, `← RECORDING`,
+  or `← CAR`. Their title uses `--font-readout` at `--type-detail-title`, and
+  the application header turns compact while such a view is open.
+- Lap, sector, and run times and the headline metrics of runs and Driver
+  Analysis pages use `--font-readout` with tabular numerals.
 
 ## Controls and states
 

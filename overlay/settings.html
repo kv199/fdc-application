@@ -48,7 +48,7 @@
 
     <section id="hud-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="hud-tab" data-settings-panel="hud">
       <div class="settings-section__heading">
-        <h2 id="hud-title">HUD</h2>
+        <h2 id="hud-title" class="settings-page-title">HUD</h2>
       </div>
       <p class="settings-section__intro">Live telemetry on top of the game: tires, pedals, steering, gear, speed, RPM, boost, and an input graph. Choose which blocks to show, how they are arranged, and how see-through they are.</p>
       <p class="settings-section__intro">The HUD is click-through and covers the monitor chosen in HUD DISPLAY. With Show HUD with telemetry on (Settings), it hides in menus.</p>
@@ -319,7 +319,7 @@
 
       <section id="driver-analysis-detail-view" class="driver-analysis-detail-view" aria-labelledby="driver-analysis-detail-title" hidden>
         <div class="events-detail-view__header">
-          <button id="driver-analysis-detail-back" class="settings-button" type="button">BACK</button>
+          <button id="driver-analysis-detail-back" class="detail-back" type="button"></button>
         </div>
         <div class="events-detail-view__heading">
           <h2 id="driver-analysis-detail-title" class="events-detail-view__title events-run-view__title">RECORDING</h2>
@@ -331,7 +331,7 @@
 
     <section id="garage-panel" class="settings-tab-panel garage-panel" role="tabpanel" aria-labelledby="garage-tab" data-settings-panel="garage" hidden>
       <div class="settings-section__heading">
-        <h2 id="garage-title">GARAGE</h2>
+        <h2 id="garage-title" class="settings-page-title">GARAGE</h2>
       </div>
       <p class="settings-section__intro">Every car you drive is saved here automatically, with each class, PI, and drivetrain setup you used. Click a car's name to rename it — the new name is used everywhere in FDC.</p>
       <section class="garage-current" aria-labelledby="garage-current-title">
@@ -357,7 +357,7 @@
     <section id="events-panel" class="settings-tab-panel events-panel" role="tabpanel" aria-labelledby="events-tab" data-settings-panel="events" hidden>
         <div id="events-library-view" class="events-view" aria-live="polite">
           <div class="settings-section__heading events-section-heading">
-            <h2 id="events-title">EVENTS</h2>
+            <h2 id="events-title" class="settings-page-title">EVENTS</h2>
             <div class="events-section-heading__actions">
               <label class="events-sort-control" for="events-sort">
                 <span>SORT</span>
@@ -443,7 +443,7 @@
 
       <section id="events-detail-view" class="events-detail-view" aria-labelledby="events-detail-title" hidden>
         <div class="events-detail-view__header">
-          <button id="events-detail-back" class="settings-button" type="button">BACK</button>
+          <button id="events-detail-back" class="detail-back" type="button" aria-label="Back to Events">← EVENTS</button>
           <div class="events-detail-view__actions">
             <button id="events-detail-delete" class="settings-button settings-button--danger" type="button">DELETE</button>
           </div>
@@ -490,7 +490,7 @@
 
       <section id="events-run-view" class="events-run-view" aria-labelledby="events-run-title" hidden>
         <div class="events-detail-view__header">
-          <button id="events-run-back" class="settings-button" type="button">BACK</button>
+          <button id="events-run-back" class="detail-back" type="button" aria-label="Back to the event">← EVENT</button>
         </div>
         <div class="events-detail-view__heading events-run-view__heading">
           <h2 id="events-run-title" class="events-detail-view__title events-run-view__title">EVENT</h2>
@@ -533,7 +533,7 @@
 
     <section id="shift-light-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="shift-light-tab" data-settings-panel="shift-light" hidden>
       <div class="settings-section__heading">
-        <h2 id="shift-light-title">SHIFT LIGHT</h2>
+        <h2 id="shift-light-title" class="settings-page-title">SHIFT LIGHT</h2>
         <div class="calibration-heading__actions">
           <button id="shift-light-help" class="calibration-help-button" type="button" aria-expanded="false" aria-controls="shift-light-help-panel" title="Explain shift-light diagnostics">?</button>
         </div>
@@ -641,7 +641,7 @@
 
     <section id="settings-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="settings-tab" data-settings-panel="settings" hidden>
       <div class="settings-section__heading">
-        <h2 id="settings-panel-title">SETTINGS</h2>
+        <h2 id="settings-panel-title" class="settings-page-title">SETTINGS</h2>
       </div>
       <p class="settings-section__intro">Options for the whole app. All FDC data stays on this PC.</p>
       <section class="display-settings" aria-label="Display settings">

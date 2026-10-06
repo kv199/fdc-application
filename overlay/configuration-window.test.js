@@ -21,7 +21,7 @@ test('Every Configuration tab opens with a short intro and Settings states where
     const markup = settingsHtml.slice(start, next === -1 ? undefined : next)
     assert.match(markup, /<p class="settings-section__intro">[^<]+<\/p>/, panel)
   }
-  assert.match(settingsHtml, /<h2 id="settings-panel-title">SETTINGS<\/h2>/)
+  assert.match(settingsHtml, /<h2 id="settings-panel-title" class="settings-page-title">SETTINGS<\/h2>/)
   assert.match(settingsHtml, /<p class="settings-section__intro">Options for the whole app\. All FDC data stays on this PC\.<\/p>/)
   assert.doesNotMatch(settingsHtml, /YOUR DATA/)
   assert.match(settingsCss, /\.settings-section__intro\s*\{/)
@@ -105,7 +105,7 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.ok(eventsForm.indexOf('id="event-route-type"') < eventsForm.indexOf('id="event-class"'))
   assert.ok(eventsForm.indexOf('id="event-class"') < eventsForm.indexOf('id="event-notes"'))
   assert.match(settingsHtml, /id="events-detail-view"[^>]+hidden/)
-  assert.match(settingsHtml, /id="events-detail-back"[^>]*>BACK<\/button>/)
+  assert.match(settingsHtml, /id="events-detail-back"[^>]*class="detail-back"[^>]*>← EVENTS<\/button>/)
   assert.match(settingsHtml, /id="events-detail-title"/)
   assert.match(settingsHtml, /id="events-detail-summary"[^>]+aria-label="Event details"/)
   assert.match(settingsHtml, /id="events-detail-notes"[^>]+hidden/)
@@ -114,7 +114,7 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.doesNotMatch(settingsHtml, /id="events-detail-archive"/)
   assert.match(settingsHtml, /id="events-detail-delete"/)
   assert.match(settingsHtml, /id="events-run-view"[^>]+hidden/)
-  assert.match(settingsHtml, /id="events-run-back"[^>]*>BACK<\/button>/)
+  assert.match(settingsHtml, /id="events-run-back"[^>]*class="detail-back"[^>]*>← EVENT<\/button>/)
   assert.match(settingsHtml, /id="events-run-title"/)
   assert.match(settingsHtml, /id="events-run-summary"[^>]+aria-label="Event details"/)
   assert.match(settingsHtml, /id="events-run-bht"/)
@@ -190,7 +190,7 @@ test('Event recorder uses the compact idle control and local run timestamps', ()
   assert.match(settingsJs, /eventRecorderHint\.dataset\.tone = !recordingAnotherEvent && !finalizing \? 'warning' : ''/)
   assert.match(settingsStyles, /\.event-recorder__hint\[data-tone="warning"\]\s*\{[^}]*var\(--notice\)/)
   assert.match(settingsJs, /getHours\(\).*getMinutes\(\).*getSeconds\(\)/s)
-  assert.match(settingsStyles, /\.event-recorder\s*\{[^}]*border: 1px solid var\(--line\);[^}]*background: var\(--surface\)/)
+  assert.match(settingsStyles, /\.event-recorder\s*\{[^}]*border: 1px solid var\(--line-strong\);[^}]*background: var\(--panel\)/)
   assert.match(settingsStyles, /\.event-recorder__record\s*\{[^}]*background: var\(--accent\)/)
   assert.match(settingsStyles, /\.settings-button--danger\s*\{[^}]*color: var\(--danger-text\)/)
 })
@@ -566,7 +566,7 @@ test('Driver Analysis heading spacing does not affect toggle internals', () => {
 test('Driver Analysis history cards open drill-down pages for recording, car, and drive', () => {
   assert.match(settingsHtml, /id="driver-analysis-history-view"[\s\S]*class="driver-analysis-history-view"/)
   assert.match(settingsHtml, /id="driver-analysis-detail-view"[\s\S]*class="driver-analysis-detail-view"/)
-  assert.match(settingsHtml, /id="driver-analysis-detail-back"[\s\S]*class="settings-button"[\s\S]*>BACK<\/button>/)
+  assert.match(settingsHtml, /id="driver-analysis-detail-back"[\s\S]*class="detail-back"[\s\S]*><\/button>/)
   assert.match(settingsHtml, /id="driver-analysis-detail-title"[\s\S]*class="events-detail-view__title/)
   assert.match(settingsHtml, /id="driver-analysis-detail-summary"[\s\S]*class="events-detail-view__summary"/)
   assert.match(settingsHtml, /id="driver-analysis-detail-body"[\s\S]*class="driver-analysis-detail-view__body"/)
@@ -613,6 +613,33 @@ test('Driver Analysis history cards open drill-down pages for recording, car, an
   assert.match(settingsCss, /\.driver-analysis-history-row__summary\s*\{[\s\S]*margin-top:\s*8px/)
   assert.match(settingsCss, /\.driver-analysis-detail-view__body[\s\S]*display:\s*grid/)
   assert.match(settingsCss, /\.driver-analysis-detail-view__overview\s*\{[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/)
+})
+
+test('Back buttons on drill-down views name their parent and use detail-back class', () => {
+  assert.match(settingsHtml, /id="events-detail-back"[^>]*class="detail-back"/)
+  assert.match(settingsHtml, /id="events-detail-back"[^>]*aria-label="Back to Events"/)
+  assert.match(settingsHtml, /id="events-detail-back"[^>]*>← EVENTS</)
+  assert.match(settingsHtml, /id="events-run-back"[^>]*class="detail-back"/)
+  assert.match(settingsHtml, /id="events-run-back"[^>]*aria-label="Back to the event"/)
+  assert.match(settingsHtml, /id="events-run-back"[^>]*>← EVENT</)
+  assert.match(settingsHtml, /id="driver-analysis-detail-back"[^>]*class="detail-back"/)
+  // One rule decides where BACK leads; the label and the navigation both use it.
+  assert.match(settingsJs, /function driverAnalysisParentLevel\(view\)/)
+  assert.match(settingsJs, /DRIVER_ANALYSIS_BACK_LABELS\[driverAnalysisParentLevel\(next\)\]/)
+  const closeLevel = settingsJs.match(/function closeDriverAnalysisLevel\(\) \{[\s\S]*?\r?\n  \}\r?\n/)[0]
+  assert.match(closeLevel, /const parentLevel = driverAnalysisParentLevel\(driverAnalysisView\)/)
+  assert.doesNotMatch(closeLevel, /groupRecordings/)
+  assert.match(settingsJs, /driverAnalysisDetailBack\.textContent = label\.text/)
+  assert.match(settingsJs, /driverAnalysisDetailBack\.setAttribute\('aria-label', label\.ariaLabel\)/)
+  assert.match(settingsJs, /← HISTORY/)
+  assert.match(settingsJs, /← RECORDING/)
+  assert.match(settingsJs, /← CAR/)
+})
+
+test('Garage does not create image placeholders for current car or saved cars', () => {
+  assert.doesNotMatch(settingsJs, /garage-current-car__image/)
+  assert.doesNotMatch(settingsJs, /garage-card__image/)
+  assert.doesNotMatch(settingsJs, /image\.textContent = 'IMAGE'[\s\S]*garageDisplayName/)
 })
 
 test('Configuration only calls render functions it defines, with the run they need', () => {

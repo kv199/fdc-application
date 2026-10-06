@@ -187,6 +187,18 @@ h1 {
   margin-top: 14px;
 }
 
+/* Drill-down views (an event, a run, a Driver Analysis recording, car, or
+   drive) keep the header compact so the detail starts higher. */
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header {
+  padding-top: 10px;
+  padding-bottom: 12px;
+}
+
+.settings-shell:has(.settings-tab-panel:not([hidden]) :is(.events-detail-view, .events-run-view, .driver-analysis-detail-view):not([hidden])) .settings-header__brand h1 {
+  margin-top: 6px;
+  font-size: var(--type-detail-title);
+}
+
 @media (max-width: 560px) {
   .settings-header {
     padding: 14px 16px;
@@ -276,8 +288,8 @@ h1 {
 .garage-current {
   margin-bottom: 24px;
   padding: 16px;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
 }
 
 .garage-section-heading {
@@ -301,25 +313,9 @@ h1 {
 .garage-current-car {
   position: relative;
   display: grid;
-  grid-template-columns: 124px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 16px;
-}
-
-.garage-current-car__image,
-.garage-card__image {
-  display: grid;
-  place-items: center;
-  color: var(--text-subtle);
-  background: var(--surface-deep);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-}
-
-.garage-current-car__image {
-  width: 124px;
-  height: 124px;
 }
 
 .garage-current-car__content {
@@ -336,8 +332,11 @@ h1 {
   color: var(--text);
   background: transparent;
   cursor: pointer;
-  font-size: clamp(20px, 3vw, 30px);
-  font-weight: 800;
+  font-family: var(--font-readout);
+  font-size: var(--type-detail-title);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -358,8 +357,9 @@ h1 {
   color: var(--text);
   background: transparent;
   font: inherit;
-  font-size: clamp(20px, 3vw, 30px);
-  font-weight: 800;
+  font-family: var(--font-readout);
+  font-size: var(--type-detail-title);
+  font-weight: 500;
 }
 
 .garage-current-car__details {
@@ -374,19 +374,20 @@ h1 {
   margin-left: auto;
   min-height: 28px;
   padding: 5px 9px;
-  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: var(--surface);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.12em;
   cursor: pointer;
 }
 
 .garage-current-variants-toggle:hover,
 .garage-current-variants-toggle:focus-visible {
-  color: var(--text);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  background: var(--accent);
 }
 
 .garage-variants {
@@ -475,18 +476,12 @@ h1 {
   --garage-rank-color: var(--text-muted);
   position: relative;
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   height: 82px;
   border: 1px solid color-mix(in srgb, var(--garage-rank-color) 34%, var(--line));
   border-left: 3px solid var(--garage-rank-color);
   background: var(--surface);
-}
-
-.garage-card__image {
-  width: 82px;
-  height: 82px;
-  align-self: stretch;
 }
 
 .garage-card__content {
@@ -783,8 +778,8 @@ h1 {
 .events-create-area {
   margin-bottom: 24px;
   padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border: 1px solid var(--line);
+  background: var(--panel);
 }
 
 .events-create-area__heading,
@@ -889,11 +884,8 @@ h1 {
   width: min(100%, 520px);
   margin: auto;
   padding: 22px;
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--accent);
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 42%),
-    var(--bg);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
   box-shadow: 0 20px 50px color-mix(in srgb, var(--shadow) 55%, transparent);
 }
 
@@ -922,8 +914,8 @@ h1 {
 }
 
 .connect-guide__steps li::marker {
-  color: var(--accent);
-  font-weight: 800;
+  color: var(--text-muted);
+  font-weight: 600;
 }
 
 .connect-guide__steps li {
@@ -940,12 +932,13 @@ h1 {
   width: fit-content;
   margin-top: 6px;
   padding: 6px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border: 1px solid var(--line);
   border-radius: 0;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  font-size: 22px;
-  font-weight: 800;
+  color: var(--text);
+  background: var(--surface-deep);
+  font-family: var(--font-readout);
+  font-size: 24px;
+  font-weight: 600;
   letter-spacing: 0.06em;
   user-select: text;
 }
@@ -969,7 +962,6 @@ h1 {
   height: 10px;
   border-radius: 50%;
   background: var(--warning);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--warning) 70%, transparent);
 }
 
 .connect-guide[data-stage='waiting'] .connect-guide__dot {
@@ -984,7 +976,6 @@ h1 {
 
 .connect-guide[data-stage='connected'] .connect-guide__dot {
   background: var(--accent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 75%, transparent);
 }
 
 .connect-guide[data-stage='problem'] .connect-guide__status {
@@ -995,7 +986,6 @@ h1 {
 
 .connect-guide[data-stage='problem'] .connect-guide__dot {
   background: var(--alert);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--alert) 65%, transparent);
 }
 
 @keyframes connect-guide-pulse {
@@ -1173,8 +1163,9 @@ h1 {
 
 .events-run-view__metric-value {
   color: var(--best);
-  font-size: 21px;
-  font-weight: 850;
+  font-family: var(--font-readout);
+  font-size: 24px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
   white-space: nowrap;
@@ -1187,8 +1178,8 @@ h1 {
 
 .events-run-table-section {
   padding: 16px;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
 }
 
 .events-run-table-section__heading {
@@ -1669,14 +1660,15 @@ h1 {
 
 .events-run-table__time {
   color: var(--text);
-  font-weight: 750;
+  font-family: var(--font-readout);
+  font-size: 15px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .events-run-table__time[data-tone="best"] { color: var(--best); }
 .events-run-table__time[data-tone="second"] { color: var(--accent); }
 .events-run-table__time.is-missing { color: var(--text-faint); }
-
 
 .events-detail-view__actions {
   display: flex;
@@ -1689,8 +1681,24 @@ h1 {
 }
 
 .events-detail-view__header {
-  padding-bottom: 16px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--line-subtle);
+}
+
+/* Back to the immediate parent, named: ← EVENTS, ← EVENT, ← RECORDING. */
+.detail-back {
+  padding: 6px 0;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.detail-back:hover {
+  color: var(--accent);
 }
 
 .events-detail-view__heading {
@@ -1721,8 +1729,9 @@ h1 {
 
 .events-detail-view__absolute-best-value {
   color: var(--best);
-  font-size: 21px;
-  font-weight: 850;
+  font-family: var(--font-readout);
+  font-size: 24px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
   white-space: nowrap;
@@ -1842,8 +1851,8 @@ h1 {
 .event-recorder {
   margin-top: 24px;
   padding: 16px;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
 }
 
 .event-recorder__heading,
@@ -1980,7 +1989,7 @@ h1 {
 .event-run-row__cell { min-width: 0; color: var(--text); font-size: 13px; }
 .event-run-row__label { display: block; margin-bottom: 3px; color: var(--text-subtle); font-size: 10px; font-weight: 800; letter-spacing: 0.1em; }
 .event-run-row__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.event-run-row__time { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 800; }
+.event-run-row__time { color: var(--accent); font-family: var(--font-readout); font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 600; }
 
 @media (max-width: 760px) {
   .event-run-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2036,19 +2045,6 @@ h1 {
   }
 }
 
-
-@media (max-width: 620px) {
-  .garage-current-car {
-    grid-template-columns: 92px minmax(0, 1fr);
-    gap: 12px;
-  }
-
-  .garage-current-car__image {
-    width: 92px;
-    height: 92px;
-  }
-}
-
 .settings-tab-panel {
   min-height: 0;
   margin-top: 24px;
@@ -2100,9 +2096,9 @@ h1 {
 .driver-analysis-recorder {
   margin-top: 14px;
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: 0;
-  background: var(--surface);
+  background: var(--panel);
 }
 
 .driver-analysis-recorder__main,
@@ -2193,7 +2189,6 @@ h1 {
   text-align: right;
 }
 
-
 .driver-analysis-history-view[hidden],
 .driver-analysis-detail-view[hidden] {
   display: none;
@@ -2248,7 +2243,6 @@ h1 {
   letter-spacing: 0.08em;
 }
 
-
 /* Every headline carries its own result: a recording card lists several cars. */
 .driver-analysis-history-row strong[data-result='insufficient'],
 .driver-analysis-history-row strong[data-result='recording'],
@@ -2286,7 +2280,6 @@ h1 {
   font-size: 13px;
   line-height: 1.4;
 }
-
 
 .driver-analysis-stats {
   display: grid;
@@ -2332,7 +2325,6 @@ h1 {
   min-width: 84px;
 }
 
-
 /* Recording grouping: meta column, cars/drives label */
 .driver-analysis-history-row__cars-drives {
   display: block;
@@ -2366,8 +2358,6 @@ h1 {
   letter-spacing: 0.08em;
   flex-shrink: 0;
 }
-
-
 
 .driver-analysis-detail-view__body {
   display: grid;
@@ -2437,8 +2427,9 @@ h1 {
 
 .driver-analysis-detail-view__overview-metric strong {
   color: var(--text);
-  font-size: 16px;
-  font-weight: 850;
+  font-family: var(--font-readout);
+  font-size: 18px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
   white-space: nowrap;
@@ -2491,6 +2482,21 @@ h1 {
   line-height: 1.1;
 }
 
+/* The header title already names the tab, so the panel's page heading is
+   kept for assistive technology only. Its row keeps any actions, right-aligned. */
+.settings-page-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.settings-section__heading:has(> .settings-page-title) {
+  justify-content: flex-end;
+}
+
 .settings-section__heading span {
   font-size: 12px;
 }
@@ -2503,16 +2509,16 @@ h1 {
 
 .calibration-help-button {
   display: inline-grid;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  border-radius: 50%;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface);
   place-items: center;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
 }
@@ -2520,7 +2526,8 @@ h1 {
 .calibration-help-button:hover,
 .calibration-help-button:focus-visible {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text-on-accent);
+  background: var(--accent);
 }
 
 .layout-list,
@@ -2529,6 +2536,12 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 0;
   background: var(--surface);
+}
+
+/* The HUD layout list is the HUD page's raised plate. */
+.layout-list {
+  border-color: var(--line-strong);
+  background: var(--panel);
 }
 
 .layout-list[hidden],
@@ -2840,9 +2853,9 @@ h1 {
 }
 
 .calibration-card {
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: 0;
-  background: var(--surface);
+  background: var(--panel);
 }
 
 .calibration-card {
@@ -2852,19 +2865,19 @@ h1 {
 .calibration-help {
   margin: -2px 0 10px;
   padding: 13px 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border: 1px solid var(--line);
   border-radius: 0;
   color: var(--text-muted);
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  background: var(--surface-deep);
   font-size: 13px;
   line-height: 1.4;
 }
 
 .calibration-help__title {
   margin-bottom: 9px;
-  color: var(--accent);
+  color: var(--text);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.16em;
 }
 
