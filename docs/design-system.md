@@ -14,7 +14,13 @@ direction; there is no light theme or theme switch.
 - `overlay/token-contrast.test.js` keeps text and control contrast at WCAG AA
   for the token pairs the interface uses.
 - `overlay/hud-design-contract.test.js` keeps the HUD geometry, cuts, and
-  fonts above.
+  fonts described in "In-game HUD and Delta".
+- `overlay/design-rules-guard.test.js` enforces the rules below that can be
+  checked automatically: square corners, a visible focus outline, no glows,
+  radial gradients, or lime gradients outside slider fills, fonts only through
+  `--font-*` tokens, no texture outside the application header, no hover
+  fill on disabled buttons, and no button state hover that the base button
+  hover silently overrides.
 
 ## Choosing a token
 
@@ -129,7 +135,18 @@ The application header is the only textured surface: it shows
 - Sliders have an 8px track filled with `--accent` (`--alert` for the redline
   setting) and a light rectangular thumb.
 - Keyboard focus is a 2px `--accent` outline outside the control. Do not
-  remove it with `outline: none` on `:focus-visible`.
+  remove it with `outline: none` on `:focus-visible`. Text fields may show
+  focus with an `--accent` border instead.
+- Inputs, selects, and text areas rest on `--surface-deep` with a `--line`
+  border and `--text`; focus turns the border `--accent`.
+- Dialogs (`.confirm-dialog`) float: their content sits on `--panel` with a
+  `--line-strong` border over a dark backdrop, and their title uses
+  `--font-readout`. The safe answer (NO, CANCEL) is the lime-filled action;
+  the destructive answer keeps `--danger-text` and fills red on hover.
+- A button with an extra state class still carries `.settings-button`; give
+  the state rule a compound selector (for example
+  `.settings-button.event-recorder__record`) so the base button rule, which
+  comes later in the file, cannot override it.
 
 ## Empty, waiting, and error states
 

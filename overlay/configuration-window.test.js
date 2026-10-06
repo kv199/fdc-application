@@ -159,7 +159,7 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsCss, /\.events-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit/)
   assert.match(settingsCss, /\.events-card__id\s*\{[\s\S]*font-size:\s*28px/)
   assert.match(settingsStyles, /\.confirm-dialog \.confirm-dialog__no\s*\{[^}]*background:\s*var\(--accent\)/)
-  assert.match(settingsStyles, /\.confirm-dialog \.confirm-dialog__yes:hover[^{]*\{[^}]*background:\s*var\(--danger\)/)
+  assert.match(settingsStyles, /\.confirm-dialog \.settings-button\.confirm-dialog__yes:not\(:disabled\):hover[^{]*\{[^}]*background:\s*var\(--danger\)/)
   assert.doesNotMatch(settingsCss, /events-card__image/)
   assert.doesNotMatch(settingsCss, /events-card__copy/)
   assert.match(settingsCss, /\.events-card\[data-event-mode="any"\][\s\S]*#f97316/)

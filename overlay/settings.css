@@ -619,16 +619,16 @@ h1 {
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 0;
-  color: var(--text-soft);
-  background: var(--surface);
+  color: var(--text);
+  background: var(--surface-deep);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
   letter-spacing: 0.04em;
 }
 
 .events-sort-control select:focus-visible,
 .hud-display-card select:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  border-color: var(--accent);
 }
 
 .events-grid {
@@ -669,11 +669,6 @@ h1 {
 
 .events-card__open:hover {
   background: var(--surface-hover);
-}
-
-.events-card__open:focus-visible {
-  outline: 1px solid var(--events-mode-color);
-  outline-offset: -1px;
 }
 
 .events-card__id {
@@ -778,7 +773,7 @@ h1 {
 .events-create-area {
   margin-bottom: 24px;
   padding: 16px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--panel);
 }
 
@@ -892,8 +887,10 @@ h1 {
 .connect-guide__content h2 {
   margin: 8px 0 0;
   color: var(--text);
-  font-size: 20px;
-  letter-spacing: 0.08em;
+  font-family: var(--font-readout);
+  font-size: var(--type-heading);
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .connect-guide__intro {
@@ -1021,8 +1018,8 @@ h1 {
   background: var(--accent);
 }
 
-.connect-guide .connect-guide__done:hover,
-.connect-guide .connect-guide__done:focus-visible {
+.connect-guide .settings-button.connect-guide__done:not(:disabled):hover,
+.connect-guide .settings-button.connect-guide__done:not(:disabled):focus-visible {
   border-color: var(--accent-hover);
   background: var(--accent-hover);
 }
@@ -1044,16 +1041,18 @@ h1 {
 .confirm-dialog__content {
   width: min(100%, 390px);
   padding: 18px;
-  border: 1px solid var(--line);
-  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
   box-shadow: 0 20px 50px color-mix(in srgb, var(--shadow) 55%, transparent);
 }
 
 .confirm-dialog__content h3 {
   margin: 0;
   color: var(--text);
-  font-size: 13px;
-  letter-spacing: 0.16em;
+  font-family: var(--font-readout);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .confirm-dialog__content p {
@@ -1094,8 +1093,8 @@ h1 {
   background: var(--accent);
 }
 
-.confirm-dialog .confirm-dialog__no:hover,
-.confirm-dialog .confirm-dialog__no:focus-visible {
+.confirm-dialog .settings-button.confirm-dialog__no:not(:disabled):hover,
+.confirm-dialog .settings-button.confirm-dialog__no:not(:disabled):focus-visible {
   border-color: var(--accent-hover);
   background: var(--accent-hover);
 }
@@ -1106,8 +1105,8 @@ h1 {
   background: transparent;
 }
 
-.confirm-dialog .confirm-dialog__yes:hover,
-.confirm-dialog .confirm-dialog__yes:focus-visible {
+.confirm-dialog .settings-button.confirm-dialog__yes:not(:disabled):hover,
+.confirm-dialog .settings-button.confirm-dialog__yes:not(:disabled):focus-visible {
   border-color: var(--danger);
   color: var(--text-on-danger);
   background: var(--danger);
@@ -1586,7 +1585,8 @@ h1 {
 
 .events-lap-detail__tooltip-value {
   color: var(--text);
-  font-family: monospace;
+  font-family: var(--font-readout);
+  font-variant-numeric: tabular-nums;
   text-align: right;
   flex-shrink: 0;
 }
@@ -1610,7 +1610,8 @@ h1 {
   padding: 2px 3px;
   color: var(--text);
   text-align: center;
-  font-family: monospace;
+  font-family: var(--font-readout);
+  font-variant-numeric: tabular-nums;
   font-size: 10px;
 }
 
@@ -1697,7 +1698,8 @@ h1 {
   cursor: pointer;
 }
 
-.detail-back:hover {
+.detail-back:hover,
+.detail-back:focus-visible {
   color: var(--accent);
 }
 
@@ -1896,7 +1898,7 @@ h1 {
 .event-recorder__status[data-state="stopped"] { color: var(--danger); }
 .event-recorder__status[hidden] { display: none; }
 
-.event-recorder__record {
+.settings-button.event-recorder__record {
   width: auto;
   margin-top: 0;
   border-color: var(--accent);
@@ -1904,8 +1906,11 @@ h1 {
   background: var(--accent);
 }
 
-.event-recorder__record:hover,
-.event-recorder__record:focus-visible { background: var(--accent-hover); }
+.settings-button.event-recorder__record:not(:disabled):hover,
+.settings-button.event-recorder__record:not(:disabled):focus-visible {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
 
 .event-recorder__controls .settings-button--danger { width: auto; margin-top: 0; }
 
@@ -2163,14 +2168,14 @@ h1 {
   min-width: 102px;
 }
 
-.driver-analysis-record--ready {
-  border-color: color-mix(in srgb, var(--accent) 68%, transparent);
+.settings-button.driver-analysis-record--ready {
+  border-color: var(--accent);
   color: var(--text-on-accent-deep);
   background: var(--accent);
 }
 
-.driver-analysis-record--ready:hover,
-.driver-analysis-record--ready:focus-visible {
+.settings-button.driver-analysis-record--ready:not(:disabled):hover,
+.settings-button.driver-analysis-record--ready:not(:disabled):focus-visible {
   border-color: var(--accent-pressed);
   background: var(--accent-pressed);
 }
@@ -3058,10 +3063,12 @@ h1 {
   color: var(--danger-text);
 }
 
-.settings-button--danger:hover,
-.settings-button--danger:focus-visible {
-  border-color: color-mix(in srgb, var(--alert) 75%, transparent);
-  background: color-mix(in srgb, var(--alert) 10%, transparent);
+/* Destructive actions fill red, never lime, on hover or keyboard focus. */
+.settings-button--danger:not(:disabled):hover,
+.settings-button--danger:not(:disabled):focus-visible {
+  border-color: var(--danger);
+  color: var(--text-on-danger);
+  background: var(--danger);
 }
 
 .settings-button--danger:disabled {
@@ -3463,7 +3470,8 @@ h1 {
 }
 
 .hud-display-card select:disabled {
-  opacity: 0.6;
+  border-color: var(--line-subtle);
+  color: var(--text-faint);
   cursor: not-allowed;
 }
 
