@@ -9,12 +9,14 @@ has no other data source.
 ## Overlay window
 
 - The HUD window is transparent, always on top, frameless, and never takes
-  focus. At startup it covers the primary monitor.
+  focus. It covers the monitor chosen in **HUD DISPLAY**.
 - During normal driving the whole window is click-through, so mouse input
   reaches the game.
 - Only an active layout edit makes the window accept pointer input; Save,
   Cancel, or Escape restores click-through.
-- The FDC tray icon offers **Configuration** and **Quit**.
+- The FDC tray icon offers **Configuration** and **Quit**. The X button of the
+  Configuration window also quits FDC, which closes the HUD; minimizing the
+  window keeps the HUD running.
 
 ## Blocks
 
@@ -29,9 +31,18 @@ The telemetry HUD has six blocks. A separate Delta strip belongs to Events.
 | Engine / Boost | Boost in bar, power in HP, and torque in N·m. Negative values show as zero, and all three show zero while the throttle is released. |
 | Input Graph | The last eight seconds of throttle (green) and brake (red) input. |
 
-**Delta** compares the current lap with the active Event reference. It is
-active only while an Event is recording and has a usable reference; see
-[Events](events.md#telemetry-recording).
+**Delta** compares the current lap with the active Event reference. It appears
+only while recording an Event with a known reference:
+
+- For an Event with a saved Absolute Best trace, Delta is visible immediately.
+- For a new Event on a circuit, Delta is hidden during lap 1; from lap 2 onward,
+  it shows the best lap so far once that lap completes.
+- For a new Event in a sprint, Delta is hidden during the first attempt; from
+  the second attempt onward, it shows the best result so far.
+- Saved runs recorded before trace storage do not have a trace, so Delta starts
+  only after the first new lap (circuit) or attempt (sprint) in that case.
+
+See [Events](events.md#telemetry-recording).
 
 ### Shift cue
 
@@ -49,7 +60,8 @@ Light Brightness settings. How targets are learned is described in
 ## Visibility
 
 - With **Show HUD with telemetry** enabled (the default), the HUD and Delta are
-  visible only while Forza reports live driving. Forza keeps sending Data Out
+  visible only while Forza reports live driving; Delta additionally needs an
+  active Event reference. Forza keeps sending Data Out
   in the pause menu, garage, and other menus but reports that racing is not
   on, so the HUD hides there. A 500 ms hold keeps a single non-live packet from
   making it blink.
@@ -88,6 +100,19 @@ Delta directly above it. Positions are stored relative to the screen size, so
 they survive a resolution change. Switching modes keeps each mode's own saved
 positions.
 
+## HUD display
+
+**HUD DISPLAY** on the HUD tab lists every connected monitor by its Windows
+display number and resolution, and marks the primary monitor. Choosing one
+moves the HUD to cover that monitor immediately, and FDC remembers the choice.
+Until a monitor is chosen, the HUD covers the primary monitor. If the saved
+monitor is not connected at startup, the HUD covers the primary monitor and the
+card says so. The list is unavailable while a layout edit is active.
+
+When Windows moves the HUD to another monitor, for example with
+Win+Shift+Arrow, FDC resizes it to cover that whole monitor and remembers it as
+the choice.
+
 ## HUD opacity
 
 **HUD Opacity** sets the opacity of the whole overlay, including Delta, from 1%
@@ -99,6 +124,10 @@ Configuration → **Settings** opens with a short intro that also notes all FDC
 data stays on this PC, and contains:
 
 - **Configuration always on top**, off by default;
+- **Confirm before quitting**, on by default: the Configuration X button asks
+  **QUIT FDC?** first. From the second confirmed quit the question offers
+  **Don't ask again**, which turns this off. A Driver Analysis or Event
+  recording in progress always asks;
 - **Show HUD with telemetry**, described above;
 - **Speed unit**: `km/h` or `mph` for speeds in the HUD, Events, and Driver
   Analysis;
@@ -113,7 +142,9 @@ km/h and meters, and changing a unit immediately redraws the open views.
 
 HUD layout, block and overlay visibility, opacity, speed and distance units,
 and brightness preferences are stored in the local application webview storage. They are not
-written to `fdc.sqlite`.
+written to `fdc.sqlite`. The **HUD DISPLAY** monitor is stored in
+`hud-display.json` in the FDC application-data directory, because FDC places the
+HUD before the page loads.
 
 ## Browser demo
 

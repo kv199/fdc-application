@@ -74,6 +74,13 @@ the tray menu, Direct Data Out, and native persistence commands.
   profile operations, Driver Analysis recording/history operations, and reset.
 - Garage, Driver Analysis, Events, and Shift Light database commands open `fdc.sqlite` below the Tauri
   application data directory and apply the versioned schema there.
+- At startup the HUD window is sized and positioned to cover the saved HUD
+  monitor, or the primary monitor. `list_hud_displays` and `set_hud_display`
+  list the connected monitors and move the HUD to one of them. When Windows
+  moves or rescales the HUD, for example with Win+Shift+Arrow, the window is
+  refitted to the monitor its top-left corner is on, and that monitor is saved.
+- Closing the Configuration window asks the page before quitting, and
+  `quit_app` exits FDC.
 
 The native layer registers the Driver Analysis global recording hotkey (keyboard
 or game-controller button via Windows Raw Input) while Driver Analysis is
@@ -89,8 +96,9 @@ HUD preference, Tauri event, Garage, Shift Light, and overlay modules in depende
 order. The Tauri configuration uses `overlay/` as the frontend distribution.
 
 The main window is a transparent, always-on-top HUD positioned across the
-primary monitor. The browser layer renders the current telemetry HUD, lap time,
-Delta, Garage persistence, and Shift Light presentation. Driver Analysis runs
+monitor chosen in **HUD DISPLAY**. The browser layer renders the current
+telemetry HUD, lap time, Delta, Garage persistence, and Shift Light
+presentation. Driver Analysis runs
 without a HUD widget and records only when explicitly started. Event
 recording initially configures Delta from the saved Event best, then replaces
 that reference in memory when a faster completed circuit lap or Sprint result
@@ -102,7 +110,9 @@ rather than each feature subscribing to the UDP source independently.
 The settings window is a separate browser page. It observes route status,
 Garage, and Shift Light events, presents the Events library, and invokes native
 commands for configuration actions. The tray menu opens Configuration and
-provides the application exit path.
+quits FDC. Closing the Configuration window asks the page through
+`SettingsController.requestQuit`; a confirmed quit calls the native
+`quit_app` command.
 
 The Configuration footer shows the build version, which copies `FDC <version>`
 to the clipboard when clicked, and a **HELP** menu. Its items call the native
@@ -193,6 +203,8 @@ telemetry path. It provides:
   and opacity remain shared. Both modes start from the same compact responsive
   arrangement. Reset returns a target to its active-mode default size and
   position;
+- a **HUD DISPLAY** monitor selector that moves the HUD to cover the chosen
+  monitor and is unavailable during a layout edit;
 - visibility controls for the top-level overlay and HUD components, plus a
   `SHOW HUD WITH TELEMETRY` preference that defaults to enabled and shows the
   HUD and Delta only while live samples (`IsRaceOn`) arrive, and hides them
@@ -205,15 +217,27 @@ telemetry path. It provides:
 - standard minimize and maximize controls, a persisted Configuration
   always-on-top preference that defaults to disabled, and a persisted window
   size (default `820 × 620` logical pixels) and last valid on-screen position;
+- a close button that quits FDC after **QUIT FDC?**. **Don't ask again** is
+  offered from the second confirmed quit and turns off the persisted
+  **CONFIRM BEFORE QUITTING** preference; a Driver Analysis or Event recording
+  in progress always asks;
 - Garage current-car and saved-car views, including local name editing and the
   current car's configuration list;
 - the Events library with local event creation, management, and run records;
 - Direct Data Out status and retry;
+- a **CONNECT FORZA HORIZON 6** setup screen that covers Configuration while
+  FDC has never received Data Out. It is skipped when the persisted
+  `fdc.connection-guide.v1` flag is set or the Garage already has a car, shows
+  the Data Out steps with `127.0.0.1` and `5301`, and follows the route
+  status: waiting, **CONNECTED** with **START USING FDC**, or a receiver problem
+  with **RETRY DATA OUT**. The first live status sets the flag; **SKIP FOR
+  NOW** or Escape closes it until the next launch;
 - current Shift Light diagnostics and reset.
 
 Layout, visibility, and display choices are kept in versioned browser storage
 keys (`fdc.layout.v2`, `fdc.layout-mode.v1`, `fdc.hud-visibility.v1`,
-`fdc.overlay-visibility.v1`, and `fdc.display-preferences.v1`). The prior
+`fdc.overlay-visibility.v1`, `fdc.display-preferences.v1`,
+`fdc.quit-confirmation.v1`, and `fdc.connection-guide.v1`). The prior
 `fdc.layout.v1` position is intentionally not migrated. Commands that affect
 the native window or Shift Light database cross the Tauri IPC boundary.
 
@@ -235,7 +259,9 @@ recordings and results live in `fdc.sqlite`. Configuration and layout preference
 keys listed above. The Configuration window size and last valid on-screen
 position are stored separately in the FDC application-data directory so a
 user-resized and moved window is restored on the next launch. A saved position
-outside the available monitors is ignored.
+outside the available monitors is ignored. The HUD monitor is stored in the
+same directory as its Windows name, physical position, and size; the position
+and size identify it when the name no longer matches.
 
 ## Generated assets
 

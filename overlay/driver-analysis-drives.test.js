@@ -58,6 +58,42 @@ test('a circuit counts laps that the race continued past and its finish lap', ()
   assert.deepEqual([drives[0].kind, drives[0].finished, drives[0].lapCount], ['circuit', true, 3])
 })
 
+test('an online circuit that stops one lap past its last boundary is finished', () => {
+  const drives = run([
+    ...drive(0, 1000, 50, { number: 0 }),
+    ...drive(1050, 2000, 50, { number: 1, last: 30 }),
+    ...drive(2050, 3050, 50, { number: 2, last: 29 }),
+    ...drive(0, 400, 50, { number: 0, last: 0 })
+  ])
+
+  assert.equal(drives.length, 2)
+  assert.deepEqual([drives[0].kind, drives[0].finished, drives[0].lapCount], ['circuit', true, 3])
+})
+
+test('an online circuit that stops mid-lap stays unfinished', () => {
+  const drives = run([
+    ...drive(0, 1000, 50, { number: 0 }),
+    ...drive(1050, 2000, 50, { number: 1, last: 30 }),
+    ...drive(2050, 2600, 50, { number: 2, last: 29 }),
+    ...drive(0, 400, 50, { number: 0, last: 0 })
+  ])
+
+  assert.equal(drives.length, 2)
+  assert.deepEqual([drives[0].kind, drives[0].finished, drives[0].lapCount], ['circuit', false, 2])
+})
+
+test('an online circuit finish allows a small distance difference', () => {
+  const drives = run([
+    ...drive(0, 1000, 50, { number: 0 }),
+    ...drive(1050, 2000, 50, { number: 1, last: 30 }),
+    ...drive(2050, 3030, 10, { number: 2, last: 29 }),
+    ...drive(0, 400, 50, { number: 0, last: 0 })
+  ])
+
+  assert.equal(drives.length, 2)
+  assert.deepEqual([drives[0].kind, drives[0].finished, drives[0].lapCount], ['circuit', true, 3])
+})
+
 test('a restart ends an unfinished circuit and starts the next drive', () => {
   const drives = run([
     ...drive(0, 1000, 50, { number: 0 }),
@@ -69,6 +105,37 @@ test('a restart ends an unfinished circuit and starts the next drive', () => {
   assert.equal(drives.length, 2)
   assert.deepEqual([drives[0].kind, drives[0].finished, drives[0].lapCount], ['circuit', false, 2])
   assert.deepEqual([drives[1].kind, drives[1].finished, drives[1].distanceM], ['sprint', false, 400])
+  assert.equal(drives[1].firstSequence, drives[0].lastSequence + 1)
+})
+
+test('an online start that reports distance while the race clock runs on stays one drive', () => {
+  const packets = []
+  for (let index = 0; index <= 120; index++) {
+    const clock = index * 0.016
+    // Every fourth packet reports a distance ahead of the others, like FH6 online starts.
+    packets.push(live(index % 4 === 3 ? 40 : 0, { current: clock, raceTime: clock }))
+  }
+  for (let distance = 100; distance <= 3000; distance += 50) {
+    packets.push(live(distance, { current: 2 + distance / 50, raceTime: 2 + distance / 50 }))
+  }
+  packets.push(result({ number: 1, last: 61.2 }))
+  const drives = run(packets)
+
+  assert.equal(drives.length, 1)
+  assert.equal(drives[0].firstSequence, 0)
+  assert.equal(drives[0].kind, 'sprint')
+  assert.equal(drives[0].finished, true)
+})
+
+test('a clean start after the race clock went back still starts a new drive', () => {
+  const drives = run([
+    ...drive(0, 1000),
+    ...drive(0, 400)
+  ])
+
+  assert.equal(drives.length, 2)
+  assert.equal(drives[0].distanceM, 1000)
+  assert.equal(drives[1].distanceM, 400)
   assert.equal(drives[1].firstSequence, drives[0].lastSequence + 1)
 })
 
@@ -84,6 +151,50 @@ test('an in-race rewind and a pause keep one drive', () => {
   assert.equal(drives.length, 1)
   assert.equal(drives[0].kind, 'sprint')
   assert.equal(drives[0].finished, false)
+})
+
+test('resetting the car to the track mid-race keeps one drive', () => {
+  const resume = []
+  for (let distance = 2400; distance <= 3050; distance += 50) {
+    const clock = 52 + (distance - 2400) / 50
+    resume.push(live(distance, { current: clock, raceTime: clock, number: 2, last: 29 }))
+  }
+  const drives = run([
+    ...drive(0, 1000, 50, { number: 0 }),
+    ...drive(1050, 2000, 50, { number: 1, last: 30 }),
+    ...drive(2050, 2500, 50, { number: 2, last: 29 }),
+    // The reset to the track: distance and lap fall back while the race clock runs on.
+    live(0, { current: 0, raceTime: 51, number: 0 }),
+    live(0, { current: 0, raceTime: 51, number: 0 }),
+    live(0, { current: 0, raceTime: 51, number: 0 }),
+    ...resume,
+    ...drive(0, 400, 50, { number: 0, last: 0 })
+  ])
+
+  assert.equal(drives.length, 2)
+  assert.equal(drives[0].kind, 'circuit')
+  assert.equal(drives[0].finished, true)
+  assert.equal(drives[0].lapCount, 3)
+  assert.equal(drives[0].distanceM, 3050)
+  assert.equal(drives[1].firstSequence, drives[0].lastSequence + 1)
+})
+
+test('a fall back to another lap that never resumes still ends the drive', () => {
+  const drives = run([
+    ...drive(0, 1000, 50, { number: 0 }),
+    ...drive(1050, 2000, 50, { number: 1, last: 30 }),
+    ...drive(2050, 2500, 50, { number: 2, last: 29 }),
+    live(300, { current: 6, raceTime: 6, number: 0 }),
+    live(350, { current: 7, raceTime: 7, number: 0 }),
+    live(400, { current: 8, raceTime: 8, number: 0 })
+  ])
+
+  assert.equal(drives.length, 1)
+  assert.equal(drives[0].kind, 'circuit')
+  assert.equal(drives[0].finished, false)
+  assert.equal(drives[0].lapCount, 2)
+  assert.equal(drives[0].distanceM, 2500)
+  assert.equal(drives[0].lastSequence, 50)
 })
 
 test('driving on after the finish line does not turn a sprint into a circuit', () => {

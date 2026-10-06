@@ -5,6 +5,50 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+## 7.24.67 - 2026-10-06
+
+### Fixed
+
+- **Driver Analysis**: a recording's distance and average speed no longer
+  come out wrong after online races, where the average could exceed the top
+  speed. Saved recordings are corrected the next time FDC starts.
+- **Driver Analysis**: online races no longer add short phantom sprint drives
+  at the start; the race is recorded as one drive from its first second.
+- **Driver Analysis**: online circuit races that reach the finish are now
+  saved as finished with all their laps instead of unfinished and one lap
+  short.
+- **Driver Analysis**: resetting the car to the track during a race no longer
+  ends the drive; the rest of the race stays in the same drive.
+
+### Improved
+
+- **Delta**: the Delta strip now appears only while recording with a known
+  reference (immediately for an Event with a saved Absolute Best trace; from
+  the second circuit lap or the next Sprint attempt for a new Event). The Event
+  page's Absolute Best time updates silently as Delta accepts a faster result,
+  before the run is saved.
+
+## 7.24.62 - 2026-10-05
+
+### Added
+
+- **HUD**: **HUD DISPLAY** on the HUD tab chooses which monitor the HUD covers,
+  and FDC remembers it. Moving the HUD to another monitor with Win+Shift+Arrow
+  now fills that whole monitor.
+- **Configuration**: until Forza has sent data once, FDC opens on a
+  **CONNECT FORZA HORIZON 6** screen that shows the Data Out settings to enter
+  in the game, `127.0.0.1` and port `5301`, and switches to **CONNECTED** as
+  soon as data arrives.
+
+### Improved
+
+- **Configuration**: the X button now quits FDC after asking **QUIT FDC?**;
+  minimize the window to keep the HUD running. From the second quit on, the
+  question offers **Don't ask again**, and **CONFIRM BEFORE QUITTING** in
+  Settings turns it back on. A recording in progress always asks.
+
+## 7.22.61 - 2026-10-02
+
 ### Fixed
 
 - **Garage**: renaming a car now also updates an open Event run and no longer

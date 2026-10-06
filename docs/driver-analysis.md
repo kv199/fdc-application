@@ -64,11 +64,15 @@ OFF → READY → WAITING → RECORDING → FINALIZING → READY
 While recording, each car's telemetry is split into drives, one per race. A
 drive starts at a clean race start: live telemetry with Current Lap and Current
 Race Time of at most two seconds and a travelled distance of at most 25 metres,
-the same start that Events use. It ends at another clean start, when driving
-continues after the finish line, when the travelled distance falls back by more
-than 100 metres together with a lap change or a reset lap clock, at a car
-change, or when recording stops. A smaller fall back without those signals is
-an in-race rewind and the drive continues; pauses continue the drive too.
+the same start that Events use. It ends at another clean start that sets the
+race clock back, when driving continues after the finish line, when the
+travelled distance falls back by more than 100 metres together with a lap change
+or a reset lap clock, at a car change, or when recording stops. After such a
+fall back the drive goes on if the same lap returns with its lap clock still
+running, as after the car is reset to the track. A smaller fall back without
+those signals is an in-race rewind and the drive continues; pauses continue the
+drive too. A clean start while Current Lap and Current Race Time keep running
+forward, as during online race starts, continues the drive.
 
 Telemetry does not identify the race type, so a drive is classified from its
 laps:
@@ -83,6 +87,10 @@ laps:
   travelled distance all cleared, once the drive has covered more than 25
   metres; live driving after a zeroed result that does not continue the race
   clock and distance ends the drive;
+- online circuits send no result packets, so a circuit drive that ends within
+  3% of a lap length of one lap past its last lap boundary reached the finish
+  line too; the lap length is the distance between its last two lap
+  boundaries, or from the drive start to its only one;
 - a drive with at least one completed circuit lap is a circuit whose lap count
   includes the finish lap when it was reached; any other drive is a sprint, so
   a one-lap circuit appears as a sprint;
@@ -196,11 +204,13 @@ was collected, regardless of its result. They describe what happened in this
 recording only. There are no reference values, grades, scores, or
 recommendations. The statistics are computed by
 `overlay/driver-analysis-stats.js` from the same normalized samples and phases
-that feed the maneuver analysis. Samples separated by a telemetry gap do not
-contribute time or distance, and a braking event or corner interrupted by a gap
-is discarded. Acceleration peaks use a 150 ms moving average, and each event's
-peak is the 95th percentile of those smoothed values, so single-frame spikes
-such as curb or contact impacts do not dominate the result.
+that feed the maneuver analysis. Distance and average speed are integrated
+from speed, because the game's travelled distance is not in metres in every
+race. Samples separated by a telemetry gap do not contribute time or distance,
+and a braking event or corner interrupted by a gap is discarded. Acceleration
+peaks use a 150 ms moving average, and each event's peak is the 95th percentile
+of those smoothed values, so single-frame spikes such as curb or contact
+impacts do not dominate the result.
 
 | Row | Content |
 | --- | --- |

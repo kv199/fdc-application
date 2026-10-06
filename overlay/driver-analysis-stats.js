@@ -6,7 +6,7 @@
   'use strict'
 
   const FdcUnits = globalThis.FdcUnits || require('./units.js')
-  const STATS_VERSION = 7
+  const STATS_VERSION = 8
   const GRAVITY = 9.80665
   const MIN_EVENTS = 3
   const TURNING_PHASES = new Set(['turn-in', 'rotation', 'exit'])
@@ -244,11 +244,8 @@
       totals.maxSpeedKmh = Math.max(totals.maxSpeedKmh, sample.speedKmh)
 
       if (dtMs > 0) {
-        const speedStepM = (sample.speedKmh + previous.speedKmh) / 2 / 3.6 * dtMs / 1000
-        const lapDelta = finite(sample.lapDistanceM) !== null && finite(previous.lapDistanceM) !== null
-          ? sample.lapDistanceM - previous.lapDistanceM
-          : null
-        totals.distanceM += lapDelta !== null && lapDelta > 0 && lapDelta <= speedStepM * 1.5 + 1 ? lapDelta : speedStepM
+        // The game's Distance Traveled is not metres in every race, so distance comes from speed alone.
+        totals.distanceM += (sample.speedKmh + previous.speedKmh) / 2 / 3.6 * dtMs / 1000
         if (sample.speedKmh >= thresholds.movingKmh) {
           totals.movingMs += dtMs
           if (sample.brake >= thresholds.brakeOn) {

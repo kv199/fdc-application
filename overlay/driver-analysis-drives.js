@@ -12,6 +12,9 @@
   const LAP_CONFIRM_DISTANCE_M = 100
   // Travelled distance falling back by more than this ends the race unless it is an in-race rewind.
   const DISTANCE_RESET_M = 100
+  // Online circuits end without result packets; a drive that stops one lap length past its last lap boundary,
+  // within this share of a lap, reached the finish line.
+  const LAP_FINISH_TOLERANCE = 0.03
 
   function finite(value) {
     if (value === null || value === undefined || value === '') return null
@@ -60,17 +63,29 @@
         lastLapNumber: finite(telemetry?.lap?.number),
         lastLapValue: lastLapValue(telemetry),
         confirmedLaps: 0,
+        boundaryDistances: [],
         pendingBoundaryDistance: null,
         finishLine: false,
         lastLiveCurrent: null,
         lastLiveRaceTime: null,
         zeroedExit: false,
+        suspended: null,
         pendingSprintCurrent: null,
         firstSequence: null,
         lastSequence: null,
         startedAtMs: null,
         finishedAtMs: null
       }
+    }
+
+    // The finish of a circuit whose result packets never arrived: one lap length past the last lap boundary.
+    function reachedFinishDistance(drive) {
+      const boundaries = drive.boundaryDistances
+      if (boundaries.length === 0) return false
+      const last = boundaries[boundaries.length - 1]
+      const lapLength = last - (boundaries.length > 1 ? boundaries[boundaries.length - 2] : drive.startDistance)
+      if (!(lapLength > 0)) return false
+      return Math.abs(drive.lastDistance - (last + lapLength)) <= lapLength * LAP_FINISH_TOLERANCE
     }
 
     function close() {
@@ -81,6 +96,7 @@
       if (drive.lastDistance - drive.startDistance <= START_MAX_DISTANCE_M) return
       const kind = drive.confirmedLaps > 0 ? 'circuit' : 'sprint'
       const finished = drive.finishLine || drive.pendingBoundaryDistance !== null || (kind === 'sprint' && drive.zeroedExit)
+        || (kind === 'circuit' && reachedFinishDistance(drive))
       drives.push({
         kind,
         finished,
@@ -92,6 +108,15 @@
         startedWallMs: drive.startedWallMs,
         distanceM: Math.max(0, Math.round((drive.lastDistance - drive.startDistance) * 10) / 10)
       })
+    }
+
+    // Online race starts report clean-start packets while the race clock keeps running; only a clock that starts
+    // over is a new race. Free roam keeps the clock at zero, so it never counts as running on.
+    function clockRunsOn(telemetry) {
+      const current = finite(telemetry?.lap?.current)
+      const raceTime = finite(telemetry?.lap?.raceTime)
+      if (current === null || current <= 0 || active.lastLiveCurrent === null || current < active.lastLiveCurrent) return false
+      return raceTime === null || active.lastLiveRaceTime === null || raceTime >= active.lastLiveRaceTime
     }
 
     // A boundary seen while racing may be a circuit lap; one seen on the non-live result packets is the finish line.
@@ -113,7 +138,7 @@
       const live = telemetry.isRaceOn === true
       if (isCleanStart(telemetry)) {
         const progressed = active && (active.lastDistance - active.startDistance > START_MAX_DISTANCE_M || active.confirmedLaps > 0)
-        if (progressed) close()
+        if (progressed && !clockRunsOn(telemetry)) close()
         if (!active) open(telemetry)
       }
       if (!active) return
@@ -162,12 +187,24 @@
       active.pendingSprintCurrent = null
       const distance = finite(telemetry?.lap?.distance)
       const lapNumber = finite(telemetry?.lap?.number)
+      const current = finite(telemetry?.lap?.current)
+      const fellBack = distance === null || distance < active.lastDistance - DISTANCE_RESET_M
+      // A car reset to the track drops the distance and lap clock for a few packets; the race goes on when the same
+      // lap returns with its clock still running. Anything else after the drop ends the race.
+      if (active.suspended) {
+        const resumes = lapNumber !== null && lapNumber === active.suspended.lapNumber
+          && current !== null && active.suspended.current !== null && current >= active.suspended.current
+        if (!resumes) {
+          if (!fellBack) close()
+          return
+        }
+        active.suspended = null
+      }
       if (distance !== null && distance < active.lastDistance - DISTANCE_RESET_M) {
-        const current = finite(telemetry?.lap?.current)
         const raceOver = (lapNumber !== null && active.lastLapNumber !== null && lapNumber !== active.lastLapNumber)
           || (current !== null && current < 1)
         if (raceOver) {
-          close()
+          active.suspended = { lapNumber: active.lastLapNumber, current: active.lastLiveCurrent }
           return
         }
         // In-race rewind: continue from the rewound position and forget a boundary that was rewound past.
@@ -177,13 +214,13 @@
       } else if (distance !== null) {
         active.lastDistance = Math.max(active.lastDistance, distance)
       }
-      const current = finite(telemetry?.lap?.current)
       const raceTime = finite(telemetry?.lap?.raceTime)
       if (current !== null) active.lastLiveCurrent = current
       if (raceTime !== null) active.lastLiveRaceTime = raceTime
       noteBoundary(telemetry, true)
       if (active.pendingBoundaryDistance !== null && active.lastDistance >= active.pendingBoundaryDistance + LAP_CONFIRM_DISTANCE_M) {
         active.confirmedLaps += 1
+        active.boundaryDistances.push(active.pendingBoundaryDistance)
         active.pendingBoundaryDistance = null
       }
       if (persisted) {

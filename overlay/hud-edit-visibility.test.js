@@ -23,6 +23,7 @@ function visibilityInput(overrides = {}) {
     telemetryVisible: true,
     mode: 'grouped',
     editingTarget: null,
+    deltaReferenceActive: true,
     ...overrides,
     state: { ...Object.fromEntries(COMPONENTS.map(name => [name, true])), ...overrides.state },
     overlayState: { delta: true, hud: true, ...overrides.overlayState }
@@ -210,4 +211,33 @@ test('an unchanged telemetry visibility does no layout or storage work', () => {
     assert.equal(layoutRefreshes, 0)
     assert.equal(counters.storageWrites, storageWrites)
   })
+})
+
+test('delta is hidden without an active reference', () => {
+  const noReference = resolveHudVisibility(visibilityInput({ deltaReferenceActive: false }))
+  assert.equal(noReference.delta, true)
+
+  const withReference = resolveHudVisibility(visibilityInput({ deltaReferenceActive: true }))
+  assert.equal(withReference.delta, false)
+})
+
+test('delta with a reference still follows telemetry visibility', () => {
+  const withReferenceLive = resolveHudVisibility(visibilityInput({ telemetryVisible: true, deltaReferenceActive: true }))
+  assert.equal(withReferenceLive.delta, false)
+
+  const withReferenceNotLive = resolveHudVisibility(visibilityInput({ telemetryVisible: false, deltaReferenceActive: true }))
+  assert.equal(withReferenceNotLive.delta, true)
+})
+
+test('delta switch off hides it even with a reference', () => {
+  const switchOff = resolveHudVisibility(visibilityInput({ deltaReferenceActive: true, overlayState: { delta: false } }))
+  assert.equal(switchOff.delta, true)
+})
+
+test('editing delta shows it without a reference', () => {
+  const editingNormal = resolveHudVisibility(visibilityInput({ deltaReferenceActive: false, editingTarget: 'delta' }))
+  assert.equal(editingNormal.delta, false)
+
+  const editingWithoutTelemetry = resolveHudVisibility(visibilityInput({ telemetryVisible: false, deltaReferenceActive: false, editingTarget: 'delta' }))
+  assert.equal(editingWithoutTelemetry.delta, false)
 })

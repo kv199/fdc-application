@@ -2,9 +2,10 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { readResolvedStylesheet } = require('../tools/stylesheet-tokens.cjs')
 
 const settingsHtml = fs.readFileSync(path.join(__dirname, 'settings.html'), 'utf8')
-const settingsCss = fs.readFileSync(path.join(__dirname, 'settings.css'), 'utf8')
+const settingsCss = readResolvedStylesheet('settings.css')
 const settingsJs = fs.readFileSync(path.join(__dirname, 'settings.js'), 'utf8')
 const overlayHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8')
@@ -521,6 +522,33 @@ test('tray has one Configuration action and no calibration reset action', () => 
   assert.match(tauriMain, /\.text\("quit", "Quit"\)/)
 })
 
+test('the Configuration X button asks QUIT FDC? through the shared dialog', () => {
+  assert.match(tauriMain, /CloseRequested[\s\S]*?prevent_close\(\)[\s\S]*?SettingsController\?\.requestQuit\?\.\(\)/)
+  assert.match(tauriMain, /fn quit_app\(app: AppHandle\) \{\s*app\.exit\(0\);/)
+  assert.doesNotMatch(tauriMain, /settings\.hide\(\)/)
+  assert.ok(settingsHtml.indexOf('src="quit-confirmation.js"') < settingsHtml.indexOf('src="settings.js"'))
+  assert.match(settingsHtml, /id="destructive-confirm-option" class="confirm-dialog__option" hidden/)
+  assert.match(settingsHtml, /CONFIRM BEFORE QUITTING[\s\S]*?id="confirm-before-quit"/)
+  assert.match(settingsJs, /title: 'QUIT FDC\?'[\s\S]*?yes: 'QUIT'[\s\S]*?no: 'CANCEL'/)
+  assert.match(settingsJs, /driverAnalysisState\.recording === true \|\| recorderState\.recording === true/)
+  assert.match(settingsJs, /call\('quit_app'\)/)
+  assert.match(settingsJs, /globalScope\.SettingsController[\s\S]*requestQuit/)
+})
+
+test('Configuration opens on the connection guide until Forza first sends Data Out', () => {
+  assert.ok(settingsHtml.indexOf('src="connection-guide.js"') < settingsHtml.indexOf('src="settings.js"'))
+  const guide = settingsHtml.slice(settingsHtml.indexOf('id="connect-guide"'), settingsHtml.indexOf('id="destructive-confirm-dialog"'))
+  assert.match(guide, /role="dialog" aria-modal="true"[^>]*hidden/)
+  assert.match(guide, /Settings → HUD and Gameplay → Telemetry/)
+  assert.match(guide, /<code class="connect-guide__value">127\.0\.0\.1<\/code>/)
+  assert.match(guide, /<code class="connect-guide__value">5301<\/code>/)
+  for (const id of ['connect-guide-retry', 'connect-guide-skip', 'connect-guide-done']) assert.match(guide, new RegExp('id="' + id + '"'))
+  assert.match(settingsJs, /applyGaragePayload\(await call\('load_garage_snapshot'\)\)[\s\S]*?openConnectionGuideIfNeverConnected\(\)/)
+  assert.match(settingsJs, /connectionGuideApi\.shouldShow\(connectionGuideApi\.read\(\), garageVehicles\.size > 0\)/)
+  assert.match(settingsJs, /telemetryRouteRetry\.hidden = !presentation\.canRetry\s*renderConnectionGuide\(\)/)
+  assert.match(settingsCss, /\.connect-guide \{[^}]*z-index: 15;/)
+})
+
 test('Configuration replays Shift Light state and waits for the real reset result', () => {
   assert.match(settingsJs, /hud_shift_light_reset_result/)
   assert.match(settingsJs, /call\('sync_shift_light_status'\)/)
@@ -641,6 +669,20 @@ test('Settings re-renders unit-dependent views when units change', () => {
   assert.match(settingsJs, /function renderUnitDependentViews\(\) \{[\s\S]*?renderEventRunDetail\(currentEventRun\)/)
   assert.match(settingsJs, /unitsChanged = previous\.speedUnit !== next\.speedUnit \|\| previous\.distanceUnit !== next\.distanceUnit/)
   assert.match(settingsJs, /if \(unitsChanged\) \{\s*renderUnitDependentViews\(\)/)
+})
+
+test('HUD DISPLAY card allows selecting which monitor the HUD covers', () => {
+  const hudPanel = settingsHtml.slice(settingsHtml.indexOf('id="hud-panel"'), settingsHtml.indexOf('id="hud-panel"') + 4000)
+  assert.match(hudPanel, /id="hud-display-title">HUD DISPLAY/)
+  assert.match(hudPanel, /Monitor the HUD is shown on/)
+  assert.match(hudPanel, /id="hud-display"[^>]*><\/select>/)
+  assert.match(hudPanel, /id="hud-display-missing"[^>]*hidden/)
+  assert.ok(hudPanel.indexOf('HUD DISPLAY') < hudPanel.indexOf('HUD OPACITY'))
+  assert.match(settingsJs, /async function refreshHudDisplay/)
+  assert.match(settingsJs, /call\('list_hud_displays'\)/)
+  assert.match(settingsJs, /call\('set_hud_display'/)
+  assert.match(settingsJs, /hudDisplay\.disabled = hudDisplayCount <= 1 \|\| Boolean\(editingTarget\)/)
+  assert.match(settingsJs, /globalScope\.SettingsController[\s\S]*refreshHudDisplay/)
 })
 
 test('HUD uses FdcUnits for speed formatting and reads fresh display preferences on update', () => {

@@ -48,7 +48,7 @@
   }
 
   function resolveHudVisibility(input) {
-    const { state, overlayState, telemetryVisible, mode, editingTarget } = input
+    const { state, overlayState, telemetryVisible, mode, editingTarget, deltaReferenceActive } = input
     const sections = {}
     for (const name of COMPONENTS) {
       sections[name] = state[name] === false
@@ -56,7 +56,7 @@
     const hasVisibleContent = COMPONENTS.some(name => state[name] !== false)
     let hud = !hasVisibleContent
     let hudFrame = !telemetryVisible || overlayState.hud === false || !hasVisibleContent
-    let delta = !telemetryVisible || overlayState.delta === false
+    let delta = !telemetryVisible || overlayState.delta === false || deltaReferenceActive !== true
 
     // A layout edit keeps its target and the target's containers visible,
     // whatever telemetry or the visibility switches would otherwise hide.
@@ -102,6 +102,7 @@
     let state = readState()
     let overlayState = readOverlayState()
     let telemetryVisible = true
+    let deltaReferenceActive = false
 
     function apply(nextState = state) {
       state = COMPONENTS.reduce((result, name) => {
@@ -113,6 +114,7 @@
         state,
         overlayState,
         telemetryVisible,
+        deltaReferenceActive,
         mode: globalScope.HudLayout?.getMode?.() || 'grouped',
         editingTarget: globalScope.HudLayout?.getEditingTarget?.() ?? null
       })
@@ -152,6 +154,12 @@
         const next = visible !== false
         if (next === telemetryVisible) return
         telemetryVisible = next
+        apply(state)
+      },
+      setDeltaReferenceActive: active => {
+        const next = active === true
+        if (next === deltaReferenceActive) return
+        deltaReferenceActive = next
         apply(state)
       },
       setVisibility: (name, visible) => {

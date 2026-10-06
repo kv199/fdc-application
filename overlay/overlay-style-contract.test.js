@@ -2,8 +2,9 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { readResolvedStylesheet } = require('../tools/stylesheet-tokens.cjs')
 
-const overlayCss = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
+const overlayCss = readResolvedStylesheet('overlay.css')
 const overlayHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 
 function cssBlock(selector) {

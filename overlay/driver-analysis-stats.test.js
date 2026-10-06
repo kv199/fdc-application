@@ -41,7 +41,7 @@ test('distribution filters non-finite values and sorts', () => {
 
 test('MIN_EVENTS and STATS_VERSION are exported', () => {
   assert.equal(statsApi.MIN_EVENTS, 3)
-  assert.equal(statsApi.STATS_VERSION, 7)
+  assert.equal(statsApi.STATS_VERSION, 8)
 })
 
 test('DEFAULT_THRESHOLDS includes required configuration', () => {
@@ -312,6 +312,40 @@ test('corner tire shares are null without combined slip', () => {
 
   assert.equal(result.corners.frontOverLimitShare, null)
   assert.equal(result.corners.rearOverLimitShare, null)
+})
+
+test('distance comes from speed even when the game distance runs ahead', () => {
+  const stats = statsApi.createDriverAnalysisStats()
+  const count = 200
+  const dtMs = 15.625
+  const speedKmh = 180
+  let previousSample = null
+
+  for (let index = 0; index < count; index++) {
+    const sample = {
+      timestampMs: index * dtMs,
+      speedKmh,
+      throttle: 1,
+      brake: 0,
+      steer: 0,
+      steerMagnitude: 0,
+      lateralResponse: 0,
+      longitudinalResponse: 0,
+      lapDistanceM: index * 2 * (speedKmh / 3.6) * dtMs / 1000
+    }
+    stats.update({ valid: true, phase: 'straight', maneuverId: null, sample, previousSample })
+    previousSample = sample
+  }
+
+  const result = stats.finalize()
+
+  const expectedDistance = (count - 1) * (speedKmh / 3.6) * dtMs / 1000
+  assert.ok(Math.abs(result.distanceM - expectedDistance) <= 1,
+    `distance should be within 1m of ${expectedDistance}, got ${result.distanceM}`)
+  assert.ok(Math.abs(result.avgSpeedKmh - speedKmh) <= 0.5,
+    `average speed should be within 0.5 of ${speedKmh}, got ${result.avgSpeedKmh}`)
+  assert.ok(result.avgSpeedKmh <= result.maxSpeedKmh,
+    `average speed ${result.avgSpeedKmh} should not exceed max speed ${result.maxSpeedKmh}`)
 })
 
 test('formatStatsRows shows corner tire shares over 100% slip', () => {

@@ -1,0 +1,107 @@
+/*
+ * FDC color tokens shared by Configuration (settings.css) and the in-game HUD
+ * (overlay.css). Every color in those stylesheets resolves to a token here.
+ *
+ * Tokens name a role, not a hue: two roles may share a value today and still
+ * change independently. Use the role that matches the meaning of the element.
+ * For a translucent variant, mix the role with transparent:
+ *   color-mix(in srgb, var(--line) 14%, transparent)
+ */
+:root {
+  /* Surfaces */
+  --bg: #090b0e;
+  --shade: #080a0c;
+  --shade-deep: #050607;
+  --shade-overlay: rgb(5 6 8 / 96%);
+  --shadow: #000;
+  --meter-track: rgb(30 34 39 / 92%);
+
+  /* Text */
+  --text: #f8fafc;
+  --text-bright: #fff;
+  --text-soft: #d4d4d8;
+  --text-muted: #a1a1aa;
+  --text-subtle: #71717a;
+  --text-faint: #52525b;
+  --text-slate: #718096;
+
+  /* Lines and neutral washes */
+  --line: #e2e8f0;
+  --line-light: #fff;
+
+  /* Interaction accent */
+  --accent: #69e83f;
+  --accent-hover: #88f166;
+  --accent-pressed: #8df36b;
+  --accent-soft: #86efac;
+  --text-on-accent: #090b0e;
+  --text-on-accent-deep: #081006;
+
+  /* Status */
+  --danger: #ef4444;
+  --danger-text: #ff827d;
+  --danger-soft: #fecaca;
+  --danger-rose: #fb7185;
+  --text-on-danger: #fff;
+  --alert: #ff312b;
+  --warning: #fbbf24;
+  --caution: #facc15;
+  --caution-strong: #eab308;
+  --notice: #f97316;
+  --notice-soft: #fed7aa;
+  --best: #c084fc;
+  --text-on-badge: #090b0e;
+  --text-on-class: #fff;
+
+  /* Vehicle classes */
+  --class-d: #7dd3fc;
+  --class-c: #facc15;
+  --class-b: #f97316;
+  --class-a: #ef4444;
+  --class-s1: #c084fc;
+  --class-s2: #2563eb;
+  --class-r: #ec4899;
+  --class-x: #22c55e;
+
+  /* Event modes */
+  --mode-any: #f97316;
+  --mode-rivals: #7dd3fc;
+  --mode-online: #facc15;
+  --mode-eventlab: #ffffff;
+  --mode-official: #ef4444;
+  --mode-blueprint: #c084fc;
+
+  /* Lap and Driver Analysis map layers */
+  --trace-throttle: #69e83f;
+  --trace-brake: #ef4444;
+  --trace-coast: #facc15;
+  --trace-slip: #22d3ee;
+  --problem-front-scrub: #fb923c;
+  --problem-exit-wheelspin: #f472b6;
+  --problem-brake-steering: #818cf8;
+  --problem-abrupt-release: #d8b4fe;
+
+  /* In-game HUD telemetry */
+  --telemetry-throttle: #69e83f;
+  --telemetry-brake: #ff312b;
+  --hud-text: #f8fafc;
+  --hud-text-bright: #fafafa;
+  --hud-text-white: #ffffff;
+  --hud-text-muted: #a1a1aa;
+  --hud-text-subtle: #71717a;
+  --hud-redline-text: #ffd4d2;
+  --hud-redline-label: #ff827d;
+  --hud-shade: #080a0c;
+  --hud-track: rgb(3 5 7 / 30%);
+  --hud-pedal-track: rgb(3 5 7 / 34%);
+  --hud-bar-track: #030507;
+  --hud-rule: rgb(226 232 240 / 42%);
+  --hud-panel: rgb(8 10 12 / 56%);
+  --hud-delta-panel: rgb(8 10 12 / 49%);
+  --hud-redline-background: rgb(217 42 37 / 96%);
+  --hud-shift-alert: rgb(168 85 247 / 96%);
+  --hud-shift-alert-flash: rgb(185 118 248 / 98%);
+  --hud-edit-line: #e2e8f0;
+  --hud-edit-accent: #69e83f;
+  --hud-edit-guide: #fbbf24;
+}

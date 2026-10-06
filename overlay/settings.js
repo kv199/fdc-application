@@ -47,6 +47,12 @@
   const telemetryStatusLabel = document.getElementById('telemetry-status-label')
   const telemetryRouteCard = document.getElementById('telemetry-route-card')
   const telemetryRouteRetry = document.getElementById('telemetry-route-retry')
+  const connectGuide = document.getElementById('connect-guide')
+  const connectGuideStatusLabel = document.getElementById('connect-guide-status-label')
+  const connectGuideHint = document.getElementById('connect-guide-hint')
+  const connectGuideRetry = document.getElementById('connect-guide-retry')
+  const connectGuideSkip = document.getElementById('connect-guide-skip')
+  const connectGuideDone = document.getElementById('connect-guide-done')
   const shiftLightEmpty = document.getElementById('shift-light-empty')
   const shiftLightProfile = document.getElementById('shift-light-profile')
   const shiftLightCarKey = document.getElementById('shift-light-car-key')
@@ -60,6 +66,17 @@
   const shiftLightHelp = document.getElementById('shift-light-help')
   const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
   const displayPreferencesApi = globalScope.DisplayPreferences
+  const quitConfirmationApi = globalScope.QuitConfirmation
+  const connectionGuideApi = globalScope.ConnectionGuide
+  const CONNECTION_GUIDE_LABELS = Object.freeze({
+    waiting: 'WAITING FOR DATA FROM FORZA…',
+    connected: 'CONNECTED',
+    problem: 'FDC CANNOT RECEIVE DATA OUT'
+  })
+  const CONNECTION_GUIDE_HINTS = Object.freeze({
+    waiting: 'This screen updates as soon as the game sends data.',
+    connected: 'FDC is receiving data from Forza Horizon 6.'
+  })
   const DEFAULT_REDLINE_BRIGHTNESS = displayPreferencesApi?.DEFAULTS?.redlineBrightness ?? 80
   const DEFAULT_HUD_OPACITY = displayPreferencesApi?.DEFAULTS?.hudOpacity ?? 80
   const SETTINGS_WINDOW_CONTEXTS = Object.freeze({
@@ -73,6 +90,7 @@
   const speedUnitInputs = [...document.querySelectorAll('input[name="speed-unit"]')]
   const distanceUnitInputs = [...document.querySelectorAll('input[name="distance-unit"]')]
   const configurationAlwaysOnTop = document.getElementById('configuration-always-on-top')
+  const confirmBeforeQuit = document.getElementById('confirm-before-quit')
   const showHudWithTelemetry = document.getElementById('show-hud-with-telemetry')
   const fdcShiftLightEnabled = document.getElementById('fdc-shift-light-enabled')
   const redlineBrightness = document.getElementById('redline-brightness')
@@ -80,6 +98,8 @@
   const redlineBrightnessReset = document.getElementById('redline-brightness-reset')
   const shiftLightBrightness = document.getElementById('shift-light-brightness')
   const shiftLightBrightnessValue = document.getElementById('shift-light-brightness-value')
+  const hudDisplay = document.getElementById('hud-display')
+  const hudDisplayMissing = document.getElementById('hud-display-missing')
   const hudOpacity = document.getElementById('hud-opacity')
   const hudOpacityValue = document.getElementById('hud-opacity-value')
   const hudOpacityReset = document.getElementById('hud-opacity-reset')
@@ -121,7 +141,11 @@
   const eventsDiscardYes = document.getElementById('events-discard-yes')
   const eventsDiscardNo = document.getElementById('events-discard-no')
   const destructiveConfirmDialog = document.getElementById('destructive-confirm-dialog')
+  const destructiveConfirmTitle = document.getElementById('destructive-confirm-title')
   const destructiveConfirmMessage = document.getElementById('destructive-confirm-message')
+  const destructiveConfirmOption = document.getElementById('destructive-confirm-option')
+  const destructiveConfirmOptionInput = document.getElementById('destructive-confirm-option-input')
+  const destructiveConfirmOptionLabel = document.getElementById('destructive-confirm-option-label')
   const destructiveConfirmYes = document.getElementById('destructive-confirm-yes')
   const destructiveConfirmNo = document.getElementById('destructive-confirm-no')
   const eventsDetailBack = document.getElementById('events-detail-back')
@@ -169,6 +193,7 @@
   let driveMapLayerSelection = [...(globalScope.DriverAnalysisMap?.ERROR_TYPES || []), 'clean']
   let eventsSortValue = 'id-desc'
   let editingTarget = null
+  let hudDisplayCount = 0
   let layoutMode = 'grouped'
   let shiftLightResetPending = false
   let displayPreferencesPending = false
@@ -185,6 +210,10 @@
   let latestShiftLightState = null
   let latestRouteRevision = -1
   let latestRouteStatus = globalScope.HudTelemetryRoute?.normalizeRouteStatus?.({ phase: 'offline' })
+  let connectionGuideChecked = false
+  let connectionGuideOpen = false
+  let connectionGuideStage = null
+  let routeStatusReceived = false
   let driverAnalysisSettings = driverAnalysisApi?.readSettings?.() || { enabled: false, hotkey: 'Ctrl+Shift+F9' }
   let driverAnalysisState = { enabled: driverAnalysisSettings.enabled, recording: false, startedAt: null, sampleCount: 0, hotkey: driverAnalysisSettings.hotkey }
   let driverAnalysisHotkeyCapture = false
@@ -553,6 +582,44 @@
     } catch {
       renderGarage()
     }
+    openConnectionGuideIfNeverConnected()
+  }
+
+  // Until Forza has sent Data Out once, Configuration opens on a setup guide.
+  function openConnectionGuideIfNeverConnected() {
+    if (!connectionGuideApi || connectionGuideChecked) return
+    connectionGuideChecked = true
+    connectionGuideOpen = connectionGuideApi.shouldShow(connectionGuideApi.read(), garageVehicles.size > 0)
+    renderConnectionGuide()
+  }
+
+  function renderConnectionGuide() {
+    if (!connectGuide || !connectionGuideApi) return
+    const presentation = globalScope.HudTelemetryRoute?.getRoutePresentation?.(latestRouteStatus)
+    // The page starts from a placeholder offline status, so wait for the real one.
+    const stage = routeStatusReceived ? connectionGuideApi.stage(presentation?.tone) : 'waiting'
+    if (stage === 'connected' && !connectionGuideApi.read().connected) connectionGuideApi.write({ connected: true })
+
+    const opening = connectionGuideOpen && connectGuide.hidden
+    const stageChanged = stage !== connectionGuideStage
+    connectionGuideStage = stage
+    connectGuide.hidden = !connectionGuideOpen
+    connectGuide.dataset.stage = stage
+    connectGuideStatusLabel.textContent = CONNECTION_GUIDE_LABELS[stage]
+    connectGuideHint.textContent = stage === 'problem' ? presentation?.detail || '' : CONNECTION_GUIDE_HINTS[stage]
+    connectGuideRetry.hidden = stage !== 'problem'
+    connectGuideSkip.hidden = stage === 'connected'
+    connectGuideDone.hidden = stage !== 'connected'
+    if (connectionGuideOpen && (opening || stageChanged)) {
+      ;(stage === 'connected' ? connectGuideDone : stage === 'problem' ? connectGuideRetry : connectGuideSkip).focus()
+    }
+  }
+
+  function closeConnectionGuide() {
+    if (!connectionGuideOpen) return
+    connectionGuideOpen = false
+    renderConnectionGuide()
+    settingsTabs.find(tab => tab.classList.contains('is-active'))?.focus()
   }
 
   async function listenEventRecorderEvents() {
@@ -606,6 +673,17 @@
         const message = `RUN SAVE FAILED${reason ? ` — ${reason}` : ''}`
         setEventRecorderFeedback(message, 'failed')
         setStatus(message, true)
+      }
+    })
+    await eventApi.listen('event_recorder_reference', event => {
+      const payload = event?.payload
+      if (!payload || typeof payload !== 'object') return
+      if (eventKey(payload.eventId) !== currentEventId || currentEventId === null) return
+      const timeMs = payload.timeMs
+      if (typeof timeMs !== 'number' || !Number.isFinite(timeMs)) return
+      if (currentEventAbsoluteBestMs === null || timeMs < currentEventAbsoluteBestMs) {
+        currentEventAbsoluteBestMs = timeMs
+        renderEventAbsoluteBest()
       }
     })
     await eventApi.emit('event_recorder_status_request')
@@ -844,7 +922,7 @@
       .some(field => field?.value.trim())
   }
 
-  // Every delete or reset of saved data asks here first. NO has focus, and Escape or a click outside the box also answers NO.
+  // Every delete or reset of saved data asks here first, and so does quitting. NO has focus, and Escape or a click outside the box also answers NO.
   let resolveDestructiveConfirm = null
   let destructiveConfirmReturnFocus = null
 
@@ -855,17 +933,55 @@
     destructiveConfirmDialog.hidden = true
     destructiveConfirmReturnFocus?.focus?.()
     destructiveConfirmReturnFocus = null
-    resolve(confirmed)
+    resolve({ confirmed, option: !destructiveConfirmOption.hidden && destructiveConfirmOptionInput.checked })
   }
 
-  function confirmDestructive(message) {
-    if (!destructiveConfirmDialog) return Promise.resolve(false)
+  function askConfirm({ title = 'ARE YOU SURE?', message, yes = 'YES', no = 'NO', option = '' }) {
+    if (!destructiveConfirmDialog) return Promise.resolve({ confirmed: false, option: false })
     closeDestructiveConfirm(false)
     destructiveConfirmReturnFocus = document.activeElement
+    destructiveConfirmTitle.textContent = title
     destructiveConfirmMessage.textContent = message
+    destructiveConfirmYes.textContent = yes
+    destructiveConfirmNo.textContent = no
+    destructiveConfirmOption.hidden = !option
+    destructiveConfirmOptionInput.checked = false
+    destructiveConfirmOptionLabel.textContent = option
     destructiveConfirmDialog.hidden = false
     destructiveConfirmNo.focus()
     return new Promise(resolve => { resolveDestructiveConfirm = resolve })
+  }
+
+  async function confirmDestructive(message) {
+    return (await askConfirm({ message })).confirmed
+  }
+
+  // The X button of this window lands here. QUIT exits FDC; minimizing keeps it running.
+  async function requestQuit() {
+    if (!quitConfirmationApi) return
+    const preferences = quitConfirmationApi.read()
+    const recording = driverAnalysisState.recording === true || recorderState.recording === true
+    const question = quitConfirmationApi.question(preferences, recording)
+    if (question) {
+      const answer = await askConfirm({
+        title: 'QUIT FDC?',
+        message: question.message,
+        yes: 'QUIT',
+        no: 'CANCEL',
+        option: question.offerDontAsk ? 'Don\'t ask again' : ''
+      })
+      if (!answer.confirmed) return
+      quitConfirmationApi.write(quitConfirmationApi.afterQuit(preferences, answer.option))
+    }
+    try {
+      await call('quit_app')
+    } catch (error) {
+      setStatus(error.message || 'Unable to quit FDC', true)
+    }
+  }
+
+  function renderQuitConfirmation() {
+    if (confirmBeforeQuit && quitConfirmationApi) updateOverlayToggle(confirmBeforeQuit, quitConfirmationApi.read().confirm)
   }
 
   function setEventsDiscardConfirmOpen(open) {
@@ -2196,6 +2312,24 @@
     }
   }
 
+  function syncHudDisplayDisabled() {
+    if (hudDisplay) hudDisplay.disabled = hudDisplayCount <= 1 || Boolean(editingTarget)
+  }
+
+  async function refreshHudDisplay() {
+    if (!hudDisplay) return
+    try {
+      const displayList = await call('list_hud_displays')
+      hudDisplay.replaceChildren(...displayList.displays.map(display => new Option(display.label, display.name)))
+      if (displayList.selected) hudDisplay.value = displayList.selected
+      hudDisplayCount = displayList.displays.length
+      hudDisplayMissing.hidden = !displayList.savedMissing
+      syncHudDisplayDisabled()
+    } catch (error) {
+      setStatus(error.message || 'Unable to list monitors', true)
+    }
+  }
+
   function selectSettingsTab(tabName) {
     for (const tab of settingsTabs) {
       const isActive = tab.dataset.settingsTab === tabName
@@ -2207,6 +2341,7 @@
       panel.hidden = panel.dataset.settingsPanel !== tabName
     }
     updateSettingsWindowContext(tabName)
+    if (tabName === 'hud') void refreshHudDisplay()
     if (tabName === 'events' && eventsView === 'library') void loadEvents()
     if (tabName === 'driver-analysis') {
       void loadDriverAnalysisHistory()
@@ -3428,6 +3563,7 @@
     telemetryStatusLabel.textContent = presentation.statusLabel
     telemetryRouteCard.dataset.tone = presentation.tone
     telemetryRouteRetry.hidden = !presentation.canRetry
+    renderConnectionGuide()
   }
 
   async function updateConfigurationAlwaysOnTop(alwaysOnTop, showStatus = true) {
@@ -3651,7 +3787,10 @@
   async function listenRouteEvents() {
     const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
     if (!eventApi || typeof eventApi.listen !== 'function') return
-    await eventApi.listen('hud_route_status', event => renderRouteStatus(event.payload))
+    await eventApi.listen('hud_route_status', event => {
+      routeStatusReceived = true
+      renderRouteStatus(event.payload)
+    })
     await call('sync_route_status')
   }
 
@@ -3712,6 +3851,7 @@
       row.querySelector('[data-layout-action="save"]').hidden = !isEditing
       row.classList.toggle('is-editing', isEditing)
     }
+    syncHudDisplayDisabled()
   }
 
   async function selectLayoutTarget(target) {
@@ -3870,6 +4010,14 @@
   displayPreferences = displayPreferencesApi?.normalize?.(displayPreferences) || displayPreferences
   renderDisplayPreferences(displayPreferences)
   void updateConfigurationAlwaysOnTop(displayPreferences.configurationAlwaysOnTop, false)
+  renderQuitConfirmation()
+  confirmBeforeQuit?.addEventListener('click', () => {
+    if (!quitConfirmationApi) return
+    const preferences = quitConfirmationApi.read()
+    const next = quitConfirmationApi.write({ ...preferences, confirm: !preferences.confirm })
+    renderQuitConfirmation()
+    setStatus(next.confirm ? 'FDC ASKS BEFORE QUITTING' : 'X QUITS FDC WITHOUT ASKING')
+  })
   configurationAlwaysOnTop?.addEventListener('click', () => {
     void updateConfigurationAlwaysOnTop(displayPreferences.configurationAlwaysOnTop === false)
   })
@@ -3987,6 +4135,15 @@
     )
   })
 
+  hudDisplay?.addEventListener('change', async () => {
+    try {
+      await call('set_hud_display', { name: hudDisplay.value })
+    } catch (error) {
+      setStatus(error.message || 'Unable to move the HUD', true)
+    }
+    await refreshHudDisplay()
+  })
+
   eventsCreateToggle?.addEventListener('click', () => {
     if (eventsCreateOpen) requestEventsCreateClose()
     else setEventsCreateOpen(true)
@@ -3999,9 +4156,9 @@
   })
   // A click on the question text keeps the focused answer, so Enter still means NO unless YES was chosen.
   destructiveConfirmDialog?.addEventListener('mousedown', event => {
-    if (!event.target.closest('button')) event.preventDefault()
+    if (!event.target.closest('button, label')) event.preventDefault()
   })
-  // Captured before every other shortcut, so Escape only closes the question and focus stays on its two answers.
+  // Captured before every other shortcut, so Escape only closes the question and focus stays on its answers.
   document.addEventListener('keydown', event => {
     if (!resolveDestructiveConfirm) return
     if (event.key === 'Escape') {
@@ -4011,7 +4168,9 @@
     } else if (event.key === 'Tab') {
       event.preventDefault()
       event.stopImmediatePropagation()
-      ;(document.activeElement === destructiveConfirmNo ? destructiveConfirmYes : destructiveConfirmNo).focus()
+      const answers = [destructiveConfirmOption.hidden ? null : destructiveConfirmOptionInput, destructiveConfirmYes, destructiveConfirmNo].filter(Boolean)
+      const index = answers.indexOf(document.activeElement)
+      answers[(index + (event.shiftKey ? answers.length - 1 : 1)) % answers.length].focus()
     }
   }, true)
   eventsDiscardYes?.addEventListener('click', closeEventsCreate)
@@ -4051,6 +4210,9 @@
   })
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && driverAnalysisHotkeyCapture) void setDriverAnalysisHotkeyCapture(false)
+  })
+  window.addEventListener('focus', () => {
+    void refreshHudDisplay()
   })
   document.addEventListener('keydown', event => {
     if (!driverAnalysisHotkeyCapture) return
@@ -4118,6 +4280,16 @@
   telemetryRouteRetry.addEventListener('click', () => {
     void retryDirectSource()
   })
+  connectGuideRetry?.addEventListener('click', () => {
+    void retryDirectSource()
+  })
+  connectGuideSkip?.addEventListener('click', closeConnectionGuide)
+  connectGuideDone?.addEventListener('click', closeConnectionGuide)
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !connectionGuideOpen || resolveDestructiveConfirm) return
+    event.preventDefault()
+    closeConnectionGuide()
+  })
 
   renderRouteStatus(latestRouteStatus)
   renderShiftLightState(null)
@@ -4142,6 +4314,8 @@
     openEventDetail,
     closeEventDetail,
     openEventRun,
-    closeEventRun
+    closeEventRun,
+    refreshHudDisplay,
+    requestQuit
   }
 })(typeof globalThis === 'undefined' ? this : globalThis)

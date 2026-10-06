@@ -75,6 +75,10 @@ test('Delta visibility stays synchronized across telemetry and HUD preference up
     assert.equal(delta.hidden, true)
 
     runtimePreferences.setOverlayVisibility('delta', true)
+    // Delta remains hidden without an active reference
+    assert.equal(delta.hidden, true)
+
+    runtimePreferences.setDeltaReferenceActive(true)
     assert.equal(delta.hidden, false)
   } finally {
     delete require.cache[modulePath]
