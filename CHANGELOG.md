@@ -5,6 +5,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+## 7.24.67 - 2026-10-06
+
 ### Fixed
 
 - **Driver Analysis**: a recording's distance and average speed no longer
