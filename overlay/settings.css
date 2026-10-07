@@ -2386,6 +2386,44 @@ h1 {
   min-width: 84px;
 }
 
+.driver-analysis-history-row__export.is-exporting {
+  position: relative;
+  overflow: hidden;
+  cursor: progress;
+}
+
+.driver-analysis-history-row__export.is-exporting:disabled {
+  color: var(--text);
+}
+
+.driver-analysis-history-row__export.is-exporting::after {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 40%;
+  height: 2px;
+  background: var(--accent);
+  content: '';
+  animation: driver-analysis-export-progress 1.1s linear infinite;
+}
+
+@keyframes driver-analysis-export-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .driver-analysis-history-row__export.is-exporting::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.35;
+  }
+}
+
 /* Recording grouping: meta column, cars/drives label */
 .driver-analysis-history-row__cars-drives {
   display: block;

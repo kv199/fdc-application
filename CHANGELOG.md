@@ -16,6 +16,12 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   editor sets SAVE, CANCEL, and RESET apart. Your data and settings are
   unchanged.
 
+### Improved
+
+- **Driver Analysis**: while a recording is exported, its button reads
+  EXPORTING… with a moving bar, and a finished export is reported in green with
+  its size, without a size warning.
+
 ## 7.24.67 - 2026-10-06
 
 ### Fixed

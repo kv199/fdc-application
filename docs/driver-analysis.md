@@ -356,12 +356,13 @@ Each history card has `EXPORT` between `DETAILS` and `DELETE`. It is unavailable
 cases as `DELETE`: while recording, while the recording has an unfinished car,
 and while the history is busy. `EXPORT` opens the Windows save dialog with the
 suggested name `fdc-driver-analysis-YYYYMMDD-HHMM.json.gz`, the local start
-time of the recording. Cancelling the dialog changes nothing. After saving, the
-status line shows `DRIVER ANALYSIS RECORDING EXPORTED` with the file size and
-marks it as an error when the file is larger than 25 MB, the GitHub attachment
-limit; such a file is shared through a file-sharing link instead. A two-hour
-recording is about 40 MB. Exporting only reads the database; a failure shows an error and leaves
-the recording unchanged, and no partial file is left behind.
+time of the recording. Cancelling the dialog changes nothing. While the export
+runs, that recording's button reads `EXPORTING…` with a moving bar along its
+bottom edge, and the other recordings' actions are unavailable. After saving,
+the status line shows `DRIVER ANALYSIS RECORDING EXPORTED` with the file size.
+A two-hour recording is about 40 MB. Exporting only reads the database; a
+failure shows an error and leaves the recording unchanged, and no partial file
+is left behind.
 
 The file is gzip-compressed JSON with `format` set to
 `fdc-driver-analysis-export` and `formatVersion` set to `1`. It holds one

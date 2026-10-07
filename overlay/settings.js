@@ -220,6 +220,7 @@
   let driverAnalysisHistory = []
   let driverAnalysisHistoryPending = false
   let driverAnalysisExportPending = false
+  let driverAnalysisExportingId = null
   let driverAnalysisActionPending = false
 
   function garageDisplayName(vehicle) {
@@ -3006,30 +3007,25 @@
     }
   }
 
-  // GitHub rejects issue attachments above 25 MB.
-  const DRIVER_ANALYSIS_EXPORT_ATTACHMENT_LIMIT_BYTES = 25 * 1024 * 1024
-
   async function exportDriverAnalysisRecording(recording) {
     if (!recording || !Array.isArray(recording.sessions) || recording.sessions.length === 0) return false
     if (driverAnalysisHistoryPending || driverAnalysisExportPending) return false
     driverAnalysisExportPending = true
+    driverAnalysisExportingId = Number(recording.recordingId)
     renderDriverAnalysisHistory()
     try {
       const fileName = globalScope.DriverAnalysisHistory.exportFileName(recording.sessions[0]?.recordedAt)
       const outcome = await call('export_driver_analysis_recording', { recordingId: Number(recording.recordingId), fileName })
       if (outcome?.cancelled) return false
       const size = formatDriverAnalysisSize(outcome?.bytes)
-      if (Number(outcome?.bytes) > DRIVER_ANALYSIS_EXPORT_ATTACHMENT_LIMIT_BYTES) {
-        setStatus(`DRIVER ANALYSIS RECORDING EXPORTED · ${size} · TOO LARGE FOR A GITHUB ATTACHMENT`, true)
-      } else {
-        setStatus(`DRIVER ANALYSIS RECORDING EXPORTED · ${size}`)
-      }
+      setStatus(`DRIVER ANALYSIS RECORDING EXPORTED · ${size}`)
       return true
     } catch (error) {
       setStatus(error?.message || (typeof error === 'string' && error) || 'Unable to export Driver Analysis recording', true)
       return false
     } finally {
       driverAnalysisExportPending = false
+      driverAnalysisExportingId = null
       renderDriverAnalysisHistory()
     }
   }
@@ -3135,7 +3131,14 @@
       const exportButton = document.createElement('button')
       exportButton.className = 'settings-button driver-analysis-history-row__export'
       exportButton.type = 'button'
-      exportButton.textContent = 'EXPORT'
+      const isExporting = driverAnalysisExportPending && driverAnalysisExportingId === Number(recording.recordingId)
+      if (isExporting) {
+        exportButton.textContent = 'EXPORTING…'
+        exportButton.classList.add('is-exporting')
+        exportButton.setAttribute('aria-busy', 'true')
+      } else {
+        exportButton.textContent = 'EXPORT'
+      }
       exportButton.disabled = actionsBlocked
       exportButton.setAttribute('aria-label', `Export Driver Analysis recording from ${firstDate}`)
       exportButton.addEventListener('click', () => void exportDriverAnalysisRecording(recording))
