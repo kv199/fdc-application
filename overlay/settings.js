@@ -108,8 +108,6 @@
   const hudOpacityValue = document.getElementById('hud-opacity-value')
   const hudOpacityReset = document.getElementById('hud-opacity-reset')
   const layoutModeInputs = [...document.querySelectorAll('[data-layout-mode]')]
-  const groupedLayoutRow = document.querySelector('[data-grouped-layout-row]')
-  const freeformLayoutList = document.querySelector('[data-freeform-layout-list]')
   const displayPreferenceRows = [...document.querySelectorAll('[data-display-preference]')]
   const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
   const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]

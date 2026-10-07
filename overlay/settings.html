@@ -87,10 +87,10 @@
       </section>
 
       <div class="layout-list">
-        <div class="layout-row layout-row--arrangement">
-          <div class="layout-row__content">
-            <strong id="hud-layout-arrangement-title">TELEMETRY ARRANGEMENT</strong>
-            <small>Grouped moves the HUD as one block. Freeform moves and resizes each block.</small>
+        <section class="layout-section layout-section--arrangement" aria-labelledby="hud-layout-arrangement-title">
+          <div class="layout-section__copy">
+            <h3 id="hud-layout-arrangement-title" class="layout-section__title">ARRANGEMENT</h3>
+            <p>Grouped moves the HUD as one block. Freeform moves each block.</p>
           </div>
           <div class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title">
             <label class="unit-option">
@@ -102,27 +102,24 @@
               <span>FREEFORM</span>
             </label>
           </div>
-        </div>
-        <article class="layout-row layout-row--edit" data-layout-edit-row>
-          <div class="layout-row__content">
-            <h3>Layout</h3>
-            <p id="hud-layout-edit-help">Move and resize blocks right on the screen. In Forza, press the hotkey; press it again to save.</p>
-          </div>
-          <div class="layout-row__actions">
-            <button id="hud-layout-reset" class="settings-button settings-button--caution" type="button">RESET LAYOUT</button>
-            <button id="hud-layout-edit" class="settings-button settings-button--ready" type="button" aria-describedby="hud-layout-edit-help">EDIT LAYOUT</button>
+        </section>
+        <section class="layout-section" aria-labelledby="hud-layout-edit-title" data-layout-edit-row>
+          <h3 id="hud-layout-edit-title" class="layout-section__title">LAYOUT</h3>
+          <div class="layout-edit">
+            <button id="hud-layout-edit" class="settings-button settings-button--ready" type="button">EDIT LAYOUT</button>
             <button id="hud-layout-cancel" class="settings-button" type="button" hidden>CANCEL</button>
             <button id="hud-layout-save" class="settings-button settings-button--ready" type="button" hidden>SAVE</button>
+            <div class="layout-edit__hotkey">
+              <span id="hud-edit-hotkey-label">IN FORZA</span>
+              <output id="hud-edit-hotkey-value" aria-live="polite" aria-labelledby="hud-edit-hotkey-label">Ctrl + Shift + F8</output>
+              <button id="hud-edit-hotkey-change" class="settings-button" type="button" aria-label="Change the HUD edit hotkey">CHANGE</button>
+            </div>
+            <button id="hud-layout-reset" class="settings-button settings-button--caution" type="button">RESET LAYOUT</button>
           </div>
-          <div class="layout-row__hotkey">
-            <span>HOTKEY IN FORZA</span>
-            <output id="hud-edit-hotkey-value" aria-live="polite">Ctrl + Shift + F8</output>
-            <button id="hud-edit-hotkey-change" class="settings-button" type="button">CHANGE</button>
-          </div>
-        </article>
-        <section class="widget-list" aria-labelledby="hud-widgets-title">
+        </section>
+        <section class="layout-section layout-section--widgets" aria-labelledby="hud-widgets-title">
           <div class="widget-list__header">
-            <h3 id="hud-widgets-title">WIDGETS</h3>
+            <h3 id="hud-widgets-title" class="layout-section__title">WIDGETS</h3>
             <div class="widget-list__all">
               <span>ALL</span>
               <button id="hud-all-widgets" class="visibility-toggle" type="button" data-hud-toggle-all aria-label="Toggle all widgets" aria-pressed="true">
@@ -130,69 +127,50 @@
               </button>
             </div>
           </div>
-          <article class="layout-row">
-            <div class="layout-row__content">
-              <h4>Tires</h4>
-              <p>Temperature and tire shapes</p>
-            </div>
+          <div class="widget-list">
+          <label class="widget-row">
+            <span class="widget-row__name">Tires</span>
             <button class="visibility-toggle" type="button" data-hud-toggle="tires" aria-label="Toggle Tires" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
-          </article>
-          <article class="layout-row">
-            <div class="layout-row__content">
-              <h4>Throttle &amp; Brake</h4>
-              <p>Pedal input meters</p>
-            </div>
+          </label>
+          <label class="widget-row">
+            <span class="widget-row__name">Throttle &amp; Brake</span>
             <button class="visibility-toggle" type="button" data-hud-toggle="pedals" aria-label="Toggle Throttle and Brake" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
-          </article>
-          <article class="layout-row">
-            <div class="layout-row__content">
-              <h4>Steering</h4>
-              <p>Steering wheel indicator</p>
-            </div>
+          </label>
+          <label class="widget-row">
+            <span class="widget-row__name">Steering</span>
             <button class="visibility-toggle" type="button" data-hud-toggle="steering" aria-label="Toggle Steering" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
-          </article>
-          <article class="layout-row">
-            <div class="layout-row__content">
-              <h4>Gear / Speed / RPM</h4>
-              <p>Drivetrain and speed data</p>
-            </div>
+          </label>
+          <label class="widget-row">
+            <span class="widget-row__name">Gear / Speed / RPM</span>
             <button class="visibility-toggle" type="button" data-hud-toggle="gear" aria-label="Toggle Gear, Speed and RPM" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
-          </article>
-          <article class="layout-row">
-            <div class="layout-row__content">
-              <h4>Engine / Boost</h4>
-              <p>Boost, power and torque data</p>
-            </div>
+          </label>
+          <label class="widget-row">
+            <span class="widget-row__name">Engine / Boost</span>
             <button class="visibility-toggle" type="button" data-hud-toggle="engine" aria-label="Toggle Engine and Boost" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
-          </article>
-          <article class="layout-row">
-            <div class="layout-row__content">
-              <h4>Input Graph</h4>
-              <p>Throttle and brake history</p>
-            </div>
+          </label>
+          <label class="widget-row">
+            <span class="widget-row__name">Input Graph</span>
             <button class="visibility-toggle" type="button" data-hud-toggle="history" aria-label="Toggle Input Graph" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
-          </article>
-          <article class="layout-row">
-            <div class="layout-row__content">
-              <h4>Delta</h4>
-              <p>Live gap to your fastest saved Event run. Shown during Events.</p>
-            </div>
+          </label>
+          <label class="widget-row">
+            <span class="widget-row__name">Delta</span>
             <button class="visibility-toggle" type="button" data-overlay-toggle="delta" aria-label="Toggle Delta" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
-          </article>
+          </label>
+          </div>
         </section>
       </div>
     </section>

@@ -77,20 +77,24 @@ Light Brightness settings. How targets are learned is described in
 
 ## Layout
 
-Configuration → **HUD** shows the layout controls in the same order for both
-arrangements:
+Configuration → **HUD** shows the layout controls on one plate with three
+sections, the same in both arrangements:
 
-1. `TELEMETRY ARRANGEMENT`, a segmented choice of GROUPED (default) and
-   FREEFORM; the selected one keeps a lime fill. Grouped keeps the visible
-   blocks side by side in one panel and moves and resizes that panel as a
-   whole. Freeform places and sizes every block independently. Delta is
-   positioned independently in both arrangements, and each arrangement keeps
-   its own saved positions.
-2. **Layout**, with **EDIT LAYOUT** (the lime next step), **RESET LAYOUT**,
-   and the edit hotkey with **CHANGE**.
-3. **WIDGETS**: Tires, Throttle & Brake, Steering, Gear / Speed / RPM,
-   Engine / Boost, Input Graph, and Delta, each with a switch, and **ALL** in
-   the list header. The list is the same in both arrangements.
+1. **ARRANGEMENT**, a segmented choice of GROUPED (default) and FREEFORM; the
+   selected one keeps a lime fill. Grouped keeps the visible blocks side by
+   side in one panel and moves and resizes that panel as a whole. Freeform
+   places and sizes every block independently. Delta is positioned
+   independently in both arrangements, and each arrangement keeps its own
+   saved positions.
+2. **LAYOUT**: **EDIT LAYOUT** (the lime next step), then `IN FORZA` with the
+   edit hotkey and **CHANGE**, and **RESET LAYOUT** apart at the right end.
+3. **WIDGETS**: one compact row per widget with its name and a switch (Tires,
+   Throttle & Brake, Steering, Gear / Speed / RPM, Engine / Boost, Input
+   Graph, Delta), and **ALL** in the section header. Clicking anywhere on a
+   row toggles its widget. **ALL** is on only while every widget is on.
+
+Below 560 px of window width the arrangement choice moves under its
+description, and RESET LAYOUT wraps to its own line.
 
 A layout edit covers every enabled target at once: in Grouped, the HUD panel
 and Delta; in Freeform, each block whose switch is on and Delta. A switched-off

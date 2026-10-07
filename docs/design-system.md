@@ -73,9 +73,10 @@ The application header is the only textured surface: it shows
 - Ready actions use `.settings-button--ready`, filled with `--accent` and
   `--text-on-accent` at rest and with `--accent-hover` on hover or focus. They
   mark the one next step: CREATE and CREATE EVENT in Events, DETAILS in
-  Driver Analysis history, SAVE while editing the HUD layout, RECORD RUN on an
-  event page, a ready RECORD in Driver Analysis, the safe NO or CANCEL in
-  confirmation dialogs, and START USING FDC in the connection guide.
+  Driver Analysis history, EDIT LAYOUT on the HUD tab and SAVE while editing
+  the HUD layout, RECORD RUN on an event page, a ready RECORD in Driver
+  Analysis, the safe NO or CANCEL in confirmation dialogs, and START USING
+  FDC in the connection guide.
 - `--best` (purple) marks best results and the learned Shift Light cue.
 - `--danger` and `--danger-text` mark destructive actions and errors.
 - `--caution` and `--warning` mark attention and unsaved state.
@@ -195,14 +196,19 @@ The application header is the only textured surface: it shows
   shapes, vertical Brake and Throttle bars, the Steering wheel, one
   Speed/Gear/RPM block, Engine (boost, power, torque), and the Input Graph;
   Delta is a separate target.
-- Configuration's HUD LAYOUT section offers a `TELEMETRY ARRANGEMENT` segmented
-  choice: GROUPED (moves the HUD as one block) or FREEFORM (moves and resizes
-  each block individually). The selected option keeps a lime fill.
-- The layout editor shows an edit toolbar with RESET (restores default layout,
-  styled with `--caution` text and border, fills `--caution` on hover), CANCEL
-  (neutral dark, fills lime on hover), and SAVE (filled with lime at rest).
-  The toolbar displays the hint text `DRAG <TARGET> TO MOVE · CORNER TO RESIZE
-  · ESC CANCELS`.
+- Configuration's HUD layout plate has three sections whose titles match the
+  HUD DISPLAY and HUD OPACITY card titles: ARRANGEMENT, a segmented choice of
+  GROUPED (moves the HUD as one block) or FREEFORM (moves and resizes each
+  block individually) whose selected option keeps a lime fill; LAYOUT, with
+  EDIT LAYOUT, the edit hotkey, and RESET LAYOUT (caution) apart at the end;
+  and WIDGETS, compact name-and-switch rows with ALL in the header.
+- The layout editor shows an edit toolbar on the selected target with the
+  hint text `DRAG <TARGET> TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO
+  SELECT`, then GRID ON (filled with lime) or GRID OFF (neutral), RESET
+  (restores the selected target's default placement, styled with `--caution`
+  text and border, fills `--caution` on hover), CANCEL (neutral dark, fills
+  lime on hover), and SAVE (filled with lime at rest). While the grid is on,
+  an alignment grid of thin lines and dots sits under the HUD.
 
 ## Checklist for a new screen or feature
 

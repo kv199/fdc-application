@@ -268,8 +268,7 @@ test('Engine telemetry keeps the compact panel order and one visibility toggle',
 
   assert.deepEqual(sections, ['hud-tires', 'hud-pedals', 'hud-steering', 'hud-gear', 'hud-engine', 'hud-history'])
   assert.deepEqual(components, ['tires', 'pedals', 'steering', 'gear', 'engine', 'history'])
-  assert.match(settingsHtml, /<h4>Engine \/ Boost<\/h4>/)
-  assert.match(settingsHtml, /<p>Boost, power and torque data<\/p>/)
+  assert.match(settingsHtml, /<span class="widget-row__name">Engine \/ Boost<\/span>/)
   assert.match(overlayHtml, /id="engine-boost"[^>]+aria-label="Boost pressure"/)
   assert.match(overlayHtml, /id="engine-power"[^>]+aria-label="Engine power"/)
   assert.match(overlayHtml, /id="engine-torque"[^>]+aria-label="Engine torque"/)
@@ -284,8 +283,11 @@ test('Engine visibility is part of the safe HUD component contract', () => {
 })
 
 test('HUD layout exposes grouped and freeform modes with unified widgets and layout editing', () => {
-  // The mode is a TELEMETRY ARRANGEMENT row inside the layout list, as a segmented choice.
-  assert.match(settingsHtml, /<div class="layout-list">\s*<div class="layout-row layout-row--arrangement">[\s\S]*?id="hud-layout-arrangement-title">TELEMETRY ARRANGEMENT<[\s\S]*?class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title"/)
+  // The layout plate has three sections in order: ARRANGEMENT, LAYOUT, WIDGETS.
+  assert.match(settingsHtml, /<div class="layout-list">\s*<section class="layout-section layout-section--arrangement"[\s\S]*?id="hud-layout-arrangement-title" class="layout-section__title">ARRANGEMENT<[\s\S]*?class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title"[\s\S]*?id="hud-layout-edit-title" class="layout-section__title">LAYOUT<[\s\S]*?id="hud-widgets-title" class="layout-section__title">WIDGETS</)
+  // Widgets are compact rows with a name only; the whole row toggles its widget.
+  assert.equal(settingsHtml.match(/<label class="widget-row">\s*<span class="widget-row__name">[^<]+<\/span>\s*<button class="visibility-toggle"/g)?.length, 7)
+  assert.doesNotMatch(settingsHtml, /layout-row|visibility-row/)
   assert.doesNotMatch(settingsHtml, /data-freeform-layout-list|data-grouped-layout-row/)
   assert.match(settingsHtml, /data-layout-mode="grouped" checked/)
   assert.match(settingsHtml, /data-layout-mode="freeform"/)
@@ -298,7 +300,7 @@ test('HUD layout exposes grouped and freeform modes with unified widgets and lay
   assert.match(settingsHtml, /data-layout-edit-row/)
 
   // One widget list with all widgets and ALL toggle
-  assert.match(settingsHtml, /id="hud-widgets-title">WIDGETS</)
+
   assert.match(settingsHtml, /id="hud-all-widgets"[^>]*data-hud-toggle-all/)
   for (const component of ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']) {
     assert.match(settingsHtml, new RegExp(`data-hud-toggle="${component}"`, 'u'))
