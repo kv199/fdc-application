@@ -19,6 +19,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ### Added
 
+- **HUD**: the layout edit shows an alignment grid, 4 × 4 zones with a finer
+  dot grid measured from the screen center, and dragged blocks snap their
+  edges or center to it. **SNAP** on the edit toolbar turns the grid and
+  snapping off; resizing never snaps.
 - **HUD**: move and resize the HUD over a running Forza without pausing it.
   Press the new edit hotkey, `Ctrl + Shift + F8` by default and changeable on
   the HUD tab, then drag any enabled block or Delta, and press it again to

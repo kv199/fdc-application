@@ -247,3 +247,81 @@ test('Gear: .gear__value contains text-box: trim-both cap alphabetic', () => {
   const found = bodies.some(body => /text-box:\s*trim-both\s+cap\s+alphabetic/.test(body))
   assert.ok(found, 'Expected .gear__value to contain text-box: trim-both cap alphabetic')
 })
+
+test('Layout grid: index.html has #layout-grid as first element inside body with hidden and aria-hidden="true"', () => {
+  const bodyMatch = overlayHtml.match(/<body[^>]*>(\s*<div[^>]*id="layout-grid"[^>]*>[\s\S]*?<\/div>)/m)
+  assert.ok(bodyMatch, 'Expected #layout-grid to be found as the first element inside body')
+
+  const gridElement = overlayHtml.match(/<div[^>]*id="layout-grid"[^>]*\/?>/)
+  assert.ok(gridElement, 'Expected to find #layout-grid element')
+
+  const gridHtml = gridElement[0]
+  assert.ok(gridHtml.includes('hidden'), 'Expected #layout-grid to have hidden attribute')
+  assert.ok(gridHtml.includes('aria-hidden="true"'), 'Expected #layout-grid to have aria-hidden="true"')
+  assert.ok(gridHtml.includes('class="layout-grid"'), 'Expected #layout-grid to have class="layout-grid"')
+})
+
+test('Layout grid: hud-grid.js script is loaded before hud-layout.js', () => {
+  const hudGridIndex = overlayHtml.indexOf('<script src="hud-grid.js"></script>')
+  const hudLayoutIndex = overlayHtml.indexOf('<script src="hud-layout.js"></script>')
+  assert.ok(hudGridIndex >= 0, 'Expected hud-grid.js script to be found')
+  assert.ok(hudLayoutIndex >= 0, 'Expected hud-layout.js script to be found')
+  assert.ok(hudGridIndex < hudLayoutIndex, 'Expected hud-grid.js to be loaded before hud-layout.js')
+})
+
+test('Layout grid: SNAP button in delta-edit-tools has data-layout-snap, aria-pressed="true", and is before RESET button', () => {
+  const deltaToolsMatch = overlayHtml.match(/<div id="delta-edit-tools"[\s\S]*?<\/div>/m)
+  assert.ok(deltaToolsMatch, 'Expected to find #delta-edit-tools')
+
+  const toolsHtml = deltaToolsMatch[0]
+  const snapMatch = toolsHtml.match(/<button[^>]*id="delta-snap"[^>]*>/)
+  assert.ok(snapMatch, 'Expected to find #delta-snap button')
+
+  const snapHtml = snapMatch[0]
+  assert.ok(snapHtml.includes('data-layout-snap'), 'Expected #delta-snap to have data-layout-snap attribute')
+  assert.ok(snapHtml.includes('aria-pressed="true"'), 'Expected #delta-snap to have aria-pressed="true"')
+  assert.ok(snapHtml.includes('layout-edit__button--toggle'), 'Expected #delta-snap to have layout-edit__button--toggle class')
+
+  const snapIndex = toolsHtml.indexOf('id="delta-snap"')
+  const resetIndex = toolsHtml.indexOf('id="delta-reset"')
+  assert.ok(snapIndex < resetIndex, 'Expected SNAP button to appear before RESET button in delta toolbar')
+})
+
+test('Layout grid: SNAP button in hud-edit-tools has data-layout-snap, aria-pressed="true", and is before RESET button', () => {
+  const hudToolsMatch = overlayHtml.match(/<div id="hud-edit-tools"[\s\S]*?<\/div>/m)
+  assert.ok(hudToolsMatch, 'Expected to find #hud-edit-tools')
+
+  const toolsHtml = hudToolsMatch[0]
+  const snapMatch = toolsHtml.match(/<button[^>]*id="hud-snap"[^>]*>/)
+  assert.ok(snapMatch, 'Expected to find #hud-snap button')
+
+  const snapHtml = snapMatch[0]
+  assert.ok(snapHtml.includes('data-layout-snap'), 'Expected #hud-snap to have data-layout-snap attribute')
+  assert.ok(snapHtml.includes('aria-pressed="true"'), 'Expected #hud-snap to have aria-pressed="true"')
+  assert.ok(snapHtml.includes('layout-edit__button--toggle'), 'Expected #hud-snap to have layout-edit__button--toggle class')
+
+  const snapIndex = toolsHtml.indexOf('id="hud-snap"')
+  const resetIndex = toolsHtml.indexOf('id="hud-reset"')
+  assert.ok(snapIndex < resetIndex, 'Expected SNAP button to appear before RESET button in hud toolbar')
+})
+
+test('Layout grid: .layout-grid uses pointer-events: none', () => {
+  const bodies = ruleBodies(overlayCss, '.layout-grid')
+  const found = bodies.some(body => /pointer-events:\s*none/.test(body))
+  assert.ok(found, 'Expected .layout-grid to contain pointer-events: none')
+})
+
+test('Layout grid: the minor dots use --layout-grid-step, --layout-grid-offset-x, --layout-grid-offset-y', () => {
+  const bodies = ruleBodies(overlayCss, '.layout-grid::before')
+  const body = bodies[0]
+  assert.ok(body, 'Expected .layout-grid rule to exist')
+  assert.ok(body.includes('--layout-grid-step'), 'Expected .layout-grid to use --layout-grid-step')
+  assert.ok(body.includes('--layout-grid-offset-x'), 'Expected .layout-grid to use --layout-grid-offset-x')
+  assert.ok(body.includes('--layout-grid-offset-y'), 'Expected .layout-grid to use --layout-grid-offset-y')
+})
+
+test('Layout grid: .layout-grid[hidden] has display: none', () => {
+  const bodies = ruleBodies(overlayCss, '.layout-grid[hidden]')
+  const found = bodies.some(body => /display:\s*none/.test(body))
+  assert.ok(found, 'Expected .layout-grid[hidden] to contain display: none')
+})

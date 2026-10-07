@@ -509,6 +509,58 @@ body {
   display: none;
 }
 
+/* The edit grid: major lines split the screen into 4 x 4 zones; the minor
+   dots sit on a square step measured from the screen center (set by
+   hud-layout.js). Each dot is a vertical stripe masked by a horizontal one. */
+.layout-grid {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--text) 35%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--text) 35%, transparent) 1px, transparent 1px);
+  background-size: 25% 25%;
+  background-position: 0 0;
+}
+
+.layout-grid::before {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background-image: linear-gradient(to right, color-mix(in srgb, var(--text) 45%, transparent) 2px, transparent 2px);
+  background-size: var(--layout-grid-step, 30px) 100%;
+  background-position: calc(var(--layout-grid-offset-x, 0px) - 1px) 0;
+  mask-image: linear-gradient(to bottom, var(--text) 2px, transparent 2px);
+  mask-size: 100% var(--layout-grid-step, 30px);
+  mask-position: 0 calc(var(--layout-grid-offset-y, 0px) - 1px);
+}
+
+.layout-grid[hidden] {
+  display: none;
+}
+
+.layout-edit__button--toggle {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.layout-edit__button--toggle[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface);
+}
+
+.layout-edit__button--toggle:hover,
+.layout-edit__button--toggle:focus-visible,
+.layout-edit__button--toggle[aria-pressed='true']:hover,
+.layout-edit__button--toggle[aria-pressed='true']:focus-visible {
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+
 .layout-edit__hint {
   color: var(--text-muted);
   font-size: 12px;

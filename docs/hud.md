@@ -105,9 +105,12 @@ During the edit:
 - clicking or dragging a target selects it; the selected target shows the
   edit toolbar with `DRAG <TARGET> TO MOVE · CORNER TO RESIZE · CLICK A BLOCK
   TO SELECT` and its corner handles;
-- drag any target to move it;
+- drag any target to move it; with snapping on, it snaps to the alignment
+  grid described below;
 - drag a corner of the selected target to resize it between 0.5× and 2× of
-  its default size;
+  its default size; resizing never snaps;
+- **SNAP**, on every edit toolbar, turns the grid and snapping on or off
+  together. It is on by default, and FDC remembers the choice;
 - **SAVE** (filled with lime at rest) keeps every change; **CANCEL** (neutral
   dark, fills lime on hover) or Escape restores every target to its position
   at the start of the edit; **RESET** (caution text and border, fills caution
@@ -116,6 +119,24 @@ During the edit:
 
 While Forza has focus, Escape reaches the game and opens its pause menu, so
 use **CANCEL** to discard an edit started with the hotkey.
+
+### Alignment grid
+
+With **SNAP** on, the edit shows an alignment grid under the HUD, and it
+disappears when the edit ends:
+
+- thin major lines divide the monitor into 4 × 4 equal zones, so the screen
+  center and the edges are major lines;
+- dots mark a square minor grid whose step is the screen height divided by 36,
+  about 30 px at 1080p, 40 px at 1440p, and 60 px at 4K. It is measured from
+  the screen center outward, so targets placed as mirror images both land on
+  it; on 16:9 screens the major lines fall on the minor grid.
+
+While a target is dragged, the nearest of its left edge, center, and right
+edge snaps to a grid line within 8 px, and likewise its top edge, center, and
+bottom edge; a major line wins a tie. The saved position is still relative to
+the screen size, so after a resolution change a target keeps its place but
+may sit a few pixels off the new grid.
 
 The edit hotkey is chosen like the Driver Analysis record hotkey: **CHANGE**,
 then a key combination with Ctrl, Alt, or Shift, or a controller button. Esc

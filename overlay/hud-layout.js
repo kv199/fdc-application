@@ -2,8 +2,10 @@
   'use strict'
 
   const HudWidgets = globalScope.HudWidgets || require('./hud-widgets.js')
+  const HudGrid = globalScope.HudGrid || require('./hud-grid.js')
   const STORAGE_KEY = 'fdc.layout.v2'
   const MODE_STORAGE_KEY = 'fdc.layout-mode.v1'
+  const SNAP_STORAGE_KEY = 'fdc.layout-snap.v1'
   const MODES = ['grouped', 'freeform']
   const GROUPED_TARGETS = HudWidgets.OVERLAY_COMPONENTS
   const FREEFORM_TARGETS = HudWidgets.COMPONENTS
@@ -82,6 +84,10 @@
     return MODES.includes(stored) ? stored : 'grouped'
   }
 
+  function readStoredSnap() {
+    return storageGet(SNAP_STORAGE_KEY) !== 'off'
+  }
+
   function readStoredLayout() {
     try {
       const stored = JSON.parse(storageGet(STORAGE_KEY) || 'null')
@@ -133,13 +139,19 @@
       if (tools[name]) return tools[name]
       const existingRoot = document.getElementById(`${name}-edit-tools`)
       if (existingRoot) {
-        tools[name] = { root: existingRoot, reset: document.getElementById(`${name}-reset`), cancel: document.getElementById(`${name}-cancel`), save: document.getElementById(`${name}-save`) }
+        tools[name] = {
+          root: existingRoot,
+          reset: document.getElementById(`${name}-reset`),
+          cancel: document.getElementById(`${name}-cancel`),
+          save: document.getElementById(`${name}-save`),
+          snap: document.getElementById(`${name}-snap`)
+        }
         return tools[name]
       }
       const root = document.createElement('div')
       root.className = 'layout-edit-tools'
       root.hidden = true
-      root.innerHTML = `<span class="layout-edit__hint">DRAG ${name.toUpperCase()} TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT</span><button class="layout-edit__button layout-edit__button--reset" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
+      root.innerHTML = `<span class="layout-edit__hint">DRAG ${name.toUpperCase()} TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT</span><button class="layout-edit__button layout-edit__button--toggle" type="button" data-layout-snap aria-pressed="true">SNAP</button><button class="layout-edit__button layout-edit__button--reset" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
       const editorFrame = FREEFORM_TARGETS.includes(name) ? document.createElement('div') : null
       const editorSurface = editorFrame || elements[name]
       if (editorFrame) {
@@ -149,7 +161,6 @@
         hud.append(editorFrame)
       }
       editorSurface.append(root)
-      const buttons = [...root.querySelectorAll('button')]
       for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right']) {
         const handle = document.createElement('button')
         handle.className = `layout-resize-handle layout-resize-handle--${corner}`
@@ -159,7 +170,11 @@
         handle.setAttribute('aria-label', `Resize ${name} from ${corner} corner`)
         editorSurface.append(handle)
       }
-      tools[name] = { root, editorFrame, reset: buttons[0], cancel: buttons[1], save: buttons[2] }
+      const reset = root.querySelector('.layout-edit__button--reset')
+      const cancel = root.querySelector('.layout-edit__button:not(.layout-edit__button--reset):not(.layout-edit__button--primary):not(.layout-edit__button--toggle)')
+      const save = root.querySelector('.layout-edit__button--primary')
+      const snap = root.querySelector('[data-layout-snap]')
+      tools[name] = { root, editorFrame, reset, cancel, save, snap }
       return tools[name]
     }
     for (const name of TARGET_NAMES) createTools(name)
@@ -167,6 +182,7 @@
     const stored = readStoredLayout()
     let mode = stored.mode
     const positions = { shared: stored.shared, grouped: stored.grouped, freeform: stored.freeform }
+    let snapEnabled = readStoredSnap()
     let sessionTargets = []
     let selectedTarget = null
     let sessionSnapshot = null
@@ -347,6 +363,17 @@
       if (name === 'hud') syncEditorToolbar(name, element.getBoundingClientRect())
     }
 
+    function syncGrid() {
+      const grid = document.getElementById('layout-grid')
+      if (!grid) return
+      grid.hidden = !(sessionTargets.length && snapEnabled)
+      if (grid.hidden) return
+      const gridData = HudGrid.computeGrid(getViewport())
+      grid.style.setProperty('--layout-grid-step', `${gridData.step}px`)
+      grid.style.setProperty('--layout-grid-offset-x', `${gridData.offsetX}px`)
+      grid.style.setProperty('--layout-grid-offset-y', `${gridData.offsetY}px`)
+    }
+
     function refreshLayout() {
       if (mode === 'grouped') {
         syncHudFrameSize()
@@ -355,6 +382,7 @@
         FREEFORM_TARGETS.forEach(applyPosition)
       }
       applyPosition('delta')
+      syncGrid()
     }
     function applyMode() {
       hud.dataset.layoutMode = mode
@@ -393,6 +421,22 @@
       }
     }
 
+    function updateSnapButtons() {
+      const pressed = snapEnabled ? 'true' : 'false'
+      for (const targetTools of Object.values(tools)) {
+        if (targetTools?.snap) {
+          targetTools.snap.setAttribute('aria-pressed', pressed)
+        }
+      }
+    }
+
+    function setSnapEnabled(enabled) {
+      snapEnabled = enabled === true
+      storageSet(SNAP_STORAGE_KEY, snapEnabled ? 'on' : 'off')
+      updateSnapButtons()
+      syncGrid()
+    }
+
     function finishEdit() {
       if (!sessionTargets.length) return
       const previousSelected = selectedTarget
@@ -416,6 +460,7 @@
       setNativeInteraction(false)
       if (previousSelected) notifySettingsEditingState(previousSelected, false)
       applyVisibility()
+      syncGrid()
     }
 
     function notifySettingsEditingState(name, editing) {
@@ -563,10 +608,14 @@
       const viewport = getViewport()
       const size = getElementSize(element, getFallbackSize(name, viewport))
       const available = getAvailableSize(viewport, size)
+      let left = clientX - dragOffsetX
+      let top = clientY - dragOffsetY
+      // Only moving snaps; resizing stays free.
+      if (snapEnabled) ({ left, top } = HudGrid.snapRect({ left, top, width: size.width, height: size.height }, viewport))
       const map = positionMap(name)
       map[name] = {
-        x: available.width > 0 ? clamp((clientX - dragOffsetX) / available.width, 0, 1) : 0,
-        y: available.height > 0 ? clamp((clientY - dragOffsetY) / available.height, 0, 1) : 0,
+        x: available.width > 0 ? clamp(left / available.width, 0, 1) : 0,
+        y: available.height > 0 ? clamp(top / available.height, 0, 1) : 0,
         size: getWidgetSize(name)
       }
       applyPosition(name)
@@ -664,7 +713,9 @@
       targetTools.reset?.addEventListener('click', () => resetPosition(name))
       targetTools.cancel?.addEventListener('click', cancelEditMode)
       targetTools.save?.addEventListener('click', savePosition)
+      targetTools.snap?.addEventListener('click', () => setSnapEnabled(!snapEnabled))
     }
+    updateSnapButtons()
     for (const handle of document.querySelectorAll('[data-layout-resize-handle]')) {
       handle.addEventListener('pointerdown', startWidgetResize)
       handle.addEventListener('pointermove', event => updateWidgetSizeFromPointer(event.clientX, event.clientY))
@@ -695,7 +746,9 @@
       toggleEditSession,
       refreshPosition: refreshLayout,
       refreshLayout,
-      getPosition: name => ({ ...(positionMap(name)[name] || ensurePosition(name)) })
+      getPosition: name => ({ ...(positionMap(name)[name] || ensurePosition(name)) }),
+      isSnapEnabled: () => snapEnabled,
+      setSnapEnabled
     }
     if (new URLSearchParams(window.location.search).get('edit') === '1') {
       window.requestAnimationFrame(() => enterEditMode('hud'))
@@ -712,6 +765,7 @@
     readStoredLayout,
     STORAGE_KEY,
     MODE_STORAGE_KEY,
+    SNAP_STORAGE_KEY,
     MODES,
     GROUPED_TARGETS,
     FREEFORM_TARGETS

@@ -81,6 +81,22 @@ test('freeform targets expose independent edit, reset, cancel, save and resize b
   assert.match(css, /\.hud-widget-editor-frame \.layout-edit-tools,[\s\S]*pointer-events: auto/)
 })
 
+test('snap preference exports storage key and defaults to on', () => {
+  assert.equal(layout.SNAP_STORAGE_KEY, 'fdc.layout-snap.v1')
+  assert.match(source, /const SNAP_STORAGE_KEY = 'fdc\.layout-snap\.v1'/)
+})
+
+test('snap preference persists as on or off', () => {
+  assert.match(source, /function readStoredSnap\(\)/)
+  assert.match(source, /storageSet\(SNAP_STORAGE_KEY, snapEnabled \? 'on' : 'off'\)/)
+  assert.match(source, /return storageGet\(SNAP_STORAGE_KEY\) !== 'off'/)
+})
+
+test('updateFromPointer does not call snapRect while updateWidgetSizeFromPointer does not', () => {
+  assert.match(source, /function updateFromPointer\(clientX, clientY\) \{[\s\S]*?if \(snapEnabled\)[\s\S]*?HudGrid\.snapRect/)
+  assert.doesNotMatch(source, /function updateWidgetSizeFromPointer\(clientX, clientY\)[\s\S]*?HudGrid\.snapRect/)
+})
+
 test('mode changes refresh visibility layout and both modes retain separate state', () => {
   assert.match(source, /storageSet\(MODE_STORAGE_KEY, mode\)/)
   assert.match(source, /globalScope\.HudPreferences\?\.apply\?\.\(\)/)
@@ -108,4 +124,10 @@ test('resolveEditableTargets returns correct targets for each mode', () => {
 
   const freeformNoDelta = resolveEditableTargets({ state: { tires: true, pedals: true, steering: true, gear: true, engine: true, history: false }, overlayState: { hud: true, delta: false }, mode: 'freeform' })
   assert.deepEqual(freeformNoDelta, ['tires', 'pedals', 'steering', 'gear', 'engine'])
+})
+
+test('static toolbars bind CANCEL and SNAP to their own buttons', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'hud-layout.js'), 'utf8')
+  assert.match(source, /cancel: document\.getElementById\(`\$\{name\}-cancel`\)/)
+  assert.match(source, /snap: document\.getElementById\(`\$\{name\}-snap`\)/)
 })

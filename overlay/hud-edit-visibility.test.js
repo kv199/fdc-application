@@ -82,7 +82,7 @@ test('edit targets that do not belong to the current mode change nothing', () =>
 
 function createFakeElement() {
   const classes = new Set()
-  return {
+  const fakeElement = {
     hidden: false,
     dataset: {},
     style: { setProperty() {}, removeProperty() {} },
@@ -97,19 +97,24 @@ function createFakeElement() {
     removeAttribute() {},
     getBoundingClientRect: () => ({ left: 0, top: 0, right: 100, bottom: 69, width: 100, height: 69 }),
     querySelectorAll: () => [createFakeElement(), createFakeElement(), createFakeElement()],
+    querySelector: () => fakeElement,
     set innerHTML(_) {}
   }
+  return fakeElement
 }
 
-const RUNTIME_GLOBALS = ['document', 'window', 'location', 'addEventListener', 'requestAnimationFrame', 'localStorage', 'HudWidgets', 'HudLayout', 'HudPreferences']
-const RUNTIME_MODULES = ['./hud-widgets.js', './hud-layout.js', './hud-preferences.js'].map(file => require.resolve(file))
+const RUNTIME_GLOBALS = ['document', 'window', 'location', 'addEventListener', 'requestAnimationFrame', 'localStorage', 'HudWidgets', 'HudGrid', 'HudLayout', 'HudPreferences']
+const RUNTIME_MODULES = [
+  ...(require('fs').existsSync(require.resolve('./hud-grid.js')) ? ['./hud-grid.js'] : []),
+  './hud-widgets.js', './hud-layout.js', './hud-preferences.js'
+].map(file => require.resolve(file))
 
 // Loads the real overlay layout and visibility modules on a minimal DOM, in
 // the index.html script order.
 function withOverlayRuntime(run) {
   const previous = Object.fromEntries(RUNTIME_GLOBALS.map(name => [name, global[name]]))
-  const ids = ['delta-strip', 'hud-frame', 'hud', ...COMPONENTS.map(name => `hud-${name}`)]
-  for (const name of ['delta', 'hud']) ids.push(`${name}-edit-tools`, `${name}-reset`, `${name}-cancel`, `${name}-save`)
+  const ids = ['layout-grid', 'delta-strip', 'hud-frame', 'hud', ...COMPONENTS.map(name => `hud-${name}`)]
+  for (const name of ['delta', 'hud']) ids.push(`${name}-edit-tools`, `${name}-snap`, `${name}-reset`, `${name}-cancel`, `${name}-save`)
   const elements = new Map(ids.map(id => [id, createFakeElement()]))
   const storage = new Map()
   const counters = { storageWrites: 0 }
@@ -301,4 +306,48 @@ test('the edit hotkey does nothing when every target is switched off', () => {
     assert.equal(HudLayout.toggleEditSession(), 'unavailable')
     assert.deepEqual(HudLayout.getEditingTargets(), [])
   })
+})
+
+test('snap is enabled by default and can be toggled', () => {
+  withOverlayRuntime(({ element, counters }) => {
+    assert.equal(HudLayout.isSnapEnabled(), true)
+    HudLayout.setSnapEnabled(false)
+    assert.equal(HudLayout.isSnapEnabled(), false)
+    assert.equal(counters.storageWrites > 0, true)
+    HudLayout.setSnapEnabled(true)
+    assert.equal(HudLayout.isSnapEnabled(), true)
+  })
+})
+
+test('grid shows when edit session starts with snap enabled and hides when snap is disabled', () => {
+  withOverlayRuntime(({ element }) => {
+    HudLayout.setSnapEnabled(true)
+    assert.equal(element('layout-grid').hidden, true, 'grid hidden before edit')
+
+    HudLayout.toggleEditSession()
+    assert.equal(element('layout-grid').hidden, false, 'grid shown after edit starts with snap on')
+
+    HudLayout.setSnapEnabled(false)
+    assert.equal(element('layout-grid').hidden, true, 'grid hidden when snap disabled')
+
+    HudLayout.setSnapEnabled(true)
+    assert.equal(element('layout-grid').hidden, false, 'grid shown again when snap enabled')
+
+    HudLayout.cancelEditMode()
+    assert.equal(element('layout-grid').hidden, true, 'grid hidden after edit ends')
+  })
+})
+
+test('snap preference persists in storage', () => {
+  let savedValue = null
+  withOverlayRuntime(({ element, counters }) => {
+    const initialWrites = counters.storageWrites
+    HudLayout.setSnapEnabled(false)
+    assert(counters.storageWrites > initialWrites, 'storage write occurred')
+    // Capture what was written to storage
+    const storage = global.localStorage
+    savedValue = storage.getItem('fdc.layout-snap.v1')
+  })
+
+  assert.equal(savedValue, 'off', 'snap preference written to storage as off')
 })

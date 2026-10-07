@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="overlay.css">
 </head>
 <body>
+  <div id="layout-grid" class="layout-grid" aria-hidden="true" hidden></div>
   <div class="hud-shell">
     <section id="delta-strip" class="delta-strip" aria-label="Lap delta">
       <div class="delta-strip__best" data-delta-best-container hidden>
@@ -24,6 +25,7 @@
       </div>
       <div id="delta-edit-tools" class="layout-edit-tools" hidden>
         <span class="layout-edit__hint">DRAG DELTA TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT</span>
+        <button id="delta-snap" class="layout-edit__button layout-edit__button--toggle" type="button" data-layout-snap aria-pressed="true">SNAP</button>
         <button id="delta-reset" class="layout-edit__button layout-edit__button--reset" type="button">RESET</button>
         <button id="delta-cancel" class="layout-edit__button" type="button">CANCEL</button>
         <button id="delta-save" class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>
@@ -94,6 +96,7 @@
       </div>
       <div id="hud-edit-tools" class="layout-edit-tools" hidden>
         <span class="layout-edit__hint">DRAG HUD TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT</span>
+        <button id="hud-snap" class="layout-edit__button layout-edit__button--toggle" type="button" data-layout-snap aria-pressed="true">SNAP</button>
         <button id="hud-reset" class="layout-edit__button layout-edit__button--reset" type="button">RESET</button>
         <button id="hud-cancel" class="layout-edit__button" type="button">CANCEL</button>
         <button id="hud-save" class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>
@@ -122,6 +125,7 @@
   <script src="delta-runtime.js"></script>
   <script src="event-recorder.js"></script>
   <script src="hud-widgets.js"></script>
+  <script src="hud-grid.js"></script>
   <script src="hud-layout.js"></script>
   <script src="hud-preferences.js"></script>
   <script src="tauri-events.js"></script>
