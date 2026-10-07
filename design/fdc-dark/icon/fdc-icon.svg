@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">FDC application icon proposal</title>
+  <desc id="description">A cream F with an angled lime top rail on a rounded dark olive tile.</desc>
+  <!-- Original FDC mark. Palette follows overlay/tokens.css; the flat tile
+       avoids the header texture so the mark remains clear at tray sizes. -->
+  <rect width="512" height="512" rx="104" fill="#152019"/>
+  <path d="M130 167H206V232H347L316 294H206V395H130Z" fill="#edf0df"/>
+  <path d="M154 112H386L354 174H130V136Z" fill="#c3ed83"/>
+</svg>

@@ -6,6 +6,9 @@
     title: 'Light theme · Configuration',
     section: 'FOUNDATIONS',
     status: 'proposal',
+    theme: 'light',
+    proposalLabel: 'FDC LIGHT / PROPOSAL',
+    proposalKicker: 'CONFIGURATION ONLY / HUD UNCHANGED',
     description: 'Proposed light roles for the Configuration window. The painted header, in-game HUD and Delta keep their current dark design. Values below resolve from the separate proposal CSS, not the app runtime.',
     html: `<div class="row"><div><span class="label">CONFIGURATION ONLY / PROPOSAL</span><h2>Light work area, familiar FDC</h2><p class="light-proposal__lead">The app keeps its painted dark header, type, square edges and current layout. Light roles make lists, forms and recorded data easier to scan. The on-game HUD and Delta are outside this theme.</p></div><a href="LIGHT_THEME.md">Token and usage notes ↗</a></div>
       <section class="panel"><h3>SURFACES AND TEXT</h3>${swatches([

@@ -11,13 +11,13 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const context = { window: {} };
 vm.createContext(context);
 
-for (const file of ['screens.js', 'screens-current.js', 'foundations.js', 'style-spec.js', 'overlays.js', 'light-theme.js']) {
+for (const file of ['screens.js', 'screens-current.js', 'foundations.js', 'style-spec.js', 'overlays.js', 'light-theme.js', 'icon/icon.js']) {
   vm.runInContext(read(file), context, { filename: file });
 }
 
 const boards = [...context.window.FDC_SCREENS, ...context.window.FDC_FOUNDATIONS];
 const ids = new Set(boards.map(board => board.id));
-if (boards.length !== 23 || ids.size !== 23) throw Error('Expected 23 unique boards');
+if (boards.length !== 24 || ids.size !== 24) throw Error('Expected 24 unique boards');
 
 for (const board of boards) {
   if (!board.html || !board.description) throw Error(`Empty board: ${board.id}`);
@@ -30,13 +30,13 @@ for (const board of boards) {
 }
 
 // The book has no copies of app assets: it uses the app's tokens, fonts, and texture.
-for (const file of ['index.html', 'book.css', 'design-system.css', 'light-theme.css', 'book.js', 'overlays.js', 'README.md', 'IMPLEMENTATION.md', 'LIGHT_THEME.md']) {
+for (const file of ['index.html', 'book.css', 'design-system.css', 'light-theme.css', 'icon/icon.css', 'icon/fdc-icon.svg', 'icon/fdc-icon.png', 'icon/fdc-icon.ico', 'book.js', 'overlays.js', 'README.md', 'IMPLEMENTATION.md', 'LIGHT_THEME.md']) {
   if (!exists(file)) throw Error(`Missing book file: ${file}`);
 }
 for (const file of ['fonts', 'paint.png']) {
   if (exists(file)) throw Error(`Duplicate of an app asset in the book: ${file}`);
 }
-for (const css of ['book.css', 'design-system.css', 'light-theme.css']) {
+for (const css of ['book.css', 'design-system.css', 'light-theme.css', 'icon/icon.css']) {
   for (const match of read(css).matchAll(/url\(([^)]+)\)/g)) {
     if (!exists(match[1])) throw Error(`Broken asset in ${css}: ${match[1]}`);
   }
@@ -68,6 +68,11 @@ if (/(?:--hud-[\w-]+|--telemetry-[\w-]+|--paint)\s*:/.test(lightCss)) throw Erro
 for (const match of light.html.matchAll(/data-light-token="(--[\w-]+)"/g)) {
   if (!lightCss.includes(`${match[1]}:`)) throw Error(`Light specification names an undefined token: ${match[1]}`);
 }
+const icon = boards.find(board => board.id === 'foundation-icon');
+if (!icon || icon.status !== 'proposal') throw Error('Application icon board must be marked as a proposal');
+for (const match of icon.html.matchAll(/(?:src|href)="(icon\/[^\"]+)"/g)) {
+  if (!exists(match[1])) throw Error(`Missing proposed icon asset: ${match[1]}`);
+}
 
 if (!boards.find(board => board.id === 'settings').html.includes('DISTANCE UNIT')) {
   throw Error('Settings specimen is missing the distance unit');
@@ -76,4 +81,4 @@ if (!boards.find(board => board.id === 'driver-list').html.includes('Ctrl + Shif
   throw Error('Driver specimen shows the wrong default hotkey');
 }
 
-console.log('FDC design book: 22 implemented boards, 1 light Configuration proposal, links, app assets, and specification tokens verified.');
+console.log('FDC design book: 22 implemented boards, 2 proposals, links, app assets, and specification tokens verified.');
