@@ -5,6 +5,17 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+### Added
+
+- **Design**: FDC has a new look, FDC Dark. Configuration gets a painted
+  header with each tab's description and the Data Out status, which opens the
+  connection guide when selected; drill-down pages show where you are, such as
+  `← EVENTS / EVENT`; and the next step on each screen, such as CREATE,
+  DETAILS, or RECORD RUN, is highlighted in lime. The HUD and Delta use the new
+  fonts and cut corners and keep their colors and opacity, and the layout
+  editor sets SAVE, CANCEL, and RESET apart. Your data and settings are
+  unchanged.
+
 ## 7.24.67 - 2026-10-06
 
 ### Fixed
