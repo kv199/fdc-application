@@ -71,9 +71,10 @@ Light Brightness settings. How targets are learned is described in
 - With the option disabled, the HUD stays visible without live telemetry.
 - In Configuration, each widget in the **WIDGETS** list has its own switch,
   and **ALL** turns every widget, Delta included, on or off at once. When
-  every block is hidden, the telemetry HUD is not shown. Earlier versions had
-  one switch for the whole telemetry HUD; if it was off, FDC turns every block
-  off on the first start of this version, so the HUD stays hidden.
+  every block is hidden, the telemetry HUD is not shown. Versions before
+  7.28 had one switch for the whole telemetry HUD; if it was off, FDC turns
+  every block off on its first start after the update, so the HUD stays
+  hidden.
 
 ## Layout
 
@@ -89,8 +90,8 @@ below HUD OPACITY, the same in both arrangements:
 2. The layout editor, built like the Driver Analysis recorder: two rows,
    each with a title and a sentence on the left and its controls on the
    right. **EDIT THE LAYOUT** has **RESET LAYOUT** and **EDIT LAYOUT** (the
-   lime next step); while an edit runs it shows **EDITING** in caution yellow
-   with **CANCEL** and **SAVE**. **IN-GAME EDIT HOTKEY** shows the hotkey and
+   lime next step); while an edit runs it shows **EDITING** in yellow with
+   **CANCEL** and **SAVE**. **IN-GAME EDIT HOTKEY** shows the hotkey and
    **CHANGE**, like GLOBAL RECORD HOTKEY.
 3. **WIDGETS**: one compact row per widget with its name and a switch (Tires,
    Throttle & Brake, Steering, Gear / Speed / RPM, Engine / Boost, Input
@@ -118,9 +119,9 @@ During the edit:
 
 - every target in the edit stays visible, even when **Show HUD with
   telemetry** would otherwise hide it, and Delta shows without an Event;
-- clicking or dragging a target on the screen selects it; the selected target shows the
-  edit toolbar with `DRAG <TARGET> TO MOVE · CORNER TO RESIZE · CLICK A BLOCK
-  TO SELECT` and its corner handles;
+- clicking or dragging a target on the screen selects it; the selected target
+  shows the edit toolbar with `DRAG <TARGET> TO MOVE · CORNER TO RESIZE ·
+  CLICK A BLOCK TO SELECT` and its corner handles;
 - drag any target to move it; with the grid on, it moves along the
   alignment grid described below;
 - drag a corner of the selected target to resize it between 0.5× and 2× of
@@ -209,9 +210,10 @@ km/h and meters, and changing a unit immediately redraws the open views.
 
 ## Persistence
 
-HUD layout, block and overlay visibility, opacity, speed and distance units,
-and brightness preferences are stored in the local application webview storage. They are not
-written to `fdc.sqlite`. The **HUD DISPLAY** monitor is stored in
+HUD layout, block and overlay visibility, opacity, the HUD edit hotkey, the
+GRID choice, speed and distance units, and brightness preferences are stored
+in the local application webview storage. They are not written to
+`fdc.sqlite`. The **HUD DISPLAY** monitor is stored in
 `hud-display.json` in the FDC application-data directory, because FDC places the
 HUD before the page loads.
 

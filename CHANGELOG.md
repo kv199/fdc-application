@@ -19,23 +19,21 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ### Added
 
-- **HUD**: the HUD tab has one layout block for both arrangements: one
-  **EDIT LAYOUT** button with the edit hotkey next to it, a new **RESET
-  LAYOUT** that returns every block and Delta to its default place after you
-  confirm, and one compact **WIDGETS** list where clicking a widget's row
-  switches it and **ALL** switches every widget at once. Pick the block to move by clicking it on the screen.
-  On the edit toolbar, **GRID ON** is filled and **GRID OFF** is not, so its
-  state is clear.
+- **HUD**: move and resize the HUD over a running Forza without pausing it.
+  Press the new in-game edit hotkey, `Ctrl + Shift + F8` by default, then
+  drag any enabled block or Delta and press the hotkey again to save;
+  **CANCEL** puts every block back.
+- **HUD**: the HUD tab is simpler and the same in Grouped and Freeform.
+  **EDIT LAYOUT** starts one edit of every enabled block, and you pick the
+  block to change by clicking it on the screen. **RESET LAYOUT** returns
+  every block and Delta to its default place after you confirm. The
+  **IN-GAME EDIT HOTKEY** row shows and changes the hotkey, and one
+  **WIDGETS** list switches each widget, or every widget with **ALL**.
 - **HUD**: the layout edit shows an alignment grid, 4 × 4 zones with a finer
   dot grid measured from the screen center. A dragged block moves dot to dot
   by its top-left corner and centers itself on the middle and quarter lines
-  of the screen. **GRID** on the edit toolbar turns the grid off; resizing
-  never snaps.
-- **HUD**: move and resize the HUD over a running Forza without pausing it.
-  Press the new edit hotkey, `Ctrl + Shift + F8` by default and changeable on
-  the HUD tab, then drag any enabled block or Delta, and press it again to
-  save. **EDIT** in Configuration opens the same edit with that block
-  selected, and **CANCEL** puts every block back.
+  of the screen; resizing never snaps. **GRID ON** on the edit toolbar turns
+  the grid off and then reads **GRID OFF**.
 - **Design**: FDC has a new look, FDC Dark. Configuration gets a painted
   header with each tab's description and the Data Out status, which opens the
   connection guide when selected; drill-down pages show where you are, such as

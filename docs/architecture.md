@@ -82,18 +82,23 @@ the tray menu, Direct Data Out, and native persistence commands.
 - Closing the Configuration window asks the page before quitting, and
   `quit_app` exits FDC.
 
-The native layer registers the Driver Analysis global recording hotkey (keyboard
-or game-controller button via Windows Raw Input) while Driver Analysis is
-enabled, and a refused binding does not stop startup. It does not analyze driving
-telemetry. The browser consumer operates on normalized telemetry after the IPC
-boundary.
+The native layer registers two global hotkeys, each a keyboard combination or a
+game-controller button read through Windows Raw Input: the Driver Analysis
+recording hotkey while Driver Analysis is enabled, and the HUD edit hotkey at
+all times. A pressed shortcut or button is routed to its own action: the
+Driver Analysis hotkey emits the recording toggle event, and the HUD edit
+hotkey asks the HUD page to start or save a layout edit. The two bindings can
+never be the same, and a refused binding does not stop startup. It does not
+analyze driving telemetry. The browser consumer operates on normalized
+telemetry after the IPC boundary.
 
 ## Browser overlay
 
 `overlay/index.html` is the static main-window entry point. It loads the
-telemetry route, display preferences, Driver Analysis, lap timing, Delta, layout,
-HUD preference, Tauri event, Garage, Shift Light, and overlay modules in dependency
-order. The Tauri configuration uses `overlay/` as the frontend distribution.
+telemetry route, display preferences, Driver Analysis, lap timing, Delta, HUD
+widgets, alignment grid, layout, HUD preference, Tauri event, Garage, Shift
+Light, and overlay modules in dependency order. The Tauri configuration uses
+`overlay/` as the frontend distribution.
 
 The main window is a transparent, always-on-top HUD positioned across the
 monitor chosen in **HUD DISPLAY**. The browser layer renders the current
@@ -195,17 +200,20 @@ verification requirements are documented in [Shift Light](shift-light.md).
 Configuration is a local Tauri settings window rather than a second runtime
 telemetry path. It provides:
 
-- overlay target editing for Delta and the telemetry HUD. The
-  telemetry HUD offers a default `GROUPED` mode that moves and resizes the
-  compact panel as one target, and a `FREEFORM` mode that moves and resizes
-  Tires, Throttle and Brake, Steering, Gear / Speed / RPM, Engine / Boost, and
-  Input Graph independently. Each mode keeps its own layout, while visibility
-  and opacity remain shared. Both modes start from the same compact responsive
-  arrangement. Reset returns a target to its active-mode default size and
-  position;
+- HUD layout editing. The telemetry HUD offers a default `GROUPED`
+  arrangement that moves and resizes the compact panel as one target, and a
+  `FREEFORM` arrangement that moves and resizes Tires, Throttle and Brake,
+  Steering, Gear / Speed / RPM, Engine / Boost, and Input Graph
+  independently; Delta is its own target in both. Each arrangement keeps its
+  own layout, while visibility and opacity remain shared. **EDIT LAYOUT**, or
+  the HUD edit hotkey while Forza keeps focus, starts one edit of every
+  enabled target on the HUD itself, with an alignment grid; the target to
+  change is picked by clicking it on the screen. **RESET LAYOUT** returns every
+  target in both arrangements to its default size and position;
 - a **HUD DISPLAY** monitor selector that moves the HUD to cover the chosen
   monitor and is unavailable during a layout edit;
-- visibility controls for the top-level overlay and HUD components, plus a
+- a **WIDGETS** list with one switch per HUD block and Delta and an **ALL**
+  switch for every widget at once, plus a
   `SHOW HUD WITH TELEMETRY` preference that defaults to enabled and shows the
   HUD and Delta only while live samples (`IsRaceOn`) arrive, and hides them
   500 ms after the last live sample. Forza keeps sending samples in menus, and

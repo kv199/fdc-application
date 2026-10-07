@@ -29,8 +29,10 @@ account, no cloud: everything stays on the local machine.
 Tire temperatures, throttle and brake, steering, gear, speed and RPM, boost,
 power and torque, and an eight-second input graph. Keep the blocks in one
 panel or place and resize each one freely, hide what you don't need, and set
-the overlay opacity. The HUD stays click-through and hides in the pause menu
-and garage. [More about the HUD](docs/hud.md)
+the overlay opacity. Press the edit hotkey in Forza to move the HUD over the
+running game without pausing it, with an alignment grid to line blocks up.
+The HUD stays click-through and hides in the pause menu and garage.
+[More about the HUD](docs/hud.md)
 
 <details>
 <summary>HUD layout in Configuration</summary>
