@@ -63,7 +63,7 @@ test('freeform preserves current compact grid widths and 69px height', () => {
 })
 
 test('freeform targets expose independent edit, reset, cancel, save and resize behavior', () => {
-  assert.match(source, /function resetPosition\(name = editingTarget \|\| 'hud'\)/)
+  assert.match(source, /function resetPosition\(name = selectedTarget \|\| 'hud'\)/)
   assert.match(source, /function resetLayout\(targetMode = mode\)/)
   assert.match(source, /setMode,[\s\S]*getMode: \(\) => mode/)
   assert.match(source, /dataset\.layoutResizeTarget = name/)
@@ -77,7 +77,7 @@ test('freeform targets expose independent edit, reset, cancel, save and resize b
   assert.match(source, /if \(name === 'hud'\) syncEditorToolbar\(name, element\.getBoundingClientRect\(\)\)/)
   assert.match(source, /calculateEditorToolbarPosition\(rect, toolbarRect, viewport\)/)
   assert.match(css, /\.hud-widget-editor-frame \{[\s\S]*pointer-events: none/)
-  assert.match(css, /\.hud-widget-editor-frame:not\(\[hidden\]\) \.layout-resize-handle/)
+  assert.match(css, /\.hud-widget-editor-frame\.is-selected:not\(\[hidden\]\) \.layout-resize-handle/)
   assert.match(css, /\.hud-widget-editor-frame \.layout-edit-tools,[\s\S]*pointer-events: auto/)
 })
 
@@ -86,4 +86,26 @@ test('mode changes refresh visibility layout and both modes retain separate stat
   assert.match(source, /globalScope\.HudPreferences\?\.apply\?\.\(\)/)
   assert.match(source, /if \(name === 'hud'\) return positions\.grouped/)
   assert.match(source, /return positions\.freeform/)
+})
+
+test('resolveEditableTargets returns correct targets for each mode', () => {
+  const { resolveEditableTargets } = require('./hud-preferences.js')
+
+  const grouped = resolveEditableTargets({ state: { tires: true, pedals: true, steering: true, gear: true, engine: true, history: true }, overlayState: { hud: true, delta: true }, mode: 'grouped' })
+  assert.deepEqual(grouped, ['hud', 'delta'])
+
+  const groupedNoHud = resolveEditableTargets({ state: { tires: true, pedals: true, steering: true, gear: true, engine: true, history: true }, overlayState: { hud: false, delta: true }, mode: 'grouped' })
+  assert.deepEqual(groupedNoHud, ['delta'])
+
+  const groupedAllBlocksOff = resolveEditableTargets({ state: { tires: false, pedals: false, steering: false, gear: false, engine: false, history: false }, overlayState: { hud: true, delta: true }, mode: 'grouped' })
+  assert.deepEqual(groupedAllBlocksOff, ['delta'])
+
+  const groupedNothingOn = resolveEditableTargets({ state: { tires: false, pedals: false, steering: false, gear: false, engine: false, history: false }, overlayState: { hud: false, delta: false }, mode: 'grouped' })
+  assert.deepEqual(groupedNothingOn, [])
+
+  const freeform = resolveEditableTargets({ state: { tires: true, pedals: true, steering: true, gear: true, engine: true, history: false }, overlayState: { hud: true, delta: true }, mode: 'freeform' })
+  assert.deepEqual(freeform, ['tires', 'pedals', 'steering', 'gear', 'engine', 'delta'])
+
+  const freeformNoDelta = resolveEditableTargets({ state: { tires: true, pedals: true, steering: true, gear: true, engine: true, history: false }, overlayState: { hud: true, delta: false }, mode: 'freeform' })
+  assert.deepEqual(freeformNoDelta, ['tires', 'pedals', 'steering', 'gear', 'engine'])
 })

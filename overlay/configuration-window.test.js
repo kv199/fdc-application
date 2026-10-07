@@ -746,3 +746,22 @@ test('The one next step of a screen uses the lime ready button', () => {
   assert.match(settingsStyles, /\.settings-button\.settings-button--ready\s*\{[^}]*background: var\(--accent\)/)
   assert.match(settingsStyles, /\.settings-button\.settings-button--ready:disabled\s*\{[^}]*background: var\(--surface-deep\)/)
 })
+
+test('the HUD tab offers an edit hotkey that is registered at startup and never shared with Driver Analysis', () => {
+  const start = settingsHtml.indexOf('data-settings-panel="hud"')
+  const hudPanel = settingsHtml.slice(start, settingsHtml.indexOf('data-settings-panel="', start + 1))
+  assert.match(hudPanel, /<h3 id="hud-edit-hotkey-title">EDIT HOTKEY<\/h3>/)
+  assert.match(hudPanel, /id="hud-edit-hotkey-value"[^>]*>Ctrl \+ Shift \+ F8<\/output>/)
+  assert.match(hudPanel, /id="hud-edit-hotkey-change" class="settings-button"/)
+  assert.match(settingsJs, /const DEFAULT_HUD_EDIT_HOTKEY = 'Ctrl\+Shift\+F8'/)
+  assert.match(settingsJs, /const HUD_EDIT_HOTKEY_STORAGE_KEY = 'fdc\.hud-edit-hotkey\.v1'/)
+  assert.match(settingsJs, /call\('set_hud_edit_hotkey', \{ hotkey: normalized \}\)/)
+  assert.match(settingsJs, /void setHudEditHotkey\(hudEditHotkeySettings\.hotkey, false, hudEditHotkeySettings\.hotkeyLabel\)/)
+  assert.match(settingsJs, /THAT HOTKEY IS ALREADY USED BY DRIVER ANALYSIS/)
+  assert.match(settingsJs, /THAT HOTKEY IS ALREADY USED BY HUD EDIT/)
+  // One capture at a time: starting either capture ends the other.
+  assert.match(settingsJs, /if \(hudEditHotkeyCapture && driverAnalysisHotkeyCapture\) await setDriverAnalysisHotkeyCapture\(false\)/)
+  assert.match(settingsJs, /if \(driverAnalysisHotkeyCapture && hudEditHotkeyCapture\) await setHudEditHotkeyCapture\(false\)/)
+  assert.match(tauriMain, /fn set_hud_edit_hotkey\(/)
+  assert.match(tauriMain, /window\.HudLayout\?\.toggleEditSession\?\.\(\)/)
+})

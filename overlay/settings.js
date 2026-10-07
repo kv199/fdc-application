@@ -5,6 +5,8 @@
   const OVERLAY_VISIBILITY_STORAGE_KEY = 'fdc.overlay-visibility.v1'
   const EVENTS_SORT_STORAGE_KEY = 'fdc.events-sort.v1'
   const LAYOUT_MODE_STORAGE_KEY = 'fdc.layout-mode.v1'
+  const HUD_EDIT_HOTKEY_STORAGE_KEY = 'fdc.hud-edit-hotkey.v1'
+  const DEFAULT_HUD_EDIT_HOTKEY = 'Ctrl+Shift+F8'
   const EVENT_SORT_OPTIONS = ['id-desc', 'id-asc', 'last-recorded-desc', 'last-recorded-asc']
   const { COMPONENTS, OVERLAY_COMPONENTS } = globalScope.HudWidgets
   const LAYOUT_TARGET_LABELS = Object.freeze({
@@ -33,6 +35,8 @@
   const driverAnalysisRecorderHint = document.getElementById('driver-analysis-recorder-hint')
   const driverAnalysisHotkeyValue = document.getElementById('driver-analysis-hotkey-value')
   const driverAnalysisHotkeyChange = document.getElementById('driver-analysis-hotkey-change')
+  const hudEditHotkeyValue = document.getElementById('hud-edit-hotkey-value')
+  const hudEditHotkeyChange = document.getElementById('hud-edit-hotkey-change')
   const driverAnalysisHistoryView = document.getElementById('driver-analysis-history-view')
   const driverAnalysisDetailView = document.getElementById('driver-analysis-detail-view')
   const driverAnalysisDetailBack = document.getElementById('driver-analysis-detail-back')
@@ -217,6 +221,8 @@
   let driverAnalysisSettings = driverAnalysisApi?.readSettings?.() || { enabled: false, hotkey: 'Ctrl+Shift+F9' }
   let driverAnalysisState = { enabled: driverAnalysisSettings.enabled, recording: false, startedAt: null, sampleCount: 0, hotkey: driverAnalysisSettings.hotkey }
   let driverAnalysisHotkeyCapture = false
+  let hudEditHotkeySettings = readHudEditHotkeySettings()
+  let hudEditHotkeyCapture = false
   let driverAnalysisHistory = []
   let driverAnalysisHistoryPending = false
   let driverAnalysisExportPending = false
@@ -3298,6 +3304,10 @@
       if (announce) setStatus('USE CTRL, ALT OR SHIFT WITH ONE KEY. WINDOWS KEY IS NOT ALLOWED.', true)
       return false
     }
+    if (normalized === hudEditHotkeySettings.hotkey) {
+      if (announce) setStatus('THAT HOTKEY IS ALREADY USED BY HUD EDIT', true)
+      return false
+    }
     if (!driverAnalysisSettings.enabled) {
       driverAnalysisSettings = driverAnalysisApi.writeSettings({ ...driverAnalysisSettings, hotkey: normalized, hotkeyLabel })
       return true
@@ -3341,6 +3351,7 @@
   async function setDriverAnalysisHotkeyCapture(active) {
     const wasActive = driverAnalysisHotkeyCapture
     driverAnalysisHotkeyCapture = active === true
+    if (driverAnalysisHotkeyCapture && hudEditHotkeyCapture) await setHudEditHotkeyCapture(false)
     driverAnalysisHotkeyChange.textContent = driverAnalysisHotkeyCapture ? 'CANCEL' : 'CHANGE'
     renderDriverAnalysisState(driverAnalysisState)
     if (driverAnalysisHotkeyCapture) {
@@ -3356,6 +3367,91 @@
       } catch {
       }
     }
+  }
+
+  // The HUD edit hotkey is always registered: pressing it in Forza starts a layout edit
+  // over the running game, and pressing it again saves.
+  function readHudEditHotkeySettings() {
+    try {
+      const stored = JSON.parse(globalScope.localStorage?.getItem(HUD_EDIT_HOTKEY_STORAGE_KEY) || 'null')
+      const hotkey = driverAnalysisApi?.normalizeHotkey?.(stored?.hotkey) || DEFAULT_HUD_EDIT_HOTKEY
+      const hotkeyLabel = hotkey.startsWith('Controller:') && typeof stored?.hotkeyLabel === 'string' ? stored.hotkeyLabel.trim().slice(0, 80) : ''
+      return { hotkey, hotkeyLabel }
+    } catch {
+      return { hotkey: DEFAULT_HUD_EDIT_HOTKEY, hotkeyLabel: '' }
+    }
+  }
+
+  function writeHudEditHotkeySettings(hotkey, hotkeyLabel) {
+    hudEditHotkeySettings = { hotkey, hotkeyLabel: hotkey.startsWith('Controller:') ? hotkeyLabel : '' }
+    try { globalScope.localStorage?.setItem(HUD_EDIT_HOTKEY_STORAGE_KEY, JSON.stringify(hudEditHotkeySettings)) } catch { /* restricted webview */ }
+  }
+
+  function renderHudEditHotkey() {
+    if (!hudEditHotkeyValue || !hudEditHotkeyChange) return
+    hudEditHotkeyChange.textContent = hudEditHotkeyCapture ? 'CANCEL' : 'CHANGE'
+    hudEditHotkeyValue.textContent = hudEditHotkeyCapture
+      ? 'PRESS KEYS OR A BUTTON'
+      : driverAnalysisApi?.formatHotkey?.(hudEditHotkeySettings.hotkey, hudEditHotkeySettings.hotkeyLabel) || hudEditHotkeySettings.hotkey
+  }
+
+  async function setHudEditHotkey(hotkey, announce = true, hotkeyLabel = '') {
+    const normalized = driverAnalysisApi?.normalizeHotkey?.(hotkey)
+    if (!normalized) {
+      if (announce) setStatus('USE CTRL, ALT OR SHIFT WITH ONE KEY. WINDOWS KEY IS NOT ALLOWED.', true)
+      return false
+    }
+    if (normalized === driverAnalysisSettings.hotkey) {
+      setStatus('THAT HOTKEY IS ALREADY USED BY DRIVER ANALYSIS', true)
+      return false
+    }
+    try {
+      const registered = await call('set_hud_edit_hotkey', { hotkey: normalized })
+      writeHudEditHotkeySettings(registered, hotkeyLabel)
+      renderHudEditHotkey()
+      if (announce) {
+        const formatted = driverAnalysisApi.formatHotkey(registered, hudEditHotkeySettings.hotkeyLabel).toUpperCase()
+        setStatus(`HUD EDIT HOTKEY SET TO ${formatted}`)
+      }
+      return true
+    } catch (error) {
+      renderHudEditHotkey()
+      setStatus(error.message || 'Unable to register HUD edit hotkey', true)
+      return false
+    }
+  }
+
+  async function setHudEditHotkeyCapture(active) {
+    const wasActive = hudEditHotkeyCapture
+    hudEditHotkeyCapture = active === true
+    if (hudEditHotkeyCapture && driverAnalysisHotkeyCapture) await setDriverAnalysisHotkeyCapture(false)
+    renderHudEditHotkey()
+    if (hudEditHotkeyCapture) {
+      setStatus('PRESS A KEY COMBINATION OR A CONTROLLER BUTTON')
+      try {
+        await call('start_controller_capture')
+      } catch {
+        setStatus('CONTROLLER CAPTURE UNAVAILABLE. PRESS A KEY COMBINATION.', true)
+      }
+    } else if (wasActive) {
+      try {
+        await call('stop_controller_capture')
+      } catch {
+      }
+    }
+  }
+
+  async function listenHudEditHotkeyEvents() {
+    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+    if (!eventApi || typeof eventApi.listen !== 'function') return
+    await eventApi.listen('driver_analysis_controller_captured', async event => {
+      if (!hudEditHotkeyCapture) return
+      const binding = event?.payload?.binding
+      const deviceName = event?.payload?.deviceName || ''
+      if (!binding) return
+      await setHudEditHotkeyCapture(false)
+      await setHudEditHotkey(binding, true, deviceName)
+    })
   }
 
   async function listenDriverAnalysisEvents() {
@@ -3879,10 +3975,8 @@
 
   async function selectLayoutTarget(target) {
     if (editingTarget === target) return
-    if (editingTarget) {
-      await call('layout_action', { action: 'cancel', target: editingTarget })
-    }
 
+    // An active edit covers every enabled block, so EDIT on another row only selects it.
     try {
       await call('layout_action', { action: 'edit', target })
       editingTarget = target
@@ -4256,6 +4350,31 @@
     void setDriverAnalysisHotkeyCapture(false)
     void setDriverAnalysisHotkey(hotkey)
   })
+  hudEditHotkeyChange?.addEventListener('click', () => {
+    void setHudEditHotkeyCapture(!hudEditHotkeyCapture)
+  })
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && hudEditHotkeyCapture) void setHudEditHotkeyCapture(false)
+  })
+  document.addEventListener('keydown', event => {
+    if (!hudEditHotkeyCapture) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    if (event.key === 'Escape') {
+      void setHudEditHotkeyCapture(false)
+      setStatus('HUD EDIT HOTKEY UNCHANGED')
+      return
+    }
+    const hotkey = driverAnalysisApi?.hotkeyFromKeyboardEvent?.(event)
+    if (!hotkey) {
+      if (!['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) {
+        setStatus('USE CTRL, ALT OR SHIFT WITH ONE KEY. WINDOWS KEY IS NOT ALLOWED.', true)
+      }
+      return
+    }
+    void setHudEditHotkeyCapture(false)
+    void setHudEditHotkey(hotkey)
+  })
   garageCurrentVariantsToggle?.addEventListener('click', toggleGarageVariants)
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return
@@ -4320,11 +4439,14 @@
   renderDriverAnalysisHistory()
   void loadDriverAnalysisHistory()
   if (driverAnalysisSettings.enabled) void setDriverAnalysisHotkey(driverAnalysisSettings.hotkey, false, driverAnalysisSettings.hotkeyLabel)
+  renderHudEditHotkey()
+  void setHudEditHotkey(hudEditHotkeySettings.hotkey, false, hudEditHotkeySettings.hotkeyLabel)
   void listenShiftLightEvents()
   void listenRouteEvents()
   void listenGarageEvents()
   void listenEventRecorderEvents()
   void listenDriverAnalysisEvents()
+  void listenHudEditHotkeyEvents()
   globalScope.SettingsController = {
     cancelEdit,
     setLayoutEditingState,

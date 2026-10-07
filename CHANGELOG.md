@@ -16,6 +16,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ### Added
 
+- **HUD**: move and resize the HUD over a running Forza without pausing it.
+  Press the new edit hotkey, `Ctrl + Shift + F8` by default and changeable on
+  the HUD tab, then drag any enabled block or Delta, and press it again to
+  save. **EDIT** in Configuration opens the same edit with that block
+  selected, and **CANCEL** puts every block back.
 - **Design**: FDC has a new look, FDC Dark. Configuration gets a painted
   header with each tab's description and the Data Out status, which opens the
   connection guide when selected; drill-down pages show where you are, such as

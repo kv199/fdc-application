@@ -197,9 +197,9 @@ test('Layout editor: all SAVE buttons have layout-edit__button--primary class', 
   assert.ok(overlayHtml.includes('id="hud-save" class="layout-edit__button layout-edit__button--primary"'), 'Expected hud-save to have layout-edit__button--primary class')
 })
 
-test('Layout editor: hint texts follow the pattern DRAG <TARGET> TO MOVE · CORNER TO RESIZE · ESC CANCELS', () => {
-  const hintPattern = /DRAG\s+\w+\s+TO\s+MOVE\s+·\s+CORNER\s+TO\s+RESIZE\s+·\s+ESC\s+CANCELS/
-  assert.match(overlayHtml, hintPattern, 'Expected hint text to follow pattern with DRAG TO MOVE · CORNER TO RESIZE · ESC CANCELS')
+test('Layout editor: hint texts follow the pattern DRAG <TARGET> TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT', () => {
+  const hintPattern = /DRAG\s+\w+\s+TO\s+MOVE\s+·\s+CORNER\s+TO\s+RESIZE\s+·\s+CLICK\s+A\s+BLOCK\s+TO\s+SELECT/
+  assert.match(overlayHtml, hintPattern, 'Expected hint text to follow pattern with DRAG TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT')
 })
 
 test('Layout editor: .layout-edit__button--primary has accent colors and comes after generic hover rule', () => {

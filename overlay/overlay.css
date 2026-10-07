@@ -599,9 +599,9 @@ body {
   touch-action: none;
 }
 
-.hud-frame.is-editing .layout-resize-handle,
-.delta-strip.is-editing .layout-resize-handle,
-.hud-widget-editor-frame:not([hidden]) .layout-resize-handle {
+.hud-frame.is-editing.is-selected .layout-resize-handle,
+.delta-strip.is-editing.is-selected .layout-resize-handle,
+.hud-widget-editor-frame.is-selected:not([hidden]) .layout-resize-handle {
   display: block;
 }
 

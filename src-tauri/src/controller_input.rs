@@ -1,4 +1,4 @@
-//! Game-controller button binding for the Driver Analysis recording toggle.
+//! Game-controller button binding for the Driver Analysis recording toggle and HUD edit toggle.
 //!
 //! A dedicated thread owns a message-only window that receives Windows Raw
 //! Input from HID joysticks, gamepads, and multi-axis controllers in the
@@ -13,6 +13,12 @@ use tauri::{AppHandle, Emitter};
 
 pub const CONTROLLER_CAPTURED_EVENT: &str = "driver_analysis_controller_captured";
 const MAX_BUTTON: u16 = 1024;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HotkeyAction {
+    DriverAnalysis,
+    HudEdit,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ControllerBinding {
@@ -127,32 +133,37 @@ impl ButtonTracker {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EdgeAction {
     Capture,
-    Trigger,
+    Trigger(HotkeyAction),
     Ignore,
 }
 
 pub fn edge_action(
     capturing: bool,
-    binding: Option<ControllerBinding>,
+    driver_analysis: Option<ControllerBinding>,
+    hud_edit: Option<ControllerBinding>,
     pressed: ControllerBinding,
 ) -> EdgeAction {
     if capturing {
         EdgeAction::Capture
-    } else if binding == Some(pressed) {
-        EdgeAction::Trigger
+    } else if driver_analysis == Some(pressed) {
+        EdgeAction::Trigger(HotkeyAction::DriverAnalysis)
+    } else if hud_edit == Some(pressed) {
+        EdgeAction::Trigger(HotkeyAction::HudEdit)
     } else {
         EdgeAction::Ignore
     }
 }
 
 struct SharedState {
-    binding: Option<ControllerBinding>,
+    driver_analysis: Option<ControllerBinding>,
+    hud_edit: Option<ControllerBinding>,
     capturing: bool,
     app: Option<AppHandle>,
 }
 
 static SHARED: Mutex<SharedState> = Mutex::new(SharedState {
-    binding: None,
+    driver_analysis: None,
+    hud_edit: None,
     capturing: false,
     app: None,
 });
@@ -172,14 +183,25 @@ fn with_shared<T>(update: impl FnOnce(&mut SharedState) -> T) -> Result<T, Strin
     Ok(update(&mut shared))
 }
 
-pub fn set_active_binding(binding: Option<ControllerBinding>) -> Result<(), String> {
-    with_shared(|shared| shared.binding = binding)
+pub fn set_active_binding(
+    action: HotkeyAction,
+    binding: Option<ControllerBinding>,
+) -> Result<(), String> {
+    with_shared(|shared| match action {
+        HotkeyAction::DriverAnalysis => shared.driver_analysis = binding,
+        HotkeyAction::HudEdit => shared.hud_edit = binding,
+    })
 }
 
 /// Handles one press edge from the listener thread.
 fn handle_press(pressed: ControllerBinding, device_name: &str) {
     let Ok((action, app)) = with_shared(|shared| {
-        let action = edge_action(shared.capturing, shared.binding, pressed);
+        let action = edge_action(
+            shared.capturing,
+            shared.driver_analysis,
+            shared.hud_edit,
+            pressed,
+        );
         if action == EdgeAction::Capture {
             shared.capturing = false;
         }
@@ -200,8 +222,11 @@ fn handle_press(pressed: ControllerBinding, device_name: &str) {
                 },
             );
         }
-        EdgeAction::Trigger => {
+        EdgeAction::Trigger(HotkeyAction::DriverAnalysis) => {
             let _ = app.emit(crate::DRIVER_ANALYSIS_HOTKEY_EVENT, ());
+        }
+        EdgeAction::Trigger(HotkeyAction::HudEdit) => {
+            crate::trigger_hud_edit_hotkey(&app);
         }
         EdgeAction::Ignore => {}
     }
@@ -689,10 +714,43 @@ mod tests {
     #[test]
     fn edges_capture_trigger_or_ignore() {
         let other = ControllerBinding { button: 5, ..MOZA };
-        assert_eq!(edge_action(true, Some(MOZA), other), EdgeAction::Capture);
-        assert_eq!(edge_action(true, Some(MOZA), MOZA), EdgeAction::Capture);
-        assert_eq!(edge_action(false, Some(MOZA), MOZA), EdgeAction::Trigger);
-        assert_eq!(edge_action(false, Some(MOZA), other), EdgeAction::Ignore);
-        assert_eq!(edge_action(false, None, MOZA), EdgeAction::Ignore);
+        assert_eq!(
+            edge_action(true, Some(MOZA), None, other),
+            EdgeAction::Capture
+        );
+        assert_eq!(
+            edge_action(true, Some(MOZA), None, MOZA),
+            EdgeAction::Capture
+        );
+        assert_eq!(
+            edge_action(false, Some(MOZA), None, MOZA),
+            EdgeAction::Trigger(HotkeyAction::DriverAnalysis)
+        );
+        assert_eq!(
+            edge_action(false, Some(MOZA), None, other),
+            EdgeAction::Ignore
+        );
+        assert_eq!(edge_action(false, None, None, MOZA), EdgeAction::Ignore);
+    }
+
+    #[test]
+    fn edges_trigger_hud_edit_when_bound() {
+        let other = ControllerBinding { button: 5, ..MOZA };
+        assert_eq!(
+            edge_action(false, None, Some(MOZA), MOZA),
+            EdgeAction::Trigger(HotkeyAction::HudEdit)
+        );
+        assert_eq!(
+            edge_action(false, None, Some(MOZA), other),
+            EdgeAction::Ignore
+        );
+    }
+
+    #[test]
+    fn edges_driver_analysis_takes_precedence_over_hud_edit() {
+        assert_eq!(
+            edge_action(false, Some(MOZA), Some(MOZA), MOZA),
+            EdgeAction::Trigger(HotkeyAction::DriverAnalysis)
+        );
     }
 }

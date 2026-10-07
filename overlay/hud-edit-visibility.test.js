@@ -22,7 +22,7 @@ function visibilityInput(overrides = {}) {
   return {
     telemetryVisible: true,
     mode: 'grouped',
-    editingTarget: null,
+    editingTargets: [],
     deltaReferenceActive: true,
     ...overrides,
     state: { ...Object.fromEntries(COMPONENTS.map(name => [name, true])), ...overrides.state },
@@ -61,7 +61,7 @@ test('resolveHudVisibility keeps the base visibility rules without an edit', () 
 test('an edited target and its containers stay visible under every hiding condition', () => {
   for (const [mode, target] of EDIT_CASES) {
     for (const [condition, overrides] of Object.entries(HIDING_CONDITIONS)) {
-      const visibility = resolveHudVisibility(visibilityInput({ ...overrides(target), mode, editingTarget: target }))
+      const visibility = resolveHudVisibility(visibilityInput({ ...overrides(target), mode, editingTargets: [target] }))
       assert.deepEqual(
         editChain(visibility, target).filter(Boolean),
         [],
@@ -74,9 +74,9 @@ test('an edited target and its containers stay visible under every hiding condit
 test('edit targets that do not belong to the current mode change nothing', () => {
   const base = visibilityInput({ telemetryVisible: false })
   const expected = resolveHudVisibility(base)
-  assert.deepEqual(resolveHudVisibility({ ...base, mode: 'freeform', editingTarget: 'hud' }), resolveHudVisibility({ ...base, mode: 'freeform' }))
+  assert.deepEqual(resolveHudVisibility({ ...base, mode: 'freeform', editingTargets: ['hud'] }), resolveHudVisibility({ ...base, mode: 'freeform' }))
   for (const name of COMPONENTS) {
-    assert.deepEqual(resolveHudVisibility({ ...base, editingTarget: name }), expected, `grouped ${name}`)
+    assert.deepEqual(resolveHudVisibility({ ...base, editingTargets: [name] }), expected, `grouped ${name}`)
   }
 })
 
@@ -235,9 +235,70 @@ test('delta switch off hides it even with a reference', () => {
 })
 
 test('editing delta shows it without a reference', () => {
-  const editingNormal = resolveHudVisibility(visibilityInput({ deltaReferenceActive: false, editingTarget: 'delta' }))
+  const editingNormal = resolveHudVisibility(visibilityInput({ deltaReferenceActive: false, editingTargets: ['delta'] }))
   assert.equal(editingNormal.delta, false)
 
-  const editingWithoutTelemetry = resolveHudVisibility(visibilityInput({ telemetryVisible: false, deltaReferenceActive: false, editingTarget: 'delta' }))
+  const editingWithoutTelemetry = resolveHudVisibility(visibilityInput({ telemetryVisible: false, deltaReferenceActive: false, editingTargets: ['delta'] }))
   assert.equal(editingWithoutTelemetry.delta, false)
+})
+
+test('multiple edit targets show all their sections and containers', () => {
+  const visibility = resolveHudVisibility(visibilityInput({ telemetryVisible: false, mode: 'freeform', state: { tires: true, pedals: false, steering: false, gear: true, engine: true, history: false }, editingTargets: ['tires', 'gear', 'delta'] }))
+  assert.equal(visibility.delta, false, 'delta visible')
+  assert.equal(visibility.sections.tires, false, 'tires visible despite no telemetry')
+  assert.equal(visibility.sections.gear, false, 'gear visible despite no telemetry')
+  assert.equal(visibility.sections.steering, true, 'steering hidden by its switch')
+  assert.equal(visibility.sections.pedals, true, 'pedals hidden by its switch')
+  assert.equal(visibility.sections.engine, false, 'engine visible by its switch')
+  assert.equal(visibility.sections.history, true, 'history hidden by its switch')
+  assert.equal(visibility.hud, false, 'hud visible because a target is being edited')
+  assert.equal(visibility.hudFrame, false, 'hudFrame visible because a target is being edited')
+})
+
+test('the edit hotkey edits every enabled target at once and saves on the second press', () => {
+  withOverlayRuntime(({ element, counters }) => {
+    HudLayout.setMode('freeform')
+    HudPreferences.setVisibility('tires', false)
+    HudPreferences.setTelemetryVisible(false)
+
+    assert.equal(HudLayout.toggleEditSession(), 'started')
+    assert.deepEqual(HudLayout.getEditingTargets(), ['pedals', 'steering', 'gear', 'engine', 'history', 'delta'])
+    assert.equal(HudLayout.getEditingTarget(), 'pedals')
+    assert.equal(element('hud-tires').hidden, true, 'a switched-off block stays out of the edit')
+    assert.equal(element('hud-gear').hidden, false)
+    assert.equal(element('delta-strip').hidden, false, 'Delta is editable without an Event')
+
+    // EDIT in Configuration selects within the running edit instead of restarting it.
+    HudLayout.enterEditMode('gear')
+    assert.equal(HudLayout.getEditingTarget(), 'gear')
+    assert.equal(HudLayout.getEditingTargets().length, 6)
+
+    assert.equal(HudLayout.toggleEditSession(), 'saved')
+    assert.deepEqual(HudLayout.getEditingTargets(), [])
+    assert.equal(element('hud-frame').hidden, true, 'non-live telemetry hides the HUD again')
+    assert.ok(counters.storageWrites > 0)
+  })
+})
+
+test('cancel restores every target and a reset inside the edit is not saved early', () => {
+  withOverlayRuntime(({ counters }) => {
+    HudLayout.setMode('grouped')
+    const before = HudLayout.getPosition('hud')
+    HudLayout.toggleEditSession()
+    const writes = counters.storageWrites
+    HudLayout.resetPosition('hud')
+    assert.equal(counters.storageWrites, writes)
+    HudLayout.cancelEditMode()
+    assert.deepEqual(HudLayout.getPosition('hud'), before)
+  })
+})
+
+test('the edit hotkey does nothing when every target is switched off', () => {
+  withOverlayRuntime(() => {
+    HudLayout.setMode('grouped')
+    HudPreferences.setOverlayVisibility('hud', false)
+    HudPreferences.setOverlayVisibility('delta', false)
+    assert.equal(HudLayout.toggleEditSession(), 'unavailable')
+    assert.deepEqual(HudLayout.getEditingTargets(), [])
+  })
 })

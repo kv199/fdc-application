@@ -124,7 +124,8 @@ device via Windows Raw Input in the background. Only button press edges count;
 buttons already held (such as engaged gear shifter buttons) are ignored. The game
 also receives the button press. Controller binding format: `Controller:VVVV:PPPP:N`
 where VVVV and PPPP are 4-digit hex vendor and product IDs, and N is the decimal
-button number 1–1024. Example: `Controller:346E:0006:116`.
+button number 1–1024. Example: `Controller:346E:0006:116`. The record hotkey
+cannot be the same as the HUD edit hotkey; see [HUD](hud.md#layout).
 
 ## Opportunity and evidence model
 

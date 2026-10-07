@@ -3501,6 +3501,16 @@ h1 {
   margin-bottom: 12px;
 }
 
+.hud-edit-hotkey-card .shift-light-brightness-card__heading {
+  margin-bottom: 0;
+}
+
+.hud-edit-hotkey-card .shift-light-brightness-card__heading output {
+  min-width: 136px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
 .hud-display-card__description {
   margin: 4px 0 0;
   color: var(--text-muted);

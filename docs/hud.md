@@ -13,7 +13,10 @@ has no other data source.
 - During normal driving the whole window is click-through, so mouse input
   reaches the game.
 - Only an active layout edit makes the window accept pointer input; Save,
-  Cancel, or Escape restores click-through.
+  Cancel, or Escape restores click-through. Because the window still never
+  takes focus, a layout edit started with the edit hotkey leaves Forza in
+  focus: the game does not pause, and the keyboard and controllers keep
+  driving the car.
 - The FDC tray icon offers **Configuration** and **Quit**. The X button of the
   Configuration window also quits FDC, which closes the HUD; minimizing the
   window keeps the HUD running.
@@ -84,18 +87,41 @@ modes. The visible blocks are listed as checkboxes in Grouped mode.
 | --- | --- |
 | ![Grouped layout settings](images/configuration-hud-grouped.png) | ![Freeform layout settings](images/configuration-hud-freeform.png) |
 
-**EDIT** starts an on-screen edit of the selected target:
+A layout edit covers every enabled target at once: in Grouped, the HUD panel
+and Delta; in Freeform, each block whose visibility switch is on and Delta.
+The HUD Layout and Delta switches leave their targets out. Two ways start it:
 
-- the edited target stays visible for the whole edit, even when **Show HUD
-  with telemetry** or a visibility switch would otherwise hide it;
-- the edit toolbar displays `DRAG <TARGET> TO MOVE · CORNER TO RESIZE · ESC
-  CANCELS`;
-- drag the target to move it;
-- drag a corner to resize it between 0.5× and 2× of its default size;
-- **SAVE** (filled with lime at rest) keeps the change; **CANCEL** (neutral
-  dark, fills lime on hover) or Escape restores the previous position; **RESET**
-  (caution text and border, fills caution on hover) returns the target to its
-  default placement and sits apart with extra space.
+- the **EDIT HOTKEY** on the HUD tab, `Ctrl + Shift + F8` by default, pressed
+  while Forza is in focus. Pressing it again saves the edit. With every target
+  switched off, the hotkey does nothing;
+- **EDIT** on a row in Configuration, which starts the same edit with that
+  target selected, or selects it when an edit is already running. A target
+  whose switch is off joins the edit when its **EDIT** is pressed.
+
+During the edit:
+
+- every target in the edit stays visible, even when **Show HUD with
+  telemetry** would otherwise hide it, and Delta shows without an Event;
+- clicking or dragging a target selects it; the selected target shows the
+  edit toolbar with `DRAG <TARGET> TO MOVE · CORNER TO RESIZE · CLICK A BLOCK
+  TO SELECT` and its corner handles;
+- drag any target to move it;
+- drag a corner of the selected target to resize it between 0.5× and 2× of
+  its default size;
+- **SAVE** (filled with lime at rest) keeps every change; **CANCEL** (neutral
+  dark, fills lime on hover) or Escape restores every target to its position
+  at the start of the edit; **RESET** (caution text and border, fills caution
+  on hover) returns the selected target to its default placement until the
+  edit is saved or cancelled, and sits apart with extra space.
+
+While Forza has focus, Escape reaches the game and opens its pause menu, so
+use **CANCEL** to discard an edit started with the hotkey.
+
+The edit hotkey is chosen like the Driver Analysis record hotkey: **CHANGE**,
+then a key combination with Ctrl, Alt, or Shift, or a controller button. Esc
+keeps the current hotkey. Windows-key combinations are not allowed, and the
+edit hotkey cannot be the same as the Driver Analysis hotkey. The choice is
+stored in the local application webview storage.
 
 By default the telemetry HUD sits centered near the bottom of the screen with
 Delta directly above it. Positions are stored relative to the screen size, so

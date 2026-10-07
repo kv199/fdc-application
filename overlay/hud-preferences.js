@@ -47,8 +47,20 @@
     }
   }
 
+  function resolveEditableTargets({ state, overlayState, mode }) {
+    const targets = []
+    const hudOn = overlayState.hud !== false && COMPONENTS.some(name => state[name] !== false)
+    if (mode === 'grouped') {
+      if (hudOn) targets.push('hud')
+    } else {
+      if (hudOn) targets.push(...COMPONENTS.filter(name => state[name] !== false))
+    }
+    if (overlayState.delta !== false) targets.push('delta')
+    return targets
+  }
+
   function resolveHudVisibility(input) {
-    const { state, overlayState, telemetryVisible, mode, editingTarget, deltaReferenceActive } = input
+    const { state, overlayState, telemetryVisible, mode, editingTargets, deltaReferenceActive } = input
     const sections = {}
     for (const name of COMPONENTS) {
       sections[name] = state[name] === false
@@ -58,16 +70,19 @@
     let hudFrame = !telemetryVisible || overlayState.hud === false || !hasVisibleContent
     let delta = !telemetryVisible || overlayState.delta === false || deltaReferenceActive !== true
 
-    // A layout edit keeps its target and the target's containers visible,
+    // A layout edit keeps its targets and the targets' containers visible,
     // whatever telemetry or the visibility switches would otherwise hide.
-    if (editingTarget === 'delta') {
-      delta = false
-    } else if (editingTarget === 'hud' && mode === 'grouped') {
-      hudFrame = false
-    } else if (COMPONENTS.includes(editingTarget) && mode === 'freeform') {
-      sections[editingTarget] = false
-      hud = false
-      hudFrame = false
+    const edits = editingTargets || []
+    for (const target of edits) {
+      if (target === 'delta') {
+        delta = false
+      } else if (target === 'hud' && mode === 'grouped') {
+        hudFrame = false
+      } else if (COMPONENTS.includes(target) && mode === 'freeform') {
+        sections[target] = false
+        hud = false
+        hudFrame = false
+      }
     }
 
     return { hud, hudFrame, delta, sections }
@@ -116,7 +131,7 @@
         telemetryVisible,
         deltaReferenceActive,
         mode: globalScope.HudLayout?.getMode?.() || 'grouped',
-        editingTarget: globalScope.HudLayout?.getEditingTarget?.() ?? null
+        editingTargets: globalScope.HudLayout?.getEditingTargets?.() ?? []
       })
 
       for (const name of COMPONENTS) sections[name].hidden = visibility.sections[name]
@@ -179,6 +194,11 @@
         apply(state)
         globalScope.HudOverlay?.refresh?.()
       },
+      getEditableTargets: () => resolveEditableTargets({
+        state,
+        overlayState,
+        mode: globalScope.HudLayout?.getMode?.() || 'grouped'
+      }),
       apply
     }
     applyOverlayVisibility()
@@ -192,6 +212,7 @@
     overlayComponents: OVERLAY_COMPONENTS,
     defaultOverlayState: () => ({ ...DEFAULT_OVERLAY_STATE }),
     readOverlayState,
+    resolveEditableTargets,
     resolveHudVisibility
   }
 

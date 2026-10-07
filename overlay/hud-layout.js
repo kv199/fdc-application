@@ -139,7 +139,7 @@
       const root = document.createElement('div')
       root.className = 'layout-edit-tools'
       root.hidden = true
-      root.innerHTML = `<span class="layout-edit__hint">DRAG ${name.toUpperCase()} TO MOVE · CORNER TO RESIZE · ESC CANCELS</span><button class="layout-edit__button layout-edit__button--reset" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
+      root.innerHTML = `<span class="layout-edit__hint">DRAG ${name.toUpperCase()} TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT</span><button class="layout-edit__button layout-edit__button--reset" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
       const editorFrame = FREEFORM_TARGETS.includes(name) ? document.createElement('div') : null
       const editorSurface = editorFrame || elements[name]
       if (editorFrame) {
@@ -167,8 +167,10 @@
     const stored = readStoredLayout()
     let mode = stored.mode
     const positions = { shared: stored.shared, grouped: stored.grouped, freeform: stored.freeform }
-    let editingTarget = null
-    let editingSnapshot = null
+    let sessionTargets = []
+    let selectedTarget = null
+    let sessionSnapshot = null
+    let dragTarget = null
     let dragging = false
     let dragOffsetX = 0
     let dragOffsetY = 0
@@ -392,21 +394,27 @@
     }
 
     function finishEdit() {
-      if (!editingTarget) return
-      const name = editingTarget
+      if (!sessionTargets.length) return
+      const previousSelected = selectedTarget
       dragging = false
       resizing = false
       resizeHandle = null
       resizeSnapshot = null
-      elements[name].classList.remove('is-editing')
-      setToolsVisible(name, false)
+      for (const name of sessionTargets) {
+        elements[name].classList.remove('is-editing', 'is-selected')
+        const targetTools = tools[name]
+        if (targetTools?.editorFrame) targetTools.editorFrame.classList.remove('is-selected')
+        setToolsVisible(name, false)
+        elements[name].setAttribute('aria-grabbed', 'false')
+      }
       document.body.classList.remove('is-editing')
       document.body.removeAttribute('data-editing-target')
-      editingTarget = null
-      editingSnapshot = null
-      elements[name].setAttribute('aria-grabbed', 'false')
+      dragTarget = null
+      sessionTargets = []
+      selectedTarget = null
+      sessionSnapshot = null
       setNativeInteraction(false)
-      notifySettingsEditingState(name, false)
+      if (previousSelected) notifySettingsEditingState(previousSelected, false)
       applyVisibility()
     }
 
@@ -416,52 +424,108 @@
       return Promise.resolve(invoke('notify_layout_state', { target: name, editing })).catch(() => {})
     }
 
+    function copyPositions() {
+      const copyMap = map => Object.fromEntries(Object.entries(map).map(([name, position]) => [name, { ...position }]))
+      return { shared: copyMap(positions.shared), grouped: copyMap(positions.grouped), freeform: copyMap(positions.freeform) }
+    }
+
+    function startSession(targets, selected) {
+      if (sessionTargets.length || !targets.length) return
+      sessionSnapshot = copyPositions()
+      sessionTargets = targets
+      for (const name of targets) {
+        elements[name].classList.add('is-editing')
+        const targetTools = tools[name]
+        if (targetTools?.editorFrame) targetTools.editorFrame.hidden = false
+      }
+      document.body.classList.add('is-editing')
+      setNativeInteraction(true)
+      // Targets hidden by telemetry become visible first, so the selection measures real rects.
+      applyVisibility()
+      selectTarget(selected)
+      refreshLayout()
+    }
+
+    function selectTarget(name) {
+      if (!sessionTargets.includes(name)) return
+      if (selectedTarget === name) return
+      if (selectedTarget) {
+        elements[selectedTarget].classList.remove('is-selected')
+        const targetTools = tools[selectedTarget]
+        if (targetTools?.editorFrame) targetTools.editorFrame.classList.remove('is-selected')
+        setToolsVisible(selectedTarget, false)
+      }
+      selectedTarget = name
+      elements[name].classList.add('is-selected')
+      const targetTools = tools[name]
+      if (targetTools?.editorFrame) targetTools.editorFrame.classList.add('is-selected')
+      document.body.dataset.editingTarget = name
+      setToolsVisible(name, true)
+      notifySettingsEditingState(name, true)
+      syncEditorFrame(name)
+      const rect = elements[name].getBoundingClientRect()
+      syncEditorToolbar(name, rect)
+    }
+
+    function editableTargets() {
+      return globalScope.HudPreferences?.getEditableTargets?.() ||
+        (mode === 'grouped' ? ['hud', 'delta'] : [...FREEFORM_TARGETS, 'delta'])
+    }
+
     function enterEditMode(name = 'hud') {
       const unavailableGroupedTarget = name === 'hud' && mode !== 'grouped'
       const unavailableFreeformTarget = FREEFORM_TARGETS.includes(name) && mode !== 'freeform'
       if (!TARGET_NAMES.includes(name) || unavailableGroupedTarget || unavailableFreeformTarget) return
-      if (editingTarget === name) return
-      if (editingTarget) cancelEditMode()
-      editingTarget = name
-      applyVisibility()
-      ensurePosition(name)
-      editingSnapshot = { ...positionMap(name)[name] }
-      elements[name].classList.add('is-editing')
-      elements[name].setAttribute('aria-grabbed', 'false')
-      setToolsVisible(name, true)
-      document.body.classList.add('is-editing')
-      document.body.dataset.editingTarget = name
-      setNativeInteraction(true)
-      notifySettingsEditingState(name, true)
-      refreshLayout()
+      if (!sessionTargets.length) {
+        const targets = editableTargets()
+        if (!targets.includes(name)) targets.push(name)
+        startSession(targets, name)
+      } else {
+        if (!sessionTargets.includes(name)) {
+          sessionTargets.push(name)
+          elements[name].classList.add('is-editing')
+          const targetTools = tools[name]
+          if (targetTools?.editorFrame) targetTools.editorFrame.hidden = false
+          applyVisibility()
+        }
+        selectTarget(name)
+      }
     }
 
     function savePosition() {
-      if (!editingTarget) return
+      if (!sessionTargets.length) return
       persist()
       finishEdit()
     }
 
     function cancelEditMode() {
-      if (!editingTarget) return
-      const name = editingTarget
-      const map = positionMap(name)
-      if (editingSnapshot) map[name] = { ...editingSnapshot }
-      else delete map[name]
+      if (!sessionTargets.length) return
+      if (sessionSnapshot) Object.assign(positions, sessionSnapshot)
       finishEdit()
+      refreshLayout()
     }
 
-    function resetPosition(name = editingTarget || 'hud') {
+    function resetPosition(name = selectedTarget || 'hud') {
       if (!TARGET_NAMES.includes(name)) return
       delete positionMap(name)[name]
-      persist()
+      if (!sessionTargets.includes(name)) persist()
       refreshLayout()
-      if (editingTarget === name) editingSnapshot = null
+    }
+
+    function toggleEditSession() {
+      if (sessionTargets.length) {
+        savePosition()
+        return 'saved'
+      }
+      const targets = editableTargets()
+      if (!targets.length) return 'unavailable'
+      startSession(targets, targets[0])
+      return 'started'
     }
 
     function resetLayout(targetMode = mode) {
       if (!MODES.includes(targetMode)) return
-      if (editingTarget) cancelEditMode()
+      if (sessionTargets.length) cancelEditMode()
       if (targetMode === 'grouped') positions.grouped = {}
       else positions.freeform = {}
       persist()
@@ -469,7 +533,7 @@
     }
     function setMode(nextMode) {
       if (!MODES.includes(nextMode) || nextMode === mode) return mode
-      if (editingTarget) cancelEditMode()
+      if (sessionTargets.length) cancelEditMode()
       mode = nextMode
       storageSet(MODE_STORAGE_KEY, mode)
       persist()
@@ -480,19 +544,21 @@
     }
 
     function startDrag(name, event) {
-      if (editingTarget !== name || event.button !== 0 || event.target.closest('button, .layout-edit-tools')) return
+      if (!sessionTargets.includes(name) || event.button !== 0 || event.target.closest('button, .layout-edit-tools')) return
+      if (selectedTarget !== name) selectTarget(name)
       const rect = elements[name].getBoundingClientRect()
       dragOffsetX = event.clientX - rect.left
       dragOffsetY = event.clientY - rect.top
       dragging = true
+      dragTarget = name
       elements[name].setAttribute('aria-grabbed', 'true')
       elements[name].setPointerCapture?.(event.pointerId)
       event.preventDefault()
     }
 
     function updateFromPointer(clientX, clientY) {
-      if (!editingTarget) return
-      const name = editingTarget
+      if (!dragTarget) return
+      const name = dragTarget
       const element = elements[name]
       const viewport = getViewport()
       const size = getElementSize(element, getFallbackSize(name, viewport))
@@ -507,15 +573,16 @@
     }
 
     function finishDrag(event) {
-      if (!dragging || !editingTarget) return
+      if (!dragging || !dragTarget) return
       dragging = false
-      elements[editingTarget].setAttribute('aria-grabbed', 'false')
-      elements[editingTarget].releasePointerCapture?.(event.pointerId)
+      elements[dragTarget].setAttribute('aria-grabbed', 'false')
+      elements[dragTarget].releasePointerCapture?.(event.pointerId)
+      dragTarget = null
     }
 
     function startWidgetResize(event) {
       const name = event.currentTarget.dataset.layoutResizeTarget
-      if (editingTarget !== name || event.button !== 0) return
+      if (selectedTarget !== name || event.button !== 0) return
       resizeHandle = event.currentTarget.dataset.layoutResizeHandle
       const rect = elements[name].getBoundingClientRect()
       const factor = getWidgetScaleFactor(name)
@@ -590,6 +657,7 @@
       element.addEventListener('pointerup', finishDrag)
       element.addEventListener('pointercancel', () => {
         dragging = false
+        dragTarget = null
         resizing = false
         element.setAttribute('aria-grabbed', 'false')
       })
@@ -606,7 +674,7 @@
 
     window.addEventListener('resize', refreshLayout)
     window.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && editingTarget) {
+      if (event.key === 'Escape' && sessionTargets.length) {
         event.preventDefault()
         cancelEditMode()
       }
@@ -621,8 +689,10 @@
       resetLayout,
       setMode,
       getMode: () => mode,
-      getEditingTarget: () => editingTarget,
-      isEditing: name => editingTarget === name,
+      getEditingTarget: () => selectedTarget,
+      getEditingTargets: () => [...sessionTargets],
+      isEditing: name => sessionTargets.includes(name),
+      toggleEditSession,
       refreshPosition: refreshLayout,
       refreshLayout,
       getPosition: name => ({ ...(positionMap(name)[name] || ensurePosition(name)) })
