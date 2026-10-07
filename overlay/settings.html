@@ -104,21 +104,23 @@
           </div>
         </section>
         <section class="layout-section" aria-labelledby="hud-layout-edit-title" data-layout-edit-row>
-          <h3 id="hud-layout-edit-title" class="layout-section__title">LAYOUT</h3>
+          <div class="layout-section__header">
+            <h3 id="hud-layout-edit-title" class="layout-section__title">LAYOUT</h3>
+            <button id="hud-layout-reset" class="settings-button settings-button--caution" type="button">RESET LAYOUT</button>
+          </div>
           <div class="layout-edit">
             <button id="hud-layout-edit" class="settings-button settings-button--ready" type="button">EDIT LAYOUT</button>
             <button id="hud-layout-cancel" class="settings-button" type="button" hidden>CANCEL</button>
             <button id="hud-layout-save" class="settings-button settings-button--ready" type="button" hidden>SAVE</button>
             <div class="layout-edit__hotkey">
-              <span id="hud-edit-hotkey-label">IN FORZA</span>
-              <output id="hud-edit-hotkey-value" aria-live="polite" aria-labelledby="hud-edit-hotkey-label">Ctrl + Shift + F8</output>
-              <button id="hud-edit-hotkey-change" class="settings-button" type="button" aria-label="Change the HUD edit hotkey">CHANGE</button>
+              <span id="hud-edit-hotkey-label">or in Forza</span>
+              <output id="hud-edit-hotkey-value" class="hotkey-keys" aria-live="polite" aria-labelledby="hud-edit-hotkey-label">Ctrl + Shift + F8</output>
+              <button id="hud-edit-hotkey-change" class="layout-edit__change" type="button" aria-label="Change the HUD edit hotkey">CHANGE</button>
             </div>
-            <button id="hud-layout-reset" class="settings-button settings-button--caution" type="button">RESET LAYOUT</button>
           </div>
         </section>
         <section class="layout-section layout-section--widgets" aria-labelledby="hud-widgets-title">
-          <div class="widget-list__header">
+          <div class="layout-section__header">
             <h3 id="hud-widgets-title" class="layout-section__title">WIDGETS</h3>
             <div class="widget-list__all">
               <span>ALL</span>

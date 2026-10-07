@@ -200,8 +200,10 @@ The application header is the only textured surface: it shows
   HUD DISPLAY and HUD OPACITY card titles: ARRANGEMENT, a segmented choice of
   GROUPED (moves the HUD as one block) or FREEFORM (moves and resizes each
   block individually) whose selected option keeps a lime fill; LAYOUT, with
-  EDIT LAYOUT, the edit hotkey, and RESET LAYOUT (caution) apart at the end;
-  and WIDGETS, compact name-and-switch rows with ALL in the header.
+  RESET LAYOUT (caution) in its header, then EDIT LAYOUT, the edit hotkey as
+  `.hotkey-key` keycaps on `--surface-deep`, and a quiet text CHANGE; and
+  WIDGETS, compact name-and-switch rows with ALL in the header. Section
+  controls in a header sit on the right, aligned with the switches below.
 - The layout editor shows an edit toolbar on the selected target with the
   hint text `DRAG <TARGET> TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO
   SELECT`, then GRID ON (filled with lime) or GRID OFF (neutral), RESET

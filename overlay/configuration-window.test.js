@@ -767,7 +767,10 @@ test('the HUD tab offers an edit hotkey in the layout edit row that is registere
   const start = settingsHtml.indexOf('data-settings-panel="hud"')
   const hudPanel = settingsHtml.slice(start, settingsHtml.indexOf('data-settings-panel="', start + 1))
   assert.match(hudPanel, /data-layout-edit-row[\s\S]*id="hud-edit-hotkey-value"[^>]*>Ctrl \+ Shift \+ F8<\/output>/)
-  assert.match(hudPanel, /id="hud-edit-hotkey-change" class="settings-button"/)
+  assert.match(hudPanel, /id="hud-edit-hotkey-change" class="layout-edit__change"/)
+  // RESET LAYOUT sits in the LAYOUT header, apart from EDIT LAYOUT; the hotkey shows as keycaps.
+  assert.match(hudPanel, /<div class="layout-section__header">\s*<h3 id="hud-layout-edit-title"[^>]*>LAYOUT<\/h3>\s*<button id="hud-layout-reset"/)
+  assert.match(settingsJs, /cap\.className = 'hotkey-key'/)
   assert.doesNotMatch(hudPanel, /id="hud-edit-hotkey-title">EDIT HOTKEY/)
   assert.match(settingsJs, /const DEFAULT_HUD_EDIT_HOTKEY = 'Ctrl\+Shift\+F8'/)
   assert.match(settingsJs, /const HUD_EDIT_HOTKEY_STORAGE_KEY = 'fdc\.hud-edit-hotkey\.v1'/)

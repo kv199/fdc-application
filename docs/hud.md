@@ -86,15 +86,17 @@ sections, the same in both arrangements:
    places and sizes every block independently. Delta is positioned
    independently in both arrangements, and each arrangement keeps its own
    saved positions.
-2. **LAYOUT**: **EDIT LAYOUT** (the lime next step), then `IN FORZA` with the
-   edit hotkey and **CHANGE**, and **RESET LAYOUT** apart at the right end.
+2. **LAYOUT**: **RESET LAYOUT** in the section header on the right, as RESET
+   sits on the HUD OPACITY card; below it **EDIT LAYOUT** (the lime next
+   step), then "or in Forza" with the edit hotkey shown as keycaps, such as
+   `[Ctrl] + [Shift] + [8]`, and a quiet underlined **CHANGE**.
 3. **WIDGETS**: one compact row per widget with its name and a switch (Tires,
    Throttle & Brake, Steering, Gear / Speed / RPM, Engine / Boost, Input
    Graph, Delta), and **ALL** in the section header. Clicking anywhere on a
    row toggles its widget. **ALL** is on only while every widget is on.
 
 Below 560 px of window width the arrangement choice moves under its
-description, and RESET LAYOUT wraps to its own line.
+description, and the hotkey wraps under EDIT LAYOUT.
 
 A layout edit covers every enabled target at once: in Grouped, the HUD panel
 and Delta; in Freeform, each block whose switch is on and Delta. A switched-off
