@@ -246,12 +246,13 @@ because totals across different cars say little.
 The action column on the right holds `DETAILS`, `EXPORT`, and `DELETE`, top
 to bottom; `DETAILS` is shown once every car of the recording is finished.
 `DETAILS` opens the recording page, and the history is replaced by pages like
-the Events tab, with the same tables and metrics: each page has `BACK`, and
-Escape also goes up one level. The recording page shows the date, duration,
-car and drive counts, storage size, and the `CARS` table with each car, its
-PI, drivetrain, drive count, duration, and headline; selecting a row opens the
-car page. A recording with a single car opens its car page directly, and
-`BACK` from it returns to the history.
+the Events tab, with the same tables and metrics: each page has a compact
+header with a back link to the parent page and the page name at
+`--type-detail-title`, and Escape also goes up one level. The recording page
+shows the date, duration, car and drive counts, storage size, and the `CARS`
+table with each car, its PI, drivetrain, drive count, duration, and headline;
+selecting a row opens the car page. A recording with a single car opens its
+car page directly, and the back button returns to history.
 
 The car page shows the car's name with its PI, drivetrain, drive count,
 duration, and date, then its headline as the `RESULT` metric with the text

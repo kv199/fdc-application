@@ -27,8 +27,8 @@ opens with a short intro.
   name returns the display to the numeric ordinal.
 - **Saved cars** is a responsive grid with one card per car ordinal. Its heading
   shows the saved count. The most recently observed car is first and carries a
-  `LAST USED` badge in its upper-right corner. Every saved card is as tall as
-  its image placeholder and is not editable.
+  `LAST USED` badge in its upper-right corner. Each card displays the car's name,
+  class, performance index, and drivetrain.
 - Class and performance index are displayed as the paired Forza-style badge:
   D is light blue, C yellow, B orange, A red, S1 purple, S2 dark blue, R pink,
   and X bright green. The class color also marks the left edge of a saved card.

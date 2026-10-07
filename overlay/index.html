@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>FDC · HUD</title>
+  <link rel="preload" href="assets/fonts/BarlowCondensed-Medium.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/fonts/BarlowCondensed-SemiBold.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/fonts/Barlow-SemiBold.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="overlay.css">
 </head>
@@ -20,8 +23,8 @@
         <div id="delta-fill" class="delta-strip__fill" data-delta-fill aria-hidden="true"></div>
       </div>
       <div id="delta-edit-tools" class="layout-edit-tools" hidden>
-        <span class="layout-edit__hint">DRAG DELTA OR A CORNER TO RESIZE</span>
-        <button id="delta-reset" class="layout-edit__button" type="button">RESET</button>
+        <span class="layout-edit__hint">DRAG DELTA TO MOVE · CORNER TO RESIZE · ESC CANCELS</span>
+        <button id="delta-reset" class="layout-edit__button layout-edit__button--reset" type="button">RESET</button>
         <button id="delta-cancel" class="layout-edit__button" type="button">CANCEL</button>
         <button id="delta-save" class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>
       </div>
@@ -90,8 +93,8 @@
         </main>
       </div>
       <div id="hud-edit-tools" class="layout-edit-tools" hidden>
-        <span class="layout-edit__hint">DRAG HUD OR A CORNER TO RESIZE</span>
-        <button id="hud-reset" class="layout-edit__button" type="button">RESET</button>
+        <span class="layout-edit__hint">DRAG HUD TO MOVE · CORNER TO RESIZE · ESC CANCELS</span>
+        <button id="hud-reset" class="layout-edit__button layout-edit__button--reset" type="button">RESET</button>
         <button id="hud-cancel" class="layout-edit__button" type="button">CANCEL</button>
         <button id="hud-save" class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>
       </div>

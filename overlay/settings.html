@@ -13,26 +13,35 @@
     <header class="settings-header">
       <div class="settings-header__topline">
         <div class="settings-header__brand">
-          <p class="settings-eyebrow">Feedback-Driven Companion</p>
+          <p class="settings-eyebrow"><span class="settings-brand">FDC</span><span class="settings-eyebrow__name">Feedback-Driven Companion</span></p>
+          <nav class="settings-header__path" aria-label="Location">
+            <button id="events-detail-back" class="detail-back" type="button" aria-label="Back to Events">← EVENTS</button>
+            <button id="events-run-back" class="detail-back" type="button" aria-label="Back to the event">← EVENT</button>
+            <button id="driver-analysis-detail-back" class="detail-back" type="button"></button>
+            <span class="settings-header__path-separator" aria-hidden="true">/</span>
+            <span class="settings-header__page" data-detail-page="event">EVENT</span>
+            <span class="settings-header__page" data-detail-page="run">RUN</span>
+            <span class="settings-header__page" data-detail-page="recording">RECORDING</span>
+            <span class="settings-header__page" data-detail-page="car">CAR</span>
+            <span class="settings-header__page" data-detail-page="drive">DRIVE</span>
+          </nav>
           <h1 id="settings-title">CONFIGURATION</h1>
+          <div class="settings-header__intro">
+            <p data-settings-intro="hud">Live telemetry over the game that never takes your clicks. Choose which blocks to show, how they are arranged, and how see-through they are.</p>
+            <p data-settings-intro="events" hidden>Save the races you repeat and record your runs with lap and sector times and a trace. While you record, Delta in the HUD compares your lap with your fastest saved run.</p>
+            <p data-settings-intro="driver-analysis" hidden>Record a session on asphalt and FDC points out the pattern that repeats most in your driving, together with your session stats.</p>
+            <p data-settings-intro="shift-light" hidden>Learns the best shift RPM for each gear of every car and tune as you drive. In the HUD the gear turns red as the shift nears and purple at the best moment.</p>
+            <p data-settings-intro="garage" hidden>Every car you drive is saved with its class, PI, and drivetrain. Click a car's name to rename it everywhere in FDC.</p>
+            <p data-settings-intro="settings" hidden>Options for the whole app. Everything FDC records stays on this PC.</p>
+          </div>
         </div>
-        <div class="settings-header__connection" aria-label="Direct Data Out connection">
-          <div id="telemetry-status" class="telemetry-status" data-state="offline" role="status" aria-live="polite">
-            <span class="telemetry-status__dot" aria-hidden="true"></span>
-            <span id="telemetry-status-label">DIRECT DATA OUT OFFLINE</span>
-          </div>
-          <div id="telemetry-route-card" class="telemetry-route-card" data-tone="offline">
-            <div id="telemetry-route-detail" class="telemetry-setup-guide">
-              <p class="telemetry-setup-guide__title">HOW TO CONNECT</p>
-              <ol>
-                <li>Open <strong>Settings → HUD and Gameplay → Telemetry</strong>.</li>
-                <li>Set <strong>Data Out</strong> to <strong>On</strong>.</li>
-                <li>Set <strong>Data Out IP Address</strong> to <strong>127.0.0.1</strong>.</li>
-                <li>Set <strong>Data Out IP Port</strong> to <strong>5301</strong>.</li>
-              </ol>
-            </div>
-            <button id="telemetry-route-retry" class="settings-button" type="button" hidden>RETRY DATA OUT</button>
-          </div>
+        <div class="settings-header__connection">
+          <button id="telemetry-status-button" class="telemetry-status-button" type="button" aria-label="Direct Data Out status. Show how to connect">
+            <span id="telemetry-status" class="telemetry-status" data-state="offline" role="status" aria-live="polite">
+              <span class="telemetry-status__dot" aria-hidden="true"></span>
+              <span id="telemetry-status-label">DIRECT DATA OUT OFFLINE</span>
+            </span>
+          </button>
         </div>
       </div>
     </header>
@@ -48,10 +57,8 @@
 
     <section id="hud-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="hud-tab" data-settings-panel="hud">
       <div class="settings-section__heading">
-        <h2 id="hud-title">HUD</h2>
+        <h2 id="hud-title" class="settings-page-title">HUD</h2>
       </div>
-      <p class="settings-section__intro">Live telemetry on top of the game: tires, pedals, steering, gear, speed, RPM, boost, and an input graph. Choose which blocks to show, how they are arranged, and how see-through they are.</p>
-      <p class="settings-section__intro">The HUD is click-through and covers the monitor chosen in HUD DISPLAY. With Show HUD with telemetry on (Settings), it hides in menus.</p>
 
       <section class="shift-light-brightness-card hud-display-card" aria-labelledby="hud-display-title">
         <div class="shift-light-brightness-card__heading">
@@ -88,26 +95,25 @@
             <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
           </button>
         </div>
-        <p class="settings-section__intro">Press EDIT, drag to move, drag a corner to resize, then SAVE. Esc cancels.</p>
-        <div class="hud-layout-mode__options" role="radiogroup" aria-labelledby="hud-layout-mode-title">
-          <label class="hud-layout-mode__option">
-            <input type="radio" name="hud-layout-mode" value="grouped" data-layout-mode="grouped" checked>
-            <span>
-              <strong>GROUPED</strong>
-              <small>Keep telemetry blocks in one panel.</small>
-            </span>
-          </label>
-          <label class="hud-layout-mode__option">
-            <input type="radio" name="hud-layout-mode" value="freeform" data-layout-mode="freeform">
-            <span>
-              <strong>FREEFORM</strong>
-              <small>Move and resize each block independently.</small>
-            </span>
-          </label>
-        </div>
       </section>
 
       <div class="layout-list">
+        <div class="layout-row layout-row--arrangement">
+          <div class="layout-row__content">
+            <strong id="hud-layout-arrangement-title">TELEMETRY ARRANGEMENT</strong>
+            <small>Grouped moves the HUD as one block. Freeform moves and resizes each block.</small>
+          </div>
+          <div class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title">
+            <label class="unit-option">
+              <input type="radio" name="hud-layout-mode" value="grouped" data-layout-mode="grouped" checked>
+              <span>GROUPED</span>
+            </label>
+            <label class="unit-option">
+              <input type="radio" name="hud-layout-mode" value="freeform" data-layout-mode="freeform">
+              <span>FREEFORM</span>
+            </label>
+          </div>
+        </div>
         <article class="layout-row" data-layout-target="delta">
           <div class="layout-row__content">
             <h3>Delta</h3>
@@ -115,7 +121,7 @@
           </div>
           <div class="layout-row__actions">
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
-            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="settings-button settings-button--ready" type="button" data-layout-action="save" hidden>SAVE</button>
             <button class="visibility-toggle" type="button" data-overlay-toggle="delta" aria-label="Toggle Delta" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
@@ -133,7 +139,7 @@
             </button>
             <div class="layout-row__actions">
               <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
-              <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+              <button class="settings-button settings-button--ready" type="button" data-layout-action="save" hidden>SAVE</button>
             </div>
           </div>
 
@@ -197,7 +203,7 @@
           </div>
           <div class="layout-row__actions">
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
-            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="settings-button settings-button--ready" type="button" data-layout-action="save" hidden>SAVE</button>
             <button class="visibility-toggle" type="button" data-hud-toggle="tires" aria-label="Toggle Tires" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
@@ -209,7 +215,7 @@
           </div>
           <div class="layout-row__actions">
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
-            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="settings-button settings-button--ready" type="button" data-layout-action="save" hidden>SAVE</button>
             <button class="visibility-toggle" type="button" data-hud-toggle="pedals" aria-label="Toggle Throttle and Brake" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
@@ -221,7 +227,7 @@
           </div>
           <div class="layout-row__actions">
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
-            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="settings-button settings-button--ready" type="button" data-layout-action="save" hidden>SAVE</button>
             <button class="visibility-toggle" type="button" data-hud-toggle="steering" aria-label="Toggle Steering" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
@@ -233,7 +239,7 @@
           </div>
           <div class="layout-row__actions">
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
-            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="settings-button settings-button--ready" type="button" data-layout-action="save" hidden>SAVE</button>
             <button class="visibility-toggle" type="button" data-hud-toggle="gear" aria-label="Toggle Gear, Speed and RPM" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
@@ -245,7 +251,7 @@
           </div>
           <div class="layout-row__actions">
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
-            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="settings-button settings-button--ready" type="button" data-layout-action="save" hidden>SAVE</button>
             <button class="visibility-toggle" type="button" data-hud-toggle="engine" aria-label="Toggle Engine and Boost" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
@@ -257,7 +263,7 @@
           </div>
           <div class="layout-row__actions">
             <button class="settings-button" type="button" data-layout-action="edit">EDIT</button>
-            <button class="settings-button settings-button--primary" type="button" data-layout-action="save" hidden>SAVE</button>
+            <button class="settings-button settings-button--ready" type="button" data-layout-action="save" hidden>SAVE</button>
             <button class="visibility-toggle" type="button" data-hud-toggle="history" aria-label="Toggle Input Graph" aria-pressed="true">
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
@@ -276,7 +282,6 @@
             <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
           </button>
         </div>
-        <p class="settings-section__intro">Record a session on asphalt and FDC points out the one habit that keeps repeating — or the most frequent pattern it checked — together with your session stats.</p>
 
         <div class="driver-analysis-warning" role="note" aria-label="Beta warning">
           <strong>BETA</strong>
@@ -318,9 +323,6 @@
       </div>
 
       <section id="driver-analysis-detail-view" class="driver-analysis-detail-view" aria-labelledby="driver-analysis-detail-title" hidden>
-        <div class="events-detail-view__header">
-          <button id="driver-analysis-detail-back" class="settings-button" type="button">BACK</button>
-        </div>
         <div class="events-detail-view__heading">
           <h2 id="driver-analysis-detail-title" class="events-detail-view__title events-run-view__title">RECORDING</h2>
           <div id="driver-analysis-detail-summary" class="events-detail-view__summary" aria-label="Driver Analysis details"></div>
@@ -331,9 +333,8 @@
 
     <section id="garage-panel" class="settings-tab-panel garage-panel" role="tabpanel" aria-labelledby="garage-tab" data-settings-panel="garage" hidden>
       <div class="settings-section__heading">
-        <h2 id="garage-title">GARAGE</h2>
+        <h2 id="garage-title" class="settings-page-title">GARAGE</h2>
       </div>
-      <p class="settings-section__intro">Every car you drive is saved here automatically, with each class, PI, and drivetrain setup you used. Click a car's name to rename it — the new name is used everywhere in FDC.</p>
       <section class="garage-current" aria-labelledby="garage-current-title">
         <div class="garage-section-heading">
           <h3 id="garage-current-title">CURRENT CAR</h3>
@@ -357,7 +358,7 @@
     <section id="events-panel" class="settings-tab-panel events-panel" role="tabpanel" aria-labelledby="events-tab" data-settings-panel="events" hidden>
         <div id="events-library-view" class="events-view" aria-live="polite">
           <div class="settings-section__heading events-section-heading">
-            <h2 id="events-title">EVENTS</h2>
+            <h2 id="events-title" class="settings-page-title">EVENTS</h2>
             <div class="events-section-heading__actions">
               <label class="events-sort-control" for="events-sort">
                 <span>SORT</span>
@@ -368,10 +369,9 @@
                   <option value="last-recorded-asc">LAST RUN ↑</option>
                 </select>
               </label>
-              <button id="events-create-toggle" class="settings-button settings-button--primary" type="button" aria-expanded="false" aria-controls="events-create-area">CREATE</button>
+              <button id="events-create-toggle" class="settings-button settings-button--ready" type="button" aria-expanded="false" aria-controls="events-create-area">CREATE</button>
             </div>
           </div>
-        <p class="settings-section__intro">Save the races you repeat and record your attempts. Every run keeps lap and sector times and a driving trace, and while recording, Delta in the HUD compares your current lap with your fastest saved run.</p>
         <section id="events-create-area" class="events-create-area" aria-labelledby="events-create-title" hidden>
           <div class="events-create-area__heading">
             <h3 id="events-create-title">NEW EVENT</h3>
@@ -423,7 +423,7 @@
               <textarea id="event-notes" name="notes" rows="3"></textarea>
             </label>
             <div class="events-form__actions">
-              <button id="events-create-submit" class="settings-button settings-button--primary" type="submit">CREATE EVENT</button>
+              <button id="events-create-submit" class="settings-button settings-button--ready" type="submit">CREATE EVENT</button>
             </div>
           </form>
         </section>
@@ -442,15 +442,12 @@
       </div>
 
       <section id="events-detail-view" class="events-detail-view" aria-labelledby="events-detail-title" hidden>
-        <div class="events-detail-view__header">
-          <button id="events-detail-back" class="settings-button" type="button">BACK</button>
-          <div class="events-detail-view__actions">
-            <button id="events-detail-delete" class="settings-button settings-button--danger" type="button">DELETE</button>
-          </div>
-        </div>
         <div class="events-detail-view__heading">
           <button id="events-detail-title" class="events-detail-view__title" type="button">EVENT</button>
           <div id="events-detail-summary" class="events-detail-view__summary" aria-label="Event details"></div>
+          <div class="events-detail-view__actions">
+            <button id="events-detail-delete" class="settings-button settings-button--danger" type="button">DELETE</button>
+          </div>
         </div>
         <section id="events-detail-notes" class="events-detail-view__notes" aria-labelledby="events-detail-notes-label" hidden>
           <span id="events-detail-notes-label" class="events-detail-view__notes-label">NOTES</span>
@@ -489,9 +486,6 @@
       </section>
 
       <section id="events-run-view" class="events-run-view" aria-labelledby="events-run-title" hidden>
-        <div class="events-detail-view__header">
-          <button id="events-run-back" class="settings-button" type="button">BACK</button>
-        </div>
         <div class="events-detail-view__heading events-run-view__heading">
           <h2 id="events-run-title" class="events-detail-view__title events-run-view__title">EVENT</h2>
           <div id="events-run-summary" class="events-detail-view__summary" aria-label="Event details"></div>
@@ -533,12 +527,11 @@
 
     <section id="shift-light-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="shift-light-tab" data-settings-panel="shift-light" hidden>
       <div class="settings-section__heading">
-        <h2 id="shift-light-title">SHIFT LIGHT</h2>
+        <h2 id="shift-light-title" class="settings-page-title">SHIFT LIGHT</h2>
         <div class="calibration-heading__actions">
           <button id="shift-light-help" class="calibration-help-button" type="button" aria-expanded="false" aria-controls="shift-light-help-panel" title="Explain shift-light diagnostics">?</button>
         </div>
       </div>
-      <p class="settings-section__intro">Learns the best shift RPM for each gear of every car and tune while you drive — no setup needed. In the HUD the gear block turns red as the shift approaches and purple at the best moment.</p>
 
       <section class="shift-light-brightness-card shift-light-brightness-card--redline" data-display-preference aria-labelledby="redline-brightness-title">
         <div class="shift-light-brightness-card__heading">
@@ -641,9 +634,8 @@
 
     <section id="settings-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="settings-tab" data-settings-panel="settings" hidden>
       <div class="settings-section__heading">
-        <h2 id="settings-panel-title">SETTINGS</h2>
+        <h2 id="settings-panel-title" class="settings-page-title">SETTINGS</h2>
       </div>
-      <p class="settings-section__intro">Options for the whole app. All FDC data stays on this PC.</p>
       <section class="display-settings" aria-label="Display settings">
         <div class="display-settings__list">
           <div class="display-setting-row" data-display-preference>
