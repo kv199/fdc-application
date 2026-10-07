@@ -26,6 +26,10 @@ test('keyboard capture requires a non-Windows modifier combination', () => {
   assert.equal(analysis.hotkeyFromKeyboardEvent({ key: 'F9', ctrlKey: true, altKey: false, shiftKey: true, metaKey: false }), 'Ctrl+Shift+F9')
   assert.equal(analysis.hotkeyFromKeyboardEvent({ key: 'r', ctrlKey: false, altKey: false, shiftKey: false, metaKey: false }), null)
   assert.equal(analysis.hotkeyFromKeyboardEvent({ key: 'r', ctrlKey: false, altKey: false, shiftKey: false, metaKey: true }), null)
+  // Shift turns digits into symbols and other layouts change letters; the physical key still counts.
+  assert.equal(analysis.hotkeyFromKeyboardEvent({ key: '*', code: 'Digit8', ctrlKey: true, altKey: false, shiftKey: true, metaKey: false }), 'Ctrl+Shift+8')
+  assert.equal(analysis.hotkeyFromKeyboardEvent({ key: 'к', code: 'KeyR', ctrlKey: true, altKey: true, shiftKey: false, metaKey: false }), 'Ctrl+Alt+R')
+  assert.equal(analysis.hotkeyFromKeyboardEvent({ key: 'F8', code: 'F8', ctrlKey: true, altKey: false, shiftKey: true, metaKey: false }), 'Ctrl+Shift+F8')
 })
 
 test('controller bindings are normalized and validated', () => {

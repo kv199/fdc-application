@@ -87,9 +87,15 @@
     return BLOCKED_HOTKEYS.has(hotkey) ? null : hotkey
   }
 
+  // The physical key decides, so Shift+8 stays 8 instead of '*' and letters work on any layout.
+  function mainKeyFromCode(code) {
+    const match = /^(?:Key([A-Z])|Digit([0-9]))$/.exec(String(code || ''))
+    return match ? match[1] || match[2] : null
+  }
+
   function hotkeyFromKeyboardEvent(event) {
     if (!event || event.metaKey) return null
-    const mainKey = normalizedMainKey(event.key)
+    const mainKey = mainKeyFromCode(event.code) || normalizedMainKey(event.key)
     if (!mainKey || ['Ctrl', 'Alt', 'Shift'].includes(mainKey)) return null
     return normalizeHotkey([event.ctrlKey ? 'Ctrl' : '', event.altKey ? 'Alt' : '', event.shiftKey ? 'Shift' : '', mainKey].filter(Boolean).join('+'))
   }

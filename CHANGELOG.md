@@ -7,6 +7,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ### Fixed
 
+- **Hotkeys**: the HUD edit and Driver Analysis hotkeys now accept Ctrl, Alt,
+  or Shift with a number key, such as `Ctrl + Shift + 8`, and letter keys on
+  any keyboard layout.
 - **Driver Analysis**: free roam before a race is no longer included at the
   start of that race's drive, so the drive's start time, duration, and map
   begin at the race start.
