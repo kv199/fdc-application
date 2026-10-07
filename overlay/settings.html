@@ -86,50 +86,46 @@
         </div>
       </section>
 
-      <div class="layout-list">
-        <section class="layout-section layout-section--arrangement" aria-labelledby="hud-layout-arrangement-title">
-          <div class="layout-section__copy">
-            <h3 id="hud-layout-arrangement-title" class="layout-section__title">ARRANGEMENT</h3>
-            <p>Grouped moves the HUD as one block. Freeform moves each block.</p>
+      <section class="shift-light-brightness-card layout-arrangement" aria-labelledby="hud-layout-arrangement-title">
+        <div class="layout-arrangement__copy">
+          <h3 id="hud-layout-arrangement-title">ARRANGEMENT</h3>
+          <p>Grouped moves the HUD as one block. Freeform moves each block.</p>
+        </div>
+        <div class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title">
+          <label class="unit-option">
+            <input type="radio" name="hud-layout-mode" value="grouped" data-layout-mode="grouped" checked>
+            <span>GROUPED</span>
+          </label>
+          <label class="unit-option">
+            <input type="radio" name="hud-layout-mode" value="freeform" data-layout-mode="freeform">
+            <span>FREEFORM</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="shift-light-brightness-card layout-actions" aria-label="HUD layout editing" data-layout-edit-row>
+        <button id="hud-layout-edit" class="settings-button settings-button--ready" type="button">EDIT LAYOUT</button>
+        <button id="hud-layout-cancel" class="settings-button" type="button" hidden>CANCEL</button>
+        <button id="hud-layout-save" class="settings-button settings-button--ready" type="button" hidden>SAVE</button>
+        <div class="layout-actions__hotkey">
+          <span id="hud-edit-hotkey-label">or</span>
+          <output id="hud-edit-hotkey-value" aria-live="polite" aria-labelledby="hud-edit-hotkey-label">Ctrl + Shift + F8</output>
+          <button id="hud-edit-hotkey-change" class="settings-button" type="button" aria-label="Change the HUD edit hotkey">CHANGE</button>
+        </div>
+        <button id="hud-layout-reset" class="settings-button settings-button--caution" type="button">RESET LAYOUT</button>
+      </section>
+
+      <section class="layout-list" aria-labelledby="hud-widgets-title">
+        <div class="layout-section__header">
+          <h3 id="hud-widgets-title" class="layout-section__title">WIDGETS</h3>
+          <div class="widget-list__all">
+            <span>ALL</span>
+            <button id="hud-all-widgets" class="visibility-toggle" type="button" data-hud-toggle-all aria-label="Toggle all widgets" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
           </div>
-          <div class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title">
-            <label class="unit-option">
-              <input type="radio" name="hud-layout-mode" value="grouped" data-layout-mode="grouped" checked>
-              <span>GROUPED</span>
-            </label>
-            <label class="unit-option">
-              <input type="radio" name="hud-layout-mode" value="freeform" data-layout-mode="freeform">
-              <span>FREEFORM</span>
-            </label>
-          </div>
-        </section>
-        <section class="layout-section" aria-labelledby="hud-layout-edit-title" data-layout-edit-row>
-          <div class="layout-section__header">
-            <h3 id="hud-layout-edit-title" class="layout-section__title">LAYOUT</h3>
-            <button id="hud-layout-reset" class="settings-button settings-button--caution" type="button">RESET LAYOUT</button>
-          </div>
-          <div class="layout-edit">
-            <button id="hud-layout-edit" class="settings-button settings-button--ready" type="button">EDIT LAYOUT</button>
-            <button id="hud-layout-cancel" class="settings-button" type="button" hidden>CANCEL</button>
-            <button id="hud-layout-save" class="settings-button settings-button--ready" type="button" hidden>SAVE</button>
-            <div class="layout-edit__hotkey">
-              <span id="hud-edit-hotkey-label">or in Forza</span>
-              <output id="hud-edit-hotkey-value" class="hotkey-keys" aria-live="polite" aria-labelledby="hud-edit-hotkey-label">Ctrl + Shift + F8</output>
-              <button id="hud-edit-hotkey-change" class="layout-edit__change" type="button" aria-label="Change the HUD edit hotkey">CHANGE</button>
-            </div>
-          </div>
-        </section>
-        <section class="layout-section layout-section--widgets" aria-labelledby="hud-widgets-title">
-          <div class="layout-section__header">
-            <h3 id="hud-widgets-title" class="layout-section__title">WIDGETS</h3>
-            <div class="widget-list__all">
-              <span>ALL</span>
-              <button id="hud-all-widgets" class="visibility-toggle" type="button" data-hud-toggle-all aria-label="Toggle all widgets" aria-pressed="true">
-                <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
-              </button>
-            </div>
-          </div>
-          <div class="widget-list">
+        </div>
+        <div class="widget-list">
           <label class="widget-row">
             <span class="widget-row__name">Tires</span>
             <button class="visibility-toggle" type="button" data-hud-toggle="tires" aria-label="Toggle Tires" aria-pressed="true">
@@ -172,9 +168,8 @@
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
           </label>
-          </div>
-        </section>
-      </div>
+        </div>
+      </section>
     </section>
 
     <section id="driver-analysis-panel" class="settings-tab-panel driver-analysis-panel" role="tabpanel" aria-labelledby="driver-analysis-tab" data-settings-panel="driver-analysis" hidden>

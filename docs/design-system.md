@@ -114,7 +114,7 @@ The application header is the only textured surface: it shows
   actions in its row stay right-aligned. A heading that labels a control, such
   as the Driver Analysis switch, stays visible.
 - The raised plate (`--panel` with a `--line-strong` border) marks one area
-  per view: the HUD layout list, the Events create form, the event's run
+  per view: the HUD WIDGETS list, the Events create form, the event's run
   recorder, the run's lap breakdown, the Driver Analysis recorder, the Shift
   Light calibration card, and the Garage current car. The Events library,
   Driver Analysis drill-down pages, and Settings have none.
@@ -196,14 +196,15 @@ The application header is the only textured surface: it shows
   shapes, vertical Brake and Throttle bars, the Steering wheel, one
   Speed/Gear/RPM block, Engine (boost, power, torque), and the Input Graph;
   Delta is a separate target.
-- Configuration's HUD layout plate has three sections whose titles match the
-  HUD DISPLAY and HUD OPACITY card titles: ARRANGEMENT, a segmented choice of
+- Configuration's HUD layout uses three blocks below HUD OPACITY. ARRANGEMENT
+  is a card like HUD DISPLAY and HUD OPACITY, with a segmented choice of
   GROUPED (moves the HUD as one block) or FREEFORM (moves and resizes each
-  block individually) whose selected option keeps a lime fill; LAYOUT, with
-  RESET LAYOUT (caution) in its header, then EDIT LAYOUT, the edit hotkey as
-  `.hotkey-key` keycaps on `--surface-deep`, and a quiet text CHANGE; and
-  WIDGETS, compact name-and-switch rows with ALL in the header. Section
-  controls in a header sit on the right, aligned with the switches below.
+  block individually) whose selected option keeps a lime fill. The layout
+  actions card is one line: EDIT LAYOUT, "or" with the edit hotkey and
+  CHANGE styled like the Driver Analysis record hotkey, and RESET LAYOUT
+  (caution) at the right end. WIDGETS is the raised plate: compact
+  name-and-switch rows with ALL in its header. Controls on the right of all
+  three blocks line up on one edge.
 - The layout editor shows an edit toolbar on the selected target with the
   hint text `DRAG <TARGET> TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO
   SELECT`, then GRID ON (filled with lime) or GRID OFF (neutral), RESET

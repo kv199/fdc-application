@@ -284,7 +284,10 @@ test('Engine visibility is part of the safe HUD component contract', () => {
 
 test('HUD layout exposes grouped and freeform modes with unified widgets and layout editing', () => {
   // The layout plate has three sections in order: ARRANGEMENT, LAYOUT, WIDGETS.
-  assert.match(settingsHtml, /<div class="layout-list">\s*<section class="layout-section layout-section--arrangement"[\s\S]*?id="hud-layout-arrangement-title" class="layout-section__title">ARRANGEMENT<[\s\S]*?class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title"[\s\S]*?id="hud-layout-edit-title" class="layout-section__title">LAYOUT<[\s\S]*?id="hud-widgets-title" class="layout-section__title">WIDGETS</)
+  // Three separate blocks in order: the ARRANGEMENT card, the one-line layout actions card,
+  // and the WIDGETS plate.
+  assert.match(settingsHtml, /<section class="shift-light-brightness-card layout-arrangement" aria-labelledby="hud-layout-arrangement-title">[\s\S]*?<h3 id="hud-layout-arrangement-title">ARRANGEMENT<\/h3>[\s\S]*?class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title"[\s\S]*?<\/section>\s*<section class="shift-light-brightness-card layout-actions"[^>]*data-layout-edit-row>[\s\S]*?<\/section>\s*<section class="layout-list" aria-labelledby="hud-widgets-title">[\s\S]*?id="hud-widgets-title" class="layout-section__title">WIDGETS</)
+  assert.doesNotMatch(settingsHtml, />LAYOUT<\/h3>/)
   // Widgets are compact rows with a name only; the whole row toggles its widget.
   assert.equal(settingsHtml.match(/<label class="widget-row">\s*<span class="widget-row__name">[^<]+<\/span>\s*<button class="visibility-toggle"/g)?.length, 7)
   assert.doesNotMatch(settingsHtml, /layout-row|visibility-row/)
@@ -445,7 +448,7 @@ test('Shift Light exposes separate redline and FDC cue controls in the Shift Lig
 
 test('HUD opacity appears before HUD controls and resets to its 80 percent default', () => {
   const hudOpacityIndex = settingsHtml.indexOf('id="hud-opacity"')
-  const layoutListIndex = settingsHtml.indexOf('<div class="layout-list">')
+  const layoutListIndex = settingsHtml.indexOf('class="shift-light-brightness-card layout-arrangement"')
 
   assert.ok(hudOpacityIndex >= 0)
   assert.ok(hudOpacityIndex < layoutListIndex)
@@ -767,10 +770,9 @@ test('the HUD tab offers an edit hotkey in the layout edit row that is registere
   const start = settingsHtml.indexOf('data-settings-panel="hud"')
   const hudPanel = settingsHtml.slice(start, settingsHtml.indexOf('data-settings-panel="', start + 1))
   assert.match(hudPanel, /data-layout-edit-row[\s\S]*id="hud-edit-hotkey-value"[^>]*>Ctrl \+ Shift \+ F8<\/output>/)
-  assert.match(hudPanel, /id="hud-edit-hotkey-change" class="layout-edit__change"/)
-  // RESET LAYOUT sits in the LAYOUT header, apart from EDIT LAYOUT; the hotkey shows as keycaps.
-  assert.match(hudPanel, /<div class="layout-section__header">\s*<h3 id="hud-layout-edit-title"[^>]*>LAYOUT<\/h3>\s*<button id="hud-layout-reset"/)
-  assert.match(settingsJs, /cap\.className = 'hotkey-key'/)
+  // One line: EDIT LAYOUT, "or" the hotkey styled like the Driver Analysis hotkey, RESET LAYOUT last.
+  assert.match(hudPanel, /data-layout-edit-row>\s*<button id="hud-layout-edit"[\s\S]*?<span id="hud-edit-hotkey-label">or<\/span>[\s\S]*?id="hud-edit-hotkey-change" class="settings-button"[\s\S]*?<button id="hud-layout-reset"[^>]*>RESET LAYOUT<\/button>\s*<\/section>/)
+  assert.match(settingsStyles, /\.layout-actions__hotkey output \{[^}]*font-weight: 750;[^}]*letter-spacing: 0\.08em;/)
   assert.doesNotMatch(hudPanel, /id="hud-edit-hotkey-title">EDIT HOTKEY/)
   assert.match(settingsJs, /const DEFAULT_HUD_EDIT_HOTKEY = 'Ctrl\+Shift\+F8'/)
   assert.match(settingsJs, /const HUD_EDIT_HOTKEY_STORAGE_KEY = 'fdc\.hud-edit-hotkey\.v1'/)

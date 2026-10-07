@@ -3388,18 +3388,9 @@
   function renderHudEditHotkey() {
     if (!hudEditHotkeyValue || !hudEditHotkeyChange) return
     hudEditHotkeyChange.textContent = hudEditHotkeyCapture ? 'CANCEL' : 'CHANGE'
-    if (hudEditHotkeyCapture) {
-      hudEditHotkeyValue.textContent = 'PRESS KEYS OR A BUTTON'
-      return
-    }
-    // Each key of the combination shows as its own keycap: [Ctrl] + [Shift] + [8].
-    const formatted = driverAnalysisApi?.formatHotkey?.(hudEditHotkeySettings.hotkey, hudEditHotkeySettings.hotkeyLabel) || hudEditHotkeySettings.hotkey
-    hudEditHotkeyValue.replaceChildren(...formatted.split(' + ').flatMap((key, index) => {
-      const cap = document.createElement('kbd')
-      cap.className = 'hotkey-key'
-      cap.textContent = key
-      return index ? [' + ', cap] : [cap]
-    }))
+    hudEditHotkeyValue.textContent = hudEditHotkeyCapture
+      ? 'PRESS KEYS OR A BUTTON'
+      : driverAnalysisApi?.formatHotkey?.(hudEditHotkeySettings.hotkey, hudEditHotkeySettings.hotkeyLabel) || hudEditHotkeySettings.hotkey
   }
 
   async function setHudEditHotkey(hotkey, announce = true, hotkeyLabel = '') {

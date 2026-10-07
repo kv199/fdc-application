@@ -77,8 +77,8 @@ Light Brightness settings. How targets are learned is described in
 
 ## Layout
 
-Configuration → **HUD** shows the layout controls on one plate with three
-sections, the same in both arrangements:
+Configuration → **HUD** shows the layout controls as three separate blocks
+below HUD OPACITY, the same in both arrangements:
 
 1. **ARRANGEMENT**, a segmented choice of GROUPED (default) and FREEFORM; the
    selected one keeps a lime fill. Grouped keeps the visible blocks side by
@@ -86,17 +86,16 @@ sections, the same in both arrangements:
    places and sizes every block independently. Delta is positioned
    independently in both arrangements, and each arrangement keeps its own
    saved positions.
-2. **LAYOUT**: **RESET LAYOUT** in the section header on the right, as RESET
-   sits on the HUD OPACITY card; below it **EDIT LAYOUT** (the lime next
-   step), then "or in Forza" with the edit hotkey shown as keycaps, such as
-   `[Ctrl] + [Shift] + [8]`, and a quiet underlined **CHANGE**.
+2. One line of layout actions: **EDIT LAYOUT** (the lime next step), then
+   "or" and the edit hotkey with **CHANGE**, styled like the Driver Analysis
+   record hotkey, and **RESET LAYOUT** at the right end.
 3. **WIDGETS**: one compact row per widget with its name and a switch (Tires,
    Throttle & Brake, Steering, Gear / Speed / RPM, Engine / Boost, Input
-   Graph, Delta), and **ALL** in the section header. Clicking anywhere on a
+   Graph, Delta), and **ALL** in the block header. Clicking anywhere on a
    row toggles its widget. **ALL** is on only while every widget is on.
 
 Below 560 px of window width the arrangement choice moves under its
-description, and the hotkey wraps under EDIT LAYOUT.
+description, and RESET LAYOUT wraps to its own line on the right.
 
 A layout edit covers every enabled target at once: in Grouped, the HUD panel
 and Delta; in Freeform, each block whose switch is on and Delta. A switched-off

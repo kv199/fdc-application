@@ -2633,23 +2633,28 @@ h1 {
   background: var(--accent);
 }
 
-/* The HUD layout list is the HUD page's raised plate: three sections with
-   titles styled like the HUD DISPLAY and HUD OPACITY card titles above it. */
+/* The WIDGETS list is the HUD page's raised plate; ARRANGEMENT and the layout
+   actions are ordinary cards like HUD DISPLAY and HUD OPACITY above them. */
 .layout-list {
   overflow: hidden;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--line-strong);
   border-radius: 0;
   background: var(--panel);
 }
 
-.layout-section {
-  padding: var(--space-3) var(--space-4);
+.layout-arrangement {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
 }
 
-.layout-section + .layout-section {
-  border-top: 1px solid var(--line);
+.layout-arrangement__copy {
+  min-width: 0;
 }
 
+.layout-arrangement__copy h3,
 .layout-section__title {
   margin: 0;
   color: var(--text);
@@ -2658,97 +2663,49 @@ h1 {
   letter-spacing: 0.09em;
 }
 
-.layout-section--arrangement {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-.layout-section__copy {
-  min-width: 0;
-}
-
-.layout-section__copy p {
+.layout-arrangement__copy p {
   margin: var(--space-1) 0 0;
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.35;
 }
 
-/* EDIT LAYOUT leads; the hotkey follows it; RESET LAYOUT sits apart at the end. */
-.layout-edit {
+/* One line: EDIT LAYOUT, "or" the hotkey styled like the Driver Analysis
+   record hotkey, and RESET LAYOUT at the right end. */
+.layout-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  margin-top: var(--space-2);
 }
 
-/* "or in Forza [Ctrl] + [Shift] + [8] CHANGE" reads as one phrase after EDIT LAYOUT. */
-.layout-edit__hotkey {
+.layout-actions__hotkey {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: 10px;
   margin-left: var(--space-2);
   color: var(--text-muted);
   font-size: 13px;
 }
 
-.hotkey-keys {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  color: var(--text-muted);
-}
-
-.hotkey-key {
-  min-width: 24px;
-  padding: 2px 7px;
-  border: 1px solid var(--line-strong);
-  border-radius: 0;
+.layout-actions__hotkey output {
   color: var(--text);
-  background: var(--surface-deep);
-  font-family: var(--font-readout);
-  font-size: 14px;
-  font-weight: 600;
-  text-align: center;
-}
-
-/* A quiet text action: the hotkey is a secondary setting next to EDIT LAYOUT. */
-.layout-edit__change {
-  padding: 4px 2px;
-  border: 0;
-  border-radius: 0;
-  color: var(--text-muted);
-  background: transparent;
-  font-size: var(--type-label);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
   font-weight: 750;
-  letter-spacing: 0.1em;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
+  letter-spacing: 0.08em;
 }
 
-.layout-edit__change:hover,
-.layout-edit__change:focus-visible {
-  color: var(--accent);
+.layout-actions #hud-layout-reset {
+  margin-left: auto;
 }
 
-/* Section headers: the title on the left, the section's own control on the right,
-   like the HUD OPACITY card's RESET. */
 .layout-section__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
   min-height: 32px;
-}
-
-.layout-section__header .settings-button {
-  min-height: 32px;
-  padding: 7px 10px 6px;
 }
 
 .widget-list__all {
@@ -2792,12 +2749,12 @@ h1 {
 }
 
 @media (max-width: 560px) {
-  .layout-section--arrangement {
+  .layout-arrangement {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .layout-edit__hotkey {
+  .layout-actions__hotkey {
     margin-left: 0;
   }
 }
