@@ -5,6 +5,12 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+### Fixed
+
+- **Driver Analysis**: free roam before a race is no longer included at the
+  start of that race's drive, so the drive's start time, duration, and map
+  begin at the race start.
+
 ### Added
 
 - **Design**: FDC has a new look, FDC Dark. Configuration gets a painted

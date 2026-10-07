@@ -10,9 +10,9 @@ function run(packets) {
   let timestampMs = 5000
   for (const packet of packets) {
     wall += 16
-    timestampMs += 16
+    timestampMs += 16 + (packet.gapBeforeMs || 0)
     const persisted = packet.isRaceOn ? { sequence: sequence++, timestampMs } : null
-    segmenter.update(packet, persisted)
+    segmenter.update({ ...packet, timestampMs }, persisted)
   }
   return segmenter.finalize()
 }
@@ -334,6 +334,33 @@ test('a clean start followed by stationary packets and finalize creates no drive
   ])
 
   assert.equal(drives.length, 0)
+})
+
+test('a race after free roam and a loading gap starts its drive at the race start', () => {
+  const drives = run([
+    ...Array(40).fill(live(0, { current: 0, raceTime: 0 })),
+    { ...live(0, { current: 0, raceTime: 0 }), gapBeforeMs: 30000 },
+    ...drive(50, 3000),
+    result({ number: 1, last: 61.2 })
+  ])
+
+  assert.equal(drives.length, 1)
+  assert.equal(drives[0].firstSequence, 40)
+  assert.equal(drives[0].kind, 'sprint')
+  assert.equal(drives[0].finished, true)
+})
+
+test('a clean start without a gap does not restart a drive that has not moved', () => {
+  const drives = run([
+    ...Array(40).fill(live(0, { current: 0, raceTime: 0 })),
+    ...drive(50, 3000),
+    result({ number: 1, last: 61.2 })
+  ])
+
+  assert.equal(drives.length, 1)
+  assert.equal(drives[0].firstSequence, 0)
+  assert.equal(drives[0].kind, 'sprint')
+  assert.equal(drives[0].finished, true)
 })
 
 test('a finished sprint followed by a clean start where car never moves creates one drive', () => {

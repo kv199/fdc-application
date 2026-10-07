@@ -15,6 +15,9 @@
   // Online circuits end without result packets; a drive that stops one lap length past its last lap boundary,
   // within this share of a lap, reached the finish line.
   const LAP_FINISH_TOLERANCE = 0.03
+  // Loading into a race pauses live telemetry; a clean start after a longer gap begins a new race even when the
+  // drive opened in free roam never moved.
+  const START_AFTER_GAP_MS = 5000
 
   function finite(value) {
     if (value === null || value === undefined || value === '') return null
@@ -53,6 +56,7 @@
     const now = typeof options.now === 'function' ? options.now : () => Date.now()
     const drives = []
     let active = null
+    let lastLiveTimestampMs = null
 
     function open(telemetry) {
       const distance = finite(telemetry?.lap?.distance) ?? 0
@@ -136,9 +140,13 @@
     function update(telemetry, persisted = null) {
       if (!telemetry || typeof telemetry !== 'object') return
       const live = telemetry.isRaceOn === true
+      const timestampMs = finite(telemetry?.timestampMs)
+      const afterGap = live && timestampMs !== null && lastLiveTimestampMs !== null && timestampMs - lastLiveTimestampMs > START_AFTER_GAP_MS
+      if (live && timestampMs !== null) lastLiveTimestampMs = timestampMs
       if (isCleanStart(telemetry)) {
         const progressed = active && (active.lastDistance - active.startDistance > START_MAX_DISTANCE_M || active.confirmedLaps > 0)
         if (progressed && !clockRunsOn(telemetry)) close()
+        else if (active && !progressed && afterGap) close()
         if (!active) open(telemetry)
       }
       if (!active) return
