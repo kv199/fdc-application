@@ -284,10 +284,14 @@ test('Engine visibility is part of the safe HUD component contract', () => {
 
 test('HUD layout exposes grouped and freeform modes with unified widgets and layout editing', () => {
   // The layout plate has three sections in order: ARRANGEMENT, LAYOUT, WIDGETS.
-  // Three separate blocks in order: the ARRANGEMENT card, the one-line layout actions card,
-  // and the WIDGETS plate.
-  assert.match(settingsHtml, /<section class="shift-light-brightness-card layout-arrangement" aria-labelledby="hud-layout-arrangement-title">[\s\S]*?<h3 id="hud-layout-arrangement-title">ARRANGEMENT<\/h3>[\s\S]*?class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title"[\s\S]*?<\/section>\s*<section class="shift-light-brightness-card layout-actions"[^>]*data-layout-edit-row>[\s\S]*?<\/section>\s*<section class="layout-list" aria-labelledby="hud-widgets-title">[\s\S]*?id="hud-widgets-title" class="layout-section__title">WIDGETS</)
-  assert.doesNotMatch(settingsHtml, />LAYOUT<\/h3>/)
+  // Three blocks in order: the ARRANGEMENT card, the layout editor (an action panel like the
+  // Driver Analysis recorder), and the WIDGETS card.
+  assert.match(settingsHtml, /<section class="shift-light-brightness-card layout-arrangement" aria-labelledby="hud-layout-arrangement-title">[\s\S]*?<h3 id="hud-layout-arrangement-title">ARRANGEMENT<\/h3>[\s\S]*?class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title"[\s\S]*?<\/section>\s*<section class="action-panel"[^>]*data-layout-edit-row>[\s\S]*?<h3 id="hud-layout-edit-title">EDIT THE LAYOUT<\/h3>[\s\S]*?<strong>IN-GAME EDIT HOTKEY<\/strong>[\s\S]*?<\/section>\s*<section class="layout-list" aria-labelledby="hud-widgets-title">[\s\S]*?id="hud-widgets-title" class="layout-section__title">WIDGETS</)
+  // The editor shows EDITING while an edit runs, like READY on the Driver Analysis recorder.
+  assert.match(settingsHtml, /id="hud-layout-status" class="action-panel__status" data-state="editing" role="status" aria-live="polite" hidden>EDITING</)
+  assert.match(settingsJs, /if \(status\) status\.hidden = !editing/)
+  assert.match(settingsStyles, /\.driver-analysis-recorder__main,\s*\.driver-analysis-hotkey,\s*\.action-panel__row \{/)
+  assert.match(settingsStyles, /\.action-panel__status\[data-state='editing'\] \{\s*color: var\(--warning\);/)
   // Widgets are compact rows with a name only; the whole row toggles its widget.
   assert.equal(settingsHtml.match(/<label class="widget-row">\s*<span class="widget-row__name">[^<]+<\/span>\s*<button class="visibility-toggle"/g)?.length, 7)
   assert.doesNotMatch(settingsHtml, /layout-row|visibility-row/)
@@ -770,9 +774,9 @@ test('the HUD tab offers an edit hotkey in the layout edit row that is registere
   const start = settingsHtml.indexOf('data-settings-panel="hud"')
   const hudPanel = settingsHtml.slice(start, settingsHtml.indexOf('data-settings-panel="', start + 1))
   assert.match(hudPanel, /data-layout-edit-row[\s\S]*id="hud-edit-hotkey-value"[^>]*>Ctrl \+ Shift \+ F8<\/output>/)
-  // One line: EDIT LAYOUT, "or" the hotkey styled like the Driver Analysis hotkey, RESET LAYOUT last.
-  assert.match(hudPanel, /data-layout-edit-row>\s*<button id="hud-layout-edit"[\s\S]*?<span id="hud-edit-hotkey-label">or<\/span>[\s\S]*?id="hud-edit-hotkey-change" class="settings-button"[\s\S]*?<button id="hud-layout-reset"[^>]*>RESET LAYOUT<\/button>\s*<\/section>/)
-  assert.match(settingsStyles, /\.layout-actions__hotkey output \{[^}]*font-weight: 750;[^}]*letter-spacing: 0\.08em;/)
+  // The hotkey row matches GLOBAL RECORD HOTKEY: copy on the left, the combination and CHANGE on the right.
+  assert.match(hudPanel, /<strong>IN-GAME EDIT HOTKEY<\/strong>\s*<small id="hud-edit-hotkey-help">[^<]+<\/small>\s*<\/div>\s*<div class="action-panel__actions">\s*<output id="hud-edit-hotkey-value"[^>]*>Ctrl \+ Shift \+ F8<\/output>\s*<button id="hud-edit-hotkey-change" class="settings-button"/)
+  assert.match(settingsStyles, /\.driver-analysis-hotkey__control output,\s*\.action-panel__actions output \{/)
   assert.doesNotMatch(hudPanel, /id="hud-edit-hotkey-title">EDIT HOTKEY/)
   assert.match(settingsJs, /const DEFAULT_HUD_EDIT_HOTKEY = 'Ctrl\+Shift\+F8'/)
   assert.match(settingsJs, /const HUD_EDIT_HOTKEY_STORAGE_KEY = 'fdc\.hud-edit-hotkey\.v1'/)

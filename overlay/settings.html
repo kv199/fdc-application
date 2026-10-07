@@ -103,16 +103,30 @@
         </div>
       </section>
 
-      <section class="shift-light-brightness-card layout-actions" aria-label="HUD layout editing" data-layout-edit-row>
-        <button id="hud-layout-edit" class="settings-button settings-button--ready" type="button">EDIT LAYOUT</button>
-        <button id="hud-layout-cancel" class="settings-button" type="button" hidden>CANCEL</button>
-        <button id="hud-layout-save" class="settings-button settings-button--ready" type="button" hidden>SAVE</button>
-        <div class="layout-actions__hotkey">
-          <span id="hud-edit-hotkey-label">or</span>
-          <output id="hud-edit-hotkey-value" aria-live="polite" aria-labelledby="hud-edit-hotkey-label">Ctrl + Shift + F8</output>
-          <button id="hud-edit-hotkey-change" class="settings-button" type="button" aria-label="Change the HUD edit hotkey">CHANGE</button>
+      <section class="action-panel" aria-label="HUD layout editing" data-layout-edit-row>
+        <div class="action-panel__row">
+          <div>
+            <h3 id="hud-layout-edit-title">EDIT THE LAYOUT</h3>
+            <p id="hud-layout-edit-hint">Move and resize the HUD blocks right on the screen.</p>
+          </div>
+          <div class="action-panel__actions">
+            <span id="hud-layout-status" class="action-panel__status" data-state="editing" role="status" aria-live="polite" hidden>EDITING</span>
+            <button id="hud-layout-reset" class="settings-button settings-button--caution" type="button">RESET LAYOUT</button>
+            <button id="hud-layout-edit" class="settings-button settings-button--ready" type="button" aria-describedby="hud-layout-edit-hint">EDIT LAYOUT</button>
+            <button id="hud-layout-cancel" class="settings-button" type="button" hidden>CANCEL</button>
+            <button id="hud-layout-save" class="settings-button settings-button--ready" type="button" hidden>SAVE</button>
+          </div>
         </div>
-        <button id="hud-layout-reset" class="settings-button settings-button--caution" type="button">RESET LAYOUT</button>
+        <div class="action-panel__row">
+          <div>
+            <strong>IN-GAME EDIT HOTKEY</strong>
+            <small id="hud-edit-hotkey-help">Works while Forza is in focus: press it to edit over the game, press it again to save. Don't use Windows-key combinations or buttons the game uses.</small>
+          </div>
+          <div class="action-panel__actions">
+            <output id="hud-edit-hotkey-value" aria-live="polite">Ctrl + Shift + F8</output>
+            <button id="hud-edit-hotkey-change" class="settings-button" type="button" aria-describedby="hud-edit-hotkey-help">CHANGE</button>
+          </div>
+        </div>
       </section>
 
       <section class="layout-list" aria-labelledby="hud-widgets-title">

@@ -2154,7 +2154,10 @@ h1 {
   line-height: 1.45;
 }
 
-.driver-analysis-recorder {
+/* Action panels: the Driver Analysis recorder and the HUD layout editor share
+   one look, a raised plate of rows with copy on the left and actions on the right. */
+.driver-analysis-recorder,
+.action-panel {
   margin-top: 14px;
   overflow: hidden;
   border: 1px solid var(--line-strong);
@@ -2163,7 +2166,8 @@ h1 {
 }
 
 .driver-analysis-recorder__main,
-.driver-analysis-hotkey {
+.driver-analysis-hotkey,
+.action-panel__row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2172,7 +2176,9 @@ h1 {
 }
 
 .driver-analysis-recorder__main h3,
-.driver-analysis-hotkey strong {
+.driver-analysis-hotkey strong,
+.action-panel__row h3,
+.action-panel__row strong {
   color: var(--text);
   font-size: 13px;
   font-weight: 800;
@@ -2180,7 +2186,9 @@ h1 {
 }
 
 .driver-analysis-recorder__main p,
-.driver-analysis-hotkey small {
+.driver-analysis-hotkey small,
+.action-panel__row p,
+.action-panel__row small {
   display: block;
   margin-top: 6px;
   color: var(--text-muted);
@@ -2189,14 +2197,16 @@ h1 {
 }
 
 .driver-analysis-recorder__actions,
-.driver-analysis-hotkey__control {
+.driver-analysis-hotkey__control,
+.action-panel__actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 10px;
 }
 
-.driver-analysis-recording-status {
+.driver-analysis-recording-status,
+.action-panel__status {
   color: var(--text-subtle);
   font-size: 12px;
   font-weight: 800;
@@ -2208,7 +2218,8 @@ h1 {
 }
 
 .driver-analysis-recording-status[data-state='waiting'],
-.driver-analysis-recording-status[data-state='finalizing'] {
+.driver-analysis-recording-status[data-state='finalizing'],
+.action-panel__status[data-state='editing'] {
   color: var(--warning);
 }
 
@@ -2236,11 +2247,13 @@ h1 {
   background: var(--accent-pressed);
 }
 
-.driver-analysis-hotkey {
+.driver-analysis-hotkey,
+.action-panel__row + .action-panel__row {
   border-top: 1px solid var(--line-subtle);
 }
 
-.driver-analysis-hotkey__control output {
+.driver-analysis-hotkey__control output,
+.action-panel__actions output {
   min-width: 136px;
   color: var(--text);
   font-size: 13px;
@@ -2544,12 +2557,14 @@ h1 {
   }
 
   .driver-analysis-recorder__main,
-  .driver-analysis-hotkey {
+  .driver-analysis-hotkey,
+  .action-panel__row {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .driver-analysis-hotkey__control {
+  .driver-analysis-hotkey__control,
+  .action-panel__actions {
     width: 100%;
     justify-content: space-between;
   }
@@ -2633,14 +2648,23 @@ h1 {
   background: var(--accent);
 }
 
-/* The WIDGETS list is the HUD page's raised plate; ARRANGEMENT and the layout
-   actions are ordinary cards like HUD DISPLAY and HUD OPACITY above them. */
+/* The layout editor is the HUD page's raised plate; ARRANGEMENT and WIDGETS
+   are ordinary cards like HUD DISPLAY and HUD OPACITY. */
+.action-panel {
+  margin: 0 0 18px;
+}
+
+/* Rows line up with the 18px side padding of the HUD cards around the panel. */
+.action-panel .action-panel__row {
+  padding: 16px 18px;
+}
+
 .layout-list {
   overflow: hidden;
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   border-radius: 0;
-  background: var(--panel);
+  background: var(--surface);
 }
 
 .layout-arrangement {
@@ -2668,36 +2692,6 @@ h1 {
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.35;
-}
-
-/* One line: EDIT LAYOUT, "or" the hotkey styled like the Driver Analysis
-   record hotkey, and RESET LAYOUT at the right end. */
-.layout-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.layout-actions__hotkey {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-left: var(--space-2);
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.layout-actions__hotkey output {
-  color: var(--text);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-}
-
-.layout-actions #hud-layout-reset {
-  margin-left: auto;
 }
 
 .layout-section__header {
@@ -2752,10 +2746,6 @@ h1 {
   .layout-arrangement {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .layout-actions__hotkey {
-    margin-left: 0;
   }
 }
 

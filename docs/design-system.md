@@ -114,7 +114,7 @@ The application header is the only textured surface: it shows
   actions in its row stay right-aligned. A heading that labels a control, such
   as the Driver Analysis switch, stays visible.
 - The raised plate (`--panel` with a `--line-strong` border) marks one area
-  per view: the HUD WIDGETS list, the Events create form, the event's run
+  per view: the HUD layout editor, the Events create form, the event's run
   recorder, the run's lap breakdown, the Driver Analysis recorder, the Shift
   Light calibration card, and the Garage current car. The Events library,
   Driver Analysis drill-down pages, and Settings have none.
@@ -200,11 +200,12 @@ The application header is the only textured surface: it shows
   is a card like HUD DISPLAY and HUD OPACITY, with a segmented choice of
   GROUPED (moves the HUD as one block) or FREEFORM (moves and resizes each
   block individually) whose selected option keeps a lime fill. The layout
-  actions card is one line: EDIT LAYOUT, "or" with the edit hotkey and
-  CHANGE styled like the Driver Analysis record hotkey, and RESET LAYOUT
-  (caution) at the right end. WIDGETS is the raised plate: compact
-  name-and-switch rows with ALL in its header. Controls on the right of all
-  three blocks line up on one edge.
+  editor is the page's raised plate and an action panel (`.action-panel`)
+  that shares its styles with the Driver Analysis recorder: EDIT THE LAYOUT
+  with RESET LAYOUT (caution) and EDIT LAYOUT, or EDITING with CANCEL and
+  SAVE; and IN-GAME EDIT HOTKEY with the hotkey and CHANGE. WIDGETS is a
+  card of compact name-and-switch rows with ALL in its header. Text and
+  controls of all three blocks line up on the same left and right edges.
 - The layout editor shows an edit toolbar on the selected target with the
   hint text `DRAG <TARGET> TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO
   SELECT`, then GRID ON (filled with lime) or GRID OFF (neutral), RESET

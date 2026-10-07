@@ -86,16 +86,19 @@ below HUD OPACITY, the same in both arrangements:
    places and sizes every block independently. Delta is positioned
    independently in both arrangements, and each arrangement keeps its own
    saved positions.
-2. One line of layout actions: **EDIT LAYOUT** (the lime next step), then
-   "or" and the edit hotkey with **CHANGE**, styled like the Driver Analysis
-   record hotkey, and **RESET LAYOUT** at the right end.
+2. The layout editor, built like the Driver Analysis recorder: two rows,
+   each with a title and a sentence on the left and its controls on the
+   right. **EDIT THE LAYOUT** has **RESET LAYOUT** and **EDIT LAYOUT** (the
+   lime next step); while an edit runs it shows **EDITING** in caution yellow
+   with **CANCEL** and **SAVE**. **IN-GAME EDIT HOTKEY** shows the hotkey and
+   **CHANGE**, like GLOBAL RECORD HOTKEY.
 3. **WIDGETS**: one compact row per widget with its name and a switch (Tires,
    Throttle & Brake, Steering, Gear / Speed / RPM, Engine / Boost, Input
    Graph, Delta), and **ALL** in the block header. Clicking anywhere on a
    row toggles its widget. **ALL** is on only while every widget is on.
 
 Below 560 px of window width the arrangement choice moves under its
-description, and RESET LAYOUT wraps to its own line on the right.
+description, and each editor row stacks its controls under its text.
 
 A layout edit covers every enabled target at once: in Grouped, the HUD panel
 and Delta; in Freeform, each block whose switch is on and Delta. A switched-off

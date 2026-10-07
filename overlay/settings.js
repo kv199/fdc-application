@@ -3944,16 +3944,18 @@
     const saveBtn = document.getElementById('hud-layout-save')
     const cancelBtn = document.getElementById('hud-layout-cancel')
 
-    if (editingTarget) {
-      editBtn.hidden = true
-      resetBtn.hidden = true
-      saveBtn.hidden = false
-      cancelBtn.hidden = false
-    } else {
-      editBtn.hidden = false
-      resetBtn.hidden = false
-      saveBtn.hidden = true
-      cancelBtn.hidden = true
+    const editing = Boolean(editingTarget)
+    editBtn.hidden = editing
+    resetBtn.hidden = editing
+    saveBtn.hidden = !editing
+    cancelBtn.hidden = !editing
+    const status = document.getElementById('hud-layout-status')
+    if (status) status.hidden = !editing
+    const hint = document.getElementById('hud-layout-edit-hint')
+    if (hint) {
+      hint.textContent = editing
+        ? 'Drag the blocks on the screen, then save or cancel. In Forza, the hotkey also saves.'
+        : 'Move and resize the HUD blocks right on the screen.'
     }
     syncHudDisplayDisabled()
   }
