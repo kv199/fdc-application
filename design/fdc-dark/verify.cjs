@@ -30,7 +30,7 @@ for (const board of boards) {
 }
 
 // The book has no copies of app assets: it uses the app's tokens, fonts, and texture.
-for (const file of ['index.html', 'book.css', 'design-system.css', 'light-theme.css', 'icon/icon.css', 'icon/fdc-icon.svg', 'icon/fdc-icon.png', 'icon/fdc-icon.ico', 'icon/fdc-icon-pulse.svg', 'icon/fdc-icon-pulse.png', 'icon/fdc-icon-pulse.ico', 'icon/fdc-icon-lift.svg', 'icon/fdc-icon-lift.png', 'icon/fdc-icon-lift.ico', 'icon/fdc-icon-lift-mark.svg', 'book.js', 'overlays.js', 'README.md', 'IMPLEMENTATION.md', 'LIGHT_THEME.md']) {
+for (const file of ['index.html', 'book.css', 'design-system.css', 'light-theme.css', 'icon/icon.css', 'icon/fdc-icon.svg', 'icon/fdc-icon.png', 'icon/fdc-icon.ico', 'icon/fdc-icon-pulse.svg', 'icon/fdc-icon-pulse.png', 'icon/fdc-icon-pulse.ico', 'icon/fdc-icon-lift.svg', 'icon/fdc-icon-lift.png', 'icon/fdc-icon-lift.ico', 'icon/fdc-icon-lift-mark.svg', 'icon/fdc-icon-chroma.svg', 'icon/fdc-icon-chroma.png', 'icon/fdc-icon-chroma.ico', 'icon/fdc-icon-spectrum.svg', 'icon/fdc-icon-spectrum.png', 'icon/fdc-icon-spectrum.ico', 'book.js', 'overlays.js', 'README.md', 'IMPLEMENTATION.md', 'LIGHT_THEME.md']) {
   if (!exists(file)) throw Error(`Missing book file: ${file}`);
 }
 if (!fs.existsSync(path.join(repo, 'overlay', 'assets', 'textures', 'paint.jpg'))) throw Error('Missing FDC paint texture used by the icon finish preview');

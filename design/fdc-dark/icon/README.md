@@ -14,6 +14,14 @@ study shortens the cream arms, widens the colored pieces, and reduces the gaps.
 The Lift mark is larger within the tile. Its exported tile uses a restrained
 olive gradient so the shape can still be judged at the 16 px tray size.
 
+Chroma and Spectrum are a new, separate exploration prompted by a supplied
+multicolor app-icon reference. Both use an italic F with a warm spine, cool
+middle rail, and rounded night-blue tile. Chroma keeps smooth color fields for
+the clearest small-size read. Spectrum adds three distinct middle-rail bands
+and sparse points on the tile. The reference image is not included or traced;
+the geometry and exports were authored for FDC. These colors are exploratory
+and do not change the app or HUD palette.
+
 ## Files
 
 - `fdc-icon.svg`: editable original vector source, 512 × 512 viewBox.
@@ -26,6 +34,8 @@ olive gradient so the shape can still be judged at the 16 px tray size.
 - `fdc-icon-lift.png`: 1024 × 1024 transparent-corner variant export.
 - `fdc-icon-lift.ico`: Windows variant export with the same seven sizes.
 - `fdc-icon-lift-mark.svg`: foreground-only preview for comparing tile finishes.
+- `fdc-icon-chroma.svg`, `.png`, `.ico`: editable Chroma vector and Windows exports.
+- `fdc-icon-spectrum.svg`, `.png`, `.ico`: editable Spectrum vector and Windows exports.
 
 All shapes were authored as FDC vectors. Lift interprets a user-supplied
 composition sketch; the sketch file is not included in the repository. No
@@ -38,7 +48,8 @@ olive surface colors without texture. The book also previews the foreground
 on the existing `overlay/assets/textures/paint.jpg`. That preview is not an
 icon export and does not duplicate the texture in this folder.
 
-The `foundation-icon` board compares all three proposals at taskbar and tray
-sizes and shows the current installed icon separately. No proposal is selected
-for implementation. Replacing the runtime icon and updating
-application assets belongs to the later implementation step.
+The `foundation-icon` board shows the two new color studies first and preserves
+all three earlier proposals below. It compares them at taskbar and tray sizes
+and shows the current installed icon separately. No proposal is selected for
+implementation. Replacing the runtime icon and updating application assets
+belongs to the later implementation step.

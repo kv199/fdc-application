@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">FDC Chroma F icon proposal</title>
+  <desc id="description">A large italic F shifts from gold and coral through violet and blue on a rounded midnight tile.</desc>
+  <defs>
+    <linearGradient id="tile" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#172559"/>
+      <stop offset="47%" stop-color="#0d1741"/>
+      <stop offset="100%" stop-color="#080d29"/>
+    </linearGradient>
+    <linearGradient id="spine" x1="42%" y1="100%" x2="60%" y2="0%">
+      <stop offset="0%" stop-color="#ffd531"/>
+      <stop offset="48%" stop-color="#ff9228"/>
+      <stop offset="100%" stop-color="#f34339"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0%" y1="0%" x2="100%" y2="80%">
+      <stop offset="0%" stop-color="#f34339"/>
+      <stop offset="45%" stop-color="#e04b7e"/>
+      <stop offset="100%" stop-color="#7654f5"/>
+    </linearGradient>
+    <linearGradient id="middle" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#416df9"/>
+      <stop offset="60%" stop-color="#8055ed"/>
+      <stop offset="100%" stop-color="#e35ac2"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="104" fill="url(#tile)"/>
+  <path d="M139 93H221L165 422H79Z" fill="url(#spine)"/>
+  <path d="M139 93H405L363 171H125Z" fill="url(#top)"/>
+  <path d="M113 243H342L301 316H96Z" fill="url(#middle)"/>
+</svg>

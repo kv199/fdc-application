@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">FDC Spectrum F icon proposal</title>
+  <desc id="description">A gold-to-coral F spine joins two faceted color rails, with violet and blue signal bands on a rounded night-blue tile.</desc>
+  <defs>
+    <linearGradient id="tile" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#151d56"/>
+      <stop offset="57%" stop-color="#0a1036"/>
+      <stop offset="100%" stop-color="#070a27"/>
+    </linearGradient>
+    <radialGradient id="light" cx="46%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#314ba1" stop-opacity=".34"/>
+      <stop offset="100%" stop-color="#314ba1" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="spine" x1="60%" y1="0%" x2="20%" y2="100%">
+      <stop offset="0%" stop-color="#ff4639"/>
+      <stop offset="48%" stop-color="#ff8525"/>
+      <stop offset="100%" stop-color="#ffd631"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fa493a"/>
+      <stop offset="48%" stop-color="#e13684"/>
+      <stop offset="100%" stop-color="#824cf4"/>
+    </linearGradient>
+    <linearGradient id="band-1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#425fe7"/>
+      <stop offset="100%" stop-color="#8b4af5"/>
+    </linearGradient>
+    <linearGradient id="band-2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3e79ee"/>
+      <stop offset="100%" stop-color="#ae53ea"/>
+    </linearGradient>
+    <linearGradient id="band-3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4973f1"/>
+      <stop offset="100%" stop-color="#e85fc5"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="104" fill="url(#tile)"/>
+  <rect width="512" height="512" rx="104" fill="url(#light)"/>
+  <g fill="#8fa8ed" opacity=".46">
+    <circle cx="100" cy="74" r="2.5"/><circle cx="310" cy="62" r="2"/>
+    <circle cx="443" cy="114" r="2.5"/><circle cx="71" cy="199" r="2"/>
+    <circle cx="409" cy="236" r="2.5"/><circle cx="461" cy="348" r="2"/>
+    <circle cx="303" cy="435" r="2"/><circle cx="109" cy="456" r="2.5"/>
+  </g>
+  <path d="M146 88H227L164 426H80Z" fill="url(#spine)"/>
+  <path d="M146 88H409L367 165H131Z" fill="url(#top)"/>
+  <path d="M119 242H345L332 266H114Z" fill="url(#band-1)"/>
+  <path d="M114 266H332L318 291H106Z" fill="url(#band-2)"/>
+  <path d="M106 291H318L305 316H99Z" fill="url(#band-3)"/>
+</svg>

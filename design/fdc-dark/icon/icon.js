@@ -2,18 +2,29 @@
 (() => {
   const icon = (file, px, alt = '') => `<img src="icon/${file}.png" width="${px}" height="${px}" alt="${alt}"/>`;
   const metal = (px, label = '') => `<span class="icon-proposal__metal" style="--icon-size:${px}px" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}><img class="icon-proposal__metal-texture" src="../../overlay/assets/textures/paint.jpg" alt=""/><img class="icon-proposal__metal-mark" src="icon/fdc-icon-lift-mark.svg" alt=""/></span>`;
+  const newSizes = file => `<div class="icon-proposal__new-sizes">${[64, 32, 24, 16].map(px => `<span>${icon(file, px)}<small>${px}</small></span>`).join('')}</div>`;
+  const newContext = (name, theme) => `<div class="icon-proposal__context icon-proposal__context--${theme}">${icon('fdc-icon-chroma', 42)}${icon('fdc-icon-spectrum', 42)}<span>${name}</span></div>`;
   const files = ['fdc-icon', 'fdc-icon-lift', 'fdc-icon-pulse'];
   const sizes = [64, 32, 24, 16].map(px => `<tr><th scope="row">${px} px</th>${files.map(file => `<td>${icon(file, px)}</td>`).join('')}</tr>`).join('');
   const context = (name, theme) => `<div class="icon-proposal__context icon-proposal__context--${theme}">${files.map(file => icon(file, 42)).join('')}<span>${name}</span></div>`;
   window.FDC_FOUNDATIONS.push({
     id: 'foundation-icon',
-    title: 'App icon · Signal F',
+    title: 'App icon · F studies',
     section: 'FOUNDATIONS',
     status: 'proposal',
     proposalLabel: 'FDC ICON / PROPOSAL',
     proposalKicker: 'APP ICON / BOTH THEMES',
-    description: 'Three rounded FDC icon proposals. Lift now has shorter F arms, wider and closer throttle/brake pieces, and a subtle gradient; compare it with the app paint texture at tray size. The installed icon remains unchanged.',
-    html: `<h2>Less arm. More signal.</h2><p class="icon-proposal__intro">Lift keeps both angled cuts in the F, shortens the cream arms, and widens the detached throttle and brake pieces. Their gaps are smaller. The tile now carries a quiet olive gradient; the same mark is also shown over FDC's existing painted material below.</p>
+    description: 'Two new prismatic F studies explore the supplied colorful icon reference. The earlier Signal F, Lift, and Pulse proposals are preserved below; the installed icon remains unchanged.',
+    html: `<h2>F in color.</h2><p class="icon-proposal__intro">A fresh direction based on the supplied reference: one bold italic F, warm-to-cool color inside the letter, and a deep night-blue tile. These are FDC-authored studies, not a tracing of the reference. Compare the clean ribbon with a faceted, instrument-like version at real Windows sizes.</p>
+      <div class="icon-proposal__new-grid">
+        <section class="panel icon-proposal__new-card">${icon('fdc-icon-chroma', 224, 'Chroma F: warm gold spine, coral and violet top bar, blue-violet middle bar on a rounded night-blue tile')}<div><h3>Chroma</h3><p class="muted">The simplest read: three connected gradients, one clear F.</p>${newSizes('fdc-icon-chroma')}</div></section>
+        <section class="panel icon-proposal__new-card">${icon('fdc-icon-spectrum', 224, 'Spectrum F: gold spine, coral-violet top bar and three blue-violet signal bands on a sparse dotted dark-blue tile')}<div><h3>Spectrum</h3><p class="muted">Layered signal bands and sparse points add the reference's depth.</p>${newSizes('fdc-icon-spectrum')}</div></section>
+      </div>
+      <p class="muted icon-proposal__new-note">Both use new vector geometry. The blue tile and multicolor rails are exploratory; no app or HUD colors change. At 16 px, judge the overall F silhouette rather than the tiny bands and dots.</p>
+      <div class="icon-proposal__contexts">${newContext('FDC Dark', 'dark')}${newContext('Light Configuration proposal', 'light')}</div>
+      <div class="icon-proposal__files"><a href="icon/fdc-icon-chroma.svg">Chroma SVG ↗</a><a href="icon/fdc-icon-chroma.png">Chroma PNG ↗</a><a href="icon/fdc-icon-chroma.ico">Chroma ICO ↗</a><a href="icon/fdc-icon-spectrum.svg">Spectrum SVG ↗</a><a href="icon/fdc-icon-spectrum.png">Spectrum PNG ↗</a><a href="icon/fdc-icon-spectrum.ico">Spectrum ICO ↗</a></div>
+      <hr class="icon-proposal__divider"/>
+      <h2>Less arm. More signal.</h2><p class="icon-proposal__intro">Earlier studies, kept for comparison. Lift keeps both angled cuts in the F, shortens the cream arms, and widens the detached throttle and brake pieces. Their gaps are smaller. The tile carries a quiet olive gradient; the same mark is also shown over FDC's existing painted material below.</p>
       <div class="icon-proposal__variants">
         <section class="panel icon-proposal__variant">${icon('fdc-icon', 192, 'Signal F icon: cream F with a continuous lime upper rail on a rounded dark olive tile')}<h3>Signal F</h3><p class="muted">The minimal baseline. One continuous rail.</p></section>
         <section class="panel icon-proposal__variant">${icon('fdc-icon-lift', 192, 'Lift icon: short cream F arms and wider green and red pieces with close diagonal cuts on an olive gradient tile')}<h3>Signal F · Lift</h3><p class="muted">Shorter cream arms, broader throttle and brake pieces, tighter cuts.</p></section>
