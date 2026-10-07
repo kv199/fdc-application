@@ -1,16 +1,16 @@
 .icon-proposal__intro { max-width: 72ch; }
-.icon-proposal__variants { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.icon-proposal__variants { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
 .icon-proposal__variant { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 310px; text-align: center; }
 .icon-proposal__variant > img { display: block; width: 192px; height: 192px; }
 .icon-proposal__variant p { max-width: 42ch; }
-.icon-proposal__size-table { width: min(100%, 500px); margin: 16px 0 30px; border-collapse: collapse; }
-.icon-proposal__size-table th, .icon-proposal__size-table td { width: 33.33%; padding: 12px; border-bottom: 1px solid var(--line); text-align: center; }
+.icon-proposal__size-table { width: min(100%, 640px); margin: 16px 0 30px; border-collapse: collapse; }
+.icon-proposal__size-table th, .icon-proposal__size-table td { width: 25%; padding: 10px 6px; border-bottom: 1px solid var(--line); text-align: center; }
 .icon-proposal__size-table th:first-child { text-align: left; }
 .icon-proposal__size-table thead th { color: var(--text-muted); font-size: 12px; font-weight: 600; }
 .icon-proposal__size-table tbody th { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 600; }
 .icon-proposal__size-table img { display: block; margin: auto; }
 .icon-proposal__contexts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
-.icon-proposal__context { display: flex; align-items: center; gap: 12px; min-height: 76px; padding: 12px; border: 1px solid var(--line); }
+.icon-proposal__context { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-height: 76px; padding: 12px; border: 1px solid var(--line); }
 .icon-proposal__context img { width: 42px; height: 42px; flex: none; }
 .icon-proposal__context--dark { background: var(--surface-deep); color: var(--text); }
 .icon-proposal__context--light { background: #f1f3ee; color: #1b241d; }

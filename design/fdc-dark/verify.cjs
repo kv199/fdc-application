@@ -30,7 +30,7 @@ for (const board of boards) {
 }
 
 // The book has no copies of app assets: it uses the app's tokens, fonts, and texture.
-for (const file of ['index.html', 'book.css', 'design-system.css', 'light-theme.css', 'icon/icon.css', 'icon/fdc-icon.svg', 'icon/fdc-icon.png', 'icon/fdc-icon.ico', 'icon/fdc-icon-pulse.svg', 'icon/fdc-icon-pulse.png', 'icon/fdc-icon-pulse.ico', 'book.js', 'overlays.js', 'README.md', 'IMPLEMENTATION.md', 'LIGHT_THEME.md']) {
+for (const file of ['index.html', 'book.css', 'design-system.css', 'light-theme.css', 'icon/icon.css', 'icon/fdc-icon.svg', 'icon/fdc-icon.png', 'icon/fdc-icon.ico', 'icon/fdc-icon-pulse.svg', 'icon/fdc-icon-pulse.png', 'icon/fdc-icon-pulse.ico', 'icon/fdc-icon-lift.svg', 'icon/fdc-icon-lift.png', 'icon/fdc-icon-lift.ico', 'book.js', 'overlays.js', 'README.md', 'IMPLEMENTATION.md', 'LIGHT_THEME.md']) {
   if (!exists(file)) throw Error(`Missing book file: ${file}`);
 }
 for (const file of ['fonts', 'paint.png']) {

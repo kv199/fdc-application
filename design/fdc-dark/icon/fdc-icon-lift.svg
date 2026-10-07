@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">FDC Signal F lift variant</title>
+  <desc id="description">A cream F on a rounded dark olive tile with both horizontal tips detached and raised in lime. Their ends share the same diagonal cut.</desc>
+  <!-- Vector interpretation of the user's sketch. Palette follows overlay/tokens.css. -->
+  <rect width="512" height="512" rx="104" fill="#152019"/>
+  <path d="M130 163H257V224H204V252H257V312H204V395H130Z" fill="#edf0df"/>
+  <path d="M280 130H389L357 192H280Z" fill="#c3ed83"/>
+  <path d="M280 222H358L326 284H280Z" fill="#c3ed83"/>
+</svg>

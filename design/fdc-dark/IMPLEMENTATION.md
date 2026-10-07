@@ -8,7 +8,7 @@ The proposed light Configuration palette is in
 design-book specimen and is not implemented in the application. The in-game HUD
 and Delta stay on the current dark design.
 
-The two application icon proposals are in `design/fdc-dark/icon/`. Each SVG is
+The three application icon proposals are in `design/fdc-dark/icon/`. Each SVG is
 the editable source and PNG/ICO are exports. The installed Tauri icon is
 unchanged.
 
