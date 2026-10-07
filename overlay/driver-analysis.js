@@ -12,6 +12,8 @@
   const SAMPLE_BATCH_MS = 1000
   const REANALYSIS_PAGE_SIZE = 2000
   const BLOCKED_HOTKEYS = new Set(['Alt+F4', 'Alt+Tab', 'Ctrl+Escape', 'Ctrl+Shift+Escape'])
+  // Car-selection screens send telemetry for cars nobody drives; such a car's session is not kept.
+  const MIN_KEPT_SESSION_DISTANCE_M = 25
 
   function storageGet(storage, key) {
     try { return storage?.getItem?.(key) || null } catch { return null }
@@ -224,6 +226,7 @@
     const invoke = typeof options.invoke === 'function' ? options.invoke : null
     const emit = typeof options.emit === 'function' ? options.emit : () => Promise.resolve()
     const onResult = typeof options.onResult === 'function' ? options.onResult : () => Promise.resolve()
+    const onDiscarded = typeof options.onDiscarded === 'function' ? options.onDiscarded : () => Promise.resolve()
     const now = typeof options.now === 'function' ? options.now : () => Date.now()
     const createSegmenter = typeof options.createSegmenter === 'function'
       ? options.createSegmenter
@@ -236,6 +239,7 @@
     let recordingId = null
     let recordingPromise = null
     let car = createCarState()
+    let keptSessions = 0
     let lastError = null
     let persistence = Promise.resolve()
 
@@ -274,6 +278,7 @@
       recordingId = null
       recordingPromise = null
       car = createCarState()
+      keptSessions = 0
       lastError = null
     }
 
@@ -331,9 +336,18 @@
       const finalized = engine.finalize()
       engine.reset?.('car_finished')
       const drives = state.segmenter?.finalize?.() || []
+      const rawDistanceM = finalized?.stats?.distanceM
+      const distanceM = rawDistanceM === null || rawDistanceM === undefined ? null : finite(rawDistanceM, null)
+      const kept = drives.length > 0 || distanceM === null || distanceM > MIN_KEPT_SESSION_DISTANCE_M
+      if (kept) keptSessions += 1
       await state.sessionPromise
       await flushSamples(state)
       await persistence
+      if (!kept) {
+        await enqueue(() => invoke('discard_driver_analysis_session', { sessionId: state.sessionId }))
+        void Promise.resolve(onDiscarded()).catch(() => undefined)
+        return null
+      }
       const payload = persistencePayload(finalized, interrupted)
       const entry = await enqueue(() => invoke('finalize_driver_analysis_session', { sessionId: state.sessionId, ...payload, drives }))
       void Promise.resolve(onResult(entry)).catch(() => undefined)
@@ -362,6 +376,10 @@
       try {
         const entry = await finishCar(interrupted)
         await persistence
+        if (recordingId !== null && keptSessions === 0) {
+          await enqueue(() => invoke('discard_driver_analysis_recording', { recordingId }))
+          void Promise.resolve(onDiscarded()).catch(() => undefined)
+        }
         resetRuntime('recording_stop')
         phase = enabled ? 'ready' : 'off'
         publish()

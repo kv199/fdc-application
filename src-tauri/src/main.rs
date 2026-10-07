@@ -2881,6 +2881,60 @@ fn delete_driver_analysis_recording(app: AppHandle, recording_id: i64) -> Result
     delete_driver_analysis_recording_in_connection(&mut connection, recording_id)
 }
 
+// Discards a car's session that is still being recorded, such as a car shown on a car-selection screen that nobody
+// drove. A finished session is never touched.
+fn discard_driver_analysis_session_in_connection(
+    connection: &Connection,
+    session_id: i64,
+) -> Result<(), String> {
+    if session_id <= 0 {
+        return Err("Driver Analysis session id must be positive".to_string());
+    }
+    let changed = connection
+        .execute(
+            "DELETE FROM driver_analysis_sessions WHERE id = ?1 AND status = 'recording'",
+            params![session_id],
+        )
+        .map_err(|error| format!("unable to discard Driver Analysis session: {error}"))?;
+    if changed == 0 {
+        return Err("Driver Analysis session is not an unfinished recording".to_string());
+    }
+    Ok(())
+}
+
+// Discards a recording that ended without any car session.
+fn discard_driver_analysis_recording_in_connection(
+    connection: &mut Connection,
+    recording_id: i64,
+) -> Result<(), String> {
+    if recording_id <= 0 {
+        return Err("Driver Analysis recording id must be positive".to_string());
+    }
+    let changed = connection
+        .execute(
+            "DELETE FROM driver_analysis_recordings WHERE id = ?1
+             AND NOT EXISTS (SELECT 1 FROM driver_analysis_sessions WHERE recording_id = ?1)",
+            params![recording_id],
+        )
+        .map_err(|error| format!("unable to discard Driver Analysis recording: {error}"))?;
+    if changed == 0 {
+        return Err("Driver Analysis recording does not exist or still has cars".to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn discard_driver_analysis_session(app: AppHandle, session_id: i64) -> Result<(), String> {
+    let connection = open_shift_light_db(&app)?;
+    discard_driver_analysis_session_in_connection(&connection, session_id)
+}
+
+#[tauri::command]
+fn discard_driver_analysis_recording(app: AppHandle, recording_id: i64) -> Result<(), String> {
+    let mut connection = open_shift_light_db(&app)?;
+    discard_driver_analysis_recording_in_connection(&mut connection, recording_id)
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DriverAnalysisExportOutcome {
@@ -5807,6 +5861,8 @@ fn main() {
             load_driver_analysis_sessions,
             delete_driver_analysis_session,
             delete_driver_analysis_recording,
+            discard_driver_analysis_session,
+            discard_driver_analysis_recording,
             export_driver_analysis_recording,
             sync_route_status,
             sync_shift_light_status,
@@ -7965,6 +8021,137 @@ mod tests {
                 .unwrap(),
             0
         );
+    }
+
+    #[test]
+    fn driver_analysis_discard_removes_an_unfinished_session_and_its_samples() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_sample(0)],
+        )
+        .unwrap();
+        // Discard the unfinished session
+        discard_driver_analysis_session_in_connection(&connection, session_id).unwrap();
+        // Verify the session is gone
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM driver_analysis_sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "session should be deleted");
+        // Verify its samples are gone (by cascade)
+        let sample_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM driver_analysis_samples WHERE session_id = ?1",
+                params![session_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        assert_eq!(sample_count, 0, "samples should be deleted by cascade");
+    }
+
+    #[test]
+    fn driver_analysis_discard_keeps_a_finished_session() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        append_driver_analysis_samples_in_connection(
+            &mut connection,
+            session_id,
+            &[driver_analysis_sample(0)],
+        )
+        .unwrap();
+        // Finalize the session (changes status from 'recording' to 'completed')
+        finalize_driver_analysis_session_in_connection(
+            &mut connection,
+            session_id,
+            &[],
+            &[],
+            &driver_analysis_result("insufficient"),
+            None,
+        )
+        .unwrap();
+        // Try to discard a finished session
+        let result = discard_driver_analysis_session_in_connection(&connection, session_id);
+        assert!(
+            result.is_err(),
+            "discard should fail for a finished session"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Driver Analysis session is not an unfinished recording"
+        );
+        // Verify the session still exists
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM driver_analysis_sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "finished session should not be deleted");
+    }
+
+    #[test]
+    fn driver_analysis_discard_recording_only_without_sessions() {
+        let mut connection = driver_analysis_connection();
+        let session_id = create_driver_analysis_session_in_connection(
+            &mut connection,
+            &driver_analysis_session_input(1_000),
+        )
+        .unwrap();
+        // Get the recording_id from the session
+        let recording_id: i64 = connection
+            .query_row(
+                "SELECT recording_id FROM driver_analysis_sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        // Try to discard the recording while it still has a session
+        let result = discard_driver_analysis_recording_in_connection(&mut connection, recording_id);
+        assert!(
+            result.is_err(),
+            "discard should fail while recording has sessions"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Driver Analysis recording does not exist or still has cars"
+        );
+        // Verify the recording still exists
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM driver_analysis_recordings WHERE id = ?1",
+                params![recording_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "recording should still exist");
+        // Delete the session
+        delete_driver_analysis_session_in_connection(&connection, session_id).unwrap();
+        // Now discarding the recording should succeed
+        discard_driver_analysis_recording_in_connection(&mut connection, recording_id).unwrap();
+        // Verify the recording is gone
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM driver_analysis_recordings WHERE id = ?1",
+                params![recording_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "recording should be deleted");
     }
 
     #[test]

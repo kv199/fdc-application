@@ -103,6 +103,7 @@ const driverAnalysisRecorder = window.DriverAnalysis?.createRecorder?.({
     emitRecorderEvent('driver_analysis_result', entry),
     publishDriverAnalysisHistory()
   ]),
+  onDiscarded: () => publishDriverAnalysisHistory(),
   enabled: driverAnalysisSettings.enabled
 }) || null
 let deltaReferenceRequest = 0

@@ -56,6 +56,10 @@ OFF → READY → WAITING → RECORDING → FINALIZING → READY
 - A vehicle-identity change finishes and saves the analysis session of the
   previous car and starts a new session for the new car in the same recording.
   Switching back to an earlier car starts another session for it.
+- Car-selection screens send telemetry for cars nobody drives. A finished car
+  session without drives whose car travelled at most 25 metres is deleted
+  instead of saved, and a recording that ends without any saved car is deleted
+  too. A session whose distance is unknown is kept.
 - An unfinished `recording` session is recovered as `interrupted` when FDC
   starts.
 

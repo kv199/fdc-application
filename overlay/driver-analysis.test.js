@@ -425,13 +425,13 @@ test('an analysis engine fault stops the recording without throwing into the tel
   assert.deepEqual(commands, [])
 })
 
-function stubEngine() {
+function stubEngine(stats = null) {
   let updates = 0
   return {
     get updates() { return updates },
     reset() {}, resetTransient() {}, update() { updates += 1 },
     snapshot() { return { algorithmVersion: 'test-v1' } },
-    finalize() { return { status: 'insufficient', mainProblem: null, opportunities: [], evidence: [], stats: null } }
+    finalize() { return { status: 'insufficient', mainProblem: null, opportunities: [], evidence: [], stats } }
   }
 }
 
@@ -442,7 +442,9 @@ function stubInvoke(calls) {
     if (command === 'create_driver_analysis_recording') return 5
     if (command === 'create_driver_analysis_session') return nextSession++
     if (command === 'finalize_driver_analysis_session') return { id: payload.sessionId, result: payload.result.result }
-    return payload.samples.length
+    if (command === 'discard_driver_analysis_session') return 1
+    if (command === 'discard_driver_analysis_recording') return 1
+    return payload.samples?.length ?? 0
   }
 }
 
@@ -492,4 +494,152 @@ test('stored samples carry the car position and finalize carries the drives', as
   const drives = calls.find(call => call.command === 'finalize_driver_analysis_session').payload.drives
   assert.equal(drives.length, 1)
   assert.deepEqual([drives[0].kind, drives[0].finished, drives[0].firstSequence, drives[0].lastSequence, drives[0].distanceM], ['sprint', true, 0, 2, 1500])
+})
+
+test('a car with distanceM: 3 and no drives is deleted when recording stops', async () => {
+  const calls = []
+  const discardedCalls = []
+  const recorder = analysis.createRecorder({
+    engine: stubEngine({ version: 1, distanceM: 3 }),
+    invoke: stubInvoke(calls),
+    enabled: true,
+    onDiscarded: () => { discardedCalls.push('discarded'); return Promise.resolve() }
+  })
+  const car = { ordinal: 42, pi: 700, drivetrain: 1 }
+  recorder.start()
+  recorder.update(packet(100, car, { current: 0, raceTime: 0, distance: 0 }))
+  recorder.update(packet(116, car, { current: 0, raceTime: 0, distance: 3 }))
+  await recorder.stop()
+
+  const deletes = calls.filter(call => call.command === 'discard_driver_analysis_session')
+  assert.equal(deletes.length, 1, 'should invoke discard_driver_analysis_session for low-distance session')
+  assert.equal(deletes[0].payload.sessionId, 20)
+  const finalizes = calls.filter(call => call.command === 'finalize_driver_analysis_session')
+  assert.equal(finalizes.length, 0, 'should not finalize a discarded session')
+  const recordDeletes = calls.filter(call => call.command === 'discard_driver_analysis_recording')
+  assert.equal(recordDeletes.length, 1, 'should discard recording with no kept sessions')
+  assert.equal(recordDeletes[0].payload.recordingId, 5)
+  assert.deepEqual(discardedCalls, ['discarded', 'discarded'], 'should call onDiscarded callback twice (once for session, once for recording)')
+})
+
+test('a car with distanceM: 500 is finalized normally', async () => {
+  const calls = []
+  const recorder = analysis.createRecorder({
+    engine: stubEngine({ version: 1, distanceM: 500 }),
+    invoke: stubInvoke(calls),
+    enabled: true
+  })
+  const car = { ordinal: 42, pi: 700, drivetrain: 1 }
+  recorder.start()
+  recorder.update(packet(100, car))
+  recorder.update(packet(116, car))
+  await recorder.stop()
+
+  const deletes = calls.filter(call => call.command === 'discard_driver_analysis_session')
+  assert.equal(deletes.length, 0, 'should not discard high-distance session')
+  const finalizes = calls.filter(call => call.command === 'finalize_driver_analysis_session')
+  assert.equal(finalizes.length, 1, 'should finalize the session')
+  const recordDeletes = calls.filter(call => call.command === 'discard_driver_analysis_recording')
+  assert.equal(recordDeletes.length, 0, 'should not discard recording with kept sessions')
+})
+
+test('two cars in one recording: low-distance first car deleted, high-distance second car finalized, recording kept', async () => {
+  const calls = []
+  const recorder = analysis.createRecorder({
+    engine: stubEngine({ version: 1, distanceM: 0 }),
+    invoke: stubInvoke(calls),
+    enabled: true
+  })
+  const bmw = { ordinal: 42, pi: 700, drivetrain: 1 }
+  const audi = { ordinal: 77, pi: 600, drivetrain: 2 }
+
+  recorder.start()
+  // First car with low distance
+  recorder.update(packet(100, bmw))
+  recorder.update(packet(116, bmw))
+
+  // Second car, need to update engine for second finalize
+  let carCount = 0
+  const flexibleEngine = {
+    get updates() { return 0 },
+    reset() {}, resetTransient() {}, update() {},
+    snapshot() { return { algorithmVersion: 'test-v1' } },
+    finalize() {
+      carCount += 1
+      if (carCount === 1) return { status: 'insufficient', mainProblem: null, opportunities: [], evidence: [], stats: { version: 1, distanceM: 0 } }
+      else return { status: 'insufficient', mainProblem: null, opportunities: [], evidence: [], stats: { version: 1, distanceM: 500 } }
+    }
+  }
+
+  // Re-create recorder with flexible engine to simulate distance change
+  calls.length = 0
+  let nextSession = 20
+  const flexibleInvoke = async (command, payload) => {
+    calls.push({ command, payload })
+    if (command === 'create_driver_analysis_recording') return 5
+    if (command === 'create_driver_analysis_session') return nextSession++
+    if (command === 'finalize_driver_analysis_session') return { id: payload.sessionId, result: payload.result.result }
+    return payload.samples?.length ?? 0
+  }
+
+  const recorder2 = analysis.createRecorder({
+    engine: flexibleEngine,
+    invoke: flexibleInvoke,
+    enabled: true
+  })
+
+  recorder2.start()
+  // First car with low distance
+  recorder2.update(packet(100, bmw))
+  recorder2.update(packet(116, bmw))
+  // Second car with high distance
+  recorder2.update(packet(900, audi))
+  recorder2.update(packet(916, audi))
+
+  await recorder2.stop()
+
+  const deletes = calls.filter(call => call.command === 'discard_driver_analysis_session')
+  assert.equal(deletes.length, 1, 'should discard the first low-distance session')
+  assert.equal(deletes[0].payload.sessionId, 20)
+  const finalizes = calls.filter(call => call.command === 'finalize_driver_analysis_session')
+  assert.equal(finalizes.length, 1, 'should finalize only the high-distance session')
+  assert.equal(finalizes[0].payload.sessionId, 21)
+  const recordDeletes = calls.filter(call => call.command === 'discard_driver_analysis_recording')
+  assert.equal(recordDeletes.length, 0, 'should NOT discard recording when at least one session is kept')
+})
+
+test('stats without a distance (stats: null) keeps the session', async () => {
+  const calls = []
+  const recorder = analysis.createRecorder({
+    engine: stubEngine(null),
+    invoke: stubInvoke(calls),
+    enabled: true
+  })
+  const car = { ordinal: 42, pi: 700, drivetrain: 1 }
+  recorder.start()
+  recorder.update(packet(100, car))
+  recorder.update(packet(116, car))
+  await recorder.stop()
+
+  const deletes = calls.filter(call => call.command === 'discard_driver_analysis_session')
+  assert.equal(deletes.length, 0, 'should not discard session without distance info')
+  const finalizes = calls.filter(call => call.command === 'finalize_driver_analysis_session')
+  assert.equal(finalizes.length, 1, 'should finalize session with unknown distance')
+})
+
+test('stats with a null distance keep the session', async () => {
+  const calls = []
+  const recorder = analysis.createRecorder({
+    engine: stubEngine({ distanceM: null }),
+    invoke: stubInvoke(calls),
+    enabled: true
+  })
+  const car = { ordinal: 42, pi: 700, drivetrain: 1 }
+  recorder.start()
+  recorder.update(packet(100, car))
+  recorder.update(packet(116, car))
+  await recorder.stop()
+
+  assert.equal(calls.filter(call => call.command === 'discard_driver_analysis_session').length, 0)
+  assert.equal(calls.filter(call => call.command === 'finalize_driver_analysis_session').length, 1)
 })

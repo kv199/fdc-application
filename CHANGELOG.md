@@ -10,6 +10,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Driver Analysis**: free roam before a race is no longer included at the
   start of that race's drive, so the drive's start time, duration, and map
   begin at the race start.
+- **Driver Analysis**: cars only shown on car-selection screens no longer
+  appear as extra cars in a recording; a car that moved no more than 25 metres
+  without a race is not saved.
 
 ### Added
 
