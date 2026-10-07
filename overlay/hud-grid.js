@@ -3,7 +3,6 @@
 
   const MAJOR_DIVISIONS = 4
   const MINOR_ROWS = 36
-  const SNAP_THRESHOLD = 8
 
   function positive(value) {
     const number = Number(value)
@@ -41,36 +40,31 @@
     })
   }
 
-  // Moves the nearest of the start edge, center, and end edge onto the nearest
-  // line within the threshold; a major line wins a tie.
-  function snapAxis(start, size, majors, minors, threshold) {
-    let best = null
-    for (const anchor of [start, start + size / 2, start + size]) {
-      for (const [lines, major] of [[majors, true], [minors, false]]) {
-        for (const line of lines) {
-          const distance = Math.abs(anchor - line)
-          if (!best || distance < best.distance || (distance === best.distance && major && !best.major)) {
-            best = { distance, line, shift: line - anchor, major }
-          }
-        }
-      }
-    }
-    return best && best.distance <= threshold
-      ? { start: start + best.shift, line: best.line }
-      : { start, line: null }
+  function nearest(value, lines) {
+    return lines.reduce((best, line) => (best === null || Math.abs(value - line) < Math.abs(value - best) ? line : best), null)
   }
 
-  function snapRect(rect, viewport, threshold = SNAP_THRESHOLD) {
+  // The start edge sits on the nearest dot, unless the center is within half a
+  // step of a major line inside the screen; then the block centers on it.
+  function snapAxis(start, size, majors, minors, step) {
+    const center = start + size / 2
+    const major = nearest(center, majors.slice(1, -1))
+    if (major !== null && Math.abs(center - major) <= step / 2) return { start: major - size / 2, line: major }
+    const minor = nearest(start, minors)
+    return minor === null ? { start, line: null } : { start: minor, line: minor }
+  }
+
+  function snapRect(rect, viewport) {
     if (!Number.isFinite(rect?.left) || !Number.isFinite(rect?.top)) {
       return { left: rect?.left, top: rect?.top, lineX: null, lineY: null }
     }
     const grid = computeGrid(viewport)
-    const x = snapAxis(rect.left, Number(rect.width) || 0, grid.majorX, grid.minorX, threshold)
-    const y = snapAxis(rect.top, Number(rect.height) || 0, grid.majorY, grid.minorY, threshold)
+    const x = snapAxis(rect.left, Number(rect.width) || 0, grid.majorX, grid.minorX, grid.step)
+    const y = snapAxis(rect.top, Number(rect.height) || 0, grid.majorY, grid.minorY, grid.step)
     return { left: x.start, top: y.start, lineX: x.line, lineY: y.line }
   }
 
-  const api = Object.freeze({ MAJOR_DIVISIONS, MINOR_ROWS, SNAP_THRESHOLD, computeGrid, snapRect })
+  const api = Object.freeze({ MAJOR_DIVISIONS, MINOR_ROWS, computeGrid, snapRect })
 
   if (typeof globalScope !== 'undefined') globalScope.HudGrid = api
   if (typeof module !== 'undefined') module.exports = api

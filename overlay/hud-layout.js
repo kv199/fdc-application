@@ -151,7 +151,7 @@
       const root = document.createElement('div')
       root.className = 'layout-edit-tools'
       root.hidden = true
-      root.innerHTML = `<span class="layout-edit__hint">DRAG ${name.toUpperCase()} TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT</span><button class="layout-edit__button layout-edit__button--toggle" type="button" data-layout-snap aria-pressed="true">SNAP</button><button class="layout-edit__button layout-edit__button--reset" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
+      root.innerHTML = `<span class="layout-edit__hint">DRAG ${name.toUpperCase()} TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT</span><button class="layout-edit__button layout-edit__button--toggle" type="button" data-layout-snap aria-pressed="true">GRID</button><button class="layout-edit__button layout-edit__button--reset" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
       const editorFrame = FREEFORM_TARGETS.includes(name) ? document.createElement('div') : null
       const editorSurface = editorFrame || elements[name]
       if (editorFrame) {

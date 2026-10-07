@@ -5,7 +5,6 @@ const grid = require('./hud-grid.js')
 test('exports constants', () => {
   assert.equal(grid.MAJOR_DIVISIONS, 4)
   assert.equal(grid.MINOR_ROWS, 36)
-  assert.equal(grid.SNAP_THRESHOLD, 8)
 })
 
 test('1920x1080: computes step, offset, and lines correctly', () => {
@@ -96,138 +95,117 @@ test('handles non-finite or zero dimensions as 1', () => {
   assert(g4.step >= 4)
 })
 
-test('snapRect: snaps left edge to major line', () => {
+test('snapRect: corner snaps to nearest minor line', () => {
   const viewport = { width: 1920, height: 1080 }
-  // Block at left=960, width=30, top=200: left anchor is exactly on major line 960
-  // Y anchors: 200, 225, 250 - all > 8 away from nearest lines (180, 210, 240, etc.)
-  const rect = { left: 960, top: 200, width: 30, height: 50 }
+  // Block 100x50 at left=47, top=1000
+  // rawCenterX = 47 + 50 = 97; closest interior major 480 is 383 away, >15, so no center snap
+  // Corner snap to nearest minorX: |47-30|=17, |47-60|=13 → snap to 60
+  // rawCenterY = 1000 + 25 = 1025; closest interior major 810 is 215 away, >15, so no center snap
+  // Corner snap to nearest minorY: |1000-990|=10, |1000-1020|=20 → snap to 990
+  const rect = { left: 47, top: 1000, width: 100, height: 50 }
 
   const result = grid.snapRect(rect, viewport)
 
-  assert.equal(result.left, 960)
-  assert.equal(result.top, 200)
-  assert.equal(result.lineX, 960)
-  assert.equal(result.lineY, null)
+  assert.equal(result.left, 60)
+  assert.equal(result.top, 990)
+  assert.equal(result.lineX, 60)
+  assert.equal(result.lineY, 990)
 })
 
-test('snapRect: snaps to minor line', () => {
+test('snapRect: center detent on interior major line within step/2', () => {
   const viewport = { width: 1920, height: 1080 }
-  // Block at left=925, width=10, top=200: center at 930 (minor line), distance 0
-  const rect = { left: 925, top: 200, width: 10, height: 50 }
+  // Block 100x50 with rawCenter 955 (left 905)
+  // rawCenterX = 955; closest interior majorX 960 is 5 away, <=15, so CENTER on 960
+  // left = 960 - 50 = 910
+  // rawCenterY = 1000 + 25 = 1025; closest interior majorY 810 is 215 away, >15, corner snap
+  // Corner snap to nearest minorY: |1000-1020|=20, |1000-990|=10 → snap to 990
+  const rect = { left: 905, top: 1000, width: 100, height: 50 }
 
   const result = grid.snapRect(rect, viewport)
 
-  // Center anchor at 930 is exactly on the minor line 930
-  // Anchors: 925, 930, 935. Best is (930, 930) at distance 0
-  // new_left = 925 + (930 - 930) = 925
-  assert.equal(result.left, 925)
-  assert.equal(result.top, 200)
+  assert.equal(result.left, 910)
+  assert.equal(result.lineX, 960)
+  assert.equal(result.top, 990)
+  assert.equal(result.lineY, 990)
+})
+
+test('snapRect: no center detent when beyond step/2 threshold', () => {
+  const viewport = { width: 1920, height: 1080 }
+  // Block 100-wide with rawCenter 976 (left 926)
+  // rawCenterX = 976; closest interior majorX 960 is 16 away, >15, so NO center snap
+  // Corner snap to nearest minorX: |926-900|=26, |926-930|=4 → snap to 930
+  const rect = { left: 926, top: 500, width: 100, height: 50 }
+
+  const result = grid.snapRect(rect, viewport)
+
+  assert.equal(result.left, 930)
   assert.equal(result.lineX, 930)
-  assert.equal(result.lineY, null)
 })
 
-test('snapRect: does not snap when distance exceeds threshold', () => {
+test('snapRect: Y axis independent of X axis', () => {
   const viewport = { width: 1920, height: 1080 }
-  // In the 1920x1080 grid with step 30, the farthest from any line is 15px.
-  // So with threshold 3, we can find positions that don't snap.
-  // Position 816: distance to 810 is 6, to 840 is 24
-  // With threshold 3, neither snaps.
-  const rect = { left: 816, top: 100, width: 1, height: 50 }
-  const result = grid.snapRect(rect, viewport, 3)
+  // Test that X and Y snap independently
+  // Block 50x50 at left=503, top=537
+  // rawCenterX = 503 + 25 = 528; closest interior majorX 480 is 48 away, >15, corner snap
+  // Corner snap to nearest minorX: |503-480|=23, |503-510|=7 → snap to 510
+  // rawCenterY = 537 + 25 = 562; closest interior majorY 540 is 22 away, >15, corner snap
+  // Corner snap to nearest minorY: |537-540|=3... wait, let me recalculate
+  // Actually, |537-540| = 3, but we're looking for NEAREST, so check more
+  // Nearest minorY to 537: minorY are at multiples of 30 from center 540
+  // 540-30=510, 540+0=540, 540+30=570...
+  // So minorY includes: ..., 510, 540, 570, ...
+  // |537-540|=3, |537-510|=27 → nearest is 540
+  // So top = 540, lineY = 540
+  // But wait, 540 is also a major line. Let me re-check: does minor snap or major center win?
+  // The algorithm first checks if center can snap to major. If not, it snaps corner to minor.
+  // So rawCenterY = 562. Interior majorY = [270, 540, 810]. Closest = 540 at distance 22 > 15.
+  // So NO center snap. Now snap corner to nearest minor.
+  // But 540 is BOTH a major and minor line. So it will be returned as a minor snap.
+  // Let me recalculate: corner is at top=537. Nearest minorY lines are 540, 510.
+  // Distance to 540: 3. Distance to 510: 27. So nearest is 540, lineY = 540.
 
-  assert.equal(result.left, 816)
-  assert.equal(result.lineX, null)
-})
-
-test('snapRect: snaps right edge to viewport edge', () => {
-  const viewport = { width: 1920, height: 1080 }
-  // Block at left=1810, width=110: right edge at 1920, snaps to major line 1920
-  const rect = { left: 1810, top: 100, width: 110, height: 50 }
+  // Let me reconsider the test. I'll use different values to avoid edge cases.
+  // Block 50x50 at left=513, top=517
+  // rawCenterX = 513 + 25 = 538; closest interior majorX 480 is 58 away, >15, corner snap
+  // Corner snap to nearest minorX: |513-510|=3, |513-540|=27 → snap to 510
+  // rawCenterY = 517 + 25 = 542; closest interior majorY 540 is 2 away, <=15, CENTER on 540
+  // top = 540 - 25 = 515, lineY = 540
+  const rect = { left: 513, top: 517, width: 50, height: 50 }
 
   const result = grid.snapRect(rect, viewport)
 
-  assert.equal(result.left, 1810 + (1920 - 1920))
-  assert.equal(result.lineX, 1920)
-})
-
-test('snapRect: snaps center to major line', () => {
-  const viewport = { width: 1920, height: 1080 }
-  // Block at left=910, width=100: center at 960 (major line), snaps to 960
-  const rect = { left: 910, top: 100, width: 100, height: 50 }
-
-  const result = grid.snapRect(rect, viewport)
-
-  assert.equal(result.left, 910) // center is already at 960, no shift needed
-  assert.equal(result.lineX, 960)
-})
-
-test('snapRect: snaps Y axis independently', () => {
-  const viewport = { width: 1920, height: 1080 }
-  // Block at (903, 537): center at (928, 562)
-  // X: center 928 is 32 away from 960, not within threshold 8
-  // Y: center 562 is 22 away from 540, not within threshold 8
-  // Let's use a better position: (903, 512)
-  // X: center 928 is still 32 away
-  // Y: center 537 is 3 away from 540 (snaps)
-  const rect = { left: 903, top: 512, width: 50, height: 50 }
-
-  const result = grid.snapRect(rect, viewport)
-
-  // X axis: anchors at 903, 928, 953
-  // 903 to 900: 3, 928 to 930: 2, 953 to 960: 7
-  // Closest is 928 to 930 at distance 2, snaps to 930
-  // new_left = 903 + (930 - 928) = 905
-  // Y axis: anchors at 512, 537, 562
-  // 512 to 510: 2, 537 to 540: 3, 562 to 570: 8
-  // Closest is 512 to 510 at distance 2, snaps to 510
-  // new_top = 512 + (510 - 512) = 510
-  assert.equal(result.left, 905)
-  assert.equal(result.top, 510)
-  assert.equal(result.lineX, 930)
-  assert.equal(result.lineY, 510)
-})
-
-test('snapRect: prefers major line on distance tie', () => {
-  const viewport = { width: 1920, height: 1080 }
-  // Block where an anchor is equidistant from major and minor lines
-  // At position 945: to 930 (minor): 15, to 960 (major): 15
-  // With threshold=15, both are candidates, major (960) should be chosen
-  const rect = { left: 945, top: 200, width: 0, height: 1 }
-
-  const result = grid.snapRect(rect, viewport, 15)
-
-  // All anchors at 945, equidistant from 930 and 960
-  // Major line 960 is preferred
-  // new_left = 945 + (960 - 945) = 960
-  assert.equal(result.left, 960)
-  assert.equal(result.lineX, 960)
-})
-
-test('snapRect: threshold 0 requires exact match', () => {
-  const viewport = { width: 1920, height: 1080 }
-  // Block at left=960 (exactly on major line)
-  const rect = { left: 960, top: 540, width: 100, height: 50 }
-
-  const result = grid.snapRect(rect, viewport, 0)
-
-  // Left anchor at 960 is exactly on 960 (major)
-  assert.equal(result.left, 960)
-  assert.equal(result.lineX, 960)
-  // Top anchor at 540 is exactly on 540 (major)
-  assert.equal(result.top, 540)
+  assert.equal(result.left, 510)
+  assert.equal(result.lineX, 510)
+  assert.equal(result.top, 515)
   assert.equal(result.lineY, 540)
 })
 
-test('snapRect: threshold 0 does not snap off-by-one', () => {
+test('snapRect: does not center on edge major lines', () => {
   const viewport = { width: 1920, height: 1080 }
-  // Block at left=961 (1px off major line)
-  const rect = { left: 961, top: 100, width: 100, height: 50 }
+  // Block 100x100 near left edge
+  // If we position it with rawCenter at 5, it should NOT center on 0 (edge major)
+  // rawCenterX = 5; interior majorX = [480, 960, 1440], none within 15, corner snap
+  // Corner snap to nearest minorX: nearest to -45 (left=-45) is 0
+  const rect = { left: -45, top: 100, width: 100, height: 100 }
 
-  const result = grid.snapRect(rect, viewport, 0)
+  const result = grid.snapRect(rect, viewport)
 
-  // No anchor is exactly on a line
-  assert.equal(result.left, 961)
-  assert.equal(result.lineX, null)
+  assert.equal(result.left, 0)
+  assert.equal(result.lineX, 0)
+})
+
+test('snapRect: does not center on right edge major line', () => {
+  const viewport = { width: 1920, height: 1080 }
+  // Block 100-wide near right edge
+  // rawCenterX = 1920 - 50 = 1870 (left 1820, width 100)
+  // Interior majorX = [480, 960, 1440], closest 1440 is 430 away, >15, corner snap
+  // Corner snap to nearest minorX: |1820-1800|=20, |1820-1830|=10 → snap to 1830
+  const rect = { left: 1820, top: 100, width: 100, height: 100 }
+
+  const result = grid.snapRect(rect, viewport)
+
+  assert.equal(result.left, 1830)
+  assert.equal(result.lineX, 1830)
 })
 
 test('snapRect: guards against non-finite input', () => {
@@ -249,31 +227,31 @@ test('snapRect: guards against non-finite input', () => {
 
 test('snapRect: does not clamp to viewport', () => {
   const viewport = { width: 1920, height: 1080 }
-  // Block far to the right, outside viewport
+  // Block far to the right, outside viewport. Grid only extends to 1920.
+  // rawCenterX = 2050; interior majorX closest 1440 is 610 away, >15, corner snap
+  // Corner snap to nearest minorX: grid extends to 1920, so nearest is 1920 (distance 80)
   const rect = { left: 2000, top: 100, width: 100, height: 50 }
 
   const result = grid.snapRect(rect, viewport)
 
-  // Should snap to the nearest line without clamping
-  // 2000 to 1920 (major): 80 away (> 8, no snap)
-  // 2000 to 1890 (minor, if exists): 110 away
-  // Let me check: 1920 is in majorX, 1890 is not (1920 - 30 = 1890, which is 960 + k*30)
-  // Actually, 1890 = 960 - 30*(-2.3), doesn't work out evenly. Let me recalculate.
-  // Minor lines are 960 + k*30 for integer k.
-  // k such that 960 + k*30 = 1890: k = 930/30 = 31, so 1890 = 960 + 31*30, yes
-  // So 1890 is a minor line.
-  // 2000 to 1890: 110 away (too far)
-  // Actually, 2000 to 1920: 80, to 1890: 110, neither snaps.
-  // But let's check all anchors: left=2000, center=2050, right=2100
-  // For right=2100 to 2040: probably doesn't exist. Let me be more careful.
-  // 2100 to 2070 (960 + 37*30): 30 away (> 8, no snap)
-  // So all anchors fail to snap with threshold 8.
-
-  assert.equal(result.left, 2000)
-  assert.equal(result.lineX, null)
+  assert.equal(result.left, 1920)
+  assert.equal(result.lineX, 1920)
 })
 
-test('computeGrid returns frozen object', () => {
+test('snapRect: center detent on interior Y major', () => {
+  const viewport = { width: 1920, height: 1080 }
+  // Block 50-tall with rawCenter 548 (top 523)
+  // rawCenterY = 548; interior majorY 540 is 8 away, <=15, CENTER on 540
+  // top = 540 - 25 = 515, lineY = 540
+  const rect = { left: 500, top: 523, width: 100, height: 50 }
+
+  const result = grid.snapRect(rect, viewport)
+
+  assert.equal(result.top, 515)
+  assert.equal(result.lineY, 540)
+})
+
+test('snapRect: computeGrid returns frozen object', () => {
   const g = grid.computeGrid({ width: 1920, height: 1080 })
   // Frozen objects silently fail to update in non-strict mode
   g.step = 10 // should be ignored

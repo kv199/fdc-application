@@ -105,11 +105,11 @@ During the edit:
 - clicking or dragging a target selects it; the selected target shows the
   edit toolbar with `DRAG <TARGET> TO MOVE · CORNER TO RESIZE · CLICK A BLOCK
   TO SELECT` and its corner handles;
-- drag any target to move it; with snapping on, it snaps to the alignment
-  grid described below;
+- drag any target to move it; with the grid on, it moves along the
+  alignment grid described below;
 - drag a corner of the selected target to resize it between 0.5× and 2× of
   its default size; resizing never snaps;
-- **SNAP**, on every edit toolbar, turns the grid and snapping on or off
+- **GRID**, on every edit toolbar, turns the grid and snapping on or off
   together. It is on by default, and FDC remembers the choice;
 - **SAVE** (filled with lime at rest) keeps every change; **CANCEL** (neutral
   dark, fills lime on hover) or Escape restores every target to its position
@@ -122,19 +122,22 @@ use **CANCEL** to discard an edit started with the hotkey.
 
 ### Alignment grid
 
-With **SNAP** on, the edit shows an alignment grid under the HUD, and it
+With **GRID** on, the edit shows an alignment grid under the HUD, and it
 disappears when the edit ends:
 
 - thin major lines divide the monitor into 4 × 4 equal zones, so the screen
   center and the edges are major lines;
 - dots mark a square minor grid whose step is the screen height divided by 36,
   about 30 px at 1080p, 40 px at 1440p, and 60 px at 4K. It is measured from
-  the screen center outward, so targets placed as mirror images both land on
-  it; on 16:9 screens the major lines fall on the minor grid.
+  the screen center outward, so the center lines are on it; on 16:9 screens
+  the major lines fall on the minor grid.
 
-While a target is dragged, the nearest of its left edge, center, and right
-edge snaps to a grid line within 8 px, and likewise its top edge, center, and
-bottom edge; a major line wins a tie. The saved position is still relative to
+While a target is dragged, its top-left corner jumps from dot to dot: the
+target's real edges, not the dashed edit frame drawn 5 px outside it, sit on
+the nearest dots. When the target's center comes within half a grid step of a
+major line inside the screen (25%, 50%, or 75%), the target centers on that
+line instead, so it can sit exactly in the middle of the screen. Pushed
+against a screen edge, a target stays flush with it. The saved position is still relative to
 the screen size, so after a resolution change a target keeps its place but
 may sit a few pixels off the new grid.
 
