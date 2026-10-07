@@ -3,6 +3,17 @@
 .icon-proposal__variant { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 310px; text-align: center; }
 .icon-proposal__variant > img { display: block; width: 192px; height: 192px; }
 .icon-proposal__variant p { max-width: 42ch; }
+.icon-proposal__finish-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin: 22px 0 0; }
+.icon-proposal__finish-grid figure { display: flex; flex-direction: column; align-items: center; margin: 0; text-align: center; }
+.icon-proposal__finish-grid figure > img { display: block; width: 160px; height: 160px; }
+.icon-proposal__finish-grid figcaption { display: grid; gap: 4px; margin: 12px 0; font-size: 13px; }
+.icon-proposal__finish-grid figcaption span { color: var(--text-muted); }
+.icon-proposal__finish-sizes { display: flex; align-items: end; gap: 12px; min-height: 32px; }
+.icon-proposal__finish-sizes > img { display: block; }
+.icon-proposal__metal { position: relative; display: inline-block; width: var(--icon-size); height: var(--icon-size); overflow: hidden; border-radius: 20.3%; background: #152019; flex: none; }
+.icon-proposal__metal img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.icon-proposal__metal-texture { object-fit: cover; object-position: center; opacity: .58; }
+.icon-proposal__metal-mark { z-index: 1; }
 .icon-proposal__size-table { width: min(100%, 640px); margin: 16px 0 30px; border-collapse: collapse; }
 .icon-proposal__size-table th, .icon-proposal__size-table td { width: 25%; padding: 10px 6px; border-bottom: 1px solid var(--line); text-align: center; }
 .icon-proposal__size-table th:first-child { text-align: left; }
@@ -20,6 +31,6 @@
 .icon-proposal__files { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
 .icon-proposal__files a { padding: 9px 12px; border: 1px solid var(--line); background: var(--surface-deep); }
 @media (max-width: 760px) {
-  .icon-proposal__variants, .icon-proposal__contexts { grid-template-columns: 1fr; }
+  .icon-proposal__variants, .icon-proposal__contexts, .icon-proposal__finish-grid { grid-template-columns: 1fr; }
   .icon-proposal__variant { min-height: 285px; }
 }

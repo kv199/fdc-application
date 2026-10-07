@@ -37,7 +37,8 @@ the tokens named on both specification boards.
   notes in `LIGHT_THEME.md`; it does not change the app or its HUD.
 - The **App icon · Signal F** board compares the original mark with a
   single telemetry-step variant and a sketch-led two-arm variant at tray and
-  taskbar sizes. Their vector sources and PNG/ICO exports live in `icon/`;
+  taskbar sizes. It also compares the latest Lift gradient with the existing
+  FDC paint texture. Vector sources and PNG/ICO exports live in `icon/`;
   the installed app icon remains unchanged.
 
 `docs/design-system.md` (on the implementation branch) is the rulebook for the
