@@ -5758,36 +5758,44 @@ fn notify_layout_state(app: AppHandle, target: String, editing: bool) -> Result<
 
 #[tauri::command]
 fn layout_action(app: AppHandle, action: String, target: String) -> Result<(), String> {
-    if !is_valid_layout_target(&target) {
-        return Err("unknown layout target".to_string());
-    }
-
+    // Actions that ignore target and handle global layout state
     let script = match action.as_str() {
-        "edit" => match target.as_str() {
-            "delta" => "window.HudLayout?.enterEditMode?.('delta')",
-            "hud" => "window.HudLayout?.enterEditMode?.('hud')",
-            "tires" => "window.HudLayout?.enterEditMode?.('tires')",
-            "pedals" => "window.HudLayout?.enterEditMode?.('pedals')",
-            "steering" => "window.HudLayout?.enterEditMode?.('steering')",
-            "gear" => "window.HudLayout?.enterEditMode?.('gear')",
-            "engine" => "window.HudLayout?.enterEditMode?.('engine')",
-            "history" => "window.HudLayout?.enterEditMode?.('history')",
-            _ => unreachable!(),
-        },
-        "save" => "window.HudLayout?.savePosition?.()",
-        "cancel" => "window.HudLayout?.cancelEditMode?.()",
-        "reset" => match target.as_str() {
-            "delta" => "window.HudLayout?.resetPosition?.('delta')",
-            "hud" => "window.HudLayout?.resetPosition?.('hud')",
-            "tires" => "window.HudLayout?.resetPosition?.('tires')",
-            "pedals" => "window.HudLayout?.resetPosition?.('pedals')",
-            "steering" => "window.HudLayout?.resetPosition?.('steering')",
-            "gear" => "window.HudLayout?.resetPosition?.('gear')",
-            "engine" => "window.HudLayout?.resetPosition?.('engine')",
-            "history" => "window.HudLayout?.resetPosition?.('history')",
-            _ => unreachable!(),
-        },
-        _ => return Err("unknown layout action".to_string()),
+        "start" => "window.HudLayout?.startEditSession?.()",
+        "reset_all" => "window.HudLayout?.resetAllPositions?.()",
+        _ => {
+            // Actions that require target validation
+            if !is_valid_layout_target(&target) {
+                return Err("unknown layout target".to_string());
+            }
+
+            match action.as_str() {
+                "edit" => match target.as_str() {
+                    "delta" => "window.HudLayout?.enterEditMode?.('delta')",
+                    "hud" => "window.HudLayout?.enterEditMode?.('hud')",
+                    "tires" => "window.HudLayout?.enterEditMode?.('tires')",
+                    "pedals" => "window.HudLayout?.enterEditMode?.('pedals')",
+                    "steering" => "window.HudLayout?.enterEditMode?.('steering')",
+                    "gear" => "window.HudLayout?.enterEditMode?.('gear')",
+                    "engine" => "window.HudLayout?.enterEditMode?.('engine')",
+                    "history" => "window.HudLayout?.enterEditMode?.('history')",
+                    _ => unreachable!(),
+                },
+                "save" => "window.HudLayout?.savePosition?.()",
+                "cancel" => "window.HudLayout?.cancelEditMode?.()",
+                "reset" => match target.as_str() {
+                    "delta" => "window.HudLayout?.resetPosition?.('delta')",
+                    "hud" => "window.HudLayout?.resetPosition?.('hud')",
+                    "tires" => "window.HudLayout?.resetPosition?.('tires')",
+                    "pedals" => "window.HudLayout?.resetPosition?.('pedals')",
+                    "steering" => "window.HudLayout?.resetPosition?.('steering')",
+                    "gear" => "window.HudLayout?.resetPosition?.('gear')",
+                    "engine" => "window.HudLayout?.resetPosition?.('engine')",
+                    "history" => "window.HudLayout?.resetPosition?.('history')",
+                    _ => unreachable!(),
+                },
+                _ => return Err("unknown layout action".to_string()),
+            }
+        }
     };
 
     eval_main(&app, script)

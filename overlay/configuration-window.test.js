@@ -264,12 +264,12 @@ test('Event lap rows expose trace details and time-weighted pedal statistics', (
 
 test('Engine telemetry keeps the compact panel order and one visibility toggle', () => {
   const sections = [...overlayHtml.matchAll(/<section id="(hud-[^"]+)"/g)].map(match => match[1])
-  const components = [...settingsHtml.matchAll(/data-hud-component="([^"]+)"/g)].map(match => match[1])
+  const components = [...settingsHtml.matchAll(/data-hud-toggle="([^"]+)"/g)].map(match => match[1])
 
   assert.deepEqual(sections, ['hud-tires', 'hud-pedals', 'hud-steering', 'hud-gear', 'hud-engine', 'hud-history'])
   assert.deepEqual(components, ['tires', 'pedals', 'steering', 'gear', 'engine', 'history'])
-  assert.match(settingsHtml, /<strong>Engine \/ Boost<\/strong>/)
-  assert.match(settingsHtml, /<small>Boost, power and torque data<\/small>/)
+  assert.match(settingsHtml, /<h4>Engine \/ Boost<\/h4>/)
+  assert.match(settingsHtml, /<p>Boost, power and torque data<\/p>/)
   assert.match(overlayHtml, /id="engine-boost"[^>]+aria-label="Boost pressure"/)
   assert.match(overlayHtml, /id="engine-power"[^>]+aria-label="Engine power"/)
   assert.match(overlayHtml, /id="engine-torque"[^>]+aria-label="Engine torque"/)
@@ -283,23 +283,37 @@ test('Engine visibility is part of the safe HUD component contract', () => {
   assert.match(tauriMain, /"tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
 })
 
-test('HUD layout exposes grouped and freeform modes with independent widget controls', () => {
+test('HUD layout exposes grouped and freeform modes with unified widgets and layout editing', () => {
   // The mode is a TELEMETRY ARRANGEMENT row inside the layout list, as a segmented choice.
   assert.match(settingsHtml, /<div class="layout-list">\s*<div class="layout-row layout-row--arrangement">[\s\S]*?id="hud-layout-arrangement-title">TELEMETRY ARRANGEMENT<[\s\S]*?class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title"/)
-  assert.doesNotMatch(settingsHtml, /Press EDIT, drag to move/)
+  assert.doesNotMatch(settingsHtml, /data-freeform-layout-list|data-grouped-layout-row/)
   assert.match(settingsHtml, /data-layout-mode="grouped" checked/)
   assert.match(settingsHtml, /data-layout-mode="freeform"/)
 
+  // Layout edit row has EDIT LAYOUT, RESET LAYOUT, SAVE, CANCEL
+  assert.match(settingsHtml, /id="hud-layout-edit"[^>]*class="settings-button settings-button--ready"/)
+  assert.match(settingsHtml, /id="hud-layout-reset"[^>]*class="settings-button settings-button--caution"/)
+  assert.match(settingsHtml, /id="hud-layout-save"/)
+  assert.match(settingsHtml, /id="hud-layout-cancel"/)
+  assert.match(settingsHtml, /data-layout-edit-row/)
+
+  // One widget list with all widgets and ALL toggle
+  assert.match(settingsHtml, /id="hud-widgets-title">WIDGETS</)
+  assert.match(settingsHtml, /id="hud-all-widgets"[^>]*data-hud-toggle-all/)
   for (const component of ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']) {
-    assert.match(settingsHtml, new RegExp(`data-layout-target="${component}"`, 'u'))
     assert.match(settingsHtml, new RegExp(`data-hud-toggle="${component}"`, 'u'))
   }
+  assert.match(settingsHtml, /data-overlay-toggle="delta"/)
 
+  // No old per-row edit buttons or accordion
+  assert.doesNotMatch(settingsHtml, /data-layout-action="edit"|data-accordion-toggle|visibility-list/)
+
+  // Native contract for layout actions
+  assert.match(settingsJs, /call\('layout_action', \{ action: 'start', target: 'hud' \}\)/)
+  assert.match(settingsJs, /call\('layout_action', \{ action: 'reset_all', target: 'hud' \}\)/)
   assert.match(settingsJs, /const LAYOUT_MODE_STORAGE_KEY = 'fdc\.layout-mode\.v1'/)
   assert.match(settingsJs, /call\('set_layout_mode', \{ mode: nextMode \}\)/)
-  assert.match(settingsJs, /call\('layout_action', \{ action: 'cancel', target: editingTarget \}\)/)
   assert.match(tauriMain, /fn set_layout_mode\(app: AppHandle, mode: String\)/)
-  assert.match(tauriMain, /"delta" \| "hud" \| "tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
 })
 
 test('the header status opens the connection guide instead of a permanent setup card', () => {
@@ -747,12 +761,12 @@ test('The one next step of a screen uses the lime ready button', () => {
   assert.match(settingsStyles, /\.settings-button\.settings-button--ready:disabled\s*\{[^}]*background: var\(--surface-deep\)/)
 })
 
-test('the HUD tab offers an edit hotkey that is registered at startup and never shared with Driver Analysis', () => {
+test('the HUD tab offers an edit hotkey in the layout edit row that is registered at startup and never shared with Driver Analysis', () => {
   const start = settingsHtml.indexOf('data-settings-panel="hud"')
   const hudPanel = settingsHtml.slice(start, settingsHtml.indexOf('data-settings-panel="', start + 1))
-  assert.match(hudPanel, /<h3 id="hud-edit-hotkey-title">EDIT HOTKEY<\/h3>/)
-  assert.match(hudPanel, /id="hud-edit-hotkey-value"[^>]*>Ctrl \+ Shift \+ F8<\/output>/)
+  assert.match(hudPanel, /data-layout-edit-row[\s\S]*id="hud-edit-hotkey-value"[^>]*>Ctrl \+ Shift \+ F8<\/output>/)
   assert.match(hudPanel, /id="hud-edit-hotkey-change" class="settings-button"/)
+  assert.doesNotMatch(hudPanel, /id="hud-edit-hotkey-title">EDIT HOTKEY/)
   assert.match(settingsJs, /const DEFAULT_HUD_EDIT_HOTKEY = 'Ctrl\+Shift\+F8'/)
   assert.match(settingsJs, /const HUD_EDIT_HOTKEY_STORAGE_KEY = 'fdc\.hud-edit-hotkey\.v1'/)
   assert.match(settingsJs, /call\('set_hud_edit_hotkey', \{ hotkey: normalized \}\)/)
@@ -764,4 +778,11 @@ test('the HUD tab offers an edit hotkey that is registered at startup and never 
   assert.match(settingsJs, /if \(driverAnalysisHotkeyCapture && hudEditHotkeyCapture\) await setHudEditHotkeyCapture\(false\)/)
   assert.match(tauriMain, /fn set_hud_edit_hotkey\(/)
   assert.match(tauriMain, /window\.HudLayout\?\.toggleEditSession\?\.\(\)/)
+})
+
+test('every widget switch is the only element bound to its widget', () => {
+  for (const name of ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']) {
+    assert.equal(settingsHtml.match(new RegExp(`data-hud-toggle="${name}"`, 'g'))?.length, 1, name)
+  }
+  assert.equal(settingsHtml.match(/data-overlay-toggle="delta"/g)?.length, 1)
 })

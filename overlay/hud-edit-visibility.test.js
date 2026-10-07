@@ -351,3 +351,62 @@ test('snap preference persists in storage', () => {
 
   assert.equal(savedValue, 'off', 'snap preference written to storage as off')
 })
+
+test('startEditSession() returns started then active on a second call', () => {
+  withOverlayRuntime(() => {
+    HudLayout.setMode('grouped')
+    assert.equal(HudLayout.startEditSession(), 'started', 'first call starts session')
+    assert.equal(HudLayout.startEditSession(), 'active', 'second call returns active')
+    HudLayout.cancelEditMode()
+  })
+})
+
+test('startEditSession() returns unavailable when every target is disabled', () => {
+  withOverlayRuntime(() => {
+    HudLayout.setMode('freeform')
+    HudPreferences.setVisibility('tires', false)
+    HudPreferences.setVisibility('pedals', false)
+    HudPreferences.setVisibility('steering', false)
+    HudPreferences.setVisibility('gear', false)
+    HudPreferences.setVisibility('engine', false)
+    HudPreferences.setVisibility('history', false)
+    HudPreferences.setOverlayVisibility('delta', false)
+    HudPreferences.apply()
+    assert.equal(HudLayout.startEditSession(), 'unavailable', 'returns unavailable when no targets available')
+  })
+})
+
+test('resetAllPositions() during session ends it and clears all positions', () => {
+  withOverlayRuntime(({ element }) => {
+    HudLayout.setMode('grouped')
+    const freshlyCaptured = HudLayout.getPosition('hud')
+
+    // Modify and then reset
+    HudLayout.startEditSession()
+    const originalPos = HudLayout.getPosition('hud')
+    assert.ok(originalPos.x !== undefined && originalPos.y !== undefined, 'position has coordinates')
+
+    HudLayout.resetAllPositions()
+    assert.deepEqual(HudLayout.getEditingTargets(), [], 'session is ended')
+
+    // Get fresh runtime position to compare against
+    const afterReset = HudLayout.getPosition('hud')
+    assert.deepEqual(afterReset, freshlyCaptured, 'position matches fresh runtime default')
+  })
+})
+
+test('snap buttons show GRID ON when enabled and GRID OFF when disabled', () => {
+  withOverlayRuntime(({ element }) => {
+    // Check initial state - snap is enabled by default
+    assert.equal(element('delta-snap').textContent, 'GRID ON', 'delta snap button shows GRID ON initially')
+    assert.equal(element('hud-snap').textContent, 'GRID ON', 'hud snap button shows GRID ON initially')
+
+    HudLayout.setSnapEnabled(false)
+    assert.equal(element('delta-snap').textContent, 'GRID OFF', 'delta snap button shows GRID OFF after disable')
+    assert.equal(element('hud-snap').textContent, 'GRID OFF', 'hud snap button shows GRID OFF after disable')
+
+    HudLayout.setSnapEnabled(true)
+    assert.equal(element('delta-snap').textContent, 'GRID ON', 'delta snap button shows GRID ON after enable')
+    assert.equal(element('hud-snap').textContent, 'GRID ON', 'hud snap button shows GRID ON after enable')
+  })
+})

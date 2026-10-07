@@ -69,48 +69,57 @@ Light Brightness settings. How targets are learned is described in
   on, so the HUD hides there. A 500 ms hold keeps a single non-live packet from
   making it blink.
 - With the option disabled, the HUD stays visible without live telemetry.
-- In Configuration, the **HUD Layout** switch hides or shows the whole
-  telemetry HUD, the Delta switch controls Delta, and each block can be hidden
-  individually. When every block is hidden, the telemetry HUD is not shown.
+- In Configuration, each widget in the **WIDGETS** list has its own switch,
+  and **ALL** turns every widget, Delta included, on or off at once. When
+  every block is hidden, the telemetry HUD is not shown. Earlier versions had
+  one switch for the whole telemetry HUD; if it was off, FDC turns every block
+  off on the first start of this version, so the HUD stays hidden.
 
 ## Layout
 
-Configuration → **HUD** opens with a short intro and shows the `TELEMETRY
-ARRANGEMENT` segmented choice with GROUPED (default) and FREEFORM options; the
-selected one keeps a lime fill. Grouped keeps the visible blocks side by side
-in one panel and moves and resizes that panel as a whole. Freeform gives each
-block its own row with **EDIT** and a visibility switch, so every block can be
-placed and sized independently. Delta is positioned independently in both
-modes. The visible blocks are listed as checkboxes in Grouped mode.
+Configuration → **HUD** shows the layout controls in the same order for both
+arrangements:
 
-| Grouped | Freeform |
-| --- | --- |
-| ![Grouped layout settings](images/configuration-hud-grouped.png) | ![Freeform layout settings](images/configuration-hud-freeform.png) |
+1. `TELEMETRY ARRANGEMENT`, a segmented choice of GROUPED (default) and
+   FREEFORM; the selected one keeps a lime fill. Grouped keeps the visible
+   blocks side by side in one panel and moves and resizes that panel as a
+   whole. Freeform places and sizes every block independently. Delta is
+   positioned independently in both arrangements, and each arrangement keeps
+   its own saved positions.
+2. **Layout**, with **EDIT LAYOUT** (the lime next step), **RESET LAYOUT**,
+   and the edit hotkey with **CHANGE**.
+3. **WIDGETS**: Tires, Throttle & Brake, Steering, Gear / Speed / RPM,
+   Engine / Boost, Input Graph, and Delta, each with a switch, and **ALL** in
+   the list header. The list is the same in both arrangements.
 
 A layout edit covers every enabled target at once: in Grouped, the HUD panel
-and Delta; in Freeform, each block whose visibility switch is on and Delta.
-The HUD Layout and Delta switches leave their targets out. Two ways start it:
+and Delta; in Freeform, each block whose switch is on and Delta. A switched-off
+widget stays out of the edit; switch it on to place it. Two ways start it:
 
-- the **EDIT HOTKEY** on the HUD tab, `Ctrl + Shift + F8` by default, pressed
-  while Forza is in focus. Pressing it again saves the edit. With every target
-  switched off, the hotkey does nothing;
-- **EDIT** on a row in Configuration, which starts the same edit with that
-  target selected, or selects it when an edit is already running. A target
-  whose switch is off joins the edit when its **EDIT** is pressed.
+- **EDIT LAYOUT**. While the edit runs, **SAVE** and **CANCEL** take its place
+  in Configuration, and **RESET LAYOUT** is hidden. With every widget off,
+  Configuration asks to turn one on instead;
+- the edit hotkey, `Ctrl + Shift + F8` by default, pressed while Forza is in
+  focus. Pressing it again saves the edit. With every widget off, the hotkey
+  does nothing.
+
+**RESET LAYOUT** asks for confirmation and then returns every block and Delta
+to its default place and size in both arrangements.
 
 During the edit:
 
 - every target in the edit stays visible, even when **Show HUD with
   telemetry** would otherwise hide it, and Delta shows without an Event;
-- clicking or dragging a target selects it; the selected target shows the
+- clicking or dragging a target on the screen selects it; the selected target shows the
   edit toolbar with `DRAG <TARGET> TO MOVE · CORNER TO RESIZE · CLICK A BLOCK
   TO SELECT` and its corner handles;
 - drag any target to move it; with the grid on, it moves along the
   alignment grid described below;
 - drag a corner of the selected target to resize it between 0.5× and 2× of
   its default size; resizing never snaps;
-- **GRID**, on every edit toolbar, turns the grid and snapping on or off
-  together. It is on by default, and FDC remembers the choice;
+- **GRID ON**, filled with lime, on every edit toolbar turns the grid and
+  snapping off and then reads **GRID OFF** with a plain frame; pressing it
+  again turns them back on. It is on by default, and FDC remembers the choice;
 - **SAVE** (filled with lime at rest) keeps every change; **CANCEL** (neutral
   dark, fills lime on hover) or Escape restores every target to its position
   at the start of the edit; **RESET** (caution text and border, fills caution
@@ -137,9 +146,9 @@ target's real edges, not the dashed edit frame drawn 5 px outside it, sit on
 the nearest dots. When the target's center comes within half a grid step of a
 major line inside the screen (25%, 50%, or 75%), the target centers on that
 line instead, so it can sit exactly in the middle of the screen. Pushed
-against a screen edge, a target stays flush with it. The saved position is still relative to
-the screen size, so after a resolution change a target keeps its place but
-may sit a few pixels off the new grid.
+against a screen edge, a target stays flush with it. The saved position is
+still relative to the screen size, so after a resolution change a target keeps
+its place but may sit a few pixels off the new grid.
 
 The edit hotkey is chosen like the Driver Analysis record hotkey: **CHANGE**,
 then a key combination with Ctrl, Alt, or Shift, or a controller button. Esc

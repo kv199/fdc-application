@@ -131,3 +131,16 @@ test('static toolbars bind CANCEL and SNAP to their own buttons', () => {
   assert.match(source, /cancel: document\.getElementById\(`\$\{name\}-cancel`\)/)
   assert.match(source, /snap: document\.getElementById\(`\$\{name\}-snap`\)/)
 })
+
+test('native layout_action maps start and reset_all actions', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8')
+  // Check that the actions are defined and call the correct JS functions
+  assert.match(source, /"start"\s*=>\s*"window\.HudLayout\?\.startEditSession\?\.\(\)"/)
+  assert.match(source, /"reset_all"\s*=>\s*"window\.HudLayout\?\.resetAllPositions\?\.\(\)"/)
+  // Ensure these come in the layout_action function
+  const layoutActionStart = source.indexOf('fn layout_action')
+  const layoutActionEnd = source.indexOf('\n}\n', layoutActionStart) + 3
+  const layoutActionSource = source.substring(layoutActionStart, layoutActionEnd)
+  assert.match(layoutActionSource, /"start"/)
+  assert.match(layoutActionSource, /"reset_all"/)
+})

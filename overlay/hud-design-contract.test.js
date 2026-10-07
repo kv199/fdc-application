@@ -325,3 +325,28 @@ test('Layout grid: .layout-grid[hidden] has display: none', () => {
   const found = bodies.some(body => /display:\s*none/.test(body))
   assert.ok(found, 'Expected .layout-grid[hidden] to contain display: none')
 })
+
+test('Layout editor: static GRID buttons show GRID ON', () => {
+  assert.ok(overlayHtml.includes('id="delta-snap" class="layout-edit__button layout-edit__button--toggle" type="button" data-layout-snap aria-pressed="true">GRID ON</button>'), 'Expected delta-snap to show GRID ON')
+  assert.ok(overlayHtml.includes('id="hud-snap" class="layout-edit__button layout-edit__button--toggle" type="button" data-layout-snap aria-pressed="true">GRID ON</button>'), 'Expected hud-snap to show GRID ON')
+})
+
+test('Layout editor: .layout-edit__button--toggle[aria-pressed="true"] is filled with accent', () => {
+  const bodies = ruleBodies(overlayCss, ".layout-edit__button--toggle[aria-pressed='true']")
+  const found = bodies.some(body =>
+    body.includes('border-color: var(--accent)') &&
+    body.includes('color: var(--text-on-accent)') &&
+    body.includes('background: var(--accent)')
+  )
+  assert.ok(found, 'Expected .layout-edit__button--toggle[aria-pressed="true"] to be filled with accent colors')
+})
+
+test('Layout editor: .layout-edit__button--toggle[aria-pressed="true"]:hover uses accent-hover', () => {
+  const bodies = ruleBodies(overlayCss, ".layout-edit__button--toggle[aria-pressed='true']:hover")
+  const found = bodies.some(body =>
+    body.includes('border-color: var(--accent-hover)') &&
+    body.includes('background: var(--accent-hover)') &&
+    body.includes('color: var(--text-on-accent)')
+  )
+  assert.ok(found, 'Expected .layout-edit__button--toggle[aria-pressed="true"]:hover to use accent-hover colors')
+})

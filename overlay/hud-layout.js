@@ -151,7 +151,7 @@
       const root = document.createElement('div')
       root.className = 'layout-edit-tools'
       root.hidden = true
-      root.innerHTML = `<span class="layout-edit__hint">DRAG ${name.toUpperCase()} TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT</span><button class="layout-edit__button layout-edit__button--toggle" type="button" data-layout-snap aria-pressed="true">GRID</button><button class="layout-edit__button layout-edit__button--reset" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
+      root.innerHTML = `<span class="layout-edit__hint">DRAG ${name.toUpperCase()} TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT</span><button class="layout-edit__button layout-edit__button--toggle" type="button" data-layout-snap aria-pressed="true">GRID ON</button><button class="layout-edit__button layout-edit__button--reset" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
       const editorFrame = FREEFORM_TARGETS.includes(name) ? document.createElement('div') : null
       const editorSurface = editorFrame || elements[name]
       if (editorFrame) {
@@ -423,9 +423,11 @@
 
     function updateSnapButtons() {
       const pressed = snapEnabled ? 'true' : 'false'
+      const text = snapEnabled ? 'GRID ON' : 'GRID OFF'
       for (const targetTools of Object.values(tools)) {
         if (targetTools?.snap) {
           targetTools.snap.setAttribute('aria-pressed', pressed)
+          targetTools.snap.textContent = text
         }
       }
     }
@@ -557,15 +559,20 @@
       refreshLayout()
     }
 
+    function startEditSession() {
+      if (sessionTargets.length) return 'active'
+      const targets = editableTargets()
+      if (!targets.length) return 'unavailable'
+      startSession(targets, targets[0])
+      return 'started'
+    }
+
     function toggleEditSession() {
       if (sessionTargets.length) {
         savePosition()
         return 'saved'
       }
-      const targets = editableTargets()
-      if (!targets.length) return 'unavailable'
-      startSession(targets, targets[0])
-      return 'started'
+      return startEditSession()
     }
 
     function resetLayout(targetMode = mode) {
@@ -576,6 +583,16 @@
       persist()
       refreshLayout()
     }
+
+    function resetAllPositions() {
+      if (sessionTargets.length) cancelEditMode()
+      positions.shared = {}
+      positions.grouped = {}
+      positions.freeform = {}
+      persist()
+      refreshLayout()
+    }
+
     function setMode(nextMode) {
       if (!MODES.includes(nextMode) || nextMode === mode) return mode
       if (sessionTargets.length) cancelEditMode()
@@ -743,12 +760,14 @@
       getEditingTarget: () => selectedTarget,
       getEditingTargets: () => [...sessionTargets],
       isEditing: name => sessionTargets.includes(name),
+      startEditSession,
       toggleEditSession,
       refreshPosition: refreshLayout,
       refreshLayout,
       getPosition: name => ({ ...(positionMap(name)[name] || ensurePosition(name)) }),
       isSnapEnabled: () => snapEnabled,
-      setSnapEnabled
+      setSnapEnabled,
+      resetAllPositions
     }
     if (new URLSearchParams(window.location.search).get('edit') === '1') {
       window.requestAnimationFrame(() => enterEditMode('hud'))

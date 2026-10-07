@@ -3666,6 +3666,7 @@
     for (const button of document.querySelectorAll('[data-hud-toggle]')) {
       if (button.dataset.hudToggle === component) updateOverlayToggle(button, visible)
     }
+    renderAllToggle()
   }
 
   function renderRouteStatus(rawStatus) {
@@ -3936,9 +3937,27 @@
   function renderLayoutMode(mode) {
     layoutMode = normalizeLayoutMode(mode)
     for (const input of layoutModeInputs) input.checked = input.value === layoutMode
-    if (groupedLayoutRow) groupedLayoutRow.hidden = layoutMode !== 'grouped'
-    if (freeformLayoutList) freeformLayoutList.hidden = layoutMode !== 'freeform'
-    updateLayoutRows()
+    renderLayoutEditRow()
+  }
+
+  function renderLayoutEditRow() {
+    const editBtn = document.getElementById('hud-layout-edit')
+    const resetBtn = document.getElementById('hud-layout-reset')
+    const saveBtn = document.getElementById('hud-layout-save')
+    const cancelBtn = document.getElementById('hud-layout-cancel')
+
+    if (editingTarget) {
+      editBtn.hidden = true
+      resetBtn.hidden = true
+      saveBtn.hidden = false
+      cancelBtn.hidden = false
+    } else {
+      editBtn.hidden = false
+      resetBtn.hidden = false
+      saveBtn.hidden = true
+      cancelBtn.hidden = true
+    }
+    syncHudDisplayDisabled()
   }
 
   async function selectLayoutMode(mode) {
@@ -3950,60 +3969,24 @@
       if (editingTarget) {
         await call('layout_action', { action: 'cancel', target: editingTarget })
         editingTarget = null
-        updateLayoutRows()
+        renderLayoutEditRow()
       }
       await call('set_layout_mode', { mode: nextMode })
       persistLayoutMode(nextMode)
-      renderLayoutMode(nextMode)
+      layoutMode = normalizeLayoutMode(mode)
+      for (const input of layoutModeInputs) input.checked = input.value === layoutMode
+      renderLayoutEditRow()
       setStatus(`${nextMode.toUpperCase()} HUD LAYOUT ENABLED`)
     } catch (error) {
-      renderLayoutMode(previousMode)
+      layoutMode = previousMode
+      for (const input of layoutModeInputs) input.checked = input.value === layoutMode
       setStatus(error.message || 'Unable to change HUD layout mode', true)
-    }
-  }
-
-  function updateLayoutRows() {
-    for (const row of document.querySelectorAll('[data-layout-target]')) {
-      const target = row.dataset.layoutTarget
-      const isEditing = editingTarget === target
-      row.querySelector('[data-layout-action="edit"]').hidden = isEditing
-      row.querySelector('[data-layout-action="save"]').hidden = !isEditing
-      row.classList.toggle('is-editing', isEditing)
-    }
-    syncHudDisplayDisabled()
-  }
-
-  async function selectLayoutTarget(target) {
-    if (editingTarget === target) return
-
-    // An active edit covers every enabled block, so EDIT on another row only selects it.
-    try {
-      await call('layout_action', { action: 'edit', target })
-      editingTarget = target
-      updateLayoutRows()
-      setStatus(target === 'hud'
-        ? 'EDITING HUD — DRAG IT OR A CORNER TO RESIZE'
-        : `EDITING ${LAYOUT_TARGET_LABELS[target] || target.toUpperCase()} — DRAG IT IN THE HUD`)
-    } catch (error) {
-      setStatus(error.message || 'Unable to enter edit mode', true)
-    }
-  }
-
-  async function saveLayoutTarget(target) {
-    if (editingTarget !== target) return
-    try {
-      await call('layout_action', { action: 'save', target })
-      editingTarget = null
-      updateLayoutRows()
-      setStatus('POSITION SAVED')
-    } catch (error) {
-      setStatus(error.message || 'Unable to save position', true)
     }
   }
 
   function cancelEdit() {
     editingTarget = null
-    updateLayoutRows()
+    renderLayoutEditRow()
     setStatus('READY')
   }
 
@@ -4012,54 +3995,131 @@
 
     if (isEditing) {
       editingTarget = target
-      updateLayoutRows()
-      setStatus(target === 'hud'
-        ? 'EDITING HUD - DRAG IT OR A CORNER TO RESIZE'
-        : `EDITING ${LAYOUT_TARGET_LABELS[target] || target.toUpperCase()} - DRAG IT IN THE HUD`)
+      renderLayoutEditRow()
+      setStatus('EDITING — DRAG BLOCKS ON THE SCREEN')
       return
     }
 
     if (editingTarget === target) {
       editingTarget = null
-      updateLayoutRows()
-      setStatus('POSITION SAVED')
+      renderLayoutEditRow()
+      setStatus('LAYOUT SAVED')
     }
   }
 
-  for (const row of document.querySelectorAll('[data-layout-target]')) {
-    const target = row.dataset.layoutTarget
-    row.querySelector('[data-layout-action="edit"]').addEventListener('click', () => selectLayoutTarget(target))
-    row.querySelector('[data-layout-action="save"]').addEventListener('click', () => saveLayoutTarget(target))
-  }
+  const hudLayoutEditBtn = document.getElementById('hud-layout-edit')
+  const hudLayoutResetBtn = document.getElementById('hud-layout-reset')
+  const hudLayoutSaveBtn = document.getElementById('hud-layout-save')
+  const hudLayoutCancelBtn = document.getElementById('hud-layout-cancel')
+
+  hudLayoutEditBtn?.addEventListener('click', async () => {
+    if (!anyWidgetOn()) {
+      setStatus('TURN ON A WIDGET TO EDIT THE LAYOUT', true)
+      return
+    }
+    try {
+      await call('layout_action', { action: 'start', target: 'hud' })
+      editingTarget = 'hud'
+      renderLayoutEditRow()
+      setStatus('EDITING — DRAG BLOCKS ON THE SCREEN')
+    } catch (error) {
+      setStatus(error.message || 'Unable to enter edit mode', true)
+    }
+  })
+
+  hudLayoutResetBtn?.addEventListener('click', async () => {
+    if (!(await confirmDestructive('Every HUD block and Delta goes back to its default place and size, in both arrangements.'))) return
+    try {
+      await call('layout_action', { action: 'reset_all', target: 'hud' })
+      setStatus('HUD LAYOUT RESET')
+    } catch (error) {
+      setStatus(error.message || 'Unable to reset layout', true)
+    }
+  })
+
+  hudLayoutSaveBtn?.addEventListener('click', async () => {
+    try {
+      await call('layout_action', { action: 'save', target: editingTarget })
+      editingTarget = null
+      renderLayoutEditRow()
+      setStatus('LAYOUT SAVED')
+    } catch (error) {
+      setStatus(error.message || 'Unable to save layout', true)
+    }
+  })
+
+  hudLayoutCancelBtn?.addEventListener('click', async () => {
+    try {
+      await call('layout_action', { action: 'cancel', target: editingTarget })
+      editingTarget = null
+      renderLayoutEditRow()
+      setStatus('READY')
+    } catch (error) {
+      setStatus(error.message || 'Unable to cancel the layout edit', true)
+    }
+  })
 
   const overlayVisibility = readOverlayVisibility()
+
+  function renderOverlayComponentVisibility(component, visible) {
+    const button = document.querySelector(`[data-overlay-toggle="${component}"]`)
+    if (button) updateOverlayToggle(button, visible)
+    renderAllToggle()
+  }
+
+  async function setOverlayComponentVisibility(component, visible) {
+    const previous = overlayVisibility[component] !== false
+    overlayVisibility[component] = visible
+    renderOverlayComponentVisibility(component, visible)
+    saveOverlayVisibility(overlayVisibility)
+    try {
+      await call('set_overlay_visibility', { component, visible })
+      setStatus(`${component.toUpperCase()} ${visible ? 'ENABLED' : 'HIDDEN'}`)
+    } catch (error) {
+      overlayVisibility[component] = previous
+      renderOverlayComponentVisibility(component, previous)
+      saveOverlayVisibility(overlayVisibility)
+      setStatus(error.message || 'Unable to update overlay visibility', true)
+    }
+  }
+
   for (const button of document.querySelectorAll('[data-overlay-toggle]')) {
     const component = button.dataset.overlayToggle
     const visible = overlayVisibility[component] !== false
     updateOverlayToggle(button, visible)
     button.addEventListener('click', async () => {
       const nextVisible = overlayVisibility[component] === false
-      overlayVisibility[component] = nextVisible
-      updateOverlayToggle(button, nextVisible)
-      saveOverlayVisibility(overlayVisibility)
-      try {
-        await call('set_overlay_visibility', { component, visible: nextVisible })
-        setStatus(`${component.toUpperCase()} ${nextVisible ? 'ENABLED' : 'HIDDEN'}`)
-      } catch (error) {
-        overlayVisibility[component] = !nextVisible
-        updateOverlayToggle(button, !nextVisible)
-        saveOverlayVisibility(overlayVisibility)
-        setStatus(error.message || 'Unable to update overlay visibility', true)
-      }
+      void setOverlayComponentVisibility(component, nextVisible)
     })
   }
 
-  const accordionToggle = document.querySelector('[data-accordion-toggle="hud"]')
-  const accordionPanel = document.querySelector('[data-accordion-panel="hud"]')
-  accordionToggle?.addEventListener('click', () => {
-    const expanded = accordionToggle.getAttribute('aria-expanded') === 'true'
-    accordionToggle.setAttribute('aria-expanded', String(!expanded))
-    accordionPanel.hidden = expanded
+  function allWidgetsOn() {
+    return COMPONENTS.every(c => visibility[c] !== false) && overlayVisibility.delta !== false
+  }
+
+  function anyWidgetOn() {
+    return COMPONENTS.some(c => visibility[c] !== false) || overlayVisibility.delta !== false
+  }
+
+  function renderAllToggle() {
+    const allBtn = document.getElementById('hud-all-widgets')
+    if (!allBtn) return
+    updateOverlayToggle(allBtn, allWidgetsOn())
+  }
+
+  const allWidgetsBtn = document.getElementById('hud-all-widgets')
+  allWidgetsBtn?.addEventListener('click', async () => {
+    const next = !allWidgetsOn()
+    for (const component of COMPONENTS) {
+      if ((visibility[component] !== false) !== next) {
+        await setHudComponentVisibility(component, next)
+      }
+    }
+    if ((overlayVisibility.delta !== false) !== next) {
+      await setOverlayComponentVisibility('delta', next)
+    }
+    renderAllToggle()
+    setStatus(next ? 'ALL WIDGETS ON' : 'ALL WIDGETS OFF')
   })
 
   for (const tab of settingsTabs) {
@@ -4078,6 +4138,7 @@
       nextTab.focus()
     })
   }
+
   layoutMode = readLayoutMode()
   renderLayoutMode(layoutMode)
   for (const input of layoutModeInputs) {
@@ -4192,16 +4253,20 @@
   for (const component of COMPONENTS) {
     renderHudComponentVisibility(component, visibility[component] !== false)
   }
-  for (const input of document.querySelectorAll('[data-hud-component]')) {
-    input.addEventListener('change', () => {
-      void setHudComponentVisibility(input.dataset.hudComponent, input.checked)
-    })
-  }
   for (const button of document.querySelectorAll('[data-hud-toggle]')) {
     button.addEventListener('click', () => {
       const component = button.dataset.hudToggle
       void setHudComponentVisibility(component, visibility[component] === false)
     })
+  }
+  renderAllToggle()
+  // The whole-HUD switch is gone: a HUD hidden with it stays hidden through the widget switches.
+  if (overlayVisibility.hud === false) {
+    void (async () => {
+      for (const component of COMPONENTS) await setHudComponentVisibility(component, false)
+      await setOverlayComponentVisibility('hud', true)
+      setStatus('READY')
+    })()
   }
 
   shiftLightReset.addEventListener('click', () => {

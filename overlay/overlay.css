@@ -548,17 +548,22 @@ body {
 
 .layout-edit__button--toggle[aria-pressed='true'] {
   border-color: var(--accent);
-  color: var(--accent);
-  background: var(--surface);
+  color: var(--text-on-accent);
+  background: var(--accent);
 }
 
 .layout-edit__button--toggle:hover,
-.layout-edit__button--toggle:focus-visible,
-.layout-edit__button--toggle[aria-pressed='true']:hover,
-.layout-edit__button--toggle[aria-pressed='true']:focus-visible {
+.layout-edit__button--toggle:focus-visible {
   border-color: var(--accent);
   color: var(--text-on-accent);
   background: var(--accent);
+}
+
+.layout-edit__button--toggle[aria-pressed='true']:hover,
+.layout-edit__button--toggle[aria-pressed='true']:focus-visible {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: var(--text-on-accent);
 }
 
 .layout-edit__hint {

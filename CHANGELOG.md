@@ -19,6 +19,13 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ### Added
 
+- **HUD**: the HUD tab has one layout block for both arrangements: one
+  **EDIT LAYOUT** button with the edit hotkey next to it, a new **RESET
+  LAYOUT** that returns every block and Delta to its default place after you
+  confirm, and one **WIDGETS** list with a switch per widget and **ALL** for
+  every widget at once. Pick the block to move by clicking it on the screen.
+  On the edit toolbar, **GRID ON** is filled and **GRID OFF** is not, so its
+  state is clear.
 - **HUD**: the layout edit shows an alignment grid, 4 × 4 zones with a finer
   dot grid measured from the screen center. A dragged block moves dot to dot
   by its top-left corner and centers itself on the middle and quarter lines
