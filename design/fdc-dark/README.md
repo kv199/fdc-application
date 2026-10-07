@@ -35,8 +35,9 @@ the tokens named on both specification boards.
 - The **Light theme · Configuration** board is explicitly a proposal. Its
   scoped candidate values live in `light-theme.css`, with usage and boundary
   notes in `LIGHT_THEME.md`; it does not change the app or its HUD.
-- The **App icon · Signal F** board is also a proposal. Its original vector
-  source and PNG/ICO exports live in `icon/`; the installed app icon remains
+- The **App icon · Signal F** board compares the original mark with a
+  single telemetry-step variant at tray and taskbar sizes. Their vector
+  sources and PNG/ICO exports live in `icon/`; the installed app icon remains
   unchanged.
 
 `docs/design-system.md` (on the implementation branch) is the rulebook for the
@@ -51,7 +52,7 @@ Six reference boards cover the implemented exact style specification,
 materials, fonts, the component and state kit, the screen map, and the
 connection guide with the confirmation dialogs. Two additional proposal boards
 show a light Configuration specimen with the existing dark painted header and
-the new app icon at Windows taskbar and tray sizes.
+two app-icon candidates at Windows taskbar and tray sizes.
 
 Boards follow the implemented app: the tab description and the Direct Data Out
 status in the header, the compact drill-down path such as `← RECORDING / CAR`,
