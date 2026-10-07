@@ -3,6 +3,11 @@
 The book illustrates the design; the application files are the source of truth
 for values and behavior. This map shows where each part is implemented.
 
+The proposed light Configuration palette is in
+`design/fdc-dark/light-theme.css` and `LIGHT_THEME.md`. It is scoped to its
+design-book specimen and is not implemented in the application. The in-game HUD
+and Delta stay on the current dark design.
+
 ## Values and rules
 
 | Part | Implementation |

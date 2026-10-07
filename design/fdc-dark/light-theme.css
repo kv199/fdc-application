@@ -1,0 +1,144 @@
+/* Configuration light-theme proposal. Loaded by the design book only.
+   These roles are scoped to its specimen; the app and in-game HUD stay dark. */
+.app--light-proposal {
+  color-scheme: light;
+  --bg: #f1f3ee;
+  --surface-deep: #e5e9e2;
+  --surface: #fafbf8;
+  --panel: #e8ede5;
+  --surface-hover: #e8eedc;
+  --shade: #dde3da;
+  --shade-deep: #e1e6de;
+  --shade-overlay: rgb(16 24 18 / 44%);
+  --shadow: #152016;
+  --meter-track: #d1d9ce;
+
+  --line-subtle: #d5dbd2;
+  --line: #b7c2b6;
+  --line-strong: #829184;
+  --line-light: #263329;
+
+  --text: #1b241d;
+  --text-bright: #111a13;
+  --text-soft: #364238;
+  --text-muted: #566357;
+  --text-subtle: #68756a;
+  --text-faint: #89938b;
+  --text-slate: #566357;
+
+  /* Keep FDC lime as a fill, but give text and focus their own contrast roles. */
+  --accent: #c3ed83;
+  --accent-hover: #d5f6a6;
+  --accent-pressed: #b2df6c;
+  --accent-soft: #d5f6a6;
+  --accent-ink: #446b24;
+  --focus-ring: #557a2c;
+  --text-on-accent: #162314;
+  --text-on-accent-deep: #162314;
+
+  --danger: #a51d16;
+  --danger-text: #a51d16;
+  --danger-soft: #f6c3bd;
+  --danger-rose: #a51d16;
+  --text-on-danger: #fff;
+  --warning: #765a0a;
+  --caution: #795b08;
+  --caution-strong: #624706;
+  --notice: #8a4d17;
+  --notice-soft: #f3d3b3;
+  --best: #6b3f91;
+  --text-on-badge: #141914;
+  --text-on-class: #0c150e;
+  --text-on-class-s2: #fff;
+
+  /* Book aliases used by the specimen. No HUD, telemetry, class, mode,
+     trace, problem, typography, spacing, or paint token is redefined. */
+  --muted: var(--text-muted);
+  --lime: var(--accent);
+  --purple: var(--best);
+  --red: var(--danger);
+  --amber: var(--warning);
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* The existing painted header stays in the FDC Dark palette. */
+.app--light-proposal .appmast {
+  --text: #edf0df;
+  --text-muted: #b0bcae;
+  --text-subtle: #9dab9c;
+  --surface-deep: #152019;
+  --line: #58695c;
+  --line-strong: #8c9b82;
+  --warning: #e2c876;
+  --accent: #c3ed83;
+  --focus-ring: #c3ed83;
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.app--light-proposal .appmast .label,
+.app--light-proposal .appmast__intro { color: var(--text); }
+.app--light-proposal .appnav a { color: var(--text-muted); }
+.app--light-proposal.foundation .appnav { display: flex; }
+.app--light-proposal .appnav a.active { color: var(--text-on-accent); }
+.app--light-proposal .appnav a:hover { outline-color: var(--focus-ring); }
+.app--light-proposal :is(button, a, input, select, textarea, summary):focus-visible {
+  outline-color: var(--focus-ring);
+}
+.app--light-proposal .appcontent a:not(.button) { color: var(--accent-ink); }
+.app--light-proposal .appcontent .green { color: var(--accent-ink); }
+.app--light-proposal .appcontent .purple { color: var(--best); }
+.app--light-proposal .appcontent .amber { color: var(--warning); }
+.app--light-proposal .appcontent .red { color: var(--danger-text); }
+.app--light-proposal .appcontent .button.primary {
+  color: var(--text-on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.app--light-proposal .appcontent .button.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--focus-ring);
+}
+.app--light-proposal .appcontent .button.danger {
+  color: var(--danger-text);
+  border-color: var(--danger-text);
+}
+.app--light-proposal .appcontent .button.danger:hover {
+  color: var(--text-on-danger);
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.app--light-proposal .appcontent .button:disabled,
+.app--light-proposal .appcontent .button:disabled:hover {
+  color: var(--text-faint);
+  background: var(--surface-deep);
+  border-color: var(--line-subtle);
+  opacity: 1;
+  cursor: default;
+}
+.app--light-proposal .plate { background: var(--panel); }
+.app--light-proposal .plate .muted,
+.app--light-proposal .plate .label { color: var(--text-muted); }
+.app--light-proposal .panel { background: var(--surface); }
+.app--light-proposal .appfooter { color: var(--text-muted); }
+
+.light-proposal__lead { max-width: 72ch; }
+.light-proposal__swatches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 16px 0 22px; }
+.light-proposal__swatch { min-width: 0; padding: 10px; border: 1px solid var(--line); background: var(--surface); }
+.light-proposal__swatch i { display: block; height: 46px; margin-bottom: 8px; border: 1px solid var(--line-subtle); background: var(--sample); }
+.light-proposal__swatch strong, .light-proposal__swatch code { display: block; overflow-wrap: anywhere; }
+.light-proposal__swatch strong { font-size: 12px; }
+.light-proposal__swatch code { margin-top: 3px; color: var(--text-muted); font-size: 11px; }
+.light-proposal__samples { display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--space-4); }
+.light-proposal__samples .panel, .light-proposal__samples .plate { margin-bottom: 0; }
+.light-proposal__actions { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; margin: 18px 0; }
+.light-proposal__statuses { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; font-weight: 600; }
+.light-proposal__class-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.light-proposal__class-row .badge { color: var(--text-on-class); border-color: transparent; }
+.light-proposal__class-row .class-s2 { color: var(--text-on-class-s2); }
+.light-proposal__note { margin-top: 18px; padding: 12px 14px; border-left: 1px solid var(--focus-ring); background: var(--surface-deep); font-size: 12px; }
+@media (max-width: 760px) {
+  .light-proposal__swatches { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .light-proposal__samples { grid-template-columns: 1fr; }
+}

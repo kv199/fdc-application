@@ -1,9 +1,10 @@
 # FDC design book — FDC Dark
 
 The design book shows the FDC Dark design as it is implemented in the app,
-with fixture data. It lives on the `design` branch only and never merges into
-`develop` or `main`; bring it up to date by merging the implementation branch
-into `design`.
+with fixture data, plus a separate proposed light palette for the Configuration
+window. It lives on the `design` branch only and never merges into `develop`
+or `main`; bring it up to date by merging the implementation branch into
+`design`.
 
 ## Open it
 
@@ -17,7 +18,7 @@ files opened from disk). The overview links to every board and to live
 previews of the real Configuration and HUD; see `design/preview/README.md`.
 
 Run `node design/fdc-dark/verify.cjs` to check boards, links, app assets, and
-the tokens named on the specification board.
+the tokens named on both specification boards.
 
 ## One source of values
 
@@ -32,6 +33,9 @@ the tokens named on the specification board.
   files.
 - The **Exact style specification** board reads each token's value from the
   loaded stylesheet, so it always shows what the app uses.
+- The **Light theme · Configuration** board is explicitly a proposal. Its
+  scoped candidate values live in `light-theme.css`, with usage and boundary
+  notes in `LIGHT_THEME.md`; it does not change the app or its HUD.
 
 `docs/design-system.md` (on the implementation branch) is the rulebook for the
 tokens and components; the book illustrates it.
@@ -41,9 +45,10 @@ tokens and components; the book illustrates it.
 Sixteen application boards cover HUD configuration, Grouped and Freeform
 geometry and shift states, Driver history, recording, car, and drive pages,
 Shift Light, Garage, Events library, create, event, run, and map, and Settings.
-Six reference boards cover the exact style specification, materials, fonts,
-the component and state kit, the screen map, and the connection guide with the
-confirmation dialogs.
+Six reference boards cover the implemented exact style specification,
+materials, fonts, the component and state kit, the screen map, and the
+connection guide with the confirmation dialogs. One additional proposal board
+shows a light Configuration specimen with the existing dark painted header.
 
 Boards follow the implemented app: the tab description and the Direct Data Out
 status in the header, the compact drill-down path such as `← RECORDING / CAR`,
