@@ -1,15 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
-  <title id="title">FDC Chroma Unified Light icon study</title>
-  <desc id="description">A single italic F filled by one olive-to-lime gradient on a warm white rounded tile.</desc>
+  <title id="title">FDC Chroma Photon Light icon study</title>
+  <desc id="description">A seamless italic F with one soft lime light-source gradient on a warm white rounded tile.</desc>
   <defs>
-    <linearGradient id="mark" gradientUnits="userSpaceOnUse" x1="89" y1="420" x2="402" y2="93">
-      <stop offset="0%" stop-color="#152019"/>
-      <stop offset="46%" stop-color="#576a5b"/>
-      <stop offset="100%" stop-color="#c3ed83"/>
-    </linearGradient>
+    <radialGradient id="mark" gradientUnits="userSpaceOnUse" cx="348" cy="114" r="390">
+      <stop offset="0%" stop-color="#d5f6a6"/>
+      <stop offset="24%" stop-color="#c3ed83"/>
+      <stop offset="52%" stop-color="#576a5b"/>
+      <stop offset="100%" stop-color="#152019"/>
+    </radialGradient>
   </defs>
-  <!-- One continuous F contour. All colors are established FDC tokens. -->
+  <!-- One continuous F with a straight outer left edge. All colors are FDC tokens. -->
   <rect width="512" height="512" rx="104" fill="#fbfcf4"/>
   <rect x="1" y="1" width="510" height="510" rx="103" fill="none" stroke="#d5dbc9" stroke-width="2"/>
-  <path d="M139 93H405L363 171H207.7234L195.4681 243H342L301 316H183.0426L165 422H79L98.3313 316H96L106.7494 269.8409Z" fill="url(#mark)"/>
+  <path d="M139 93H405L363 171H207.7234L195.4681 243H342L301 316H183.0426L165 422H79Z" fill="url(#mark)"/>
 </svg>

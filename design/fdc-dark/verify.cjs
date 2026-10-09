@@ -77,6 +77,14 @@ for (const file of ['icon/fdc-icon-chroma-light.svg', 'icon/fdc-icon-chroma-blac
     if (!iconColors.has(match[1].toLowerCase())) throw Error(`${file} uses an unknown color: ${match[1]}`);
   }
 }
+const unifiedIcons = ['icon/fdc-icon-chroma-light.svg', 'icon/fdc-icon-chroma-black.svg'];
+const contours = unifiedIcons.map(file => {
+  const svg = read(file);
+  const paths = [...svg.matchAll(/<path\b[^>]*d="([^"]+)"/g)];
+  if (paths.length !== 1 || !svg.includes('<radialGradient id="mark"')) throw Error(`${file} must have one F path and one radial gradient`);
+  return paths[0][1];
+});
+if (contours[0] !== contours[1]) throw Error('Light and black icons must use the same F contour');
 for (const match of icon.html.matchAll(/(?:src|href)="(icon\/[^\"]+)"/g)) {
   if (!exists(match[1])) throw Error(`Missing proposed icon asset: ${match[1]}`);
 }

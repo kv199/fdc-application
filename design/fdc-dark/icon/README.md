@@ -5,13 +5,14 @@ This is a design proposal. The installed application still uses
 
 ## Current study: Unified Chroma F
 
-The F is one continuous vector path and one gradient fill, with the same
-silhouette as Chroma Light. The light tile keeps the deep olive, painted olive,
-and lime progression. The black tile uses the same contour and gradient
-direction; its dark end starts at `--paint` and crosses `--line-strong` before
-reaching `--accent`, so the stem remains visible on `--shadow` black. Both
-rounded tiles have transparent corners. Each has an SVG source, a 1024 px
-PNG, and a seven-layer Windows ICO. There is no generated texture.
+The F is one continuous vector path and one radial gradient fill. Its
+outer left edge is a single straight line; the previous middle-arm protrusion
+is removed. A soft light source near the upper right uses `--accent-soft` and
+`--accent` to add volume without a separate stripe or texture. The light tile
+falls through `--paint` to `--surface-deep`; the black tile falls through
+`--line-strong` to `--paint` so the stem stays visible on `--shadow` black.
+Both versions use the same contour and have transparent rounded corners. Each
+has an SVG source, a 1024 px PNG, and a seven-layer Windows ICO.
 
 ## Previous study: Split F
 
