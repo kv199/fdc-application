@@ -30,7 +30,7 @@ for (const board of boards) {
 }
 
 // The book has no copies of app assets: it uses the app's tokens, fonts, and texture.
-for (const file of ['index.html', 'book.css', 'design-system.css', 'light-theme.css', 'icon/icon.css', 'icon/fdc-icon.svg', 'icon/fdc-icon.png', 'icon/fdc-icon.ico', 'icon/fdc-icon-pulse.svg', 'icon/fdc-icon-pulse.png', 'icon/fdc-icon-pulse.ico', 'icon/fdc-icon-lift.svg', 'icon/fdc-icon-lift.png', 'icon/fdc-icon-lift.ico', 'icon/fdc-icon-lift-mark.svg', 'icon/fdc-icon-chroma.svg', 'icon/fdc-icon-chroma.png', 'icon/fdc-icon-chroma.ico', 'icon/fdc-icon-spectrum.svg', 'icon/fdc-icon-spectrum.png', 'icon/fdc-icon-spectrum.ico', 'icon/fdc-icon-split.svg', 'icon/fdc-icon-split.png', 'icon/fdc-icon-split.ico', 'icon/fdc-icon-chroma-fdc.svg', 'icon/fdc-icon-chroma-fdc.png', 'icon/fdc-icon-chroma-fdc.ico', 'icon/fdc-icon-chroma-fdc-texture.jpg', 'icon/fdc-icon-chroma-fdc-texture-source.png', 'book.js', 'overlays.js', 'README.md', 'IMPLEMENTATION.md', 'LIGHT_THEME.md']) {
+for (const file of ['index.html', 'book.css', 'design-system.css', 'light-theme.css', 'icon/icon.css', 'icon/fdc-icon.svg', 'icon/fdc-icon.png', 'icon/fdc-icon.ico', 'icon/fdc-icon-pulse.svg', 'icon/fdc-icon-pulse.png', 'icon/fdc-icon-pulse.ico', 'icon/fdc-icon-lift.svg', 'icon/fdc-icon-lift.png', 'icon/fdc-icon-lift.ico', 'icon/fdc-icon-lift-mark.svg', 'icon/fdc-icon-chroma.svg', 'icon/fdc-icon-chroma.png', 'icon/fdc-icon-chroma.ico', 'icon/fdc-icon-spectrum.svg', 'icon/fdc-icon-spectrum.png', 'icon/fdc-icon-spectrum.ico', 'icon/fdc-icon-chroma-light.svg', 'icon/fdc-icon-chroma-light.png', 'icon/fdc-icon-chroma-light.ico', 'icon/fdc-icon-split.svg', 'icon/fdc-icon-split.png', 'icon/fdc-icon-split.ico', 'icon/fdc-icon-chroma-fdc.svg', 'icon/fdc-icon-chroma-fdc.png', 'icon/fdc-icon-chroma-fdc.ico', 'icon/fdc-icon-chroma-fdc-texture.jpg', 'icon/fdc-icon-chroma-fdc-texture-source.png', 'book.js', 'overlays.js', 'README.md', 'IMPLEMENTATION.md', 'LIGHT_THEME.md']) {
   if (!exists(file)) throw Error(`Missing book file: ${file}`);
 }
 if (!fs.existsSync(path.join(repo, 'overlay', 'assets', 'textures', 'paint.jpg'))) throw Error('Missing FDC paint texture used by the icon finish preview');
@@ -72,7 +72,7 @@ for (const match of light.html.matchAll(/data-light-token="(--[\w-]+)"/g)) {
 const icon = boards.find(board => board.id === 'foundation-icon');
 if (!icon || icon.status !== 'proposal') throw Error('Application icon board must be marked as a proposal');
 const iconColors = new Set([...fs.readFileSync(path.join(repo, 'overlay', 'tokens.css'), 'utf8').matchAll(/#[0-9a-fA-F]{6}/g)].map(match => match[0].toLowerCase()));
-for (const file of ['icon/fdc-icon-split.svg', 'icon/fdc-icon-chroma-fdc.svg']) {
+for (const file of ['icon/fdc-icon-chroma-light.svg', 'icon/fdc-icon-split.svg', 'icon/fdc-icon-chroma-fdc.svg']) {
   for (const match of read(file).matchAll(/(?:stop-color|fill|stroke)="(#[0-9a-fA-F]{6})"/g)) {
     if (!iconColors.has(match[1].toLowerCase())) throw Error(`${file} uses an unknown color: ${match[1]}`);
   }
