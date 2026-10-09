@@ -22,6 +22,23 @@ and sparse points on the tile. The reference image is not included or traced;
 the geometry and exports were authored for FDC. These colors are exploratory
 and do not change the app or HUD palette.
 
+Chroma · FDC palette is a follow-up that keeps Chroma's exact F geometry.
+The warm spine uses `--warning`, `--notice`, and `--telemetry-brake`; the
+two rails use `--best`, `--text`, and `--telemetry-throttle`. The tile
+uses `--surface-deep` and `--paint`. A grayscale powder-coated metal
+texture was generated with the built-in image tool and deterministically
+tinted between those two existing surface colors. The SVG embeds the
+tinted texture, so it is portable; the separate source and tinted files
+preserve texture provenance. Chroma and Spectrum remain comparison
+studies with exploratory colors, not selected FDC palette proposals.
+
+Texture generation used the built-in image tool with this brief: fine
+powder-coated automotive metal, restrained irregular micro-etching and
+hairline machining marks, even visual density, grayscale, no icon or text,
+no rust, carbon-fiber weave, grid, spotlight, or large scratches. The
+generated grayscale is kept as `fdc-icon-chroma-fdc-texture-source.png`;
+the colorized tile is derived from it, not generated in new colors.
+
 ## Files
 
 - `fdc-icon.svg`: editable original vector source, 512 × 512 viewBox.
@@ -36,11 +53,16 @@ and do not change the app or HUD palette.
 - `fdc-icon-lift-mark.svg`: foreground-only preview for comparing tile finishes.
 - `fdc-icon-chroma.svg`, `.png`, `.ico`: editable Chroma vector and Windows exports.
 - `fdc-icon-spectrum.svg`, `.png`, `.ico`: editable Spectrum vector and Windows exports.
+- `fdc-icon-chroma-fdc.svg`, `.png`, `.ico`: FDC palette vector proposal and Windows exports.
+- `fdc-icon-chroma-fdc-texture-source.png`: generated grayscale texture source.
+- `fdc-icon-chroma-fdc-texture.jpg`: tinted tile texture embedded in the SVG.
 
 All shapes were authored as FDC vectors. Lift interprets a user-supplied
 composition sketch; the sketch file is not included in the repository. No
-stock asset, icon pack, or AI-generated raster was used. Colors follow the
-implemented FDC Dark tokens. Signal F and Pulse use `--surface-deep`
+stock asset or icon pack was used. The new Chroma · FDC tile texture is
+AI-generated; its color is restricted to existing FDC surface tokens. All F
+shapes remain authored vectors. Earlier Signal F, Pulse, and Lift colors follow
+the implemented FDC Dark tokens. Signal F and Pulse use `--surface-deep`
 `#152019`, `--text` `#edf0df`, and `--accent` `#c3ed83`. Lift keeps the text
 color and uses the HUD's `--telemetry-throttle` `#69e83f` and
 `--telemetry-brake` `#ff312b` for the two floating pieces. Its gradient blends
@@ -48,8 +70,8 @@ olive surface colors without texture. The book also previews the foreground
 on the existing `overlay/assets/textures/paint.jpg`. That preview is not an
 icon export and does not duplicate the texture in this folder.
 
-The `foundation-icon` board shows the two new color studies first and preserves
-all three earlier proposals below. It compares them at taskbar and tray sizes
+The `foundation-icon` board shows Chroma · FDC first, then the two earlier
+color studies and all three original proposals below. It compares them at taskbar and tray sizes
 and shows the current installed icon separately. No proposal is selected for
 implementation. Replacing the runtime icon and updating application assets
 belongs to the later implementation step.

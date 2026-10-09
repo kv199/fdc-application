@@ -3,6 +3,7 @@
   const icon = (file, px, alt = '') => `<img src="icon/${file}.png" width="${px}" height="${px}" alt="${alt}"/>`;
   const metal = (px, label = '') => `<span class="icon-proposal__metal" style="--icon-size:${px}px" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}><img class="icon-proposal__metal-texture" src="../../overlay/assets/textures/paint.jpg" alt=""/><img class="icon-proposal__metal-mark" src="icon/fdc-icon-lift-mark.svg" alt=""/></span>`;
   const newSizes = file => `<div class="icon-proposal__new-sizes">${[64, 32, 24, 16].map(px => `<span>${icon(file, px)}<small>${px}</small></span>`).join('')}</div>`;
+  const paletteContext = (name, theme) => `<div class="icon-proposal__context icon-proposal__context--${theme}">${icon('fdc-icon-chroma-fdc', 42)}<span>${name}</span></div>`;
   const newContext = (name, theme) => `<div class="icon-proposal__context icon-proposal__context--${theme}">${icon('fdc-icon-chroma', 42)}${icon('fdc-icon-spectrum', 42)}<span>${name}</span></div>`;
   const files = ['fdc-icon', 'fdc-icon-lift', 'fdc-icon-pulse'];
   const sizes = [64, 32, 24, 16].map(px => `<tr><th scope="row">${px} px</th>${files.map(file => `<td>${icon(file, px)}</td>`).join('')}</tr>`).join('');
@@ -14,8 +15,14 @@
     status: 'proposal',
     proposalLabel: 'FDC ICON / PROPOSAL',
     proposalKicker: 'APP ICON / BOTH THEMES',
-    description: 'Two new prismatic F studies explore the supplied colorful icon reference. The earlier Signal F, Lift, and Pulse proposals are preserved below; the installed icon remains unchanged.',
-    html: `<h2>F in color.</h2><p class="icon-proposal__intro">A fresh direction based on the supplied reference: one bold italic F, warm-to-cool color inside the letter, and a deep night-blue tile. These are FDC-authored studies, not a tracing of the reference. Compare the clean ribbon with a faceted, instrument-like version at real Windows sizes.</p>
+    description: 'Chroma reworked with established FDC colors and a new matte olive texture. The prior Chroma, Spectrum, Signal F, Lift, and Pulse proposals remain below; the installed icon remains unchanged.',
+    html: `<h2>Chroma, in FDC colors.</h2><p class="icon-proposal__intro">The same bold italic F, now using only established FDC color roles. Its warm spine uses warning, notice, and HUD brake; the top ends in best purple, while the middle moves through readout white into HUD throttle. A newly generated matte metal texture is tinted only with the existing deep and painted surface colors.</p>
+      <section class="panel icon-proposal__focus">${icon('fdc-icon-chroma-fdc', 256, 'Chroma FDC: warm warning-to-brake F spine, red-to-best top bar and purple-to-throttle middle bar on a textured dark olive tile')}<div><h3>Chroma · FDC palette</h3><p class="muted">Chroma's connected geometry, with FDC's own color roles and a quiet material tile.</p>${newSizes('fdc-icon-chroma-fdc')}<p class="muted"><code>--warning</code> <code>--notice</code> <code>--telemetry-brake</code> <code>--best</code> <code>--text</code> <code>--telemetry-throttle</code></p></div></section>
+      <div class="icon-proposal__contexts">${paletteContext('FDC Dark', 'dark')}${paletteContext('Light Configuration proposal', 'light')}</div>
+      <div class="icon-proposal__files"><a href="icon/fdc-icon-chroma-fdc.svg">FDC Chroma SVG ↗</a><a href="icon/fdc-icon-chroma-fdc.png">FDC Chroma PNG ↗</a><a href="icon/fdc-icon-chroma-fdc.ico">FDC Chroma ICO ↗</a><a href="icon/fdc-icon-chroma-fdc-texture.jpg">New tile texture ↗</a></div>
+      <hr class="icon-proposal__divider"/>
+      <h2>Earlier color studies</h2><p class="icon-proposal__intro">The original Chroma and Spectrum remain here for comparison. Their blue tiles and rainbow colors were exploratory and are not part of FDC's chosen palette.</p>
+      <h3>F in color.</h3><p class="icon-proposal__intro">A fresh direction based on the supplied reference: one bold italic F, warm-to-cool color inside the letter, and a deep night-blue tile. These are FDC-authored studies, not a tracing of the reference. Compare the clean ribbon with a faceted, instrument-like version at real Windows sizes.</p>
       <div class="icon-proposal__new-grid">
         <section class="panel icon-proposal__new-card">${icon('fdc-icon-chroma', 224, 'Chroma F: warm gold spine, coral and violet top bar, blue-violet middle bar on a rounded night-blue tile')}<div><h3>Chroma</h3><p class="muted">The simplest read: three connected gradients, one clear F.</p>${newSizes('fdc-icon-chroma')}</div></section>
         <section class="panel icon-proposal__new-card">${icon('fdc-icon-spectrum', 224, 'Spectrum F: gold spine, coral-violet top bar and three blue-violet signal bands on a sparse dotted dark-blue tile')}<div><h3>Spectrum</h3><p class="muted">Layered signal bands and sparse points add the reference's depth.</p>${newSizes('fdc-icon-spectrum')}</div></section>
