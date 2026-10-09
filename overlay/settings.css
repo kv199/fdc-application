@@ -1234,9 +1234,9 @@ h1 {
 }
 
 .events-run-table-section {
-  padding: 16px;
-  border: 1px solid var(--line-strong);
-  background: var(--panel);
+  padding: 22px;
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .events-run-table-section__heading {
@@ -1244,21 +1244,22 @@ h1 {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 20px;
 }
 
 .events-run-table-section__heading h3 {
   margin: 0;
   color: var(--text);
-  font-size: 15px;
-  letter-spacing: 0.08em;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .events-run-table-section__heading span {
-  color: var(--text-subtle);
+  color: var(--text-muted);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  font-weight: 400;
+  letter-spacing: 0.14em;
 }
 
 .events-run-table-wrap {
@@ -1272,7 +1273,7 @@ h1 {
   min-width: 580px;
   border-collapse: collapse;
   color: var(--text);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .events-run-table__caption {
@@ -1287,22 +1288,27 @@ h1 {
 
 .events-run-table th,
 .events-run-table td {
-  padding: 11px 12px;
-  text-align: right;
+  padding: 13px 12px;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
-.events-run-table th:first-child,
-.events-run-table td:first-child {
-  width: 15%;
-  text-align: left;
+/* Numeric columns opt in to right alignment with the events-run-table__end class. */
+.events-run-table .events-run-table__end {
+  text-align: right;
+}
+
+/* Car names, statistic names, and lap numbers share one auto-width first column. */
+.events-run-table th:first-child {
+  width: auto;
+  white-space: nowrap;
 }
 
 .events-run-table thead th {
-  color: var(--text-subtle);
+  color: var(--text-muted);
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  font-weight: 400;
+  letter-spacing: 0.1em;
   white-space: nowrap;
 }
 
@@ -1318,7 +1324,11 @@ h1 {
 .events-run-table__lap-row:hover,
 .events-run-table__lap-row:focus-visible,
 .events-run-table__lap-row[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--best) 7%, transparent);
+  background: var(--surface-hover);
+}
+
+.events-run-table td strong[data-result] {
+  font-weight: 400;
 }
 
 .events-lap-detail-row {
@@ -1692,17 +1702,19 @@ h1 {
 
 .events-run-table tbody th {
   color: var(--text);
-  font-weight: 800;
+  font-family: var(--font-readout);
+  font-size: 18px;
+  font-weight: 500;
 }
 
 .events-run-table__sort {
   padding: 0;
   border: 0;
-  color: var(--text-subtle);
+  color: inherit;
   background: transparent;
   font: inherit;
   font-size: inherit;
-  font-weight: inherit;
+  font-weight: 400;
   letter-spacing: inherit;
   cursor: pointer;
 }
@@ -1719,15 +1731,20 @@ h1 {
 
 .events-run-table__time {
   color: var(--text);
-  font-family: var(--font-readout);
-  font-size: 15px;
-  font-weight: 600;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 400;
   white-space: nowrap;
 }
 
 .events-run-table__time[data-tone="best"] { color: var(--best); }
 .events-run-table__time[data-tone="second"] { color: var(--accent); }
 .events-run-table__time.is-missing { color: var(--text-faint); }
+
+.events-run-table__note {
+  color: var(--text-muted);
+  font-size: 12px;
+}
 
 .events-detail-view__actions {
   margin-left: auto;
@@ -1918,9 +1935,9 @@ h1 {
 
 .event-recorder {
   margin-top: 24px;
-  padding: 16px;
-  border: 1px solid var(--line-strong);
-  background: var(--panel);
+  padding: 22px;
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .event-recorder__heading,
@@ -1933,17 +1950,18 @@ h1 {
 }
 
 .event-runs__heading {
-  color: var(--text-subtle);
+  color: var(--text-muted);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: 0.14em;
 }
 
 .event-recorder h3 {
   margin: 4px 0 0;
   color: var(--text);
-  font-size: 15px;
-  letter-spacing: 0.08em;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .event-recorder__controls {
@@ -2009,62 +2027,7 @@ h1 {
   padding-top: 13px;
 }
 
-.event-runs__heading { margin-bottom: 8px; }
-.event-run-row--header { min-height: 31px; padding-top: 4px; padding-bottom: 4px; border-color: transparent; background: transparent; }
-.event-run-row--header .event-run-row__cell { color: var(--text-subtle); }
-.event-run-row__header-label,
-.event-run-row__sort {
-  color: var(--text-subtle);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-}
-.event-run-row__sort {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-.event-run-row__sort:hover,
-.event-run-row__sort:focus-visible,
-.event-run-row__sort[aria-sort="ascending"],
-.event-run-row__sort[aria-sort="descending"] {
-  color: var(--accent);
-}
-.event-run-row__sort[aria-sort="ascending"]::after { content: ' ↑'; }
-.event-run-row__sort[aria-sort="descending"]::after { content: ' ↓'; }
-.event-runs__list { display: grid; gap: 6px; }
-
-.event-run-row {
-  appearance: none;
-  display: grid;
-  grid-template-columns: minmax(82px, 0.7fr) minmax(120px, 1.4fr) minmax(120px, 1fr) minmax(90px, 0.75fr) minmax(48px, 0.35fr) minmax(85px, 0.75fr);
-  align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  padding: 7px 9px;
-  border: 1px solid var(--line-subtle);
-  background: var(--surface-deep);
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.event-run-row:hover,
-.event-run-row:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
-  background: var(--surface-hover);
-}
-
-.event-run-row__cell { min-width: 0; color: var(--text); font-size: 13px; }
-.event-run-row__label { display: block; margin-bottom: 3px; color: var(--text-subtle); font-size: 10px; font-weight: 800; letter-spacing: 0.1em; }
-.event-run-row__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.event-run-row__time { color: var(--accent); font-family: var(--font-readout); font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 600; }
-
-@media (max-width: 760px) {
-  .event-run-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+.event-runs__heading { margin-bottom: 12px; }
 
 @media (max-width: 620px) {
   .events-form {
@@ -2566,88 +2529,8 @@ h1 {
   min-width: 0;
 }
 
-/* Car names and statistic names are longer than Events lap numbers. */
-.driver-analysis-detail-view .events-run-table th:first-child {
-  width: auto;
-  white-space: nowrap;
-}
-
 .driver-analysis-detail-view__stats[hidden] {
   display: none;
-}
-
-/* Driver tables sit on plain panels; the raised plate is reserved for RESULT. */
-.driver-analysis-detail-view .events-run-table-section {
-  padding: 22px;
-  border-color: var(--line);
-  background: var(--surface);
-}
-
-.driver-analysis-detail-view .events-run-table-section__heading {
-  margin-bottom: 20px;
-}
-
-.driver-analysis-detail-view .events-run-table-section__heading h3 {
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-
-.driver-analysis-detail-view .events-run-table-section__heading span {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 400;
-  letter-spacing: 0.14em;
-}
-
-.driver-analysis-detail-view .events-run-table {
-  font-size: 14px;
-}
-
-.driver-analysis-detail-view .events-run-table th,
-.driver-analysis-detail-view .events-run-table td {
-  padding: 13px 12px;
-  text-align: left;
-}
-
-/* Numeric columns start at the fourth column; the last (result) column stays left. */
-.driver-analysis-detail-view .events-run-table td:nth-child(n + 4),
-.driver-analysis-detail-view .events-run-table th:nth-child(n + 4) {
-  text-align: right;
-}
-
-.driver-analysis-detail-view .events-run-table td:last-child,
-.driver-analysis-detail-view .events-run-table th:last-child {
-  text-align: left;
-}
-
-.driver-analysis-detail-view .events-run-table thead th {
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0.1em;
-}
-
-.driver-analysis-detail-view .events-run-table tbody th {
-  color: var(--text);
-  font-family: var(--font-readout);
-  font-size: 18px;
-  font-weight: 500;
-}
-
-.driver-analysis-detail-view .events-run-table__time {
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: 400;
-}
-
-.driver-analysis-detail-view .events-run-table td strong[data-result] {
-  font-weight: 400;
-}
-
-.driver-analysis-detail-view .events-run-table__lap-row:hover,
-.driver-analysis-detail-view .events-run-table__lap-row:focus-visible {
-  background: var(--surface-hover);
 }
 
 @media (max-width: 680px) {

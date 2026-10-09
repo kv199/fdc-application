@@ -117,11 +117,17 @@ The application header is the only textured surface: it shows
   actions in its row stay right-aligned. A heading that labels a control, such
   as the Driver Analysis switch, stays visible.
 - The raised plate (`--panel` with a `--line-strong` border) marks one area
-  per view: the HUD layout editor, the Events create form, the event's run
-  recorder, the run's lap breakdown, the Driver Analysis recorder, the Driver
-  Analysis car page's RESULT panel, the Shift Light calibration card, and the
-  Garage current car. The Events library, the other Driver Analysis drill-down
-  areas, and Settings have none.
+  per view: the HUD layout editor, the Events create form, the Driver Analysis
+  recorder, the Driver Analysis car page's RESULT panel, the Shift Light
+  calibration card, and the Garage current car. The Events library, the other
+  Driver Analysis drill-down areas, and Settings have none. Events tables,
+  including RECORD RUNS and the lap breakdown, sit on plain panels.
+- Every data table uses `.events-run-table` on a plain `--surface` panel
+  (`.events-run-table-section` or `.event-recorder`), with a `--line` border.
+  Column headers are muted 10px text, the first column is in `--font-readout`
+  at 18px, body text is 14px, and cells are left-aligned. Numeric columns
+  right-align through the `events-run-table__end` class. Selectable rows fill
+  with `--surface-hover` on hover, focus, or expansion.
 - Drill-down views (an event, a run, and the Driver Analysis recording, car,
   and drive pages) show a compact header row: the FDC brand, a back link that
   names the parent, a slash, and the page name at `--type-detail-title` in

@@ -59,11 +59,14 @@ The tab opens with a short intro and contains:
   its lap number in the event page; a sprint shows its confirmed finish time.
   A confirmed sprint is saved immediately and leaves capture armed for the
   next attempt. Circuit laps remain in their current run until **STOP** or a
-  confirmed restart. Each saved-run row shows its lap count between Best and
-  Date, then displays the local run start as `YYYY.MM.DD HH:MM:SS`.
-- The saved-run header sorts by ID, Best, or Date. Its default is Date from
-  newest to oldest, and that temporary choice is not persisted. Selecting a
-  saved run opens its detail page.
+  confirmed restart.
+- Saved runs are a table with `ID`, `CAR`, `CLASS / PI / DRIVE`, `BEST`, `LAPS`,
+  and `DATE` columns. `BEST` shows the best time followed by the best lap
+  (`L1`) or `SPRINT`. `DATE` shows the local run start as
+  `YYYY.MM.DD HH:MM:SS`.
+- The `ID`, `BEST`, and `DATE` headers sort the saved runs. The default is Date
+  from newest to oldest, and that temporary choice is not persisted. Selecting
+  a saved run opens its detail page.
 - A run detail repeats the Event identity and shows a **Best Hypothetical
   Time** when all three virtual sectors are available. It is the sum of the
   quickest Sector 1, Sector 2, and Sector 3 across that run's rows. Its lap

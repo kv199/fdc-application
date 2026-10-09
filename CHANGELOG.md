@@ -64,6 +64,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   pages use the condensed FDC Dark title font, larger on Driver Analysis
   pages, instead of a heavy bold interface font. The event title no longer
   turns lime under the pointer; selecting it still renames the event.
+- **Events**: saved runs and the lap breakdown use the same tables as Driver
+  Analysis, on plain panels. Saved runs are one table with a single header
+  row instead of separate boxes that repeated every column name; select a row
+  to open the run and a header to sort, as before.
 
 ## 7.24.67 - 2026-10-06
 

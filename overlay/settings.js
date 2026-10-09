@@ -174,6 +174,7 @@
   const eventRecorderHint = document.getElementById('event-recorder-hint')
   const eventRecorderFeedback = document.getElementById('event-recorder-feedback')
   const eventRecorderToggle = document.getElementById('event-recorder-toggle')
+  const eventRunsTable = document.getElementById('event-runs-table')
   const eventRunsList = document.getElementById('event-runs-list')
   const eventRunSortButtons = [...document.querySelectorAll('[data-run-sort]')]
   const eventRunsEmpty = document.getElementById('event-runs-empty')
@@ -1422,38 +1423,54 @@
     updateEventRunSortButtons()
     const runs = [...currentEventRuns].sort(compareEventRuns)
     if (eventRunsEmpty) eventRunsEmpty.hidden = runs.length > 0
+    if (eventRunsTable) eventRunsTable.hidden = runs.length === 0
     if (eventRunsCount) eventRunsCount.textContent = `${runs.length} ${runs.length === 1 ? 'RUN' : 'RUNS'}`
     for (const run of runs) {
       const lapCount = run.laps.length
-      const row = document.createElement('button')
-      row.type = 'button'
-      row.className = 'event-run-row'
+      const openRun = () => openEventRun(run.id)
+      const row = document.createElement('tr')
+      row.className = 'events-run-table__lap-row'
+      row.tabIndex = 0
       row.setAttribute('aria-label', `Open run ${run.id}, ${lapCount} ${lapCount === 1 ? 'lap' : 'laps'}`)
-      row.addEventListener('click', () => openEventRun(run.id))
+      row.addEventListener('click', openRun)
+      row.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        openRun()
+      })
+      const idCell = document.createElement('th')
+      idCell.scope = 'row'
+      idCell.textContent = String(run.id)
+      row.append(idCell)
+      const carCell = document.createElement('td')
+      carCell.textContent = runCarName(run)
+      row.append(carCell)
       const carDetails = [run.car.class, run.car.pi ? `PI ${run.car.pi}` : '', run.car.drivetrain].filter(Boolean).join(' · ') || '—'
+      const carDetailsCell = document.createElement('td')
+      carDetailsCell.textContent = carDetails
+      row.append(carDetailsCell)
       const bestLap = run.runType !== 'sprint'
         ? run.laps.reduce((best, lap) => !best || lap.timeMs < best.timeMs ? lap : best, null)
         : null
-      const cells = [
-        ['ID', run.id],
-        ['CAR', runCarName(run)],
-        ['CLASS / PI / DRIVE', carDetails],
-        [bestLap ? `BEST L${Math.max(1, Math.round(bestLap.lapNumber))}` : 'SPRINT', formatRunTime(runBestTimeMs(run))],
-        ['LAPS', lapCount],
-        ['DATE', formatRunDate(run.startedAt)]
-      ]
-      for (const [label, value] of cells) {
-        const cell = document.createElement('div')
-        cell.className = 'event-run-row__cell'
-        const labelElement = document.createElement('span')
-        labelElement.className = 'event-run-row__label'
-        labelElement.textContent = label
-        const valueElement = document.createElement('span')
-        valueElement.className = `event-run-row__value${label.startsWith('BEST') || label === 'SPRINT' ? ' event-run-row__time' : ''}`
-        valueElement.textContent = value
-        cell.append(labelElement, valueElement)
-        row.append(cell)
-      }
+      const bestCell = document.createElement('td')
+      bestCell.className = 'events-run-table__end'
+      const bestTime = document.createElement('span')
+      bestTime.className = 'events-run-table__time'
+      bestTime.textContent = formatRunTime(runBestTimeMs(run))
+      // The note keeps the best lap number (or SPRINT) that the old per-row label showed.
+      const bestNote = document.createElement('span')
+      bestNote.className = 'events-run-table__note'
+      bestNote.textContent = bestLap ? ` L${Math.max(1, Math.round(bestLap.lapNumber))}` : ' SPRINT'
+      bestCell.append(bestTime, bestNote)
+      row.append(bestCell)
+      const lapsCell = document.createElement('td')
+      lapsCell.className = 'events-run-table__end'
+      lapsCell.textContent = String(lapCount)
+      row.append(lapsCell)
+      const dateCell = document.createElement('td')
+      dateCell.className = 'events-run-table__end'
+      dateCell.textContent = formatRunDate(run.startedAt)
+      row.append(dateCell)
       eventRunsList.append(row)
     }
   }
@@ -2704,6 +2721,7 @@
         const th = document.createElement('th')
         th.scope = 'col'
         th.textContent = header
+        if (['DRIVES', 'DURATION'].includes(header)) th.className = 'events-run-table__end'
         headerRow.append(th)
       }
       thead.append(headerRow)
@@ -2737,10 +2755,12 @@
         row.append(drivetrainCell)
         const drivesCount = Array.isArray(s?.drives) ? s.drives.length : 0
         const drivesCell = document.createElement('td')
+        drivesCell.className = 'events-run-table__end'
         drivesCell.textContent = String(drivesCount)
         row.append(drivesCell)
         const durationMs = Number(s?.durationMs) || 0
         const durationCell = document.createElement('td')
+        durationCell.className = 'events-run-table__end'
         const durationTime = document.createElement('span')
         durationTime.className = 'events-run-table__time'
         durationTime.textContent = formatDriverAnalysisDuration(durationMs)
@@ -2901,6 +2921,7 @@
           const th = document.createElement('th')
           th.scope = 'col'
           th.textContent = colHeader
+          if (colHeader === 'START') th.className = 'events-run-table__end'
           headerRow.append(th)
         }
         thead.append(headerRow)
@@ -2934,6 +2955,7 @@
           durationCell.append(durationSpan)
           driveRow.append(durationCell)
           const startCell = document.createElement('td')
+          startCell.className = 'events-run-table__end'
           const startTime = new Date(drive?.startedWallMs)
           startCell.textContent = Number.isFinite(startTime.getTime())
             ? startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
