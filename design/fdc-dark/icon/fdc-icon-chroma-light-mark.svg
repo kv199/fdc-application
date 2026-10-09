@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">FDC Chroma F only, light surface</title>
+  <desc id="description">The unchanged Chroma F from the light tile, without any background.</desc>
+  <defs>
+    <linearGradient id="mark" gradientUnits="userSpaceOnUse" x1="89" y1="420" x2="402" y2="93">
+      <stop offset="0%" stop-color="#152019"/>
+      <stop offset="46%" stop-color="#576a5b"/>
+      <stop offset="100%" stop-color="#c3ed83"/>
+    </linearGradient>
+  </defs>
+  <path d="M139 93H405L363 171H207.7234L195.4681 243H342L301 316H183.0426L165 422H79Z" fill="url(#mark)"/>
+</svg>

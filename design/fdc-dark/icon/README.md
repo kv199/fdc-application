@@ -15,6 +15,16 @@ The radial illumination is on the tiles only. The light tile moves from
 `--surface` through `--shade` to `--shadow`. Both have transparent rounded
 corners. Each has an SVG source, a 1024 px PNG, and a seven-layer Windows ICO.
 
+## Standalone F exports
+
+The `fdc-icon-chroma-light-mark` and `fdc-icon-chroma-black-mark` files isolate
+exactly the mark from the corresponding tile SVG: same path, viewBox, position,
+linear gradient, and color stops. No tile, border, shadow, or background is
+included. The PNG and ICO exports retain full alpha outside the F. The book
+shows the marks on light and dark preview surfaces so they can be compared
+before choosing where each belongs. Each variant has SVG, 1024 px PNG, and
+seven-layer ICO files.
+
 ## Previous study: Split F
 
 Split F interprets the supplied flat, two-color monogram reference as an original

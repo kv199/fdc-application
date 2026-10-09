@@ -3,6 +3,7 @@
   const icon = (file, px, alt = '') => `<img src="icon/${file}.png" width="${px}" height="${px}" alt="${alt}"/>`;
   const metal = (px, label = '') => `<span class="icon-proposal__metal" style="--icon-size:${px}px" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}><img class="icon-proposal__metal-texture" src="../../overlay/assets/textures/paint.jpg" alt=""/><img class="icon-proposal__metal-mark" src="icon/fdc-icon-lift-mark.svg" alt=""/></span>`;
   const newSizes = file => `<div class="icon-proposal__new-sizes">${[64, 32, 24, 16].map(px => `<span>${icon(file, px)}<small>${px}</small></span>`).join('')}</div>`;
+  const chromaMarkContext = (name, theme) => `<div class="icon-proposal__context icon-proposal__context--${theme}">${icon('fdc-icon-chroma-light-mark', 42)}${icon('fdc-icon-chroma-black-mark', 42)}<span>${name}</span></div>`;
   const chromaPairContext = (name, theme) => `<div class="icon-proposal__context icon-proposal__context--${theme}">${icon('fdc-icon-chroma-light', 42)}${icon('fdc-icon-chroma-black', 42)}<span>${name}</span></div>`;
   const splitContext = (name, theme) => `<div class="icon-proposal__context icon-proposal__context--${theme}">${icon('fdc-icon-split', 42)}<span>${name}</span></div>`;
   const paletteContext = (name, theme) => `<div class="icon-proposal__context icon-proposal__context--${theme}">${icon('fdc-icon-chroma-fdc', 42)}<span>${name}</span></div>`;
@@ -17,7 +18,7 @@
     status: 'proposal',
     proposalLabel: 'FDC ICON / PROPOSAL',
     proposalKicker: 'APP ICON / BOTH THEMES',
-    description: 'The unified Chroma F keeps its linear olive-to-lime fill and smooth edge. Soft background gradients now give the light and black tiles depth; the installed icon remains unchanged.',
+    description: 'The unified Chroma F is available both on illuminated light and black tiles and as two transparent standalone marks; the installed icon remains unchanged.',
     html: `<h2>Chroma · illuminated tiles</h2><p class="icon-proposal__intro">The F keeps its original linear olive-to-lime gradient and one smooth contour. A soft radial light source now belongs to each tile: warm white falls into pale olive, while black picks up a restrained olive glow. The middle arm stays flush with the straight outer edge.</p>
       <div class="icon-proposal__new-grid">
         <section class="panel icon-proposal__new-card">${icon('fdc-icon-chroma-light', 224, 'Unified Chroma F with one olive-to-lime gradient on a warm white tile')}<div><h3>Chroma · Light</h3><p class="muted">The original F gradient over a softly lit white tile.</p>${newSizes('fdc-icon-chroma-light')}</div></section>
@@ -26,6 +27,15 @@
       <p class="muted icon-proposal__new-note">The F uses its prior <code>linearGradient</code>: Light <code>--surface-deep → --paint → --accent</code>; Black <code>--paint → --line-strong → --accent</code>. Only the tiles use a new <code>radialGradient</code> built from FDC surface and text colors.</p>
       <div class="icon-proposal__contexts">${chromaPairContext('FDC Dark', 'dark')}${chromaPairContext('Light Configuration proposal', 'light')}</div>
       <div class="icon-proposal__files"><a href="icon/fdc-icon-chroma-light.svg">Light SVG ↗</a><a href="icon/fdc-icon-chroma-light.png">Light PNG ↗</a><a href="icon/fdc-icon-chroma-light.ico">Light ICO ↗</a><a href="icon/fdc-icon-chroma-black.svg">Black SVG ↗</a><a href="icon/fdc-icon-chroma-black.png">Black PNG ↗</a><a href="icon/fdc-icon-chroma-black.ico">Black ICO ↗</a></div>
+      <hr class="icon-proposal__divider"/>
+      <h2>Chroma · F only</h2><p class="icon-proposal__intro">The exact same F from each tile, exported alone with a fully transparent canvas. The light-surface mark keeps its deep olive stem; the dark-surface mark keeps its lighter stem. Their shape, size, position, and gradient stops match the tile versions.</p>
+      <div class="icon-proposal__new-grid">
+        <section class="panel icon-proposal__new-card icon-proposal__mark-card--light">${icon('fdc-icon-chroma-light-mark', 224, 'Chroma F for light surfaces, with transparent background')}<div><h3>F only · Light surfaces</h3><p class="muted">Deep olive to lime, no tile.</p>${newSizes('fdc-icon-chroma-light-mark')}</div></section>
+        <section class="panel icon-proposal__new-card icon-proposal__mark-card--dark">${icon('fdc-icon-chroma-black-mark', 224, 'Chroma F for dark surfaces, with transparent background')}<div><h3>F only · Dark surfaces</h3><p class="muted">Lighter olive to lime, no tile.</p>${newSizes('fdc-icon-chroma-black-mark')}</div></section>
+      </div>
+      <p class="muted icon-proposal__new-note">The preview surfaces below are only for comparison. Neither exported F contains a background color, outline, shadow, or tile.</p>
+      <div class="icon-proposal__contexts">${chromaMarkContext('FDC Dark', 'dark')}${chromaMarkContext('Light Configuration proposal', 'light')}</div>
+      <div class="icon-proposal__files"><a href="icon/fdc-icon-chroma-light-mark.svg">F Light SVG ↗</a><a href="icon/fdc-icon-chroma-light-mark.png">F Light PNG ↗</a><a href="icon/fdc-icon-chroma-light-mark.ico">F Light ICO ↗</a><a href="icon/fdc-icon-chroma-black-mark.svg">F Dark SVG ↗</a><a href="icon/fdc-icon-chroma-black-mark.png">F Dark PNG ↗</a><a href="icon/fdc-icon-chroma-black-mark.ico">F Dark ICO ↗</a></div>
       <hr class="icon-proposal__divider"/>
       <h2>Split F · flat color study</h2><p class="icon-proposal__intro">A new FDC-authored direction from the supplied simple two-color monogram reference: a large, unmistakable F with two rounded instrument rails on a light rounded tile. The stem stays deep olive; the upper rail is painted olive, and the middle rail is lime. These are existing FDC colors. The reference's letterform and colors are not reproduced.</p>
       <section class="panel icon-proposal__focus">${icon('fdc-icon-split', 256, 'Split F: dark olive F stem, painted olive upper rail and lime middle rail on a warm white rounded tile')}<div><h3>Split F</h3><p class="muted">One bold mark, flat color, and a quiet tile. Judge the 16 and 24 px exports as carefully as the large view.</p>${newSizes('fdc-icon-split')}<p class="muted"><code>--text-bright</code> <code>--surface-deep</code> <code>--paint</code> <code>--accent</code></p></div></section>

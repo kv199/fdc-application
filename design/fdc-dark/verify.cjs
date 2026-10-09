@@ -72,7 +72,7 @@ for (const match of light.html.matchAll(/data-light-token="(--[\w-]+)"/g)) {
 const icon = boards.find(board => board.id === 'foundation-icon');
 if (!icon || icon.status !== 'proposal') throw Error('Application icon board must be marked as a proposal');
 const iconColors = new Set([...fs.readFileSync(path.join(repo, 'overlay', 'tokens.css'), 'utf8').matchAll(/#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?![0-9a-fA-F])/g)].map(match => match[0].toLowerCase()));
-for (const file of ['icon/fdc-icon-chroma-light.svg', 'icon/fdc-icon-chroma-black.svg', 'icon/fdc-icon-split.svg', 'icon/fdc-icon-chroma-fdc.svg']) {
+for (const file of ['icon/fdc-icon-chroma-light.svg', 'icon/fdc-icon-chroma-black.svg', 'icon/fdc-icon-chroma-light-mark.svg', 'icon/fdc-icon-chroma-black-mark.svg', 'icon/fdc-icon-split.svg', 'icon/fdc-icon-chroma-fdc.svg']) {
   for (const match of read(file).matchAll(/(?:stop-color|fill|stroke)="(#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?)"/g)) {
     if (!iconColors.has(match[1].toLowerCase())) throw Error(`${file} uses an unknown color: ${match[1]}`);
   }
@@ -85,6 +85,14 @@ const contours = unifiedIcons.map(file => {
   return paths[0][1];
 });
 if (contours[0] !== contours[1]) throw Error('Light and black icons must use the same F contour');
+for (const variant of ['light', 'black']) {
+  const tileSvg = read(`icon/fdc-icon-chroma-${variant}.svg`);
+  const markSvg = read(`icon/fdc-icon-chroma-${variant}-mark.svg`);
+  const gradient = svg => svg.match(/<linearGradient id="mark"[\s\S]*?<\/linearGradient>/)?.[0]?.replace(/\r\n/g, "\n");
+  const path = svg => svg.match(/<path d="[^"]+" fill="url\(#mark\)"\/>/)?.[0];
+  if (!gradient(tileSvg) || gradient(tileSvg) !== gradient(markSvg) || path(tileSvg) !== path(markSvg)) throw Error(`${variant} standalone F must exactly match its tile mark`);
+  if (/<rect\b|<radialGradient\b|<image\b/.test(markSvg)) throw Error(`${variant} standalone F must have no background`);
+}
 for (const match of icon.html.matchAll(/(?:src|href)="(icon\/[^\"]+)"/g)) {
   if (!exists(match[1])) throw Error(`Missing proposed icon asset: ${match[1]}`);
 }
