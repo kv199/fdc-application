@@ -258,23 +258,23 @@ to bottom; `DETAILS` is shown once every car of the recording is finished.
 the Events tab, with the same tables and metrics: each page has a compact
 header with a back link to the parent page and the page name at
 `--type-detail-title`, and Escape also goes up one level. The recording page
-shows the date, duration, car and drive counts, storage size, and the `CARS`
-table with each car, its PI, drivetrain, drive count, duration, and headline;
+shows the date, then `DURATION`, `CARS`, `DRIVES`, and `STORAGE` tiles, and the
+`CARS` table with each car, its PI, drivetrain, drive count, duration, and headline;
 selecting a row opens the car page. A recording with a single car opens its
 car page directly, and the back button returns to history.
 
 The car page shows the car's name with its PI, drivetrain, drive count,
-duration, and date, then its headline as the `RESULT` metric with the text
-below it: the qualified problem and its instruction when the car has one.
+duration, and date, then its headline inside a `RESULT` panel, with the text
+inside the panel: the qualified problem and its instruction when the car has one.
 Otherwise it shows `MOST FREQUENT:` followed by the name of the pattern that
 has the highest share of problems among the patterns with at least 10 checked
 opportunities and at least 3 problems, for example `MOST FREQUENT: FRONT SCRUB`, with the pattern text below it, such as
 `Front scrub — steering more than the front tires can take — in 18 of 133
 checks (14%). Becomes a reported problem above 40%.` When no pattern reaches
 that support, the car keeps its result copy, such as
-`NOT ENOUGH ELIGIBLE MANEUVERS`.
+`NOT ENOUGH ELIGIBLE MANEUVERS`. `MOST FREQUENT:` headlines are shown in amber.
 
-Below the headline, the `DISTANCE`, `AVERAGE`, `TOP`, and `CORNERS` metrics
+Below the `RESULT` panel, the `DISTANCE`, `AVERAGE`, `TOP`, and `CORNERS` tiles
 of the car are followed by a `STATS` control that reveals the statistics
 tables, and by the `DRIVES` table
 with `ID`, `TYPE` (`CIRCUIT · N LAPS`, `SPRINT`, with ` · UNFINISHED` when no

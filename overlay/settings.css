@@ -2325,6 +2325,11 @@ h1 {
   color: var(--warning);
 }
 
+.driver-analysis-history-row strong[data-result='most_frequent'],
+.driver-analysis-detail-view strong[data-result='most_frequent'] {
+  color: var(--warning);
+}
+
 .driver-analysis-history-row strong[data-result='no_recurring_problem'],
 .driver-analysis-detail-view strong[data-result='no_recurring_problem'] {
   color: var(--accent-soft);
@@ -2476,25 +2481,65 @@ h1 {
   gap: 12px;
 }
 
-.driver-analysis-detail-view__body .events-run-view__meta {
-  margin-bottom: 0;
+/* Four readout tiles: the book's label and Barlow Condensed value pairing. */
+.driver-analysis-detail-view__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
-/* A result headline can be long, so it wraps instead of running out of the metric. */
+.driver-analysis-detail-view__summary-metric {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.driver-analysis-detail-view__summary-label,
+.driver-analysis-detail-view__result-label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.driver-analysis-detail-view__summary-value {
+  display: block;
+  color: var(--text);
+  font-family: var(--font-readout);
+  font-size: 25px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* RESULT is the raised plate; a long headline wraps instead of running out of it. */
 .driver-analysis-detail-view__result {
-  grid-column: 1 / -1;
+  padding: 22px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
 }
 
-.driver-analysis-detail-view__result .events-run-view__metric-value {
-  font-size: 16px;
-  text-align: right;
-  white-space: normal;
+.driver-analysis-detail-view__result-headline {
+  display: block;
+  color: var(--warning);
+  font-family: var(--font-readout);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
-.driver-analysis-detail-view__text {
-  color: var(--text-soft);
-  font-size: 13px;
-  line-height: 1.45;
+.driver-analysis-detail-view__result-text {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .driver-analysis-detail-view__stats-toggle {
@@ -2521,30 +2566,78 @@ h1 {
   display: none;
 }
 
-/* The car overview uses the neutral Events RUN metric look so it does not compete with RESULT. */
-.driver-analysis-detail-view__overview {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.driver-analysis-detail-view__overview-metric {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
+/* Driver tables sit on plain panels; the raised plate is reserved for RESULT. */
+.driver-analysis-detail-view .events-run-table-section {
+  padding: 22px;
+  border-color: var(--line);
   background: var(--surface);
 }
 
-.driver-analysis-detail-view__overview-metric strong {
+.driver-analysis-detail-view .events-run-table-section__heading {
+  margin-bottom: 20px;
+}
+
+.driver-analysis-detail-view .events-run-table-section__heading h3 {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.driver-analysis-detail-view .events-run-table-section__heading span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+}
+
+.driver-analysis-detail-view .events-run-table {
+  font-size: 14px;
+}
+
+.driver-analysis-detail-view .events-run-table th,
+.driver-analysis-detail-view .events-run-table td {
+  padding: 13px 12px;
+  text-align: left;
+}
+
+/* Numeric columns start at the fourth column; the last (result) column stays left. */
+.driver-analysis-detail-view .events-run-table td:nth-child(n + 4),
+.driver-analysis-detail-view .events-run-table th:nth-child(n + 4) {
+  text-align: right;
+}
+
+.driver-analysis-detail-view .events-run-table td:last-child,
+.driver-analysis-detail-view .events-run-table th:last-child {
+  text-align: left;
+}
+
+.driver-analysis-detail-view .events-run-table thead th {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+}
+
+.driver-analysis-detail-view .events-run-table tbody th {
   color: var(--text);
   font-family: var(--font-readout);
   font-size: 18px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
+  font-weight: 500;
+}
+
+.driver-analysis-detail-view .events-run-table__time {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 400;
+}
+
+.driver-analysis-detail-view .events-run-table td strong[data-result] {
+  font-weight: 400;
+}
+
+.driver-analysis-detail-view .events-run-table__lap-row:hover,
+.driver-analysis-detail-view .events-run-table__lap-row:focus-visible {
+  background: var(--surface-hover);
 }
 
 @media (max-width: 680px) {
@@ -2552,7 +2645,7 @@ h1 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .driver-analysis-detail-view__overview {
+  .driver-analysis-detail-view__summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

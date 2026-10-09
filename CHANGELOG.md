@@ -48,6 +48,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Driver Analysis**: while a recording is exported, its button reads
   EXPORTING… with a moving bar, and a finished export is reported in green with
   its size, without a size warning.
+- **Driver Analysis**: the recording and car pages follow the FDC Dark design.
+  The recording page shows its duration, cars, drives, and storage as tiles;
+  the car page shows its result in a raised panel, with `MOST FREQUENT:`
+  headlines in amber, above large distance, speed, and corner tiles; and the
+  `CARS` and `DRIVES` tables sit on plain panels with larger car names.
 
 ## 7.24.67 - 2026-10-06
 

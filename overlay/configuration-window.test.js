@@ -615,7 +615,9 @@ test('Driver Analysis history cards open drill-down pages for recording, car, an
   assert.match(settingsJs, /patternSummary\.text/)
   assert.match(settingsJs, /formatSummaryMetrics\?\.\(session\.stats\)/)
   assert.match(settingsJs, /recording\.sessions\.length === 1\s*\n\s*\? globalScope\.DriverAnalysisHistory\?\.recordingSummary/)
-  assert.match(settingsJs, /className = 'driver-analysis-detail-view__overview'/)
+  assert.match(settingsJs, /function driverAnalysisSummaryTiles/)
+  assert.match(settingsJs, /className = 'driver-analysis-detail-view__summary'/)
+  assert.match(settingsJs, /className = 'driver-analysis-detail-view__result'/)
   assert.match(settingsJs, /formatStatsRows.*session\.stats/)
   assert.match(settingsJs, /if \(statsRows\.length > 0\)/)
   assert.match(settingsJs, /detailsButton\.textContent = 'DETAILS'/)
@@ -634,7 +636,7 @@ test('Driver Analysis history cards open drill-down pages for recording, car, an
   assert.match(settingsHtml, /id="destructive-confirm-yes"[^>]*>YES<\/button>\s*<button id="destructive-confirm-no"[^>]*>NO<\/button>/)
   assert.match(settingsCss, /\.driver-analysis-history-row__summary\s*\{[\s\S]*margin-top:\s*8px/)
   assert.match(settingsCss, /\.driver-analysis-detail-view__body[\s\S]*display:\s*grid/)
-  assert.match(settingsCss, /\.driver-analysis-detail-view__overview\s*\{[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/)
+  assert.match(settingsCss, /\.driver-analysis-detail-view__summary\s*\{[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/)
 })
 
 test('Back buttons on drill-down views name their parent and use detail-back class', () => {
