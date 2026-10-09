@@ -203,3 +203,65 @@ test('the shared telemetry path loads and clears the Event reference with record
   assert.match(overlaySource, /HudDelta\?\.isBetterReference\?\.\(normalized, current\)/)
   assert.match(overlaySource, /deltaRuntime\?\.clearReference\?\.\(\)/)
 })
+
+test('render writes a DOM property only when its presented value changes', () => {
+  let writes = 0
+  const counted = target => new Proxy(target, {
+    set(object, key, value) {
+      writes += 1
+      object[key] = value
+      return true
+    }
+  })
+  const barAttributes = {}
+  const bestAttributes = {}
+  const valueElement = counted({ textContent: '', dataset: counted({}) })
+  const barElement = counted({
+    dataset: counted({}),
+    setAttribute(name, value) {
+      writes += 1
+      barAttributes[name] = value
+    }
+  })
+  const fillElement = counted({ style: counted({}) })
+  const bestContainer = counted({ hidden: true })
+  const bestElement = counted({
+    textContent: '',
+    dataset: counted({}),
+    setAttribute(name, value) {
+      writes += 1
+      bestAttributes[name] = value
+    }
+  })
+  const root = counted({ dataset: counted({}) })
+  const runtime = createDeltaRuntime({ root, valueElement, barElement, fillElement, bestContainer, bestElement })
+
+  runtime.setActiveEvent({ id: 42, reference: { timeMs: 98765, tracePoints: referenceTrace } })
+  runtime.render(-0.5)
+  const afterFirstRender = writes
+  assert.ok(afterFirstRender > 0)
+  assert.equal(valueElement.textContent, '-0.500')
+  assert.equal(fillElement.style.width, '25%')
+  assert.equal(bestElement.textContent, '01:38.765')
+
+  const state = runtime.render(-0.5)
+  assert.equal(writes, afterFirstRender)
+  assert.equal(state.deltaSeconds, -0.5)
+  assert.equal(state.tone, 'ahead')
+
+  runtime.render(0.25)
+  assert.ok(writes > afterFirstRender)
+  assert.equal(valueElement.textContent, '+0.250')
+  assert.equal(valueElement.dataset.tone, 'behind')
+  assert.equal(barAttributes['aria-valuenow'], '0.25')
+  assert.equal(fillElement.style.width, '12.5%')
+  assert.equal(root.dataset.deltaTone, 'behind')
+
+  // Identical live telemetry produces an identical delta, so it writes nothing.
+  runtime.update({ isRaceOn: true, lap: { number: 0, current: 0, distance: 20 } })
+  runtime.update({ isRaceOn: true, lap: { number: 0, current: 4, distance: 120 } })
+  const beforeRepeatedUpdate = writes
+  runtime.update({ isRaceOn: true, lap: { number: 0, current: 4, distance: 120 } })
+  assert.equal(writes, beforeRepeatedUpdate)
+  assert.equal(valueElement.textContent, '-1.000')
+})

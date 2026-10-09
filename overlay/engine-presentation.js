@@ -5,6 +5,12 @@
   const WATTS_PER_HORSEPOWER = 745.6998715822702
   const THROTTLE_RELEASED_THRESHOLD = 0.01
   const PLACEHOLDER = '\u2014'
+  // Built once: toLocaleString would construct a new formatter on every call.
+  const WHOLE_NUMBER_FORMAT = new Intl.NumberFormat('en-US')
+  const TWO_DECIMAL_NUMBER_FORMAT = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
 
   function finiteNumber(value) {
     if (value === null || value === undefined || value === '') return null
@@ -30,24 +36,21 @@
     const boost = finiteNumber(rawBoost)
     if (boost === null) return PLACEHOLDER
     const displayedBoost = throttleReleased ? 0 : nonNegative(boost)
-    return `${(displayedBoost * BOOST_PSI_TO_BAR).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    })} BAR`
+    return `${TWO_DECIMAL_NUMBER_FORMAT.format(displayedBoost * BOOST_PSI_TO_BAR)} BAR`
   }
 
   function formatPower(rawPower, throttleReleased = false) {
     const power = finiteNumber(rawPower)
     if (power === null) return PLACEHOLDER
     const displayedPower = throttleReleased ? 0 : nonNegative(power)
-    return `${roundedInteger(displayedPower / WATTS_PER_HORSEPOWER).toLocaleString('en-US')} HP`
+    return `${WHOLE_NUMBER_FORMAT.format(roundedInteger(displayedPower / WATTS_PER_HORSEPOWER))} HP`
   }
 
   function formatTorque(rawTorque, throttleReleased = false) {
     const torque = finiteNumber(rawTorque)
     if (torque === null) return PLACEHOLDER
     const displayedTorque = throttleReleased ? 0 : nonNegative(torque)
-    return `${roundedInteger(displayedTorque).toLocaleString('en-US')} NM`
+    return `${WHOLE_NUMBER_FORMAT.format(roundedInteger(displayedTorque))} NM`
   }
 
   function formatEngine(telemetry = {}) {

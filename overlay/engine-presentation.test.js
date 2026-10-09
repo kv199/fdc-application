@@ -86,6 +86,23 @@ test('formats atmospheric zero boost as a measured zero', () => {
   assert.equal(formatEngine({ throttle: 0.5, boost: 0 }).boost, '0.00 BAR')
 })
 
+test('keeps thousands separators and two-decimal boost identical to the locale formatter', () => {
+  assert.equal(formatPower(1000000), '1,341 HP')
+  assert.equal(formatTorque(12345.6), '12,346 NM')
+  assert.equal(formatBoost(20000), '1,378.95 BAR')
+  assert.deepEqual(formatEngine({ throttle: 0.5, boost: 20000, power: 2000000, torque: 12345.6 }), {
+    boost: '1,378.95 BAR',
+    power: '2,682 HP',
+    torque: '12,346 NM'
+  })
+  for (const value of [0, 0.5, 1.005, 12.3, 999.999, 14500, 20000, 123456.789]) {
+    assert.equal(
+      formatBoost(value),
+      `${(value * 0.0689475729).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} BAR`
+    )
+  }
+})
+
 test('uses a stable placeholder for unavailable or invalid engine values', () => {
   for (const value of [null, undefined, '', Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
     assert.equal(formatBoost(value), '\u2014')

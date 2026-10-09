@@ -51,9 +51,40 @@
     }
   }
 
-  function publish(state) {
+  // Configuration renders only discrete facts (car identity, gears, learned
+  // targets, counts, persistence errors). These per-packet fields are never
+  // rendered there, so they are excluded from the signature. Without this, an
+  // unchanged panel would be re-sent on every telemetry frame.
+  const UNDISPLAYED_PER_PACKET_FIELDS = new Set(['phase', 'leadRpm', 'lightOnRpm'])
+  // Signature of the last state sent on hud_shift_light, or null if none is known to be delivered.
+  let lastEmittedSignature = null
+
+  function displayedSignature(state) {
+    const projection = {}
+    for (const key of Object.keys(state)) {
+      if (!UNDISPLAYED_PER_PACKET_FIELDS.has(key)) projection[key] = state[key]
+    }
+    return JSON.stringify(projection)
+  }
+
+  function emitShiftLightState(state, force) {
+    const signature = displayedSignature(state)
+    if (!force && signature === lastEmittedSignature) return
+    lastEmittedSignature = null
+    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+    if (typeof eventApi?.emit !== 'function') return
+    lastEmittedSignature = signature
+    Promise.resolve(eventApi.emit('hud_shift_light', state)).catch(() => {
+      // A failed delivery must not suppress the next identical state.
+      if (lastEmittedSignature === signature) lastEmittedSignature = null
+    })
+  }
+
+  // Always returns the state so the HUD light uses it on every frame. Only the
+  // Configuration event is gated by the signature; force bypasses that gate.
+  function publish(state, force = false) {
     latestState = state || EMPTY_STATE
-    emit('hud_shift_light', latestState)
+    emitShiftLightState(latestState, force)
     return latestState
   }
 
@@ -71,7 +102,7 @@
   function publishPersistenceError(error) {
     const message = error?.message || String(error || 'Unable to persist Shift Light calibration')
     latestState = { ...latestState, persistenceError: message }
-    emit('hud_shift_light', latestState)
+    emitShiftLightState(latestState, true)
   }
 
   function compactCalibration(state, key, telemetry) {
@@ -310,9 +341,12 @@
   function update(telemetry) {
     const key = telemetry ? globalScope.HudShiftLight.getShiftLightCarKey(telemetry) : null
     if (!key) {
-      if (!learner) return publish(EMPTY_STATE)
+      // An explicit null clears the HUD and is always published. Keyless frames
+      // can arrive on every packet, so they remain signature-gated.
+      const force = !telemetry
+      if (!learner) return publish(EMPTY_STATE, force)
       learner.resetTransient()
-      return publish({ ...latestState, phase: 'normal' })
+      return publish({ ...latestState, phase: 'normal' }, force)
     }
 
     latestTelemetry = telemetry
@@ -333,7 +367,7 @@
   function resetTransient() {
     if (!learner) return latestState
     learner.resetTransient()
-    return publish({ ...latestState, phase: 'normal' })
+    return publish({ ...latestState, phase: 'normal' }, true)
   }
 
   async function reset() {
@@ -378,7 +412,7 @@
     currentLearner.reset()
     pendingCalibrationByLearner.delete(currentLearner)
     calibrationFingerprintByLearner.delete(currentLearner)
-    publish({ ...currentLearner.snapshot(latestTelemetry), phase: 'normal' })
+    publish({ ...currentLearner.snapshot(latestTelemetry), phase: 'normal' }, true)
     if (resettingLearner === currentLearner) resettingLearner = null
     return publishResetResult({ ok: true, carKey: key })
   }
@@ -388,7 +422,7 @@
     getState: () => latestState,
     reset,
     resetTransient,
-    sync: () => publish(latestState),
+    sync: () => publish(latestState, true),
     update
   }
 

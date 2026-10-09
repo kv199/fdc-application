@@ -49,6 +49,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ### Improved
 
+- **HUD**: the HUD and Configuration use less processor time while you drive.
+  The HUD only redraws what changed, and Configuration only updates its Shift
+  Light panel when its values change.
 - **Driver Analysis**: while a recording is exported, its button reads
   EXPORTING… with a moving bar, and a finished export is reported in green with
   its size, without a size warning.

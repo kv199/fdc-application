@@ -12,12 +12,17 @@ function frame(overrides = {}) {
 }
 const flush = () => new Promise(resolve => setImmediate(resolve))
 
-function createRuntime({ stored = null, failSave = false } = {}) {
+function createRuntime({ stored = null, failSave = false, events = [] } = {}) {
   const calls = []
   const path = require.resolve('./shift-light-runtime.js')
   delete require.cache[path]
   global.HudShiftLight = engine
-  global.HudTauriEvents = { getEventApi: () => ({ emit: () => Promise.resolve() }) }
+  global.HudTauriEvents = { getEventApi: () => ({
+    emit: (name, payload) => {
+      events.push({ name, payload })
+      return Promise.resolve()
+    }
+  }) }
   global.__TAURI_INTERNALS__ = { invoke: (command, args) => {
     calls.push({ command, args })
     if (command === 'resolve_shift_light_config') return Promise.resolve({ variantId: 42, status: 'ready' })
@@ -65,4 +70,35 @@ test('surfaces a calibration save failure without dropping live state', async ()
   await flush(); await flush()
   assert.match(runtime.getState().persistenceError, /disk unavailable/i)
   assert.ok(runtime.getState().gears.length > 0)
+})
+
+test('publishes hud_shift_light only when the displayed state changes, while update still returns the state', async () => {
+  const events = []
+  const { runtime } = createRuntime({ events })
+  const emitCount = () => events.filter(event => event.name === 'hud_shift_light').length
+  const frozen = frame({ timestampMs: 1000, gear: 1, rpm: 5000 })
+
+  // Settle the car resolution and the first snapshot before counting emits.
+  runtime.update(frozen)
+  await flush(); await flush(); await flush(); await flush(); await flush()
+  runtime.update(frozen)
+  const settled = emitCount()
+
+  for (let index = 0; index < 10; index += 1) {
+    const returned = runtime.update(frozen)
+    assert.equal(returned, runtime.getState())
+    assert.equal(returned.carKey, 'fh6:3766:1:800:1:10')
+    assert.equal(returned.currentGear, 1)
+  }
+  assert.equal(emitCount(), settled)
+
+  runtime.update(frame({ timestampMs: 1016, gear: 2, rpm: 6000 }))
+  assert.equal(emitCount(), settled + 1)
+  assert.equal(events.filter(event => event.name === 'hud_shift_light').at(-1).payload.currentGear, 2)
+
+  const beforeSync = emitCount()
+  runtime.sync()
+  runtime.sync()
+  assert.equal(emitCount(), beforeSync + 2)
+  assert.equal(events.filter(event => event.name === 'hud_shift_light').at(-1).payload.currentGear, 2)
 })

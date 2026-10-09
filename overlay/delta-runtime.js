@@ -311,33 +311,84 @@
       return Math.max(0, distanceM - distanceOriginM)
     }
 
+    // Last value written to each DOM property. Telemetry renders on every
+    // packet while most presented values stay the same, so unchanged writes are
+    // skipped to avoid needless style and layout work. The elements are fixed
+    // for the runtime's lifetime, so these caches never need resetting.
+    const written = {
+      valueText: undefined,
+      valueTone: undefined,
+      barTone: undefined,
+      ariaValue: undefined,
+      fillWidth: undefined,
+      rootTone: undefined,
+      bestText: undefined,
+      bestAvailable: undefined,
+      bestLabel: undefined,
+      bestHidden: undefined
+    }
+
     function render(delta) {
       latest = Number.isFinite(delta) ? delta : null
       const tone = toneForDelta(latest)
-      const width = fillPercent(latest, limitSeconds)
+      const width = `${fillPercent(latest, limitSeconds)}%`
       if (valueElement) {
-        valueElement.textContent = formatDelta(latest)
-        valueElement.dataset.tone = tone
-      }
-      if (barElement) {
-        barElement.dataset.tone = tone
-        const ariaValue = latest === null ? 0 : Math.max(-limitSeconds, Math.min(limitSeconds, latest))
-        barElement.setAttribute('aria-valuenow', String(ariaValue))
-      }
-      if (fillElement) fillElement.style.width = `${width}%`
-      if (root) root.dataset.deltaTone = tone
-      if (bestElement) {
-        const bestTimeMs = reference?.timeMs ?? null
-        bestElement.textContent = formatRaceTime(bestTimeMs)
-        if (bestElement.dataset) bestElement.dataset.available = bestTimeMs === null ? 'false' : 'true'
-        if (typeof bestElement.setAttribute === 'function') {
-          bestElement.setAttribute(
-            'aria-label',
-            bestTimeMs === null ? 'Best lap time unavailable' : `Best lap time ${formatRaceTime(bestTimeMs)}`
-          )
+        const text = formatDelta(latest)
+        if (written.valueText !== text) {
+          valueElement.textContent = text
+          written.valueText = text
+        }
+        if (written.valueTone !== tone) {
+          valueElement.dataset.tone = tone
+          written.valueTone = tone
         }
       }
-      if (bestContainer) bestContainer.hidden = reference?.timeMs === null || reference?.timeMs === undefined
+      if (barElement) {
+        if (written.barTone !== tone) {
+          barElement.dataset.tone = tone
+          written.barTone = tone
+        }
+        const ariaValue = String(latest === null ? 0 : Math.max(-limitSeconds, Math.min(limitSeconds, latest)))
+        if (written.ariaValue !== ariaValue) {
+          barElement.setAttribute('aria-valuenow', ariaValue)
+          written.ariaValue = ariaValue
+        }
+      }
+      if (fillElement && written.fillWidth !== width) {
+        fillElement.style.width = width
+        written.fillWidth = width
+      }
+      if (root && written.rootTone !== tone) {
+        root.dataset.deltaTone = tone
+        written.rootTone = tone
+      }
+      if (bestElement) {
+        const bestTimeMs = reference?.timeMs ?? null
+        const bestText = formatRaceTime(bestTimeMs)
+        if (written.bestText !== bestText) {
+          bestElement.textContent = bestText
+          written.bestText = bestText
+        }
+        const available = bestTimeMs === null ? 'false' : 'true'
+        if (bestElement.dataset && written.bestAvailable !== available) {
+          bestElement.dataset.available = available
+          written.bestAvailable = available
+        }
+        if (typeof bestElement.setAttribute === 'function') {
+          const label = bestTimeMs === null ? 'Best lap time unavailable' : `Best lap time ${bestText}`
+          if (written.bestLabel !== label) {
+            bestElement.setAttribute('aria-label', label)
+            written.bestLabel = label
+          }
+        }
+      }
+      if (bestContainer) {
+        const hidden = reference?.timeMs === null || reference?.timeMs === undefined
+        if (written.bestHidden !== hidden) {
+          bestContainer.hidden = hidden
+          written.bestHidden = hidden
+        }
+      }
       return getState()
     }
 

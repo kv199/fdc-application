@@ -51,6 +51,9 @@ let routeStatus = window.HudTelemetryRoute.normalizeRouteStatus({
   revision: routeRevision
 })
 let historySamples = []
+// Index of the first sample still inside the history window. Older samples are
+// dropped in bulk by pushHistory rather than copied out on every frame.
+let historyStart = 0
 let steeringWheelImageReady = false
 let demoSignal = DEMO_SIGNALS.includes(DEMO_SIGNAL_FROM_URL) ? DEMO_SIGNAL_FROM_URL : 'normal'
 let activeRpmSignal = null
@@ -131,10 +134,13 @@ function formatGear(rawGear) {
   return String(Math.max(1, Math.min(10, Math.trunc(gear))))
 }
 
+// Built once: toLocaleString would construct a new formatter on every frame.
+const RPM_NUMBER_FORMAT = new Intl.NumberFormat('en-US')
+
 function formatRpm(rawRpm) {
   const rpm = Number(rawRpm)
   if (!Number.isFinite(rpm)) return '-- RPM'
-  return `${Math.max(0, Math.round(rpm)).toLocaleString('en-US')} RPM`
+  return `${RPM_NUMBER_FORMAT.format(Math.max(0, Math.round(rpm)))} RPM`
 }
 
 function tireColor(tempC) {
@@ -197,10 +203,10 @@ function applyDisplayPreferences() {
   document.documentElement.style.setProperty('--shift-light-brightness-scale', String(brightnessScale))
   document.documentElement.style.setProperty('--hud-opacity', String(displayPreferences.hudOpacity / 100))
   document.documentElement.dataset.speedUnit = displayPreferences.speedUnit
-  speedValue.textContent = window.FdcUnits.formatSpeed(
+  setTextContent(speedValue, window.FdcUnits.formatSpeed(
     latestTelemetry?.speedKmh,
     { unit: displayPreferences.speedUnit }
-  )
+  ))
   applyTelemetryVisibility()
 }
 
@@ -283,6 +289,34 @@ function setDemoSignal(signal) {
   setRpmSignal(demoSignal)
 }
 
+// Remembers the last value written to each property of each element, so a
+// frame that repeats a value skips the write and does not dirty style or text.
+// Every write to a tracked property must go through these helpers.
+const lastDomWrites = new WeakMap()
+
+function hasDomValueChanged(element, key, value) {
+  let memory = lastDomWrites.get(element)
+  if (!memory) {
+    memory = new Map()
+    lastDomWrites.set(element, memory)
+  }
+  if (memory.get(key) === value) return false
+  memory.set(key, value)
+  return true
+}
+
+function setTextContent(element, text) {
+  if (hasDomValueChanged(element, 'textContent', text)) element.textContent = text
+}
+
+function setStyleValue(element, property, value) {
+  if (hasDomValueChanged(element, property, value)) element.style[property] = value
+}
+
+function setAttributeValue(element, name, value) {
+  if (hasDomValueChanged(element, name, value)) element.setAttribute(name, value)
+}
+
 function updateTires(tires = {}) {
   for (const corner of Object.keys(tireElements)) {
     const value = Number(tires[corner])
@@ -290,32 +324,76 @@ function updateTires(tires = {}) {
     const visual = tireVisualElements[corner]
     const color = tireColor(value)
     const hasTemperature = Number.isFinite(value)
-    element.textContent = hasTemperature ? `${Math.round(value)}\u00b0` : '--\u00b0'
-    element.style.color = color
-    visual.style.color = color
-    visual.style.backgroundColor = hasTemperature ? color : 'transparent'
+    setTextContent(element, hasTemperature ? `${Math.round(value)}\u00b0` : '--\u00b0')
+    setStyleValue(element, 'color', color)
+    setStyleValue(visual, 'color', color)
+    setStyleValue(visual, 'backgroundColor', hasTemperature ? color : 'transparent')
   }
 }
 
 function updateEngine(telemetry = {}) {
   const engine = window.HudEnginePresentation.formatEngine(telemetry)
-  engineElements.boost.textContent = engine.boost
-  engineElements.power.textContent = engine.power
-  engineElements.torque.textContent = engine.torque
+  setTextContent(engineElements.boost, engine.boost)
+  setTextContent(engineElements.power, engine.power)
+  setTextContent(engineElements.torque, engine.torque)
 }
 
 function pushHistory(throttle, brake, timestamp = performance.now()) {
   historySamples.push({ timestamp, throttle, brake })
   const cutoff = timestamp - HISTORY_MS
-  let firstVisible = 0
-  while (firstVisible < historySamples.length && historySamples[firstVisible].timestamp < cutoff) {
-    firstVisible += 1
+  while (historyStart < historySamples.length && historySamples[historyStart].timestamp < cutoff) {
+    historyStart += 1
   }
-  if (firstVisible > 0) historySamples = historySamples.slice(firstVisible)
+  // Stale samples before historyStart stay stored until they fill half the
+  // buffer, so the copy happens rarely instead of on every frame.
+  if (historyStart > 0 && historyStart * 2 >= historySamples.length) {
+    historySamples.splice(0, historyStart)
+    historyStart = 0
+  }
+}
+
+// getBoundingClientRect forces a layout, so each canvas keeps its measured rect
+// until something that can change its on-screen size is observed. Transforms
+// change that size without a ResizeObserver notification, so the cache is also
+// dropped on style, class, or hidden changes to the canvas and its ancestors.
+const canvasRects = new Map()
+const canvasLayoutObservable = typeof ResizeObserver === 'function' && typeof MutationObserver === 'function'
+
+function clearCanvasRects() {
+  canvasRects.clear()
+}
+
+const canvasResizeObserver = canvasLayoutObservable ? new ResizeObserver(clearCanvasRects) : null
+const canvasAttributeObserver = canvasLayoutObservable ? new MutationObserver(clearCanvasRects) : null
+
+if (canvasLayoutObservable) {
+  for (const canvas of [steeringCanvas, historyCanvas]) {
+    canvasResizeObserver.observe(canvas)
+    for (let element = canvas; element; element = element.parentElement) {
+      canvasAttributeObserver.observe(element, {
+        attributes: true,
+        attributeFilter: ['style', 'class', 'hidden'],
+        subtree: false
+      })
+    }
+  }
+}
+
+function measureCanvasRect(canvas) {
+  if (!canvasLayoutObservable) return canvas.getBoundingClientRect()
+  // takeRecords returns mutations that are still queued for the observer
+  // callback, so a style or class write made earlier in this task also drops the cache.
+  if (canvasAttributeObserver.takeRecords().length > 0) clearCanvasRects()
+  let rect = canvasRects.get(canvas)
+  if (!rect) {
+    rect = canvas.getBoundingClientRect()
+    canvasRects.set(canvas, rect)
+  }
+  return rect
 }
 
 function sizeCanvas(canvas) {
-  const rect = canvas.getBoundingClientRect()
+  const rect = measureCanvasRect(canvas)
   const density = Math.min(window.devicePixelRatio || 1, 2)
   const width = Math.max(1, Math.round(rect.width * density))
   const height = Math.max(1, Math.round(rect.height * density))
@@ -326,19 +404,19 @@ function sizeCanvas(canvas) {
   return { width, height, density }
 }
 
-function drawSeries(context, samples, field, stroke, width, height, now) {
-  if (samples.length < 2) return
+function drawSeries(context, samples, start, field, stroke, width, height, now) {
+  if (samples.length - start < 2) return
 
-  const xFor = timestamp => ((timestamp - (now - HISTORY_MS)) / HISTORY_MS) * width
-  const yFor = value => height - clamp01(value) * (height - 4) - 2
+  const windowStart = now - HISTORY_MS
 
   context.beginPath()
-  samples.forEach((sample, index) => {
-    const x = xFor(sample.timestamp)
-    const y = yFor(sample[field])
-    if (index === 0) context.moveTo(x, y)
+  for (let index = start; index < samples.length; index += 1) {
+    const sample = samples[index]
+    const x = ((sample.timestamp - windowStart) / HISTORY_MS) * width
+    const y = height - clamp01(sample[field]) * (height - 4) - 2
+    if (index === start) context.moveTo(x, y)
     else context.lineTo(x, y)
-  })
+  }
   context.strokeStyle = stroke
   context.lineWidth = 2.25
   context.lineJoin = 'miter'
@@ -389,9 +467,9 @@ function drawHistory() {
     context.stroke()
   }
 
-  const now = historySamples.at(-1)?.timestamp ?? performance.now()
-  drawSeries(context, historySamples, 'throttle', '#69e83f', width, height, now)
-  drawSeries(context, historySamples, 'brake', '#ff312b', width, height, now)
+  const now = historySamples.length > historyStart ? historySamples.at(-1).timestamp : performance.now()
+  drawSeries(context, historySamples, historyStart, 'throttle', '#69e83f', width, height, now)
+  drawSeries(context, historySamples, historyStart, 'brake', '#ff312b', width, height, now)
 
   context.beginPath()
   context.moveTo(0, height - 1.5)
@@ -412,17 +490,17 @@ function renderTelemetry() {
   const throttlePercent = Math.round(throttle * 100)
   const brakePercent = Math.round(brake * 100)
 
-  throttleFill.style.transform = `scaleY(${throttle})`
-  throttleTrack.setAttribute('aria-valuenow', String(throttlePercent))
+  setStyleValue(throttleFill, 'transform', `scaleY(${throttle})`)
+  setAttributeValue(throttleTrack, 'aria-valuenow', String(throttlePercent))
 
-  brakeFill.style.transform = `scaleY(${brake})`
-  brakeTrack.setAttribute('aria-valuenow', String(brakePercent))
+  setStyleValue(brakeFill, 'transform', `scaleY(${brake})`)
+  setAttributeValue(brakeTrack, 'aria-valuenow', String(brakePercent))
 
   drawSteering(steer)
   updateTires(telemetry.tireTempC)
-  speedValue.textContent = window.FdcUnits.formatSpeed(telemetry.speedKmh, { unit: displayPreferences.speedUnit })
-  gearValue.textContent = formatGear(telemetry.gear)
-  rpmValue.textContent = formatRpm(telemetry.rpm)
+  setTextContent(speedValue, window.FdcUnits.formatSpeed(telemetry.speedKmh, { unit: displayPreferences.speedUnit }))
+  setTextContent(gearValue, formatGear(telemetry.gear))
+  setTextContent(rpmValue, formatRpm(telemetry.rpm))
   updateEngine(telemetry)
   const signal = DEMO_MODE ? demoSignal : getShiftLightSignal(telemetry)
   setRpmSignal(signal)
@@ -468,6 +546,7 @@ function resetDirectPresentation() {
   lapTimingState = window.HudLapTiming.resetForRestart()
   latestSteer = 0
   historySamples = []
+  historyStart = 0
   latestShiftLight = {
     status: 'fallback',
     phase: 'normal',
@@ -785,6 +864,8 @@ window.addEventListener('keydown', event => {
 })
 
 window.addEventListener('resize', () => {
+  // A window resize also covers devicePixelRatio and monitor changes.
+  clearCanvasRects()
   drawHistory()
   drawSteering(clampSteer(latestTelemetry?.steer))
 })
