@@ -1803,18 +1803,18 @@ h1 {
   border: 0;
   color: var(--text);
   background: transparent;
-  cursor: pointer;
+  cursor: text;
   font-family: var(--font-readout);
   font-size: var(--type-heading);
   font-weight: 500;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   line-height: 1.1;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.events-detail-view__title:hover,
+/* As in the design book, the title keeps its color under the pointer; only keyboard focus marks it. */
 .events-detail-view__title:focus-visible {
   color: var(--accent);
 }
@@ -1836,7 +1836,7 @@ h1 {
   font-family: var(--font-readout);
   font-size: var(--type-heading);
   font-weight: 500;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 
 .events-detail-view__title-input:focus {

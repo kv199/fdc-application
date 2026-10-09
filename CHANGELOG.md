@@ -55,7 +55,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   `CARS` and `DRIVES` tables sit on plain panels with larger car names.
 - **Design**: the large titles of the event, run, recording, car, and drive
   pages use the condensed FDC Dark title font, larger on Driver Analysis
-  pages, instead of a heavy bold interface font.
+  pages, instead of a heavy bold interface font. The event title no longer
+  turns lime under the pointer; selecting it still renames the event.
 
 ## 7.24.67 - 2026-10-06
 

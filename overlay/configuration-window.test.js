@@ -668,6 +668,9 @@ test('Drill-down object titles use the readout font from the design book', () =>
   assert.match(settingsStyles, /\.driver-analysis-detail-view \.events-detail-view__title\s*\{[^}]*font-size:\s*var\(--type-object-title\)/)
   assert.match(tokensCss, /--type-object-title: 36px;/)
   assert.doesNotMatch(settingsCss, /\.events-detail-view__title\s*\{[^}]*font-weight:\s*800/)
+  // Like the design book, the title does not change color under the pointer.
+  assert.doesNotMatch(settingsCss, /\.events-detail-view__title:hover/)
+  assert.match(settingsCss, /\.events-detail-view__title:focus-visible\s*\{[^}]*color:/)
 })
 
 test('Garage does not create image placeholders for current car or saved cars', () => {
