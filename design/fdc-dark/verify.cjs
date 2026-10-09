@@ -81,7 +81,7 @@ const unifiedIcons = ['icon/fdc-icon-chroma-light.svg', 'icon/fdc-icon-chroma-bl
 const contours = unifiedIcons.map(file => {
   const svg = read(file);
   const paths = [...svg.matchAll(/<path\b[^>]*d="([^"]+)"/g)];
-  if (paths.length !== 1 || !svg.includes('<radialGradient id="mark"')) throw Error(`${file} must have one F path and one radial gradient`);
+  if (paths.length !== 1 || !svg.includes('<linearGradient id="mark"') || !svg.includes('<radialGradient id="tile"')) throw Error(`${file} must have one F path, a linear mark fill, and a radial tile fill`);
   return paths[0][1];
 });
 if (contours[0] !== contours[1]) throw Error('Light and black icons must use the same F contour');

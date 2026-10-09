@@ -36,8 +36,8 @@ the tokens named on both specification boards.
   scoped candidate values live in `light-theme.css`, with usage and boundary
   notes in `LIGHT_THEME.md`; it does not change the app or its HUD.
 - The **App icon · F studies** board pairs light and black tiles carrying
-  one continuous Chroma F with a soft photonic gradient and a smooth outer
-  edge. Split F, textured Chroma,
+  one continuous Chroma F with its original linear fill and a smooth outer
+  edge. New gradients illuminate the tiles. Split F, textured Chroma,
   two earlier multicolor studies, the original mark, the single-step variant,
   and the sketch-led two-arm Lift remain below. The board
   compares them at tray and taskbar sizes. It also compares the Lift gradient with the
