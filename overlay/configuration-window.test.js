@@ -228,8 +228,8 @@ test('Events expose deterministic persisted list sorting and in-memory run sorti
   assert.match(settingsHtml, /<tbody id="event-runs-list"><\/tbody>/)
   assert.doesNotMatch(settingsHtml + settingsJs, /event-run-row/)
   assert.match(settingsJs, /events-run-table__end/)
-  assert.match(settingsJs, /events-run-table__note/)
-  assert.match(settingsJs, /events-run-table__split/)
+  // As in the design book, BEST shows only the time, without the best lap or SPRINT.
+  assert.doesNotMatch(settingsJs + settingsCss, /events-run-table__note|events-run-table__split/)
   assert.doesNotMatch(settingsHtml, /class="events-run-table__end"><button class="events-run-table__sort" type="button" data-run-sort="best"/)
   assert.doesNotMatch(settingsJs, /textContent = `#\$\{/)
   assert.doesNotMatch(settingsJs, /DRIVE #/)

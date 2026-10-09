@@ -1449,21 +1449,11 @@
       const carDetailsCell = document.createElement('td')
       carDetailsCell.textContent = carDetails
       row.append(carDetailsCell)
-      const bestLap = run.runType !== 'sprint'
-        ? run.laps.reduce((best, lap) => !best || lap.timeMs < best.timeMs ? lap : best, null)
-        : null
       const bestCell = document.createElement('td')
       const bestTime = document.createElement('span')
       bestTime.className = 'events-run-table__time'
       bestTime.textContent = formatRunTime(runBestTimeMs(run))
-      // The split row keeps the time left and the best lap number (or SPRINT) at the right edge of the cell.
-      const bestSplit = document.createElement('span')
-      bestSplit.className = 'events-run-table__split'
-      const bestNote = document.createElement('span')
-      bestNote.className = 'events-run-table__note'
-      bestNote.textContent = bestLap ? `L${Math.max(1, Math.round(bestLap.lapNumber))}` : 'SPRINT'
-      bestSplit.append(bestTime, bestNote)
-      bestCell.append(bestSplit)
+      bestCell.append(bestTime)
       row.append(bestCell)
       const lapsCell = document.createElement('td')
       lapsCell.className = 'events-run-table__end'

@@ -1741,21 +1741,6 @@ h1 {
 .events-run-table__time[data-tone="second"] { color: var(--accent); }
 .events-run-table__time.is-missing { color: var(--text-faint); }
 
-/* A time and its note share one cell: the time follows the column's left edge, the note sits at the right edge. */
-.events-run-table__split {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.events-run-table__note {
-  color: var(--text-muted);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-}
-
 .events-detail-view__actions {
   margin-left: auto;
   display: flex;

@@ -61,9 +61,8 @@ The tab opens with a short intro and contains:
   next attempt. Circuit laps remain in their current run until **STOP** or a
   confirmed restart.
 - Saved runs are a table with `ID`, `CAR`, `CLASS / PI / DRIVE`, `BEST`, `LAPS`,
-  and `DATE` columns. `BEST` shows the best time on the left and the best lap
-  (`L1`) or `SPRINT` at the right edge of the cell. `DATE` shows the local run start as
-  `YYYY.MM.DD HH:MM:SS`.
+  and `DATE` columns. `BEST` shows the run's best time, and `DATE` shows the
+  local run start as `YYYY.MM.DD HH:MM:SS`.
 - The `ID`, `BEST`, and `DATE` headers sort the saved runs. The default is Date
   from newest to oldest, and that temporary choice is not persisted. Selecting
   a saved run opens its detail page.

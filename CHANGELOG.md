@@ -73,6 +73,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   button is centered beside the title and its hint.
 - **Design**: event, run, and drive IDs are shown as plain numbers, without a
   `#`, for example `DRIVE 2`.
+- **Events**: a saved run's `BEST` column shows only the time, without the
+  best lap or `SPRINT` next to it.
 
 ## 7.24.67 - 2026-10-06
 
