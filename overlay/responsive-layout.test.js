@@ -10,7 +10,7 @@ function expectedScale(viewportWidth) {
 }
 
 test('responsive HUD scale keeps the Engine layout readable through the intermediate range', () => {
-  assert.match(overlayCss, /--hud-scale:\s*min\(2,\s*calc\(\(100vw - 16px\) \/ 736px\)\)/)
+  assert.match(overlayCss, /--hud-scale:\s*min\(2,\s*calc\(\(var\(--stage-width, 100vw\) - 16px\) \/ 736px\)\)/)
   assert.doesNotMatch(overlayCss, /@media\s*\(max-width:\s*1487px\)[\s\S]*?transform:\s*none/)
 
   assert.ok(expectedScale(1280) > 1.7)
@@ -20,8 +20,8 @@ test('responsive HUD scale keeps the Engine layout readable through the intermed
 })
 
 test('HUD frame and Delta keep responsive width while Delta has its own scale', () => {
-  assert.match(overlayCss, /\.hud-frame[\s\S]*?width:\s*min\(1472px,\s*calc\(100vw - 16px\)\)/)
-  assert.match(overlayCss, /\.delta-strip[\s\S]*?width:\s*min\(calc\(1472px \* var\(--delta-user-scale\)\),\s*calc\(100vw - 16px\)\)/)
+  assert.match(overlayCss, /\.hud-frame[\s\S]*?width:\s*min\(1472px,\s*calc\(var\(--stage-width, 100vw\) - 16px\)\)/)
+  assert.match(overlayCss, /\.delta-strip[\s\S]*?width:\s*min\(calc\(1472px \* var\(--delta-user-scale\)\),\s*calc\(var\(--stage-width, 100vw\) - 16px\)\)/)
   assert.match(overlayCss, /bottom:\s*calc\(38px \+ 69px \* var\(--hud-scale\)\)/)
 
   const layoutSource = fs.readFileSync(path.join(__dirname, 'hud-layout.js'), 'utf8')

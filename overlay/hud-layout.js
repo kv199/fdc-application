@@ -18,6 +18,8 @@
   const MAX_WIDGET_SIZE = 2
   const EDITOR_CHROME_MARGIN = 8
   const EDITOR_CHROME_GAP = 10
+  const WINDOW_BOUNDS_PADDING = 8
+  const RESTAGE_SAFETY_MS = 500
 
   function clamp(value, minimum, maximum) {
     const number = Number(value)
@@ -54,6 +56,39 @@
       : aboveTop
     const maximumTop = Math.max(EDITOR_CHROME_MARGIN, viewport.height - toolbarRect.height - EDITOR_CHROME_MARGIN)
     return { left, top: clamp(preferredTop, EDITOR_CHROME_MARGIN, maximumTop) }
+  }
+
+  // Window-space rects are moved into stage space by the window offset, padded,
+  // and rounded outward to whole CSS px inside the stage. Null when nothing is visible.
+  function computeWindowBounds(rects, stage, padding = WINDOW_BOUNDS_PADDING) {
+    const visible = (Array.isArray(rects) ? rects : []).filter(rect => rect && rect.width > 0 && rect.height > 0)
+    if (!visible.length) return null
+    const offsetX = Number(stage?.offsetX) || 0
+    const offsetY = Number(stage?.offsetY) || 0
+    const maxWidth = Math.floor(Number(stage?.width) || 0)
+    const maxHeight = Math.floor(Number(stage?.height) || 0)
+    const left = Math.min(...visible.map(rect => rect.left + offsetX)) - padding
+    const top = Math.min(...visible.map(rect => rect.top + offsetY)) - padding
+    const right = Math.max(...visible.map(rect => rect.left + rect.width + offsetX)) + padding
+    const bottom = Math.max(...visible.map(rect => rect.top + rect.height + offsetY)) + padding
+    const x0 = clamp(Math.floor(left), 0, maxWidth)
+    const y0 = clamp(Math.floor(top), 0, maxHeight)
+    const x1 = clamp(Math.ceil(right), 0, maxWidth)
+    const y1 = clamp(Math.ceil(bottom), 0, maxHeight)
+    if (x1 <= x0 || y1 <= y0) return null
+    return { left: x0, top: y0, width: x1 - x0, height: y1 - y0 }
+  }
+
+  function sameBounds(a, b) {
+    if (a === b) return true
+    if (!a || !b) return false
+    return a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height
+  }
+
+  function coversStage(bounds, stage) {
+    return bounds.left <= 0 && bounds.top <= 0 &&
+      bounds.left + bounds.width >= Math.floor(stage.width) &&
+      bounds.top + bounds.height >= Math.floor(stage.height)
   }
 
   function storageGet(key) {
@@ -204,11 +239,173 @@
       return positions.freeform
     }
 
-    function getViewport() {
+    // The stage is the whole monitor in CSS px. The native side may crop the
+    // window to the visible blocks, so the page keeps laying out in stage
+    // coordinates and only shifts its shell by the window offset.
+    const stage = readInitialStage()
+    let stageKnown = false
+    let stageSyncStarted = false
+    let lastSentBounds = null
+    let boundsScheduled = false
+    let restaging = false
+    let restageTimer = null
+
+    function readInitialStage() {
+      const root = document.documentElement
       return {
-        width: Math.max(1, document.documentElement.clientWidth || window.innerWidth),
-        height: Math.max(1, document.documentElement.clientHeight || window.innerHeight)
+        width: Math.max(1, root.clientWidth || window.innerWidth),
+        height: Math.max(1, root.clientHeight || window.innerHeight),
+        offsetX: 0,
+        offsetY: 0
       }
+    }
+
+    // The native side works in physical pixels. The page's own devicePixelRatio
+    // converts them, because it also follows the Windows text size, which the
+    // monitor scale factor does not.
+    function pixelRatio() {
+      const ratio = Number(window.devicePixelRatio)
+      return Number.isFinite(ratio) && ratio > 0 ? ratio : 1
+    }
+
+    function readStagePayload(payload) {
+      const ratio = pixelRatio()
+      const width = Number(payload?.stageWidth) / ratio
+      const height = Number(payload?.stageHeight) / ratio
+      const offsetX = Number(payload?.offsetX) / ratio
+      const offsetY = Number(payload?.offsetY) / ratio
+      if (![width, height, offsetX, offsetY].every(Number.isFinite) || width <= 0 || height <= 0) return null
+      return { width, height, offsetX, offsetY }
+    }
+
+    function toPhysicalBounds(bounds) {
+      if (!bounds) return null
+      const ratio = pixelRatio()
+      return {
+        left: bounds.left * ratio,
+        top: bounds.top * ratio,
+        width: bounds.width * ratio,
+        height: bounds.height * ratio
+      }
+    }
+
+    function setRootProperty(name, value) {
+      document.documentElement.style?.setProperty?.(name, value)
+    }
+
+    function publishStage() {
+      setRootProperty('--stage-width', `${stage.width}px`)
+      setRootProperty('--stage-height', `${stage.height}px`)
+      setRootProperty('--stage-offset-x', `${stage.offsetX}px`)
+      setRootProperty('--stage-offset-y', `${stage.offsetY}px`)
+    }
+
+    function getViewport() {
+      return { width: Math.max(1, stage.width), height: Math.max(1, stage.height) }
+    }
+
+    // Window-space rect converted into stage coordinates.
+    function getStageRect(element) {
+      const rect = element.getBoundingClientRect()
+      const left = rect.left + stage.offsetX
+      const top = rect.top + stage.offsetY
+      return { left, top, right: left + rect.width, bottom: top + rect.height, width: rect.width, height: rect.height }
+    }
+
+    // The window is full when it covers the whole stage at offset zero.
+    function isWindowFull() {
+      const root = document.documentElement
+      return Math.abs(stage.offsetX) < 1 && Math.abs(stage.offsetY) < 1 &&
+        root.clientWidth >= stage.width - 1 && root.clientHeight >= stage.height - 1
+    }
+
+    function windowMatches(bounds) {
+      if (!bounds) return isWindowFull()
+      const root = document.documentElement
+      return sameBounds(bounds, {
+        left: Math.round(stage.offsetX),
+        top: Math.round(stage.offsetY),
+        width: root.clientWidth,
+        height: root.clientHeight
+      })
+    }
+
+    function getHudShell() {
+      return document.querySelector?.('.hud-shell') || null
+    }
+
+    // Hides the shell while the native window moves, so blocks are never shown
+    // at the previous offset. Ends on the next hud_stage event or after a timeout.
+    function startRestaging() {
+      getHudShell()?.classList.add('is-restaging')
+      restaging = true
+      clearTimeout(restageTimer)
+      restageTimer = setTimeout(finishRestaging, RESTAGE_SAFETY_MS)
+    }
+
+    function finishRestaging() {
+      clearTimeout(restageTimer)
+      restageTimer = null
+      restaging = false
+      getHudShell()?.classList.remove('is-restaging')
+    }
+
+    function applyStage(payload) {
+      const next = readStagePayload(payload)
+      if (!next) return
+      const sizeChanged = next.width !== stage.width || next.height !== stage.height
+      Object.assign(stage, next)
+      stageKnown = true
+      // A different monitor invalidates the last bounds; the next refresh sends them again.
+      if (sizeChanged && next.offsetX === 0 && next.offsetY === 0) lastSentBounds = undefined
+      // Placing the HUD again, even on the same monitor, drops the native bounds
+      // and reports the whole monitor. Native rounding to physical pixels can
+      // move the offset by under 1 px, so only a larger difference resends them.
+      if (!sessionTargets.length && lastSentBounds &&
+        (Math.abs(next.offsetX - lastSentBounds.left) >= 1 || Math.abs(next.offsetY - lastSentBounds.top) >= 1)) {
+        lastSentBounds = undefined
+      }
+      publishStage()
+      if (restaging) window.requestAnimationFrame(finishRestaging)
+      refreshLayout()
+    }
+
+    function startStageSync() {
+      const invoke = globalScope.__TAURI_INTERNALS__?.invoke
+      if (typeof invoke !== 'function' || stageSyncStarted) return
+      stageSyncStarted = true
+      const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+      Promise.resolve(eventApi?.listen('hud_stage', event => applyStage(event.payload))).catch(() => {})
+      Promise.resolve(invoke('get_hud_stage')).then(applyStage).catch(() => {})
+    }
+
+    // Visible blocks only: a hidden block measures zero and computeWindowBounds ignores it.
+    function getVisibleTargetRects() {
+      const names = mode === 'grouped' ? ['delta', 'hud'] : [...FREEFORM_TARGETS, 'delta']
+      return names.map(name => elements[name].getBoundingClientRect())
+    }
+
+    function scheduleWindowBounds() {
+      if (boundsScheduled) return
+      boundsScheduled = true
+      window.requestAnimationFrame(() => {
+        boundsScheduled = false
+        updateWindowBounds()
+      })
+    }
+
+    function updateWindowBounds() {
+      const invoke = globalScope.__TAURI_INTERNALS__?.invoke
+      // Editing keeps the whole monitor; the window is cropped again after the edit.
+      if (typeof invoke !== 'function' || !stageKnown || sessionTargets.length) return
+      // With no visible block (for example no live telemetry) the current window is kept.
+      const computed = computeWindowBounds(getVisibleTargetRects(), stage)
+      if (!computed) return
+      const bounds = coversStage(computed, stage) ? null : computed
+      if (sameBounds(bounds, lastSentBounds)) return
+      if (!windowMatches(bounds)) startRestaging()
+      lastSentBounds = bounds
+      Promise.resolve(invoke('set_hud_window_bounds', { bounds: toPhysicalBounds(bounds) })).catch(() => { lastSentBounds = undefined })
     }
 
     function getElementSize(element, fallback = { width: 0, height: 0 }) {
@@ -270,7 +467,7 @@
         }
       }
 
-      const hudRect = elements.hud.getBoundingClientRect()
+      const hudRect = getStageRect(elements.hud)
       const hudLeft = hudRect.width ? hudRect.left : defaultHudRect.left
       const hudTop = hudRect.height ? hudRect.top : defaultHudRect.top
       if (name === 'hud') {
@@ -324,7 +521,7 @@
       const targetTools = tools[name]
       const editorFrame = targetTools?.editorFrame
       if (!editorFrame || editorFrame.hidden || !isFreeformTarget(name)) return
-      const rect = elements[name].getBoundingClientRect()
+      const rect = getStageRect(elements[name])
       editorFrame.style.left = `${rect.left}px`
       editorFrame.style.top = `${rect.top}px`
       editorFrame.style.width = `${rect.width}px`
@@ -360,7 +557,7 @@
       element.classList.add('layout-positioned')
       element.style.left = `${Math.round(available.width * position.x)}px`
       element.style.top = `${Math.round(available.height * position.y)}px`
-      if (name === 'hud') syncEditorToolbar(name, element.getBoundingClientRect())
+      if (name === 'hud') syncEditorToolbar(name, getStageRect(element))
     }
 
     function syncGrid() {
@@ -383,6 +580,7 @@
       }
       applyPosition('delta')
       syncGrid()
+      scheduleWindowBounds()
     }
     function applyMode() {
       hud.dataset.layoutMode = mode
@@ -460,6 +658,8 @@
       selectedTarget = null
       sessionSnapshot = null
       setNativeInteraction(false)
+      // The native side restores the cropped window, so the shell waits for its offset.
+      if (lastSentBounds !== null) startRestaging()
       if (previousSelected) notifySettingsEditingState(previousSelected, false)
       applyVisibility()
       syncGrid()
@@ -487,6 +687,8 @@
       }
       document.body.classList.add('is-editing')
       setNativeInteraction(true)
+      // The native side expands a cropped window to the whole monitor.
+      if (!isWindowFull()) startRestaging()
       // Targets hidden by telemetry become visible first, so the selection measures real rects.
       applyVisibility()
       selectTarget(selected)
@@ -510,8 +712,7 @@
       setToolsVisible(name, true)
       notifySettingsEditingState(name, true)
       syncEditorFrame(name)
-      const rect = elements[name].getBoundingClientRect()
-      syncEditorToolbar(name, rect)
+      syncEditorToolbar(name, getStageRect(elements[name]))
     }
 
     function editableTargets() {
@@ -625,8 +826,8 @@
       const viewport = getViewport()
       const size = getElementSize(element, getFallbackSize(name, viewport))
       const available = getAvailableSize(viewport, size)
-      let left = clientX - dragOffsetX
-      let top = clientY - dragOffsetY
+      let left = clientX + stage.offsetX - dragOffsetX
+      let top = clientY + stage.offsetY - dragOffsetY
       // Only moving snaps; resizing stays free.
       if (snapEnabled) ({ left, top } = HudGrid.snapRect({ left, top, width: size.width, height: size.height }, viewport))
       const map = positionMap(name)
@@ -650,7 +851,7 @@
       const name = event.currentTarget.dataset.layoutResizeTarget
       if (selectedTarget !== name || event.button !== 0) return
       resizeHandle = event.currentTarget.dataset.layoutResizeHandle
-      const rect = elements[name].getBoundingClientRect()
+      const rect = getStageRect(elements[name])
       const factor = getWidgetScaleFactor(name)
       resizeSnapshot = {
         name,
@@ -769,6 +970,10 @@
       setSnapEnabled,
       resetAllPositions
     }
+    publishStage()
+    // tauri-events.js loads after this file, so the native stage is read after load.
+    if (document.readyState === 'complete') startStageSync()
+    else window.addEventListener('load', startStageSync, { once: true })
     if (new URLSearchParams(window.location.search).get('edit') === '1') {
       window.requestAnimationFrame(() => enterEditMode('hud'))
     }
@@ -781,6 +986,7 @@
     sanitizePosition,
     sanitizeWidgetSize,
     calculateEditorToolbarPosition,
+    computeWindowBounds,
     readStoredLayout,
     STORAGE_KEY,
     MODE_STORAGE_KEY,

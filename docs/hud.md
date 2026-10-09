@@ -9,7 +9,13 @@ has no other data source.
 ## Overlay window
 
 - The HUD window is transparent, always on top, frameless, and never takes
-  focus. It covers the monitor chosen in **HUD DISPLAY**.
+  focus. It lives on the monitor chosen in **HUD DISPLAY**. Outside a layout
+  edit the window shrinks to the rectangle around the visible blocks and
+  Delta, with an 8 px margin, so Windows composes less of the screen; blocks
+  stay where the layout puts them on the monitor. A layout edit expands the
+  window to the whole monitor, and saving or cancelling shrinks it again.
+  While no block is visible, for example without live telemetry, the window
+  keeps its last size.
 - During normal driving the whole window is click-through, so mouse input
   reaches the game.
 - Only an active layout edit makes the window accept pointer input; Save,
@@ -174,14 +180,14 @@ positions.
 
 **HUD DISPLAY** on the HUD tab lists every connected monitor by its Windows
 display number and resolution, and marks the primary monitor. Choosing one
-moves the HUD to cover that monitor immediately, and FDC remembers the choice.
-Until a monitor is chosen, the HUD covers the primary monitor. If the saved
-monitor is not connected at startup, the HUD covers the primary monitor and the
+moves the HUD to that monitor immediately, and FDC remembers the choice.
+Until a monitor is chosen, the HUD uses the primary monitor. If the saved
+monitor is not connected at startup, the HUD uses the primary monitor and the
 card says so. The list is unavailable while a layout edit is active.
 
 When Windows moves the HUD to another monitor, for example with
-Win+Shift+Arrow, FDC resizes it to cover that whole monitor and remembers it as
-the choice.
+Win+Shift+Arrow, FDC places it on that monitor, shrinks it again around the
+visible blocks, and remembers the monitor as the choice.
 
 ## HUD opacity
 

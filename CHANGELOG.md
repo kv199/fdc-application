@@ -52,6 +52,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **HUD**: the HUD and Configuration use less processor time while you drive.
   The HUD only redraws what changed, and Configuration only updates its Shift
   Light panel when its values change.
+- **HUD**: with **HUD RENDERING** on **CPU**, the HUD costs far less graphics
+  card time and fewer game frames. Outside a layout edit its window now covers
+  only the area around the visible blocks instead of the whole monitor; the
+  blocks stay where you placed them, and a layout edit still uses the whole
+  monitor.
 - **Driver Analysis**: while a recording is exported, its button reads
   EXPORTING… with a moving bar, and a finished export is reported in green with
   its size, without a size warning.

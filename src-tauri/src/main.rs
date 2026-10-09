@@ -46,6 +46,7 @@ const DIRECT_UDP_BIND: &str = "127.0.0.1:5301";
 const DIRECT_TELEMETRY_EVENT: &str = "direct_telemetry";
 const DIRECT_STATUS_EVENT: &str = "direct_status";
 const DRIVER_ANALYSIS_HOTKEY_EVENT: &str = "driver_analysis_hotkey";
+const HUD_STAGE_EVENT: &str = "hud_stage";
 
 #[derive(Default)]
 struct DirectSourceState {
@@ -5171,6 +5172,35 @@ struct HudDisplayRuntimeState {
     current: Mutex<Option<String>>,
 }
 
+/// The visible HUD rectangle in physical pixels, relative to the top-left corner
+/// of the HUD's monitor. The page converts its CSS pixels with its own
+/// devicePixelRatio, which also follows the Windows text size.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+struct HudWindowBounds {
+    left: f64,
+    top: f64,
+    width: f64,
+    height: f64,
+}
+
+#[derive(Default)]
+struct HudWindowShapeState {
+    /// `None` covers the whole monitor.
+    bounds: Mutex<Option<HudWindowBounds>>,
+    editing: Mutex<bool>,
+}
+
+/// The monitor size and the window offset on it, in physical pixels; the page
+/// maps them to CSS pixels with its own devicePixelRatio.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HudStage {
+    stage_width: f64,
+    stage_height: f64,
+    offset_x: f64,
+    offset_y: f64,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 struct HudDisplayState {
     name: String,
@@ -5376,19 +5406,120 @@ fn set_hud_rendering(
     })
 }
 
-fn fit_hud_window<R: Runtime>(
+/// Maps one span onto a monitor axis of `extent` physical pixels. Rounds
+/// outward so the window never cuts into a visible block, and keeps at least
+/// one pixel inside the monitor.
+fn hud_window_span(start: f64, end: f64, extent: u32) -> (i64, i64) {
+    let extent = i64::from(extent);
+    let start = (start.floor() as i64).clamp(0, (extent - 1).max(0));
+    let end = (end.ceil() as i64).clamp(start + 1, extent.max(start + 1));
+    (start, end)
+}
+
+/// The physical rectangle the HUD window occupies on `display`. Editing, or no
+/// stored bounds, covers the whole monitor.
+fn hud_window_rect(
+    display: &HudDisplayOption,
+    bounds: Option<HudWindowBounds>,
+    editing: bool,
+) -> (PhysicalPosition<i32>, PhysicalSize<u32>) {
+    let bounds = match bounds {
+        Some(bounds) if !editing => bounds,
+        _ => {
+            return (
+                PhysicalPosition::new(display.x, display.y),
+                PhysicalSize::new(display.width, display.height),
+            );
+        }
+    };
+    let (left, right) = hud_window_span(bounds.left, bounds.left + bounds.width, display.width);
+    let (top, bottom) = hud_window_span(bounds.top, bounds.top + bounds.height, display.height);
+    (
+        PhysicalPosition::new(display.x + left as i32, display.y + top as i32),
+        PhysicalSize::new((right - left) as u32, (bottom - top) as u32),
+    )
+}
+
+/// Moves and resizes the HUD window to the stored shape on `display`, returning
+/// whether the window geometry changed.
+fn apply_hud_window_shape<R: Runtime>(
+    app: &AppHandle<R>,
     window: &WebviewWindow<R>,
     display: &HudDisplayOption,
-) -> tauri::Result<()> {
-    let position = PhysicalPosition::new(display.x, display.y);
-    let size = PhysicalSize::new(display.width, display.height);
+) -> tauri::Result<bool> {
+    let shape = app.state::<HudWindowShapeState>();
+    let bounds = *shape
+        .bounds
+        .lock()
+        .expect("HUD window shape state poisoned");
+    let editing = *shape
+        .editing
+        .lock()
+        .expect("HUD window shape state poisoned");
+    let (position, size) = hud_window_rect(display, bounds, editing);
+    fit_hud_window(window, position, size)
+}
+
+/// Returns whether anything changed. Position is set before size so the corner
+/// is already on the target monitor when Windows rescales for its DPI.
+fn fit_hud_window<R: Runtime>(
+    window: &WebviewWindow<R>,
+    position: PhysicalPosition<i32>,
+    size: PhysicalSize<u32>,
+) -> tauri::Result<bool> {
+    let mut changed = false;
     // Move first so the top-left corner is already on the target monitor when
     // Windows rescales the window for that monitor's DPI.
     if window.outer_position()? != position {
         window.set_position(position)?;
+        changed = true;
     }
     if window.inner_size()? != size {
         window.set_size(size)?;
+        changed = true;
+    }
+    Ok(changed)
+}
+
+fn hud_stage_for(display: &HudDisplayOption, window_position: PhysicalPosition<i32>) -> HudStage {
+    HudStage {
+        stage_width: f64::from(display.width),
+        stage_height: f64::from(display.height),
+        offset_x: (i64::from(window_position.x) - i64::from(display.x)) as f64,
+        offset_y: (i64::from(window_position.y) - i64::from(display.y)) as f64,
+    }
+}
+
+/// The HUD monitor FDC last placed the window on, if it is still connected.
+fn current_hud_display<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Option<HudDisplayOption>> {
+    let Some(name) = app
+        .state::<HudDisplayRuntimeState>()
+        .current
+        .lock()
+        .expect("HUD display state poisoned")
+        .clone()
+    else {
+        return Ok(None);
+    };
+    Ok(hud_display_options(app)?
+        .into_iter()
+        .find(|display| display.name == name))
+}
+
+fn current_hud_stage<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Option<HudStage>> {
+    let Some(window) = app.get_webview_window("main") else {
+        return Ok(None);
+    };
+    let Some(display) = current_hud_display(app)? else {
+        return Ok(None);
+    };
+    Ok(Some(hud_stage_for(&display, window.outer_position()?)))
+}
+
+/// Sends the HUD geometry to the main window only.
+fn emit_hud_stage<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    if let Some(stage) = current_hud_stage(app)? {
+        app.emit_to("main", HUD_STAGE_EVENT, stage)?;
     }
     Ok(())
 }
@@ -5401,14 +5532,21 @@ fn place_hud_window<R: Runtime>(
         .current
         .lock()
         .expect("HUD display state poisoned") = Some(display.name.clone());
+    // The page recomputes its bounds for the new monitor.
+    *app.state::<HudWindowShapeState>()
+        .bounds
+        .lock()
+        .expect("HUD window shape state poisoned") = None;
     if let Some(window) = app.get_webview_window("main") {
-        fit_hud_window(&window, display)?;
+        apply_hud_window_shape(app, &window, display)?;
     }
-    Ok(())
+    emit_hud_stage(app)
 }
 
-/// Keeps the HUD covering the whole monitor its top-left corner is on after
-/// Windows moves or rescales it, for example with Win+Shift+Arrow.
+/// Keeps the HUD on the monitor its top-left corner is on after Windows moves
+/// or rescales it, for example with Win+Shift+Arrow. On the same monitor it
+/// re-applies the stored shape, which ends the event cycle caused by FDC's own
+/// geometry changes.
 fn follow_hud_window_monitor<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let Some(window) = app.get_webview_window("main") else {
         return Ok(());
@@ -5426,7 +5564,7 @@ fn follow_hud_window_monitor<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()
     };
 
     let state = app.state::<HudDisplayRuntimeState>();
-    let changed = {
+    let monitor_changed = {
         let mut current = state.current.lock().expect("HUD display state poisoned");
         // The HUD has not been placed yet during startup.
         let Some(name) = current.as_ref() else {
@@ -5439,12 +5577,19 @@ fn follow_hud_window_monitor<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()
         changed
     };
 
-    fit_hud_window(&window, display)?;
-    if changed {
+    if monitor_changed {
+        *app.state::<HudWindowShapeState>()
+            .bounds
+            .lock()
+            .expect("HUD window shape state poisoned") = None;
+        apply_hud_window_shape(app, &window, display)?;
         persist_hud_display(app, display)?;
         if let Some(settings) = app.get_webview_window("settings") {
             let _ = settings.eval("window.SettingsController?.refreshHudDisplay?.()");
         }
+        emit_hud_stage(app)?;
+    } else if apply_hud_window_shape(app, &window, display)? {
+        emit_hud_stage(app)?;
     }
     Ok(())
 }
@@ -5811,7 +5956,15 @@ fn set_window_edit_mode(app: AppHandle, enabled: bool) -> tauri::Result<()> {
         return Ok(());
     };
 
-    set_window_interaction(&window, enabled)
+    set_window_interaction(&window, enabled)?;
+    *app.state::<HudWindowShapeState>()
+        .editing
+        .lock()
+        .expect("HUD window shape state poisoned") = enabled;
+    if let Some(display) = current_hud_display(&app)? {
+        apply_hud_window_shape(&app, &window, &display)?;
+    }
+    emit_hud_stage(&app)
 }
 
 fn is_valid_layout_target(target: &str) -> bool {
@@ -6051,6 +6204,46 @@ fn set_hud_display(app: AppHandle, name: String) -> Result<(), String> {
         .map_err(|error| format!("unable to save the HUD monitor: {error}"))
 }
 
+fn validate_hud_window_bounds(bounds: HudWindowBounds) -> Result<HudWindowBounds, String> {
+    let values = [bounds.left, bounds.top, bounds.width, bounds.height];
+    if !values.iter().all(|value| value.is_finite()) {
+        return Err("HUD window bounds must be finite numbers".to_string());
+    }
+    if bounds.width <= 0.0 || bounds.height <= 0.0 {
+        return Err("HUD window bounds must have a positive size".to_string());
+    }
+    Ok(bounds)
+}
+
+/// Stores the visible HUD rectangle, or `None` for the whole monitor, and
+/// applies it unless the layout is being edited.
+#[tauri::command]
+fn set_hud_window_bounds(app: AppHandle, bounds: Option<HudWindowBounds>) -> Result<(), String> {
+    let bounds = bounds.map(validate_hud_window_bounds).transpose()?;
+    *app.state::<HudWindowShapeState>()
+        .bounds
+        .lock()
+        .expect("HUD window shape state poisoned") = bounds;
+
+    let editing = *app
+        .state::<HudWindowShapeState>()
+        .editing
+        .lock()
+        .expect("HUD window shape state poisoned");
+    if !editing
+        && let Some(window) = app.get_webview_window("main")
+        && let Some(display) = current_hud_display(&app).map_err(|error| error.to_string())?
+    {
+        apply_hud_window_shape(&app, &window, &display).map_err(|error| error.to_string())?;
+    }
+    emit_hud_stage(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_hud_stage(app: AppHandle) -> HudStage {
+    current_hud_stage(&app).ok().flatten().unwrap_or_default()
+}
+
 #[tauri::command]
 fn quit_app(app: AppHandle) {
     app.exit(0);
@@ -6078,6 +6271,7 @@ fn main() {
         .manage(DriverAnalysisHotkeyState::default())
         .manage(HudEditHotkeyState::default())
         .manage(HudDisplayRuntimeState::default())
+        .manage(HudWindowShapeState::default())
         .invoke_handler(tauri::generate_handler![
             set_window_edit_mode,
             notify_layout_state,
@@ -6135,6 +6329,8 @@ fn main() {
             rename_garage_car,
             list_hud_displays,
             set_hud_display,
+            set_hud_window_bounds,
+            get_hud_stage,
             get_hud_rendering,
             set_hud_rendering,
             quit_app
@@ -10155,5 +10351,137 @@ mod tests {
         ];
         assert_eq!(choose_hud_display(None, &displays), Some(0));
         assert_eq!(choose_hud_display(None, &[]), None);
+    }
+
+    fn hud_monitor_at(x: i32, y: i32, width: u32, height: u32) -> HudDisplayOption {
+        HudDisplayOption {
+            name: format!("monitor at {x},{y}"),
+            label: String::new(),
+            x,
+            y,
+            width,
+            height,
+            primary: false,
+        }
+    }
+
+    fn hud_bounds(left: f64, top: f64, width: f64, height: f64) -> HudWindowBounds {
+        HudWindowBounds {
+            left,
+            top,
+            width,
+            height,
+        }
+    }
+
+    #[test]
+    fn covers_the_whole_monitor_while_editing_or_without_bounds() {
+        let monitor = hud_monitor_at(0, 0, 2560, 1440);
+        let whole = (PhysicalPosition::new(0, 0), PhysicalSize::new(2560, 1440));
+        let bounds = Some(hud_bounds(100.0, 50.0, 300.0, 200.0));
+
+        assert_eq!(hud_window_rect(&monitor, None, false), whole);
+        assert_eq!(hud_window_rect(&monitor, bounds, true), whole);
+    }
+
+    #[test]
+    fn shrinks_the_hud_window_to_its_bounds() {
+        let monitor = hud_monitor_at(0, 0, 2560, 1440);
+        let bounds = Some(hud_bounds(100.0, 50.0, 300.0, 200.0));
+
+        assert_eq!(
+            hud_window_rect(&monitor, bounds, false),
+            (PhysicalPosition::new(100, 50), PhysicalSize::new(300, 200))
+        );
+    }
+
+    #[test]
+    fn rounds_fractional_hud_bounds_outward() {
+        let monitor = hud_monitor_at(0, 0, 2560, 1440);
+        // 15.3 floors to 15 and 15.3 + 150.3 = 165.6 ceils to 166; a 0.75 high
+        // span keeps one pixel.
+        let bounds = Some(hud_bounds(15.3, 0.0, 150.3, 0.75));
+
+        assert_eq!(
+            hud_window_rect(&monitor, bounds, false),
+            (PhysicalPosition::new(15, 0), PhysicalSize::new(151, 1))
+        );
+    }
+
+    #[test]
+    fn clamps_hud_bounds_inside_the_monitor() {
+        let monitor = hud_monitor_at(0, 0, 2560, 1440);
+        let partly_outside = Some(hud_bounds(-50.0, 1400.0, 200.0, 100.0));
+        assert_eq!(
+            hud_window_rect(&monitor, partly_outside, false),
+            (PhysicalPosition::new(0, 1400), PhysicalSize::new(150, 40))
+        );
+
+        // Bounds entirely right of the monitor keep a 1x1 window on its edge.
+        let outside = Some(hud_bounds(3000.0, 10.0, 100.0, 100.0));
+        assert_eq!(
+            hud_window_rect(&monitor, outside, false),
+            (PhysicalPosition::new(2559, 10), PhysicalSize::new(1, 100))
+        );
+    }
+
+    #[test]
+    fn places_hud_bounds_on_monitors_with_offset_positions() {
+        let right_monitor = hud_monitor_at(2560, 0, 1920, 1080);
+        let left_monitor = hud_monitor_at(-1920, 0, 1920, 1080);
+        let bounds = Some(hud_bounds(100.0, 50.0, 300.0, 200.0));
+
+        assert_eq!(
+            hud_window_rect(&right_monitor, bounds, false),
+            (PhysicalPosition::new(2660, 50), PhysicalSize::new(300, 200))
+        );
+        assert_eq!(
+            hud_window_rect(&left_monitor, bounds, false),
+            (
+                PhysicalPosition::new(-1820, 50),
+                PhysicalSize::new(300, 200)
+            )
+        );
+        assert_eq!(
+            hud_window_rect(
+                &right_monitor,
+                Some(hud_bounds(15.3, 0.0, 150.3, 0.75)),
+                false
+            ),
+            (PhysicalPosition::new(2575, 0), PhysicalSize::new(151, 1))
+        );
+    }
+
+    #[test]
+    fn reports_the_hud_stage_in_physical_pixels() {
+        let monitor = hud_monitor_at(2560, 0, 2560, 1440);
+        let stage = hud_stage_for(&monitor, PhysicalPosition::new(3000, 300));
+
+        assert_eq!(
+            stage,
+            HudStage {
+                stage_width: 2560.0,
+                stage_height: 1440.0,
+                offset_x: 440.0,
+                offset_y: 300.0,
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_hud_bounds_that_are_not_finite_or_empty() {
+        assert!(validate_hud_window_bounds(hud_bounds(0.0, 0.0, f64::NAN, 10.0)).is_err());
+        assert!(validate_hud_window_bounds(hud_bounds(f64::INFINITY, 0.0, 10.0, 10.0)).is_err());
+        assert!(validate_hud_window_bounds(hud_bounds(0.0, 0.0, 0.0, 10.0)).is_err());
+        assert!(validate_hud_window_bounds(hud_bounds(-5.0, -5.0, 10.0, 10.0)).is_ok());
+    }
+
+    #[test]
+    fn deserializes_the_hud_bounds_contract() {
+        let bounds: Option<HudWindowBounds> =
+            serde_json::from_str(r#"{"left":1,"top":2,"width":3,"height":4}"#).unwrap();
+        assert_eq!(bounds, Some(hud_bounds(1.0, 2.0, 3.0, 4.0)));
+        let whole: Option<HudWindowBounds> = serde_json::from_str("null").unwrap();
+        assert_eq!(whole, None);
     }
 }

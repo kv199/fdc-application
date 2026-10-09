@@ -77,8 +77,18 @@ the tray menu, Direct Data Out, and native persistence commands.
 - At startup the HUD window is sized and positioned to cover the saved HUD
   monitor, or the primary monitor. `list_hud_displays` and `set_hud_display`
   list the connected monitors and move the HUD to one of them. When Windows
-  moves or rescales the HUD, for example with Win+Shift+Arrow, the window is
-  refitted to the monitor its top-left corner is on, and that monitor is saved.
+  moves the HUD to another monitor, for example with Win+Shift+Arrow, the
+  window is placed on the monitor its top-left corner is on, and that monitor
+  is saved.
+- The HUD page sends `set_hud_window_bounds` with the rectangle around its
+  visible blocks, and the native layer shrinks the window to it outside a
+  layout edit; `set_window_edit_mode` expands it to the whole monitor during an
+  edit and restores the rectangle afterwards. Placing the HUD on a monitor
+  clears the rectangle until the page sends a new one. After every geometry
+  change the native layer emits `hud_stage` to the HUD page with the monitor
+  size and the window offset on it, and `get_hud_stage` returns the same. Both
+  directions use physical pixels; the page converts them with its own
+  `devicePixelRatio`, which also follows the Windows text size.
 - Closing the Configuration window asks the page before quitting, and
   `quit_app` exits FDC.
 
@@ -110,8 +120,10 @@ Forza fully loads the graphics card. With `GPU`, the default, no browser
 arguments are added. Both windows always get the same arguments because they
 share one WebView2 environment.
 
-The main window is a transparent, always-on-top HUD positioned across the
-monitor chosen in **HUD DISPLAY**. The browser layer renders the current
+The main window is a transparent, always-on-top HUD on the monitor chosen in
+**HUD DISPLAY**. The page lays out every block in whole-monitor coordinates
+and shifts its content by the window offset, so the window can shrink around
+the visible blocks without moving them. The browser layer renders the current
 telemetry HUD, lap time, Delta, Garage persistence, and Shift Light
 presentation. Driver Analysis runs
 without a HUD widget and records only when explicitly started. Event

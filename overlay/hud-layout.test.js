@@ -74,7 +74,7 @@ test('freeform targets expose independent edit, reset, cancel, save and resize b
   assert.match(source, /hud\.append\(editorFrame\)/)
   assert.match(source, /function syncEditorToolbar\(name, rect\)/)
   assert.match(source, /function syncEditorFrame\(name\)/)
-  assert.match(source, /if \(name === 'hud'\) syncEditorToolbar\(name, element\.getBoundingClientRect\(\)\)/)
+  assert.match(source, /if \(name === 'hud'\) syncEditorToolbar\(name, getStageRect\(element\)\)/)
   assert.match(source, /calculateEditorToolbarPosition\(rect, toolbarRect, viewport\)/)
   assert.match(css, /\.hud-widget-editor-frame \{[\s\S]*pointer-events: none/)
   assert.match(css, /\.hud-widget-editor-frame\.is-selected:not\(\[hidden\]\) \.layout-resize-handle/)
@@ -143,4 +143,78 @@ test('native layout_action maps start and reset_all actions', () => {
   const layoutActionSource = source.substring(layoutActionStart, layoutActionEnd)
   assert.match(layoutActionSource, /"start"/)
   assert.match(layoutActionSource, /"reset_all"/)
+})
+
+const MONITOR = { width: 1920, height: 1080, offsetX: 0, offsetY: 0 }
+
+test('computeWindowBounds unions visible rects and pads them by 8 px', () => {
+  const rects = [
+    { left: 100, top: 200, width: 50, height: 40 },
+    { left: 300, top: 250, width: 100, height: 30 }
+  ]
+  assert.deepEqual(layout.computeWindowBounds(rects, MONITOR), { left: 92, top: 192, width: 316, height: 96 })
+  assert.deepEqual(layout.computeWindowBounds(rects, MONITOR, 0), { left: 100, top: 200, width: 300, height: 80 })
+})
+
+test('computeWindowBounds moves window-space rects into stage space by the offset', () => {
+  const rects = [
+    { left: 100, top: 200, width: 50, height: 40 },
+    { left: 300, top: 250, width: 100, height: 30 }
+  ]
+  const stage = { width: 3840, height: 2160, offsetX: 1000, offsetY: 500 }
+  assert.deepEqual(layout.computeWindowBounds(rects, stage), { left: 1092, top: 692, width: 316, height: 96 })
+})
+
+test('computeWindowBounds clamps to the stage edges', () => {
+  assert.deepEqual(
+    layout.computeWindowBounds([{ left: 2, top: 1, width: 10, height: 10 }], MONITOR),
+    { left: 0, top: 0, width: 20, height: 19 }
+  )
+  assert.deepEqual(
+    layout.computeWindowBounds([{ left: 1915, top: 1075, width: 4, height: 4 }], MONITOR),
+    { left: 1907, top: 1067, width: 13, height: 13 }
+  )
+  assert.deepEqual(
+    layout.computeWindowBounds([{ left: 0, top: 0, width: 1920, height: 1080 }], MONITOR),
+    { left: 0, top: 0, width: 1920, height: 1080 }
+  )
+})
+
+test('computeWindowBounds rounds outward to whole CSS px inside a fractional stage', () => {
+  assert.deepEqual(
+    layout.computeWindowBounds([{ left: 10.6, top: 20.2, width: 5.5, height: 3.3 }], MONITOR, 0),
+    { left: 10, top: 20, width: 7, height: 4 }
+  )
+  assert.deepEqual(
+    layout.computeWindowBounds([{ left: 1690, top: 10, width: 16, height: 10 }], { width: 1706.67, height: 900, offsetX: 0, offsetY: 0 }),
+    { left: 1682, top: 2, width: 24, height: 26 }
+  )
+})
+
+test('computeWindowBounds ignores hidden rects and returns null when nothing is visible', () => {
+  assert.equal(layout.computeWindowBounds([], MONITOR), null)
+  assert.equal(layout.computeWindowBounds(undefined, MONITOR), null)
+  assert.equal(layout.computeWindowBounds([{ left: 10, top: 10, width: 0, height: 0 }], MONITOR), null)
+  assert.deepEqual(
+    layout.computeWindowBounds([{ left: 500, top: 500, width: 0, height: 40 }, { left: 100, top: 200, width: 50, height: 40 }], MONITOR, 0),
+    { left: 100, top: 200, width: 50, height: 40 }
+  )
+})
+
+test('the page asks the native side for bounds and the stage through the agreed commands', () => {
+  assert.match(source, /invoke\('set_hud_window_bounds', \{ bounds: toPhysicalBounds\(bounds\) \}\)/)
+  assert.match(source, /invoke\('get_hud_stage'\)/)
+  assert.match(source, /listen\('hud_stage', event => applyStage\(event\.payload\)\)/)
+  assert.match(source, /if \(document\.readyState === 'complete'\) startStageSync\(\)/)
+  assert.match(source, /addEventListener\('load', startStageSync, \{ once: true \}\)/)
+})
+
+test('stage-space CSS: the shell covers the stage and shifts by the window offset', () => {
+  assert.match(css, /\.hud-shell\s*{[^}]*width:\s*var\(--stage-width, 100vw\);[^}]*height:\s*var\(--stage-height, 100vh\);[^}]*transform:\s*translate\(calc\(var\(--stage-offset-x, 0px\) \* -1\), calc\(var\(--stage-offset-y, 0px\) \* -1\)\);/s)
+  assert.match(css, /\.hud-shell\.is-restaging\s*{\s*visibility:\s*hidden;\s*}/)
+  assert.match(css, /\.hud\[data-layout-mode='freeform'\] {[^}]*width:\s*var\(--stage-width, 100vw\);[^}]*height:\s*var\(--stage-height, 100vh\);/s)
+})
+
+test('no viewport unit in the stylesheet sizes stage content except as a pre-JS fallback', () => {
+  assert.doesNotMatch(css.replace(/var\(--stage-(?:width|height), 100v[wh]\)/g, ''), /100v[wh]/)
 })
