@@ -100,6 +100,16 @@ widgets, alignment grid, layout, HUD preference, Tauri event, Garage, Shift
 Light, and overlay modules in dependency order. The Tauri configuration uses
 `overlay/` as the frontend distribution.
 
+Both windows are declared in the Tauri configuration with `create: false` and
+built at startup from that configuration, because WebView2 fixes its browser
+arguments when it starts. With the **HUD RENDERING** setting on `CPU`, both
+windows start WebView2 with `--disable-gpu` plus wry's default
+`--disable-features` list: pages are rasterized on the CPU and handed to
+Windows for composition, so the HUD does not wait behind the game's frames when
+Forza fully loads the graphics card. With `GPU`, the default, no browser
+arguments are added. Both windows always get the same arguments because they
+share one WebView2 environment.
+
 The main window is a transparent, always-on-top HUD positioned across the
 monitor chosen in **HUD DISPLAY**. The browser layer renders the current
 telemetry HUD, lap time, Delta, Garage persistence, and Shift Light
@@ -271,7 +281,8 @@ position are stored separately in the FDC application-data directory so a
 user-resized and moved window is restored on the next launch. A saved position
 outside the available monitors is ignored. The HUD monitor is stored in the
 same directory as its Windows name, physical position, and size; the position
-and size identify it when the name no longer matches.
+and size identify it when the name no longer matches. The HUD rendering choice
+is stored in the same directory and read before the windows are created.
 
 ## Generated assets
 

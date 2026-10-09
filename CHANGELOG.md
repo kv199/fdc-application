@@ -19,6 +19,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ### Added
 
+- **Settings**: **HUD RENDERING** draws the HUD with the graphics card or the
+  processor. Choose **CPU** if the HUD lags behind the game while Forza fully
+  loads the graphics card, for example with an uncapped frame rate; it costs
+  some FPS. The change applies after FDC restarts.
 - **HUD**: move and resize the HUD over a running Forza without pausing it.
   Press the new in-game edit hotkey, `Ctrl + Shift + F8` by default, then
   drag any enabled block or Delta and press the hotkey again to save;

@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Runtime, State,
-    WebviewWindow, Window, WindowEvent, menu::MenuBuilder, tray::TrayIconBuilder,
+    WebviewWindow, WebviewWindowBuilder, Window, WindowEvent, menu::MenuBuilder,
+    tray::TrayIconBuilder,
 };
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -29,6 +30,10 @@ mod driver_analysis_export;
 
 const SETTINGS_WINDOW_STATE_FILE: &str = "settings-window-size.json";
 const HUD_DISPLAY_STATE_FILE: &str = "hud-display.json";
+const HUD_RENDERING_STATE_FILE: &str = "hud-rendering.json";
+// Browser arguments replace wry's defaults, so CPU rendering repeats them.
+const CPU_RENDERING_BROWSER_ARGS: &str =
+    "--disable-gpu --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
 #[cfg(test)]
 const SETTINGS_DEFAULT_WIDTH: u32 = 820;
 #[cfg(test)]
@@ -5292,6 +5297,85 @@ fn persist_hud_display<R: Runtime>(
     Ok(())
 }
 
+/// Where both FDC webviews draw. WebView2 fixes this when it starts, so a
+/// change applies from the next launch.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum HudRenderer {
+    #[default]
+    Gpu,
+    Cpu,
+}
+
+#[derive(Deserialize, Serialize)]
+struct HudRenderingState {
+    renderer: HudRenderer,
+}
+
+/// The renderer this launch started with.
+struct ActiveHudRenderer(HudRenderer);
+
+#[derive(Serialize)]
+struct HudRenderingStatus {
+    active: HudRenderer,
+    saved: HudRenderer,
+}
+
+fn hud_rendering_state_path<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
+    Ok(app.path().app_data_dir()?.join(HUD_RENDERING_STATE_FILE))
+}
+
+fn parse_hud_renderer(contents: &str) -> HudRenderer {
+    serde_json::from_str::<HudRenderingState>(contents)
+        .map(|state| state.renderer)
+        .unwrap_or_default()
+}
+
+fn load_hud_renderer<R: Runtime>(app: &AppHandle<R>) -> HudRenderer {
+    hud_rendering_state_path(app)
+        .ok()
+        .and_then(|path| fs::read_to_string(path).ok())
+        .map(|contents| parse_hud_renderer(&contents))
+        .unwrap_or_default()
+}
+
+fn hud_rendering_browser_args(renderer: HudRenderer) -> Option<&'static str> {
+    match renderer {
+        HudRenderer::Gpu => None,
+        HudRenderer::Cpu => Some(CPU_RENDERING_BROWSER_ARGS),
+    }
+}
+
+#[tauri::command]
+fn get_hud_rendering(app: AppHandle, active: State<'_, ActiveHudRenderer>) -> HudRenderingStatus {
+    HudRenderingStatus {
+        active: active.0,
+        saved: load_hud_renderer(&app),
+    }
+}
+
+#[tauri::command]
+fn set_hud_rendering(
+    app: AppHandle,
+    active: State<'_, ActiveHudRenderer>,
+    renderer: HudRenderer,
+) -> Result<HudRenderingStatus, String> {
+    let path = hud_rendering_state_path(&app)
+        .map_err(|error| format!("unable to locate HUD rendering setting: {error}"))?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("unable to save HUD rendering setting: {error}"))?;
+    }
+    let contents = serde_json::to_vec(&HudRenderingState { renderer })
+        .map_err(|error| format!("unable to save HUD rendering setting: {error}"))?;
+    fs::write(path, contents)
+        .map_err(|error| format!("unable to save HUD rendering setting: {error}"))?;
+    Ok(HudRenderingStatus {
+        active: active.0,
+        saved: renderer,
+    })
+}
+
 fn fit_hud_window<R: Runtime>(
     window: &WebviewWindow<R>,
     display: &HudDisplayOption,
@@ -6051,6 +6135,8 @@ fn main() {
             rename_garage_car,
             list_hud_displays,
             set_hud_display,
+            get_hud_rendering,
+            set_hud_rendering,
             quit_app
         ])
         .on_window_event(|window, event| match window.label() {
@@ -6087,6 +6173,18 @@ fn main() {
             _ => {}
         })
         .setup(|app| {
+            // Both webviews share one WebView2 environment, so they must start
+            // with the same browser arguments.
+            let renderer = load_hud_renderer(app.handle());
+            app.manage(ActiveHudRenderer(renderer));
+            for config in app.config().app.windows.clone() {
+                let mut builder = WebviewWindowBuilder::from_config(app.handle(), &config)?;
+                if let Some(args) = hud_rendering_browser_args(renderer) {
+                    builder = builder.additional_browser_args(args);
+                }
+                builder.build()?;
+            }
+
             let window = app
                 .get_webview_window("main")
                 .expect("main overlay window must exist");
@@ -6192,6 +6290,35 @@ mod tests {
             );
         }
         assert!(!is_valid_layout_target("telemetry"));
+    }
+
+    #[test]
+    fn hud_rendering_defaults_to_gpu_and_cpu_disables_gpu_with_wry_defaults() {
+        assert_eq!(
+            parse_hud_renderer(r#"{"renderer":"cpu"}"#),
+            HudRenderer::Cpu
+        );
+        assert_eq!(
+            parse_hud_renderer(r#"{"renderer":"gpu"}"#),
+            HudRenderer::Gpu
+        );
+        assert_eq!(
+            parse_hud_renderer(r#"{"renderer":"vulkan"}"#),
+            HudRenderer::Gpu
+        );
+        assert_eq!(parse_hud_renderer("not json"), HudRenderer::Gpu);
+        assert_eq!(
+            serde_json::to_string(&HudRenderingState {
+                renderer: HudRenderer::Cpu
+            })
+            .unwrap(),
+            r#"{"renderer":"cpu"}"#
+        );
+
+        assert_eq!(hud_rendering_browser_args(HudRenderer::Gpu), None);
+        let args = hud_rendering_browser_args(HudRenderer::Cpu).unwrap();
+        assert!(args.split(' ').any(|arg| arg == "--disable-gpu"));
+        assert!(args.contains("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"));
     }
 
     #[test]

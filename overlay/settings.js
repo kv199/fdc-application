@@ -92,6 +92,9 @@
     settings: 'SETTINGS'
   })
   const speedUnitInputs = [...document.querySelectorAll('input[name="speed-unit"]')]
+  const hudRenderingInputs = [...document.querySelectorAll('input[name="hud-rendering"]')]
+  const hudRenderingNote = document.getElementById('hud-rendering-note')
+  const HUD_RENDERING_NOTE = hudRenderingNote?.textContent || ''
   const distanceUnitInputs = [...document.querySelectorAll('input[name="distance-unit"]')]
   const configurationAlwaysOnTop = document.getElementById('configuration-always-on-top')
   const confirmBeforeQuit = document.getElementById('confirm-before-quit')
@@ -986,6 +989,48 @@
 
   function renderQuitConfirmation() {
     if (confirmBeforeQuit && quitConfirmationApi) updateOverlayToggle(confirmBeforeQuit, quitConfirmationApi.read().confirm)
+  }
+
+  // WebView2 picks GPU or CPU drawing when FDC starts, so the saved choice
+  // can differ from the one this launch uses until the next start.
+  let hudRendering = null
+
+  function hudRenderingLabel(renderer) {
+    return renderer === 'cpu' ? 'CPU' : 'GPU'
+  }
+
+  function renderHudRendering(state) {
+    hudRendering = state
+    for (const input of hudRenderingInputs) {
+      input.checked = input.value === state?.saved
+      input.disabled = !state
+    }
+    if (!hudRenderingNote) return
+    hudRenderingNote.textContent = state && state.saved !== state.active
+      ? `Restart FDC to draw the HUD with the ${hudRenderingLabel(state.saved)}. FDC uses the ${hudRenderingLabel(state.active)} until then.`
+      : HUD_RENDERING_NOTE
+  }
+
+  async function loadHudRendering() {
+    try {
+      renderHudRendering(await call('get_hud_rendering'))
+    } catch {
+      renderHudRendering(null)
+    }
+  }
+
+  async function updateHudRendering(renderer) {
+    const previous = hudRendering
+    for (const input of hudRenderingInputs) input.disabled = true
+    try {
+      const next = await call('set_hud_rendering', { renderer })
+      renderHudRendering(next)
+      const message = `HUD RENDERING SET TO ${hudRenderingLabel(next.saved)}`
+      setStatus(next.saved === next.active ? message : `${message} · RESTART FDC TO APPLY`)
+    } catch (error) {
+      renderHudRendering(previous)
+      setStatus(error?.message || String(error || 'Unable to save HUD rendering'), true)
+    }
   }
 
   function setEventsDiscardConfirmOpen(open) {
@@ -4188,6 +4233,13 @@
   configurationAlwaysOnTop?.addEventListener('click', () => {
     void updateConfigurationAlwaysOnTop(displayPreferences.configurationAlwaysOnTop === false)
   })
+  renderHudRendering(null)
+  void loadHudRendering()
+  for (const input of hudRenderingInputs) {
+    input.addEventListener('change', () => {
+      if (input.checked) void updateHudRendering(input.value)
+    })
+  }
   for (const input of speedUnitInputs) {
     input.addEventListener('change', () => {
       if (!input.checked) return

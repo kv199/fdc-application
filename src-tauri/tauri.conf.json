@@ -23,7 +23,8 @@
         "focus": false,
         "focusable": false,
         "skipTaskbar": false,
-        "visible": false
+        "visible": false,
+        "create": false
       },
       {
         "label": "settings",
@@ -43,7 +44,8 @@
         "focus": true,
         "focusable": true,
         "skipTaskbar": false,
-        "visible": false
+        "visible": false,
+        "create": false
       }
     ],
     "security": {

@@ -526,6 +526,26 @@ test('Configuration keeps its default size and exposes standard Windows controls
   assert.equal(settingsWindow.alwaysOnTop, false)
 })
 
+test('Settings chooses GPU or CPU HUD rendering for the next FDC start', () => {
+  const panel = settingsHtml.slice(settingsHtml.indexOf('data-settings-panel="settings"'), settingsHtml.indexOf('<footer class="settings-footer"'))
+  assert.match(panel, /<strong>SHOW HUD WITH TELEMETRY<\/strong>[\s\S]*?<strong id="hud-rendering-title">HUD RENDERING<\/strong>[\s\S]*?<strong id="speed-unit-title">SPEED UNIT<\/strong>/)
+  assert.match(panel, /<input type="radio" name="hud-rendering" value="gpu">\s*<span>GPU<\/span>/)
+  assert.match(panel, /<input type="radio" name="hud-rendering" value="cpu">\s*<span>CPU<\/span>/)
+  assert.match(panel, /<small id="hud-rendering-note">[^<]*Applies after FDC restarts\.<\/small>/)
+  assert.match(settingsJs, /call\('get_hud_rendering'\)/)
+  assert.match(settingsJs, /call\('set_hud_rendering', \{ renderer \}\)/)
+  assert.match(settingsJs, /state\.saved !== state\.active/)
+
+  // WebView2 arguments are fixed at startup, so both windows are built in code.
+  for (const window of JSON.parse(tauriConfig).app.windows) {
+    assert.equal(window.create, false, window.label)
+    assert.equal(Object.hasOwn(window, 'additionalBrowserArgs'), false, window.label)
+  }
+  assert.match(tauriMain, /WebviewWindowBuilder::from_config\(app\.handle\(\), &config\)\?/)
+  assert.match(tauriMain, /builder\.additional_browser_args\(args\)/)
+  assert.match(tauriMain, /get_hud_rendering,\s*set_hud_rendering,/)
+})
+
 test('Configuration restores its last on-screen position with its size', () => {
   assert.match(tauriMain, /SettingsWindowState/)
   assert.match(tauriMain, /WindowEvent::Resized\(_\) \| WindowEvent::Moved\(_\)/)

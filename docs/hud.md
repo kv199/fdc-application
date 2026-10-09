@@ -199,6 +199,12 @@ data stays on this PC, and contains:
   **Don't ask again**, which turns this off. A Driver Analysis or Event
   recording in progress always asks;
 - **Show HUD with telemetry**, described above;
+- **HUD rendering**: `GPU`, the default, or `CPU`. With `CPU` the HUD and
+  Configuration are drawn on the processor and composited by Windows, so the
+  HUD keeps up with the game when Forza fully loads the graphics card, at the
+  cost of some game FPS. The choice is saved in `hud-rendering.json` in the FDC
+  application-data directory and applies from the next FDC start; until then
+  the row says which renderer is still in use;
 - **Speed unit**: `km/h` or `mph` for speeds in the HUD, Events, and Driver
   Analysis;
 - **Distance unit**: `km` or `mi` for distances in Events and Driver Analysis.
