@@ -3,7 +3,17 @@
 This is a design proposal. The installed application still uses
 `src-tauri/icons/icon.ico` and `src-tauri/icons/icon.png`.
 
-## Idea
+## Current study: Split F
+
+Split F interprets the supplied flat, two-color monogram reference as an original
+F rather than copying its letterform. Its tall deep-olive stem and two rounded
+rails stay readable at Windows icon sizes. The light tile is `--text-bright`;
+the upper rail is `--paint`, the middle rail is `--accent`, and the stem and
+rail edge are `--surface-deep`. The subtle tile border is `--text-soft`.
+All are existing FDC tokens; there is no generated image or texture in this
+study. The SVG is the editable source for its PNG and seven-layer ICO exports.
+
+## Earlier ideas
 
 The F stands for FDC. Its lime upper rail reads as an active signal, and the
 clipped ends borrow the HUD's precise geometry. The rounded olive tile gives
@@ -41,6 +51,7 @@ the colorized tile is derived from it, not generated in new colors.
 
 ## Files
 
+- `fdc-icon-split.svg`, `.png`, `.ico`: flat Split F source and Windows exports.
 - `fdc-icon.svg`: editable original vector source, 512 × 512 viewBox.
 - `fdc-icon.png`: 1024 × 1024 transparent-corner export.
 - `fdc-icon.ico`: Windows export with 16, 24, 32, 48, 64, 128, and 256 px layers.
@@ -70,8 +81,8 @@ olive surface colors without texture. The book also previews the foreground
 on the existing `overlay/assets/textures/paint.jpg`. That preview is not an
 icon export and does not duplicate the texture in this folder.
 
-The `foundation-icon` board shows Chroma · FDC first, then the two earlier
-color studies and all three original proposals below. It compares them at taskbar and tray sizes
+The `foundation-icon` board shows Split F first, then Chroma · FDC, the two
+earlier color studies, and all three original proposals below. It compares them at taskbar and tray sizes
 and shows the current installed icon separately. No proposal is selected for
 implementation. Replacing the runtime icon and updating application assets
 belongs to the later implementation step.

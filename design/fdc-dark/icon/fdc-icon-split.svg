@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">FDC Split F icon study</title>
+  <desc id="description">A bold dark olive F with a muted olive upper arm and lime inset middle arm on a warm white rounded tile.</desc>
+  <!-- All colors are existing FDC tokens: text-bright, text-soft, surface-deep, paint, and accent. -->
+  <rect width="512" height="512" rx="104" fill="#fbfcf4"/>
+  <rect x="1" y="1" width="510" height="510" rx="103" fill="none" stroke="#d5dbc9" stroke-width="2"/>
+  <path d="M126 91H206V113H358C390 113 411 132 411 154S390 196 358 196H206V250H318C349 250 369 268 369 289S349 329 318 329H206V421H126Z" fill="#152019"/>
+  <path d="M206 121H358C386 121 403 135 403 154S386 188 358 188H206Z" fill="#576a5b"/>
+  <path d="M206 258H318C344 258 361 270 361 289S344 321 318 321H206Z" fill="#c3ed83"/>
+</svg>
