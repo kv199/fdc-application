@@ -35,10 +35,10 @@ the tokens named on both specification boards.
 - The **Light theme · Configuration** board is explicitly a proposal. Its
   scoped candidate values live in `light-theme.css`, with usage and boundary
   notes in `LIGHT_THEME.md`; it does not change the app or its HUD.
-- The **App icon · F studies** board leads with Chroma Light: Chroma's
-  italic geometry and FDC olive-to-lime gradients on a light tile. Split F,
-  textured Chroma, two earlier multicolor studies, the original mark, the
-  single-step variant, and the sketch-led two-arm Lift remain below. The board
+- The **App icon · F studies** board pairs light and black tiles carrying
+  one continuous Chroma F and one gradient per mark. Split F, textured Chroma,
+  two earlier multicolor studies, the original mark, the single-step variant,
+  and the sketch-led two-arm Lift remain below. The board
   compares them at tray and taskbar sizes. It also compares the Lift gradient with the
   existing FDC paint texture. Vector sources and PNG/ICO exports live in
   `icon/`; the installed app icon remains unchanged.
@@ -55,7 +55,7 @@ Six reference boards cover the implemented exact style specification,
 materials, fonts, the component and state kit, the screen map, and the
 connection guide with the confirmation dialogs. Two additional proposal boards
 show a light Configuration specimen with the existing dark painted header and
-eight app-icon candidates at Windows taskbar and tray sizes.
+nine app-icon candidates at Windows taskbar and tray sizes.
 
 Boards follow the implemented app: the tab description and the Direct Data Out
 status in the header, the compact drill-down path such as `← RECORDING / CAR`,

@@ -3,13 +3,15 @@
 This is a design proposal. The installed application still uses
 `src-tauri/icons/icon.ico` and `src-tauri/icons/icon.png`.
 
-## Current study: Chroma Light
+## Current study: Unified Chroma F
 
-Chroma Light keeps the bold italic F geometry of Chroma, but uses a light
-`--text-bright` tile and only established FDC colors: `--surface-deep`,
-`--paint`, and `--accent`, with a `--text-soft` tile edge. Gradients live
-inside the vector F; there is no generated texture. The tile has transparent
-rounded corners, and SVG, PNG, and seven-layer ICO exports share one source.
+The F is one continuous vector path and one gradient fill, with the same
+silhouette as Chroma Light. The light tile keeps the deep olive, painted olive,
+and lime progression. The black tile uses the same contour and gradient
+direction; its dark end starts at `--paint` and crosses `--line-strong` before
+reaching `--accent`, so the stem remains visible on `--shadow` black. Both
+rounded tiles have transparent corners. Each has an SVG source, a 1024 px
+PNG, and a seven-layer Windows ICO. There is no generated texture.
 
 ## Previous study: Split F
 
@@ -59,7 +61,8 @@ the colorized tile is derived from it, not generated in new colors.
 
 ## Files
 
-- `fdc-icon-chroma-light.svg`, `.png`, `.ico`: Chroma geometry on a light FDC tile.
+- `fdc-icon-chroma-light.svg`, `.png`, `.ico`: unified F on a light FDC tile.
+- `fdc-icon-chroma-black.svg`, `.png`, `.ico`: the same F on a black tile.
 - `fdc-icon-split.svg`, `.png`, `.ico`: flat Split F source and Windows exports.
 - `fdc-icon.svg`: editable original vector source, 512 × 512 viewBox.
 - `fdc-icon.png`: 1024 × 1024 transparent-corner export.
@@ -90,8 +93,9 @@ olive surface colors without texture. The book also previews the foreground
 on the existing `overlay/assets/textures/paint.jpg`. That preview is not an
 icon export and does not duplicate the texture in this folder.
 
-The `foundation-icon` board shows Chroma Light first, then Split F, Chroma ·
-FDC, the two earlier color studies, and all three original proposals below.
+The `foundation-icon` board pairs light and black Unified Chroma first,
+then shows Split F, Chroma · FDC, two earlier color studies, and all three
+original proposals below.
 It compares them at taskbar and tray sizes and shows the current installed
 icon separately. No proposal is selected for
 implementation. Replacing the runtime icon and updating application assets
