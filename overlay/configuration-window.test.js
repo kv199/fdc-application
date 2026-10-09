@@ -660,6 +660,16 @@ test('Back buttons on drill-down views name their parent and use detail-back cla
   assert.match(settingsJs, /← CAR/)
 })
 
+test('Drill-down object titles use the readout font from the design book', () => {
+  const tokensCss = fs.readFileSync(path.join(__dirname, 'tokens.css'), 'utf8')
+  // settingsCss has its token references resolved, so var() assertions read the source stylesheet.
+  assert.match(settingsStyles, /\.events-detail-view__title\s*\{[^}]*font-family:\s*var\(--font-readout\)[^}]*font-size:\s*var\(--type-heading\)[^}]*font-weight:\s*500/)
+  assert.match(settingsStyles, /\.events-detail-view__title-input\s*\{[^}]*font-family:\s*var\(--font-readout\)[^}]*font-weight:\s*500/)
+  assert.match(settingsStyles, /\.driver-analysis-detail-view \.events-detail-view__title\s*\{[^}]*font-size:\s*var\(--type-object-title\)/)
+  assert.match(tokensCss, /--type-object-title: 36px;/)
+  assert.doesNotMatch(settingsCss, /\.events-detail-view__title\s*\{[^}]*font-weight:\s*800/)
+})
+
 test('Garage does not create image placeholders for current car or saved cars', () => {
   assert.doesNotMatch(settingsJs, /garage-current-car__image/)
   assert.doesNotMatch(settingsJs, /garage-card__image/)

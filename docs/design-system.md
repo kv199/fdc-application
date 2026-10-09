@@ -89,11 +89,14 @@ The application header is the only textured surface: it shows
 
 - `--font-ui`: Barlow 400/600 for interface text.
 - `--font-readout`: Barlow Condensed 500/600 for the page title, section
-  headings, the FDC brand, and prominent numeric readouts with tabular
-  numerals.
+  headings, the FDC brand, prominent numeric readouts with tabular numerals,
+  and the large object titles of drill-down pages (event, run, recording, car,
+  and drive).
 - Scale: `--type-page-title` 44px (36px below 560px width),
   `--type-detail-title` 27px for drill-down titles, `--type-heading` 28px for
-  section headings, `--type-body` 14px, `--type-label` 11px.
+  section headings and the event and run titles, `--type-object-title` 36px for
+  the object title on Driver Analysis recording, car, and drive pages,
+  `--type-body` 14px, `--type-label` 11px.
 - The font files and their SIL Open Font License texts are in
   `overlay/assets/fonts/`. Windows fonts in the fallback stack cover glyphs
   Barlow lacks, such as Cyrillic in user-entered names.
@@ -115,9 +118,10 @@ The application header is the only textured surface: it shows
   as the Driver Analysis switch, stays visible.
 - The raised plate (`--panel` with a `--line-strong` border) marks one area
   per view: the HUD layout editor, the Events create form, the event's run
-  recorder, the run's lap breakdown, the Driver Analysis recorder, the Shift
-  Light calibration card, and the Garage current car. The Events library,
-  Driver Analysis drill-down pages, and Settings have none.
+  recorder, the run's lap breakdown, the Driver Analysis recorder, the Driver
+  Analysis car page's RESULT panel, the Shift Light calibration card, and the
+  Garage current car. The Events library, the other Driver Analysis drill-down
+  areas, and Settings have none.
 - Drill-down views (an event, a run, and the Driver Analysis recording, car,
   and drive pages) show a compact header row: the FDC brand, a back link that
   names the parent, a slash, and the page name at `--type-detail-title` in
@@ -126,7 +130,9 @@ The application header is the only textured surface: it shows
   recording has a single car), and `← CAR / DRIVE`. The Direct Data Out status
   stays on the right; the tab title and description are hidden. The object's
   own name (event name or car) stays as the large title in the page content,
-  and an event page's DELETE sits at the end of that title row. Escape goes up
+  set in `--font-readout` weight 500 (at `--type-heading` for events and runs,
+  `--type-object-title` for Driver Analysis pages), and an event page's DELETE
+  sits at the end of that title row. Escape goes up
   one level.
 - Lap, sector, and run times and the headline metrics of runs and Driver
   Analysis pages use `--font-readout` with tabular numerals.

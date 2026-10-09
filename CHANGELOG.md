@@ -53,6 +53,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   the car page shows its result in a raised panel, with `MOST FREQUENT:`
   headlines in amber, above large distance, speed, and corner tiles; and the
   `CARS` and `DRIVES` tables sit on plain panels with larger car names.
+- **Design**: the large titles of the event, run, recording, car, and drive
+  pages use the condensed FDC Dark title font, larger on Driver Analysis
+  pages, instead of a heavy bold interface font.
 
 ## 7.24.67 - 2026-10-06
 
