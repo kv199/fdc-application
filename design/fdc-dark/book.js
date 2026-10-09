@@ -3,7 +3,7 @@ const params=new URLSearchParams(location.search), selected=params.get('board'),
 const nav=['HUD','EVENTS','DRIVER','SHIFT LIGHT','GARAGE','SETTINGS'];
 const canvas=document.querySelector('#canvas');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function sectionOf(b){return nav.find(n=>(b.section+' '+b.title).toUpperCase().includes(n))||b.section;}
+function sectionOf(b){return b.section==='FOUNDATIONS' ? b.section : nav.find(n=>(b.section+' '+b.title).toUpperCase().includes(n))||b.section;}
 // Drill-down boards use the app's compact header path: [parent board, parent
 // label, page name], as in "← RECORDING / CAR".
 const detailParents={

@@ -30,8 +30,28 @@ implemented FDC Dark values remain in `overlay/tokens.css`.
 | `--text-muted` / `--text-subtle` | `#566357` / `#68756a` | Supporting copy and metadata |
 | `--text-faint` | `#89938b` | Disabled and missing values only |
 
-The other proposed role values (`--shade-*`, meter, shadow, bright text, and
-line light) are declared in `light-theme.css`; that file is the exact source.
+The other proposed role values (`--shade-*`, meter, shadow, bright text, line
+light, and map roles) are declared in `light-theme.css`; that file is the exact
+source.
+
+## Events and Driver maps
+
+The [`foundation-light-maps`](index.html?board=foundation-light-maps) board puts
+current dark and proposed light treatments next to each other. Both use the
+same schematic recorded-route geometry and values. The light map sits on
+`--map-canvas: #e5e9e2` inside an ordinary `--surface` card, with a neutral
+`--map-track: #748174` route. Its map-only colors retain the established
+meaning of throttle, brake, coast, slip, problem types, and clean checks.
+They do not redefine the existing `--trace-*`, `--problem-*`, telemetry, or
+HUD tokens. The proposal has no basemap or track identity.
+
+The current bright throttle, slip, and problem colors contrast poorly with
+`--map-canvas` (roughly 1.3–2.4:1). The proposed semantic stroke colors have
+at least 3.9:1 contrast against that field; the neutral route is 3.3:1.
+Route and sector labels stay visible when overlays are hidden. Layer
+switches and the selected Driver
+problem use border, contour, and weight as well as color; hover/selected
+values remain in a readable card below the plot.
 
 ## Interaction and meaning
 

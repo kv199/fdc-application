@@ -1,7 +1,7 @@
 # FDC design book — FDC Dark
 
 The design book shows the FDC Dark design as it is implemented in the app,
-with fixture data, plus separate light Configuration and app icon proposals.
+with fixture data, plus separate light Configuration, map, and app icon proposals.
 It lives on the `design` branch only and never merges into `develop` or
 `main`; bring it up to date by merging the implementation branch into `design`.
 
@@ -35,6 +35,10 @@ the tokens named on both specification boards.
 - The **Light theme · Configuration** board is explicitly a proposal. Its
   scoped candidate values live in `light-theme.css`, with usage and boundary
   notes in `LIGHT_THEME.md`; it does not change the app or its HUD.
+- The **Light theme · Events and Driver maps** board compares current dark
+  and proposed light treatments of the same schematic map geometry, layers,
+  and sample values. `light-maps.css` and `light-maps.js` are proposal-only;
+  no runtime map, saved data, or HUD style is changed.
 - The **App icon · F studies** board pairs light and black tiles carrying
   one continuous Chroma F with its original linear fill and a smooth outer
   edge. New gradients illuminate the tiles; transparent standalone versions

@@ -13,6 +13,19 @@
   --shadow: #152016;
   --meter-track: #d1d9ce;
 
+  /* Map-only ink variants for traces on the light Configuration inset. */
+  --map-canvas: #e5e9e2;
+  --map-track: #748174;
+  --map-throttle: #446b24;
+  --map-brake: #a51d16;
+  --map-coast: #765a0a;
+  --map-slip: #126f80;
+  --map-front-scrub: #a85313;
+  --map-exit-wheelspin: #a53872;
+  --map-brake-steering: #4754af;
+  --map-abrupt-release: #76529a;
+  --map-clean: #68756a;
+
   --line-subtle: #d5dbd2;
   --line: #b7c2b6;
   --line-strong: #829184;
@@ -51,8 +64,8 @@
   --text-on-class: #0c150e;
   --text-on-class-s2: #fff;
 
-  /* Book aliases used by the specimen. No HUD, telemetry, class, mode,
-     trace, problem, typography, spacing, or paint token is redefined. */
+  /* Book aliases used by the specimen. Existing HUD, telemetry, class, mode,
+     trace, problem, typography, spacing, and paint tokens remain unchanged. */
   --muted: var(--text-muted);
   --lime: var(--accent);
   --purple: var(--best);

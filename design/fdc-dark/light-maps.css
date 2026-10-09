@@ -1,0 +1,96 @@
+/* Side-by-side map theme proposal. Scoped to the design book only. */
+.map-study__intro { max-width: 76ch; }
+.map-study__section { margin-top: 32px; }
+.map-study__section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 0 0 12px; }
+.map-study__section-head h3 { margin: 0; }
+.map-study__section-head span { color: var(--text-muted); font-size: 12px; }
+.map-study__pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.map-study__card { min-width: 0; border: 1px solid var(--line); }
+.map-study__card--dark {
+  --map-field: #0d1211;
+  --map-rail: #edf0df;
+  --map-throttle-color: var(--trace-throttle);
+  --map-brake-color: var(--trace-brake);
+  --map-coast-color: var(--trace-coast);
+  --map-slip-color: var(--trace-slip);
+  --map-scrub-color: var(--problem-front-scrub);
+  --map-wheelspin-color: var(--problem-exit-wheelspin);
+  --map-overload-color: var(--problem-brake-steering);
+  --map-release-color: var(--problem-abrupt-release);
+  --map-clean-color: #b0bcae;
+  --map-ink: #edf0df;
+  --map-secondary: #b0bcae;
+  --map-divider: #405346;
+  --map-selected: #edf0df;
+  background: #152019;
+  color: var(--map-ink);
+}
+.map-study__card--light {
+  --map-field: var(--map-canvas);
+  --map-rail: var(--map-track);
+  --map-throttle-color: var(--map-throttle);
+  --map-brake-color: var(--map-brake);
+  --map-coast-color: var(--map-coast);
+  --map-slip-color: var(--map-slip);
+  --map-scrub-color: var(--map-front-scrub);
+  --map-wheelspin-color: var(--map-exit-wheelspin);
+  --map-overload-color: var(--map-brake-steering);
+  --map-release-color: var(--map-abrupt-release);
+  --map-clean-color: var(--map-clean);
+  --map-ink: var(--text);
+  --map-secondary: var(--text-muted);
+  --map-divider: var(--line);
+  --map-selected: var(--surface);
+  background: var(--surface);
+  color: var(--map-ink);
+}
+.map-study__caption { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--map-divider); }
+.map-study__caption strong { font: 600 18px/1.1 var(--font-readout); }
+.map-study__caption span { color: var(--map-secondary); font-size: 11px; font-weight: 700; }
+.map-study__plot { background: var(--map-field); }
+.map-study__plot svg { display: block; width: 100%; height: auto; }
+.map-study__surface { fill: var(--map-field); }
+.map-study__route { fill: none; stroke: var(--map-rail); stroke-width: 13; stroke-linecap: round; stroke-linejoin: round; }
+.map-study__route--driver { stroke-width: 9; }
+.map-study__trace { fill: none; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+.map-study__trace--throttle { stroke: var(--map-throttle-color); }
+.map-study__trace--brake { stroke: var(--map-brake-color); }
+.map-study__trace--coast { stroke: var(--map-coast-color); }
+.map-study__slip { fill: none; stroke: var(--map-slip-color); stroke-width: 17; stroke-linecap: round; opacity: .78; }
+.map-study__sector { fill: var(--map-ink); font: 800 16px var(--font-ui); }
+.map-study__sector-tick { stroke: var(--map-ink); stroke-width: 3; }
+.map-study__start { fill: var(--map-ink); stroke: var(--map-field); stroke-width: 3; }
+.map-study__problem-halo { fill: none; stroke: var(--map-selected); stroke-width: 22; stroke-linecap: round; }
+.map-study__problem { fill: none; stroke-width: 15; stroke-linecap: round; }
+.map-study__problem--scrub { stroke: var(--map-scrub-color); }
+.map-study__problem--wheelspin { stroke: var(--map-wheelspin-color); }
+.map-study__problem--overload { stroke: var(--map-overload-color); }
+.map-study__problem--release { stroke: var(--map-release-color); }
+.map-study__clean { fill: var(--map-clean-color); stroke: var(--map-field); stroke-width: 3; }
+.map-study__is-hidden { opacity: 0; pointer-events: none; }
+.map-study__legend { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--map-divider); }
+.map-study__legend button { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 5px 7px; border: 1px solid var(--map-divider); border-radius: 0; color: var(--map-secondary); background: transparent; font: 700 10px/1 var(--font-ui); letter-spacing: .04em; cursor: pointer; }
+.map-study__legend button[aria-pressed="true"] { border-color: var(--map-ink); color: var(--map-ink); }
+.map-study__legend button[aria-pressed="false"] { opacity: .6; }
+.map-study__legend button:hover, .map-study__legend button:focus-visible { border-color: var(--map-ink); opacity: 1; }
+.map-study__legend button:focus-visible { outline: 2px solid var(--map-ink); outline-offset: 2px; }
+.map-study__swatch { display: inline-block; width: 9px; height: 9px; background: var(--map-swatch); }
+.map-study__swatch--throttle { --map-swatch: var(--map-throttle-color); }
+.map-study__swatch--brake { --map-swatch: var(--map-brake-color); }
+.map-study__swatch--coast { --map-swatch: var(--map-coast-color); }
+.map-study__swatch--slip { --map-swatch: var(--map-slip-color); }
+.map-study__swatch--scrub { --map-swatch: var(--map-scrub-color); }
+.map-study__swatch--wheelspin { --map-swatch: var(--map-wheelspin-color); }
+.map-study__swatch--overload { --map-swatch: var(--map-overload-color); }
+.map-study__swatch--release { --map-swatch: var(--map-release-color); }
+.map-study__swatch--clean { --map-swatch: var(--map-clean-color); border-radius: 50%; }
+.map-study__readout { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 10px 14px 14px; border-top: 1px solid var(--map-divider); }
+.map-study__readout div { min-width: 0; }
+.map-study__readout span { display: block; color: var(--map-secondary); font-size: 9px; font-weight: 700; letter-spacing: .07em; }
+.map-study__readout strong { display: block; margin-top: 3px; font: 600 18px/1.1 var(--font-readout); font-variant-numeric: tabular-nums; }
+.map-study__note { max-width: 78ch; margin: 11px 0 0; color: var(--text-muted); font-size: 12px; }
+.map-study__rules { margin-top: 32px; }
+.map-study__rules ul { margin: 10px 0 0; padding-left: 20px; }
+.map-study__rules li { margin: 5px 0; }
+@media (max-width: 900px) { .map-study__pair { grid-template-columns: 1fr; } }
+@media (max-width: 540px) { .map-study__section-head { display: block; } .map-study__readout { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
