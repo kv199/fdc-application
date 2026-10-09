@@ -59,4 +59,3 @@ if (typeof document !== 'undefined') document.addEventListener('click', event =>
   section.querySelectorAll(`[data-map-study-layer="${key}"]`).forEach(item => item.setAttribute('aria-pressed', String(active)));
   section.querySelectorAll(`[data-map-layer="${key}"]`).forEach(item => item.classList.toggle('map-study__is-hidden', !active));
 }, true);
-
