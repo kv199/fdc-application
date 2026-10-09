@@ -68,6 +68,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   Analysis, on plain panels. Saved runs are one table with a single header
   row instead of separate boxes that repeated every column name; select a row
   to open the run and a header to sort, as before.
+- **Events**: a saved run's best time lines up under its column header, with
+  its best lap or `SPRINT` at the right edge of the cell, and the RECORD RUN
+  button is centered beside the title and its hint.
+- **Design**: event, run, and drive IDs are shown as plain numbers, without a
+  `#`, for example `DRIVE 2`.
 
 ## 7.24.67 - 2026-10-06
 

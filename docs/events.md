@@ -8,7 +8,7 @@ available as the Events tab in Configuration, the second tab after HUD.
 The tab opens with a short intro and contains:
 
 - **Events** shows active events as responsive tiles in the Garage card style.
-  A tile shows its database event ID as `#ID`, its name, Mode, and Route Type.
+  A tile shows its database event ID number, its name, Mode, and Route Type.
   Selecting a tile opens that event.
 - The Events list has a persistent **SORT** selection. Its default is ID from
   highest to lowest; it can also order ID ascending or the most recently
@@ -32,7 +32,7 @@ The tab opens with a short intro and contains:
   Type, and Class appear beside the clickable title in one compact row when
   space permits; narrow layouts wrap that row below the title. Mode uses its
   configured color, and Class uses the existing Garage class color. The same
-  row starts with the event's database ID as `#ID`. Notes, when supplied,
+  row starts with the event's database ID number. Notes, when supplied,
   appear in their own framed area directly beneath that row. The page also
   shows a purple **Absolute Best**: the quickest actual saved circuit lap or
   confirmed Sprint result across that Event. When the Event has saved traces,
@@ -61,8 +61,8 @@ The tab opens with a short intro and contains:
   next attempt. Circuit laps remain in their current run until **STOP** or a
   confirmed restart.
 - Saved runs are a table with `ID`, `CAR`, `CLASS / PI / DRIVE`, `BEST`, `LAPS`,
-  and `DATE` columns. `BEST` shows the best time followed by the best lap
-  (`L1`) or `SPRINT`. `DATE` shows the local run start as
+  and `DATE` columns. `BEST` shows the best time on the left and the best lap
+  (`L1`) or `SPRINT` at the right edge of the cell. `DATE` shows the local run start as
   `YYYY.MM.DD HH:MM:SS`.
 - The `ID`, `BEST`, and `DATE` headers sort the saved runs. The default is Date
   from newest to oldest, and that temporary choice is not persisted. Selecting

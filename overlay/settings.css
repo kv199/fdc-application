@@ -1741,9 +1741,19 @@ h1 {
 .events-run-table__time[data-tone="second"] { color: var(--accent); }
 .events-run-table__time.is-missing { color: var(--text-faint); }
 
+/* A time and its note share one cell: the time follows the column's left edge, the note sits at the right edge. */
+.events-run-table__split {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .events-run-table__note {
   color: var(--text-muted);
   font-size: 12px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 
 .events-detail-view__actions {
@@ -1949,6 +1959,8 @@ h1 {
   gap: 12px;
 }
 
+.event-recorder__heading { margin-bottom: 16px; }
+
 .event-runs__heading {
   color: var(--text-muted);
   font-size: 11px;
@@ -1956,8 +1968,14 @@ h1 {
   letter-spacing: 0.14em;
 }
 
+.event-recorder__title {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
 .event-recorder h3 {
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--text);
   font-size: 19px;
   font-weight: 600;
@@ -1999,7 +2017,7 @@ h1 {
 .event-recorder__controls .settings-button--danger { width: auto; margin-top: 0; }
 
 .event-recorder__hint {
-  margin: 10px 0 18px;
+  margin: 0;
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.45;
@@ -2008,6 +2026,8 @@ h1 {
 .event-recorder__hint[data-tone="warning"] {
   color: var(--notice);
 }
+
+.event-recorder__hint[hidden] { display: none; }
 
 .event-recorder__feedback {
   margin: -8px 0 18px;

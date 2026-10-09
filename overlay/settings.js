@@ -861,7 +861,7 @@
 
     const id = document.createElement('span')
     id.className = 'events-card__id'
-    id.textContent = `#${event.id}`
+    id.textContent = String(event.id)
 
     const content = document.createElement('div')
     content.className = 'events-card__content'
@@ -1289,7 +1289,7 @@
     summaryElement.dataset.eventMode = eventModeKey(event.mode)
     const id = document.createElement('span')
     id.className = 'events-detail-view__badge events-detail-view__badge--id'
-    id.textContent = `#${event.id}`
+    id.textContent = String(event.id)
     const mode = document.createElement('span')
     mode.className = 'events-detail-view__badge events-detail-view__badge--mode'
     mode.textContent = eventModeLabel(event.mode)
@@ -1453,15 +1453,17 @@
         ? run.laps.reduce((best, lap) => !best || lap.timeMs < best.timeMs ? lap : best, null)
         : null
       const bestCell = document.createElement('td')
-      bestCell.className = 'events-run-table__end'
       const bestTime = document.createElement('span')
       bestTime.className = 'events-run-table__time'
       bestTime.textContent = formatRunTime(runBestTimeMs(run))
-      // The note keeps the best lap number (or SPRINT) that the old per-row label showed.
+      // The split row keeps the time left and the best lap number (or SPRINT) at the right edge of the cell.
+      const bestSplit = document.createElement('span')
+      bestSplit.className = 'events-run-table__split'
       const bestNote = document.createElement('span')
       bestNote.className = 'events-run-table__note'
-      bestNote.textContent = bestLap ? ` L${Math.max(1, Math.round(bestLap.lapNumber))}` : ' SPRINT'
-      bestCell.append(bestTime, bestNote)
+      bestNote.textContent = bestLap ? `L${Math.max(1, Math.round(bestLap.lapNumber))}` : 'SPRINT'
+      bestSplit.append(bestTime, bestNote)
+      bestCell.append(bestSplit)
       row.append(bestCell)
       const lapsCell = document.createElement('td')
       lapsCell.className = 'events-run-table__end'
@@ -2007,7 +2009,7 @@
     const event = currentEventId === null ? null : eventsById.get(currentEventId)
     if (!event) return
     renderEventIdentity(eventsRunTitle, eventsRunSummary, event)
-    if (eventsRunId) eventsRunId.textContent = `#${run.id}`
+    if (eventsRunId) eventsRunId.textContent = String(run.id)
     if (eventsRunBht) eventsRunBht.textContent = formatRunTime(runBestHypotheticalTimeMs(run))
     if (eventsRunTableHint) {
       eventsRunTableHint.textContent = run.runType === 'sprint' ? 'SPRINT · ONE PASS' : ''
@@ -2131,7 +2133,7 @@
     if (eventRecorderHint) {
       const sprintWarning = 'Sprint: keep recording armed between attempts, then press STOP.'
       const hint = recordingAnotherEvent
-        ? `Recording Event #${recorderState.eventId}. Open that event to stop capture.`
+        ? `Recording Event ${recorderState.eventId}. Open that event to stop capture.`
         : finalizing
           ? 'Checking post-finish telemetry for the game-reported result.'
           : sprintWarning
@@ -2943,7 +2945,7 @@
           })
           const idCell = document.createElement('th')
           idCell.scope = 'row'
-          idCell.textContent = `#${drive?.id || ''}`
+          idCell.textContent = String(drive?.id || '')
           driveRow.append(idCell)
           const typeCell = document.createElement('td')
           typeCell.textContent = globalScope.DriverAnalysisHistory?.driveTypeLabel?.(drive) || 'UNKNOWN'
@@ -2989,7 +2991,7 @@
         return
       }
       const carLabel = FdcVehicle.displayName(session?.vehicleName, session?.vehicleIdentity?.ordinal)
-      if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = `DRIVE #${drive?.id || ''}`
+      if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = `DRIVE ${drive?.id || ''}`
       const badges = []
       const carBadge = document.createElement('span')
       carBadge.className = 'events-detail-view__badge'
