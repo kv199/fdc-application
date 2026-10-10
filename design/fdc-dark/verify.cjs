@@ -74,6 +74,9 @@ if (!lightMaps || lightMaps.status !== 'proposal' || lightMaps.theme !== 'light'
 for (const key of ['events', 'driver']) {
   if (!lightMaps.html.includes(`data-map-study=\"${key}\"`)) throw Error(`Missing ${key} map comparison`);
 }
+if (!lightMaps.html.includes('map-study__inspector') || !lightMaps.html.includes('data-map-sample')) throw Error('Map study must show fixed point inspectors and keyboard samples');
+if (!read('light-maps.css').includes('grid-template-columns: minmax(0, 1fr) 290px')) throw Error('Map inspector must be beside the desktop map');
+if (!lightCss.includes('--map-track: #b7c2b6;')) throw Error('Light map route must use the established neutral line color');
 for (const token of ['--map-canvas', '--map-track', '--map-throttle', '--map-brake', '--map-coast', '--map-slip', '--map-front-scrub', '--map-exit-wheelspin', '--map-brake-steering', '--map-clean']) {
   if (!lightCss.includes(`${token}:`)) throw Error(`Missing light map role: ${token}`);
 }

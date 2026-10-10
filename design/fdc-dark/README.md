@@ -37,8 +37,11 @@ the tokens named on both specification boards.
   notes in `LIGHT_THEME.md`; it does not change the app or its HUD.
 - The **Light theme · Events and Driver maps** board compares current dark
   and proposed light treatments of the same schematic map geometry, layers,
-  and sample values. `light-maps.css` and `light-maps.js` are proposal-only;
-  no runtime map, saved data, or HUD style is changed.
+  and sample values. A persistent, full-height point inspector occupies the
+  right side of each map; numbered samples and hover update it. The light
+  neutral route uses the existing line color to separate it from throttle.
+  `light-maps.css` and `light-maps.js` are proposal-only; no runtime map,
+  saved data, or HUD style is changed.
 - The **App icon · F studies** board pairs light and black tiles carrying
   one continuous Chroma F with its original linear fill and a smooth outer
   edge. New gradients illuminate the tiles; transparent standalone versions

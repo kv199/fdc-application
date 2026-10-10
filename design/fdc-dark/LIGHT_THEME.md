@@ -37,21 +37,32 @@ source.
 ## Events and Driver maps
 
 The [`foundation-light-maps`](index.html?board=foundation-light-maps) board puts
-current dark and proposed light treatments next to each other. Both use the
+current dark and proposed light treatments one after the other. Both use the
 same schematic recorded-route geometry and values. The light map sits on
-`--map-canvas: #e5e9e2` inside an ordinary `--surface` card, with a neutral
-`--map-track: #748174` route. Its map-only colors retain the established
+`--map-canvas: #e5e9e2` inside an ordinary `--surface` card. Its neutral
+`--map-track: #b7c2b6` route matches the existing `--line` role and separates
+the route from green `--map-throttle: #446b24`. Map-only colors retain the established
 meaning of throttle, brake, coast, slip, problem types, and clean checks.
 They do not redefine the existing `--trace-*`, `--problem-*`, telemetry, or
 HUD tokens. The proposal has no basemap or track identity.
 
 The current bright throttle, slip, and problem colors contrast poorly with
 `--map-canvas` (roughly 1.3–2.4:1). The proposed semantic stroke colors have
-at least 3.9:1 contrast against that field; the neutral route is 3.3:1.
-Route and sector labels stay visible when overlays are hidden. Layer
-switches and the selected Driver
-problem use border, contour, and weight as well as color; hover/selected
-values remain in a readable card below the plot.
+at least 3.9:1 contrast against that field. The neutral route is intentionally
+quieter; its 13 px line remains legible as geometry and is distinct from the
+green throttle stroke. Route and sector labels stay visible when overlays are
+hidden. Layer switches and the selected Driver problem use border, contour,
+and weight as well as color.
+
+Each map has a point inspector at its right edge, stretching to the full map
+height. It is visible on arrival with an illustrative saved point selected.
+Hovering the map changes the nearest fixture point in the inspector; leaving
+the map keeps the last selection. Numbered point buttons offer keyboard
+selection. The panel carries the recorded telemetry and per-wheel values;
+Driver adds check details when the selected point belongs to a problem. No
+cursor-following tooltip appears. For implementation, bind the panel to the
+nearest actual saved trace point, preserve missing-field states for older
+recordings, and keep it usable when the layout stacks at narrow widths.
 
 ## Interaction and meaning
 
