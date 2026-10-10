@@ -103,7 +103,9 @@ The tab opens with a short intro and contains:
   (0% fully extended, 100% fully compressed). A curb row lists wheels on a
   rumble strip and a puddle row lists wheels in water; each appears only when
   it applies. A lap recorded before extended telemetry shows distance, time,
-  throttle, and brake only.
+  throttle, and brake only. The values appear in a POINT DATA panel to the
+  right of the map, below the map in a narrow window, while the pointer is over
+  the map; the panel clears when the pointer leaves the map and the panel.
 - Legend shares are time-weighted, not sample-count-weighted: Throttle
   (`X`), Brake (`A`), and Coast (`C`) always total 100%, and Slip uses the
   same time ownership. The first point owns

@@ -292,7 +292,14 @@ test('Event lap rows expose trace details and time-weighted pedal statistics', (
   assert.match(settingsStyles, /\.events-lap-detail__sector-label\s*\{\s*fill: var\(--text\);/)
   assert.match(settingsCss, /\.events-lap-detail__legend\s*\{/)
   assert.match(settingsCss, /\.events-lap-detail__svg\s*\{[\s\S]*max-height: 560px;/)
-  assert.match(settingsCss, /\.events-lap-detail__tooltip/)
+  assert.doesNotMatch(settingsCss, /\.events-lap-detail__tooltip\s*\{/)
+  assert.doesNotMatch(settingsJs, /function placeTooltip/)
+  assert.match(settingsJs, /events-lap-detail__map-layout/)
+  assert.match(settingsJs, /events-lap-detail__inspector/)
+  assert.match(settingsJs, /'POINT DATA'/)
+  assert.match(settingsJs, /aria-live/)
+  assert.match(settingsStyles, /\.events-lap-detail__map-layout\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\) 260px;/)
+  assert.match(settingsStyles, /@media \(max-width: 760px\) \{[^@]*?\.events-lap-detail__map-layout\s*\{/)
   assert.doesNotMatch(settingsJs, /events-lap-detail__stat-key/)
   assert.match(settingsCss, /\.events-run-view__metric\s*\{[\s\S]*align-items: center;/)
 })
@@ -450,6 +457,30 @@ test('Settings exposes Configuration priority and speed unit preferences', () =>
   assert.doesNotMatch(settingsPanel, /telemetry-settings|telemetry-route-card|DIRECT DATA OUT.*OFFLINE/u)
   assert.ok(displayPreferencesScriptIndex >= 0)
   assert.ok(settingsScriptIndex > displayPreferencesScriptIndex)
+})
+
+test('Settings groups its display rows under three headings in order', () => {
+  const groupHtml = (labelledBy) => {
+    const start = settingsHtml.indexOf(`<section class="settings-group" aria-labelledby="${labelledBy}">`)
+    assert.ok(start >= 0, `missing settings group ${labelledBy}`)
+    return settingsHtml.slice(start, settingsHtml.indexOf('</section>', start))
+  }
+  const rowTitles = (html) => [...html.matchAll(/<div class="display-setting-row[^"]*"[^>]*>\s*<div class="display-setting-row__copy">\s*<strong[^>]*>([^<]+)<\/strong>/gu)].map((match) => match[1])
+  const windowGroup = groupHtml('settings-window-title')
+  const hudGroup = groupHtml('settings-hud-title')
+  const unitsGroup = groupHtml('settings-units-title')
+
+  assert.match(settingsHtml, /<div class="settings-board">/)
+  assert.match(settingsHtml, /<h3 id="settings-window-title">WINDOW &amp; EXIT<\/h3>/)
+  assert.match(settingsHtml, /<h3 id="settings-hud-title">HUD BEHAVIOR<\/h3>/)
+  assert.match(settingsHtml, /<h3 id="settings-units-title">UNITS<\/h3>/)
+  assert.ok(settingsHtml.indexOf('WINDOW &amp; EXIT') < settingsHtml.indexOf('HUD BEHAVIOR'))
+  assert.ok(settingsHtml.indexOf('HUD BEHAVIOR') < settingsHtml.indexOf('>UNITS<'))
+  assert.deepEqual(rowTitles(windowGroup), ['CONFIGURATION ALWAYS ON TOP', 'CONFIRM BEFORE QUITTING'])
+  assert.deepEqual(rowTitles(hudGroup), ['SHOW HUD WITH TELEMETRY', 'HUD RENDERING'])
+  assert.deepEqual(rowTitles(unitsGroup), ['SPEED UNIT', 'DISTANCE UNIT'])
+  assert.match(settingsStyles, /\.settings-board\s*\{[^}]*width:\s*min\(100%,\s*960px\)/)
+  assert.match(settingsStyles, /\.settings-group\s*\{[^}]*border:\s*1px solid var\(--line\)[^}]*background:\s*var\(--surface\)/)
 })
 
 test('Shift Light exposes separate redline and FDC cue controls in the Shift Light tab', () => {

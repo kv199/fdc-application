@@ -197,7 +197,9 @@ to 100%. The default is 80%, and **RESET** restores it.
 ## Display settings
 
 Configuration → **Settings** opens with a short intro that also notes all FDC
-data stays on this PC, and contains:
+data stays on this PC. Its rows sit in a centered column at most 960 px wide,
+grouped under **WINDOW & EXIT** (the first two below), **HUD BEHAVIOR** (the
+next two), and **UNITS** (the last two):
 
 - **Configuration always on top**, off by default;
 - **Confirm before quitting**, on by default: the Configuration X button asks

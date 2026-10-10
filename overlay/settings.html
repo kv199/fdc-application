@@ -13,7 +13,7 @@
     <header class="settings-header">
       <div class="settings-header__topline">
         <div class="settings-header__brand">
-          <p class="settings-eyebrow"><span class="settings-brand">FDC</span><span class="settings-eyebrow__name">Feedback-Driven Companion</span></p>
+          <p class="settings-eyebrow"><img class="settings-brand-mark" src="assets/brand/fdc-mark.svg" alt="" width="24" height="24"><span class="settings-brand">FDC</span><span class="settings-eyebrow__name">Feedback-Driven Companion</span></p>
           <nav class="settings-header__path" aria-label="Location">
             <button id="events-detail-back" class="detail-back" type="button" aria-label="Back to Events">← EVENTS</button>
             <button id="events-run-back" class="detail-back" type="button" aria-label="Back to the event">← EVENT</button>
@@ -564,82 +564,91 @@
         <h2 id="settings-panel-title" class="settings-page-title">SETTINGS</h2>
       </div>
       <section class="display-settings" aria-label="Display settings">
-        <div class="display-settings__list">
-          <div class="display-setting-row" data-display-preference>
-            <div class="display-setting-row__copy">
-              <strong>CONFIGURATION ALWAYS ON TOP</strong>
-              <small>Keep Configuration above other apps and the game.</small>
+        <div class="settings-board">
+          <section class="settings-group" aria-labelledby="settings-window-title">
+            <header class="settings-group__head"><h3 id="settings-window-title">WINDOW &amp; EXIT</h3></header>
+            <div class="display-setting-row" data-display-preference>
+              <div class="display-setting-row__copy">
+                <strong>CONFIGURATION ALWAYS ON TOP</strong>
+                <small>Keep Configuration above other apps and the game.</small>
+              </div>
+              <button id="configuration-always-on-top" class="visibility-toggle" type="button" aria-label="Keep Configuration always on top" aria-pressed="false">
+                <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+              </button>
             </div>
-            <button id="configuration-always-on-top" class="visibility-toggle" type="button" aria-label="Keep Configuration always on top" aria-pressed="false">
-              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
-            </button>
-          </div>
-          <div class="display-setting-row">
-            <div class="display-setting-row__copy">
-              <strong>CONFIRM BEFORE QUITTING</strong>
-              <small>Ask before the X button quits FDC. A recording in progress always asks.</small>
+            <div class="display-setting-row">
+              <div class="display-setting-row__copy">
+                <strong>CONFIRM BEFORE QUITTING</strong>
+                <small>Ask before the X button quits FDC. A recording in progress always asks.</small>
+              </div>
+              <button id="confirm-before-quit" class="visibility-toggle" type="button" aria-label="Confirm before quitting FDC" aria-pressed="true">
+                <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+              </button>
             </div>
-            <button id="confirm-before-quit" class="visibility-toggle" type="button" aria-label="Confirm before quitting FDC" aria-pressed="true">
-              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
-            </button>
-          </div>
-          <div class="display-setting-row" data-display-preference>
-            <div class="display-setting-row__copy">
-              <strong>SHOW HUD WITH TELEMETRY</strong>
-              <small>Show the HUD and Delta only while live telemetry is received.</small>
+          </section>
+          <section class="settings-group" aria-labelledby="settings-hud-title">
+            <header class="settings-group__head"><h3 id="settings-hud-title">HUD BEHAVIOR</h3></header>
+            <div class="display-setting-row" data-display-preference>
+              <div class="display-setting-row__copy">
+                <strong>SHOW HUD WITH TELEMETRY</strong>
+                <small>Show the HUD and Delta only while live telemetry is received.</small>
+              </div>
+              <button id="show-hud-with-telemetry" class="visibility-toggle" type="button" aria-label="Show the HUD and Delta only with live telemetry" aria-pressed="true">
+                <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+              </button>
             </div>
-            <button id="show-hud-with-telemetry" class="visibility-toggle" type="button" aria-label="Show the HUD and Delta only with live telemetry" aria-pressed="true">
-              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
-            </button>
-          </div>
-          <div class="display-setting-row" role="group" aria-labelledby="hud-rendering-title">
-            <div class="display-setting-row__copy">
-              <strong id="hud-rendering-title">HUD RENDERING</strong>
-              <small id="hud-rendering-note">Choose CPU if the HUD lags while Forza fully loads the graphics card. CPU costs some FPS. Applies after FDC restarts.</small>
+            <div class="display-setting-row" role="group" aria-labelledby="hud-rendering-title">
+              <div class="display-setting-row__copy">
+                <strong id="hud-rendering-title">HUD RENDERING</strong>
+                <small id="hud-rendering-note">Choose CPU if the HUD lags while Forza fully loads the graphics card. CPU costs some FPS. Applies after FDC restarts.</small>
+              </div>
+              <div class="unit-options" aria-label="HUD rendering">
+                <label class="unit-option">
+                  <input type="radio" name="hud-rendering" value="gpu">
+                  <span>GPU</span>
+                </label>
+                <label class="unit-option">
+                  <input type="radio" name="hud-rendering" value="cpu">
+                  <span>CPU</span>
+                </label>
+              </div>
             </div>
-            <div class="unit-options" aria-label="HUD rendering">
-              <label class="unit-option">
-                <input type="radio" name="hud-rendering" value="gpu">
-                <span>GPU</span>
-              </label>
-              <label class="unit-option">
-                <input type="radio" name="hud-rendering" value="cpu">
-                <span>CPU</span>
-              </label>
+          </section>
+          <section class="settings-group" aria-labelledby="settings-units-title">
+            <header class="settings-group__head"><h3 id="settings-units-title">UNITS</h3></header>
+            <div class="display-setting-row" data-display-preference role="group" aria-labelledby="speed-unit-title">
+              <div class="display-setting-row__copy">
+                <strong id="speed-unit-title">SPEED UNIT</strong>
+                <small>Choose how speed is shown in the HUD, Events, and Driver Analysis.</small>
+              </div>
+              <div class="unit-options" aria-label="Speed unit">
+                <label class="unit-option">
+                  <input type="radio" name="speed-unit" value="kmh">
+                  <span>KM/H</span>
+                </label>
+                <label class="unit-option">
+                  <input type="radio" name="speed-unit" value="mph">
+                  <span>MPH</span>
+                </label>
+              </div>
             </div>
-          </div>
-          <div class="display-setting-row" data-display-preference role="group" aria-labelledby="speed-unit-title">
-            <div class="display-setting-row__copy">
-              <strong id="speed-unit-title">SPEED UNIT</strong>
-              <small>Choose how speed is shown in the HUD, Events, and Driver Analysis.</small>
+            <div class="display-setting-row" data-display-preference role="group" aria-labelledby="distance-unit-title">
+              <div class="display-setting-row__copy">
+                <strong id="distance-unit-title">DISTANCE UNIT</strong>
+                <small>Choose how distances are shown in Events and Driver Analysis.</small>
+              </div>
+              <div class="unit-options" aria-label="Distance unit">
+                <label class="unit-option">
+                  <input type="radio" name="distance-unit" value="km">
+                  <span>KM</span>
+                </label>
+                <label class="unit-option">
+                  <input type="radio" name="distance-unit" value="mi">
+                  <span>MI</span>
+                </label>
+              </div>
             </div>
-            <div class="unit-options" aria-label="Speed unit">
-              <label class="unit-option">
-                <input type="radio" name="speed-unit" value="kmh">
-                <span>KM/H</span>
-              </label>
-              <label class="unit-option">
-                <input type="radio" name="speed-unit" value="mph">
-                <span>MPH</span>
-              </label>
-            </div>
-          </div>
-          <div class="display-setting-row" data-display-preference role="group" aria-labelledby="distance-unit-title">
-            <div class="display-setting-row__copy">
-              <strong id="distance-unit-title">DISTANCE UNIT</strong>
-              <small>Choose how distances are shown in Events and Driver Analysis.</small>
-            </div>
-            <div class="unit-options" aria-label="Distance unit">
-              <label class="unit-option">
-                <input type="radio" name="distance-unit" value="km">
-                <span>KM</span>
-              </label>
-              <label class="unit-option">
-                <input type="radio" name="distance-unit" value="mi">
-                <span>MI</span>
-              </label>
-            </div>
-          </div>
+          </section>
         </div>
       </section>
 

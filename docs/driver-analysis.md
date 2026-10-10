@@ -312,8 +312,11 @@ recorded, and the instruction of that problem type, for example
 `Steering +18% · front slip 112%` and `Response lateral −0.6 m/s² · yaw
 −5 °/s`. The numbers use the check's own units: steering, pedals, and slip in
 percent, lateral response in m/s², and yaw in degrees per second. Elsewhere
-the hover shows the Events trace values. A list below the legend names every
-problem with its distance and duration; selecting one outlines it on the map.
+the hover shows the Events trace values. The hover values appear in a POINT
+DATA panel to the right of the map, below the map in a narrow window, while the
+pointer is over the map; the panel clears when the pointer leaves the map and
+the panel. A list below the legend names every problem with its distance and
+duration; selecting one outlines it on the map.
 
 Drives recorded before sample positions existed have no map and show
 `NO POSITION DATA WAS SAVED FOR THIS DRIVE`.

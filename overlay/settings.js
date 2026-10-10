@@ -1690,10 +1690,22 @@
     const start = project(points[0])
     svg.append(svgElement('circle', { class: 'events-lap-detail__start', cx: start.x, cy: start.y, r: 3 }))
 
+    // POINT DATA panel beside the map: it shows the hovered point while the pointer is over the map layout.
+    const inspectorTitle = document.createElement('span')
+    inspectorTitle.className = 'events-lap-detail__inspector-title'
+    inspectorTitle.textContent = 'POINT DATA'
+    const inspectorBody = document.createElement('div')
+    inspectorBody.className = 'events-lap-detail__inspector-body'
+    const inspector = document.createElement('aside')
+    inspector.className = 'events-lap-detail__inspector'
+    inspector.setAttribute('aria-live', 'polite')
+    inspector.setAttribute('aria-label', 'Point data')
+    inspector.append(inspectorTitle, inspectorBody)
+    const layout = document.createElement('div')
+    layout.className = 'events-lap-detail__map-layout'
+    layout.append(svg, inspector)
+
     // Hover functionality
-    const tooltipPanel = document.createElement('div')
-    tooltipPanel.className = 'events-lap-detail__tooltip'
-    tooltipPanel.hidden = true
     const markerCircle = svgElement('circle', { class: 'events-lap-detail__hover-marker', cx: 0, cy: 0, r: 4 })
     markerCircle.style.display = 'none'
     svg.append(markerCircle)
@@ -1717,18 +1729,17 @@
         const tooltipData = errorMark
           ? globalThis.DriverAnalysisMap.errorTooltipModel(errorMark, points)
           : globalThis.EventTraceMap?.tooltipModel(points[nearestIdx], points[0].distanceM ?? 0) ?? { rows: [], wheelTable: [] }
-        renderTooltip(tooltipPanel, tooltipData)
-        tooltipPanel.hidden = false
-        placeTooltip(tooltipPanel, map, event)
+        renderTooltip(inspectorBody, tooltipData)
         markerCircle.style.display = 'block'
       } else {
-        tooltipPanel.hidden = true
+        inspectorBody.replaceChildren()
         markerCircle.style.display = 'none'
       }
     })
 
-    svg.addEventListener('pointerleave', () => {
-      tooltipPanel.hidden = true
+    // The panel sits beside the SVG, so leaving the whole layout (not just the SVG) clears it.
+    layout.addEventListener('pointerleave', () => {
+      inspectorBody.replaceChildren()
       markerCircle.style.display = 'none'
     })
 
@@ -1752,9 +1763,8 @@
     })
     applyLayers()
 
-    map.append(svg, legend)
+    map.append(layout, legend)
     if (marks && marks.errors.length > 0) map.append(renderTraceErrorList(marks, points, svg))
-    map.append(tooltipPanel)
     return map
   }
 
@@ -1867,19 +1877,6 @@
     value.textContent = valueText
     button.append(swatch, name, value)
     return button
-  }
-
-  function placeTooltip(tooltip, container, event) {
-    const bounds = container.getBoundingClientRect()
-    const offset = 14
-    const pointerX = event.clientX - bounds.left
-    const pointerY = event.clientY - bounds.top
-    const tooltipWidth = tooltip.offsetWidth
-    const tooltipHeight = tooltip.offsetHeight
-    const left = pointerX + offset + tooltipWidth <= bounds.width ? pointerX + offset : pointerX - offset - tooltipWidth
-    const top = pointerY + offset + tooltipHeight <= bounds.height ? pointerY + offset : pointerY - offset - tooltipHeight
-    tooltip.style.left = `${Math.max(0, Math.min(left, bounds.width - tooltipWidth))}px`
-    tooltip.style.top = `${Math.max(0, Math.min(top, bounds.height - tooltipHeight))}px`
   }
 
   function renderErrorTooltip(container, model) {

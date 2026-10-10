@@ -138,6 +138,14 @@ textarea {
   letter-spacing: 0.04em;
 }
 
+/* The Chroma F app mark sits just before the FDC wordmark. */
+.settings-brand-mark {
+  align-self: center;
+  width: 24px;
+  height: 24px;
+  margin-right: -6px;
+}
+
 .telemetry-status {
   display: inline-flex;
   align-items: center;
@@ -1374,8 +1382,11 @@ h1 {
   background: var(--shade);
 }
 
-.events-lap-detail__map {
-  position: relative;
+.events-lap-detail__map-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 12px;
+  align-items: stretch;
 }
 
 .events-lap-detail__svg {
@@ -1642,20 +1653,28 @@ h1 {
   border-color: var(--line-strong);
 }
 
-.events-lap-detail__tooltip {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  max-width: 280px;
-  padding: 8px 10px;
-  border: 1px solid var(--line-subtle);
-  border-radius: 0;
-  background: var(--panel);
-  backdrop-filter: blur(4px);
+.events-lap-detail__inspector {
+  min-width: 0;
+  min-height: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+  overflow-y: auto;
+  contain: size;
+}
+
+.events-lap-detail__inspector-title {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: var(--type-label);
+  font-weight: 400;
+  letter-spacing: 0.14em;
+}
+
+.events-lap-detail__inspector-body {
   font-size: 11px;
   font-weight: 600;
-  z-index: 10;
-  pointer-events: none;
 }
 
 .events-lap-detail__tooltip-row {
@@ -2098,6 +2117,17 @@ h1 {
   }
 
   .events-lap-detail__svg {
+    max-height: 320px;
+  }
+}
+
+@media (max-width: 760px) {
+  .events-lap-detail__map-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .events-lap-detail__inspector {
+    contain: none;
     max-height: 320px;
   }
 }
@@ -3216,11 +3246,65 @@ h1 {
   background: var(--surface-hover);
 }
 
-.display-settings__list {
-  overflow: hidden;
+.settings-board {
+  width: min(100%, 960px);
+  margin: 0 auto;
+}
+
+.settings-group {
+  margin: 0 0 18px;
+  padding: 0 22px;
   border: 1px solid var(--line);
-  border-radius: 0;
   background: var(--surface);
+}
+
+.settings-group__head {
+  padding: 18px 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-group__head h3 {
+  margin: 0;
+  font-family: var(--font-readout);
+  font-size: 23px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+}
+
+.settings-group .display-setting-row {
+  min-height: 82px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--line-subtle);
+}
+
+.settings-group .display-setting-row + .display-setting-row {
+  border-top: 0;
+}
+
+.settings-group .display-setting-row:last-child {
+  border-bottom: 0;
+}
+
+.settings-group .display-setting-row__copy {
+  max-width: 650px;
+}
+
+.settings-group .display-setting-row > .visibility-toggle,
+.settings-group .display-setting-row > .unit-options {
+  flex: none;
+}
+
+@media (max-width: 760px) {
+  .settings-group {
+    padding: 0 16px;
+  }
+
+  .settings-group .display-setting-row[aria-labelledby="hud-rendering-title"] {
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+  }
 }
 
 .display-setting-row {

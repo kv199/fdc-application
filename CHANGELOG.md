@@ -46,6 +46,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   fonts and cut corners and keep their colors and opacity, and the layout
   editor sets SAVE, CANCEL, and RESET apart. Your data and settings are
   unchanged.
+- **Events** and **Driver Analysis**: the values of the point under the pointer
+  now appear in a **POINT DATA** panel beside the map, instead of a box that
+  followed the pointer and covered the route. The panel clears when the pointer
+  leaves the map.
 
 ### Improved
 
@@ -95,6 +99,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   table as Events and Driver Analysis, and **RESET CURRENT CALIBRATION** sits
   below it. RPM values use thousands separators, such as `9,360 RPM`, as in
   the HUD.
+- **Settings**: the settings are grouped into **WINDOW & EXIT**, **HUD
+  BEHAVIOR**, and **UNITS**, in a narrower centered column.
+- **Design**: FDC has a new app icon, the Chroma F, in the taskbar, tray,
+  window, and installer, and beside the FDC name in the Configuration header.
 
 ## 7.24.67 - 2026-10-06
 
