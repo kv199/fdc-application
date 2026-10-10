@@ -121,6 +121,7 @@
   const garageGridEmpty = document.getElementById('garage-grid-empty')
   const garageCurrentCar = document.getElementById('garage-current-car')
   const garageCurrentVariants = document.getElementById('garage-current-variants')
+  const garageVariantList = document.getElementById('garage-variant-list')
   const garageCurrentVariantsToggle = document.getElementById('garage-current-variants-toggle')
   const garageCurrentEmpty = document.getElementById('garage-current-empty')
   const garageCarsCount = document.getElementById('garage-cars-count')
@@ -297,10 +298,10 @@
   }
 
   function renderGarageVariants(vehicle) {
-    if (!garageCurrentVariants || !garageCurrentVariantsToggle) return
+    if (!garageCurrentVariants || !garageCurrentVariantsToggle || !garageVariantList) return
     const isCurrentVehicle = garageVariantsOrdinal === vehicle?.carOrdinal
     const open = Boolean(vehicle && isCurrentVehicle && garageVariantsOpen)
-    garageCurrentVariants.replaceChildren()
+    garageVariantList.replaceChildren()
     garageCurrentVariants.hidden = !open
     garageCurrentVariantsToggle.hidden = !vehicle
     garageCurrentVariantsToggle.textContent = open ? 'HIDE VARIANTS' : 'VIEW VARIANTS'
@@ -330,7 +331,12 @@
         cylindersValue.textContent = `${cylinders} CYL`
         row.append(cylindersValue)
       }
-      garageCurrentVariants.append(row)
+      // Every listed variant was observed in telemetry, so each row is marked OBSERVED.
+      const state = document.createElement('span')
+      state.className = 'garage-variant-row__state'
+      state.textContent = 'OBSERVED'
+      row.append(state)
+      garageVariantList.append(row)
     }
   }
 
@@ -460,6 +466,8 @@
 
       const meta = document.createElement('div')
       appendGaragePerformance(meta, vehicle)
+      content.append(name, meta)
+      card.append(content)
       if (vehicle.carOrdinal === garageLatestOrdinal) {
         card.classList.add('garage-card--latest')
         const latest = document.createElement('span')
@@ -467,9 +475,6 @@
         latest.textContent = 'LAST USED'
         card.append(latest)
       }
-
-      content.append(name, meta)
-      card.append(content)
       garageGrid.append(card)
     }
     renderGarageCurrent()

@@ -85,6 +85,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   lettering, and the New Event lists and notes now use the app font instead of
   a system font. The Garage shows the current car's number larger, its PI,
   drive, and cylinders as badges, and a highlighted **VIEW VARIANTS** button.
+- **Garage**: observed variants open in their own **OBSERVED VARIANTS** panel
+  below the current car, one plain row per variant marked `OBSERVED`. Saved
+  car cards are quieter: only the class badge carries the class color, and
+  `LAST USED` is a small label beside the name.
 
 ## 7.24.67 - 2026-10-06
 
