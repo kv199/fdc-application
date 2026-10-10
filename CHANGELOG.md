@@ -89,6 +89,12 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   below the current car, one plain row per variant marked `OBSERVED`. Saved
   car cards are quieter: only the class badge carries the class color, and
   `LAST USED` is a small label beside the name.
+- **Shift Light**: the tab follows the FDC Dark design. The brightness sliders
+  sit on raised cards with their percentage in large type, the calibration
+  appears under **CURRENT CAR PROFILE** with large values and the same gear
+  table as Events and Driver Analysis, and **RESET CURRENT CALIBRATION** sits
+  below it. RPM values use thousands separators, such as `9,360 RPM`, as in
+  the HUD.
 
 ## 7.24.67 - 2026-10-06
 

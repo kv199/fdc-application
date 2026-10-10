@@ -2910,14 +2910,20 @@ h1 {
   display: none;
 }
 
+/* The calibration block is a raised plate, as in the design book's Shift Light board. */
 .calibration-card {
+  padding: 22px;
   border: 1px solid var(--line-strong);
   border-radius: 0;
   background: var(--panel);
 }
 
-.calibration-card {
-  padding: 16px;
+.calibration-card__title {
+  margin: 0 0 16px;
+  color: var(--text);
+  font-size: var(--type-panel-title);
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .calibration-help {
@@ -2969,9 +2975,8 @@ h1 {
 
 .calibration-card__meta {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) repeat(3, minmax(86px, 0.75fr));
-  gap: 14px;
-  padding-bottom: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .calibration-card__meta > div {
@@ -2987,115 +2992,60 @@ h1 {
   letter-spacing: 0.14em;
 }
 
-.calibration-card output {
+/* Long targets and states wrap instead of being cut off. */
+.calibration-card__meta output {
   display: block;
-  overflow: hidden;
   color: var(--text);
-  font-size: 14px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-family: var(--font-readout);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.1;
+  overflow-wrap: break-word;
+}
+
+/* CLASS holds the garage badges: they keep their UI font and label size, not the readout. */
+.calibration-card__meta output .garage-performance {
+  font-family: var(--font-ui);
+  font-size: var(--type-label);
+}
+
+/* The class badge sits centred on the line of the large readout values. */
+.calibration-card__meta output:has(.garage-performance) {
+  display: flex;
+  align-items: center;
+  height: 1.1em;
 }
 
 #shift-light-state {
   color: var(--accent);
 }
 
-.calibration-table-wrap {
-  overflow: hidden;
-  border: 1px solid var(--line-subtle);
-  border-radius: 0;
+/* The gear table is the shared events table; these rules add only the Shift Light states. */
+.calibration-card .events-run-table-wrap {
+  margin-top: 18px;
 }
 
-.calibration-table {
-  width: 100%;
-  table-layout: fixed;
-  border-collapse: collapse;
-  color: var(--text-soft);
-  font-size: 13px;
-}
-
-.calibration-table th:nth-child(1),
-.calibration-table td:nth-child(1) {
-  width: 9%;
-}
-
-.calibration-table th:nth-child(2),
-.calibration-table td:nth-child(2) {
-  width: 21%;
-}
-
-.calibration-table th:nth-child(3),
-.calibration-table td:nth-child(3) {
-  width: 21%;
-}
-
-.calibration-table th:nth-child(4),
-.calibration-table td:nth-child(4) {
-  width: 29%;
-}
-
-.calibration-table th:nth-child(5),
-.calibration-table td:nth-child(5) {
-  width: 20%;
-}
-
-.calibration-table th,
-.calibration-table td {
-  padding: 9px 10px;
-  text-align: left;
-}
-
-.calibration-table th {
-  color: var(--text-muted);
-  font-size: var(--type-label);
-  font-weight: 400;
-  letter-spacing: 0.14em;
-}
-
-.calibration-table tbody tr + tr {
-  border-top: 1px solid var(--line-subtle);
-}
-
-.calibration-table td:first-child {
+.shift-light-gear-table td {
   color: var(--text);
-  font-weight: 600;
 }
 
-.calibration-table td:nth-child(2) {
-  color: var(--warning);
-  font-variant-numeric: tabular-nums;
-}
-
-.calibration-table td:nth-child(3) {
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.calibration-table td:nth-child(4) {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.35;
-  font-variant-numeric: tabular-nums;
-}
-
-.calibration-table td:last-child {
-  color: var(--accent);
+.shift-light-gear-table td:last-child {
   font-size: var(--type-label);
   font-weight: 400;
   letter-spacing: 0.14em;
   line-height: 1.35;
 }
 
-.calibration-table tr[data-state='learning'] td:last-child {
+.shift-light-gear-table tr[data-state='learning'] td:last-child {
   color: var(--text-muted);
 }
 
-.calibration-table tr[data-state='potential'] td:last-child {
+.shift-light-gear-table tr[data-state='potential'] td:last-child {
   color: var(--warning);
 }
 
-.calibration-table tr[data-state='optimal'] td:last-child {
+.shift-light-gear-table tr[data-state='optimal'] td:last-child {
   color: var(--best);
 }
 
@@ -3103,10 +3053,16 @@ h1 {
   display: block;
   margin-top: 3px;
   color: var(--text-subtle);
-  font-size: 11px;
+  font-size: var(--type-label);
   font-weight: 400;
   letter-spacing: 0;
   white-space: normal;
+}
+
+/* The reset is an ordinary button below the plate, sized to its label. */
+#shift-light-panel .settings-button--danger {
+  width: auto;
+  margin-top: 18px;
 }
 
 .settings-button--danger {
@@ -3360,6 +3316,7 @@ h1 {
   background: var(--accent);
 }
 
+/* Brightness cards are design-book panels: a plain 1px line, no coloured edge. */
 .shift-light-brightness-card {
   margin-bottom: 18px;
   padding: 16px 18px;
@@ -3368,9 +3325,11 @@ h1 {
   background: var(--surface);
 }
 
-/* The redline setting keeps a red edge: it controls the red alert. */
-.shift-light-brightness-card--redline {
-  border-left: 4px solid var(--alert);
+/* On the Shift Light tab the sliders follow the design book's range cards. */
+#shift-light-panel .shift-light-brightness-card {
+  margin-bottom: 20px;
+  padding: 20px 22px;
+  background: var(--panel);
 }
 
 .shift-light-brightness-card--redline .shift-light-brightness-card__heading span {
@@ -3378,9 +3337,7 @@ h1 {
 }
 
 .shift-light-brightness-card--redline .shift-light-brightness-card__heading output {
-  border-color: color-mix(in srgb, var(--alert) 72%, transparent);
   color: var(--danger-text);
-  background: color-mix(in srgb, var(--alert) 8%, transparent);
 }
 
 .shift-light-brightness-card--redline .brightness-control input {
@@ -3395,10 +3352,12 @@ h1 {
   outline-color: color-mix(in srgb, var(--alert) 82%, transparent);
 }
 
+/* FDC SHIFT LIGHT is a plain row in the page flow, not a card. */
 .shift-light-cue-toggle {
-  margin-bottom: 18px;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  margin-bottom: 20px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
 }
 
 .shift-light-brightness-card__heading {
@@ -3430,6 +3389,21 @@ h1 {
   letter-spacing: 0;
   line-height: 1;
   text-align: right;
+}
+
+#shift-light-panel .shift-light-brightness-card__heading h3 {
+  font-size: var(--type-body);
+}
+
+/* The Shift Light percentage is a bare readout in its colour: no box around it. */
+#shift-light-panel .shift-light-brightness-card__heading output {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-readout);
+  font-size: 22px;
+  font-weight: 500;
 }
 
 .hud-opacity-card__actions {

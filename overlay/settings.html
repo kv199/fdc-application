@@ -510,6 +510,7 @@
       </div>
 
       <div id="shift-light-profile" class="calibration-card" hidden>
+        <h3 class="calibration-card__title">CURRENT CAR PROFILE</h3>
         <div class="calibration-card__meta">
           <div>
             <span class="calibration-label">CAR</span>
@@ -537,25 +538,25 @@
           </div>
         </div>
 
-        <div class="calibration-table-wrap">
-            <table class="calibration-table">
-              <thead>
+        <div class="events-run-table-wrap">
+          <table class="events-run-table shift-light-gear-table">
+            <thead>
               <tr>
                 <th scope="col">GEAR</th>
                 <th scope="col">SHIFT POINT</th>
                 <th scope="col">ACCEPTED SHIFTS</th>
                 <th scope="col">LAST COMPARISON</th>
-                <th scope="col">STATE</th>
+                <th scope="col" class="events-run-table__end">STATE</th>
               </tr>
             </thead>
             <tbody id="shift-light-gear-rows"></tbody>
           </table>
         </div>
-
-        <button id="shift-light-reset" class="settings-button settings-button--danger" type="button" disabled>
-          RESET CURRENT CALIBRATION
-        </button>
       </div>
+
+      <button id="shift-light-reset" class="settings-button settings-button--danger" type="button" disabled hidden>
+        RESET CURRENT CALIBRATION
+      </button>
     </section>
 
     <section id="settings-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="settings-tab" data-settings-panel="settings" hidden>

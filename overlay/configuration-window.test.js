@@ -485,6 +485,40 @@ test('Shift Light exposes separate redline and FDC cue controls in the Shift Lig
   assert.match(settingsJs, /fdcShiftLightEnabled/)
 })
 
+test('Shift Light calibration card uses the design book title, table, and reset placement', () => {
+  const profileIndex = settingsHtml.indexOf('id="shift-light-profile"')
+  const gearRowsIndex = settingsHtml.indexOf('id="shift-light-gear-rows"')
+  const resetIndex = settingsHtml.indexOf('id="shift-light-reset"')
+
+  assert.ok(profileIndex >= 0)
+  assert.match(settingsHtml, /<div id="shift-light-profile" class="calibration-card" hidden>\s*<h3 class="calibration-card__title">CURRENT CAR PROFILE<\/h3>/)
+  assert.match(settingsHtml, /class="events-run-table shift-light-gear-table"/)
+  assert.match(settingsHtml, /<th scope="col" class="events-run-table__end">STATE<\/th>/)
+  assert.match(settingsHtml, /<th scope="col">LAST COMPARISON<\/th>/)
+  assert.doesNotMatch(settingsHtml, /calibration-table/)
+  assert.ok(gearRowsIndex > profileIndex)
+  assert.ok(resetIndex > gearRowsIndex)
+  assert.match(settingsHtml, /<\/table>\s*<\/div>\s*<\/div>\s*<button id="shift-light-reset"[^>]*\bdisabled hidden>/)
+  assert.match(settingsJs, /shiftLightProfile\.hidden = !hasProfile\s*\n\s*shiftLightReset\.hidden = !hasProfile/)
+  assert.match(settingsJs, /const gearCell = document\.createElement\('th'\)\s*\n\s*gearCell\.scope = 'row'/)
+  assert.match(settingsJs, /stateCell\.className = 'events-run-table__end'/)
+  assert.match(settingsJs, /cell\.colSpan = 5\s*\n\s*cell\.textContent = 'NO GEAR SAMPLES YET'/)
+})
+
+test('Shift Light RPM values use thousands separators through formatRpm', () => {
+  const formatterIndex = settingsJs.indexOf("const SHIFT_LIGHT_RPM_FORMAT = new Intl.NumberFormat('en-US')")
+  const renderIndex = settingsJs.indexOf('function renderShiftLightState(value)')
+
+  assert.ok(formatterIndex > 0)
+  assert.ok(formatterIndex < renderIndex)
+  assert.match(settingsJs, /return Number\.isFinite\(value\) \? `\$\{SHIFT_LIGHT_RPM_FORMAT\.format\(Math\.round\(value\)\)\} RPM` : '—'/)
+  assert.match(settingsJs, /shiftLightCarRpmMax\.textContent = state\.rpmMax \? formatRpm\(state\.rpmMax\) : '—'/)
+  assert.match(settingsJs, /\? `\$\{formatRpm\(state\.usableCeiling\)\} · \$\{state\.ceilingSampleCount\}\/3`/)
+  assert.match(settingsJs, /· \$\{formatRpm\(activeTarget\)\}`/)
+  assert.match(settingsJs, /LEARNING · \$\{formatRpm\(fallbackTarget\)\}`/)
+  assert.doesNotMatch(settingsJs, /\$\{(state\.rpmMax|state\.usableCeiling|activeTarget|fallbackTarget)\} RPM/)
+})
+
 test('HUD opacity appears before HUD controls and resets to its 80 percent default', () => {
   const hudOpacityIndex = settingsHtml.indexOf('id="hud-opacity"')
   const layoutListIndex = settingsHtml.indexOf('class="shift-light-brightness-card layout-arrangement"')

@@ -233,11 +233,16 @@ the bounded crossover journal.
 
 ## Settings
 
-The Shift Light tab in Configuration opens with a short intro and shows the
-active configuration, reported redline, learned
-ceiling progress, effective target, state, accepted sample count and last power
-comparison for each observed pair. It does not diagnose the driver's shift as
-"bad" or "too early" when the capture was unusable or the next gear was weaker.
+The Shift Light tab in Configuration opens with a short intro. Once a car has a
+profile, a `CURRENT CAR PROFILE` card shows the car, its class, the reported
+RPM limit, learned ceiling progress, effective target and state. Reported and
+learned RPM values use thousands separators, for example `9,360 RPM`, matching
+the in-game HUD. Below the metadata, a table lists each observed gear with its
+shift point, accepted sample count, last power comparison and state. Each cell
+keeps its second line of detail. The `RESET CURRENT CALIBRATION` button sits
+directly below the card and stays hidden until a car profile exists. The
+tab does not diagnose the driver's shift as "bad" or "too early" when the
+capture was unusable or the next gear was weaker.
 
 Redline brightness and FDC Shift Light brightness remain independent visual
 preferences. Redline uses five explicit 96%-opaque background-color anchors:

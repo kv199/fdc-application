@@ -3767,8 +3767,11 @@
     }
   }
 
+  // Matches the in-game HUD number format (for example 8,200 RPM).
+  const SHIFT_LIGHT_RPM_FORMAT = new Intl.NumberFormat('en-US')
+
   function formatRpm(value) {
-    return Number.isFinite(value) ? `${Math.round(value)} RPM` : '—'
+    return Number.isFinite(value) ? `${SHIFT_LIGHT_RPM_FORMAT.format(Math.round(value))} RPM` : '—'
   }
 
   function formatDelta(value) {
@@ -3810,15 +3813,16 @@
     const hasProfile = Boolean(state?.carKey && state?.carOrdinal)
     shiftLightEmpty.hidden = hasProfile
     shiftLightProfile.hidden = !hasProfile
+    shiftLightReset.hidden = !hasProfile
     shiftLightReset.disabled = !hasProfile || shiftLightResetPending
     if (!hasProfile) return
 
     const garageVehicle = state.gameId === 'fh6' && state.carOrdinal ? garageVehicles.get(state.carOrdinal) : null
     shiftLightCarKey.textContent = FdcVehicle.displayName(garageVehicle?.name, state.carOrdinal)
     renderShiftLightCarClass(state, garageVehicle)
-    shiftLightCarRpmMax.textContent = state.rpmMax ? `${state.rpmMax} RPM` : '—'
+    shiftLightCarRpmMax.textContent = state.rpmMax ? formatRpm(state.rpmMax) : '—'
     shiftLightUsableCeiling.textContent = state.usableCeiling
-      ? `${state.usableCeiling} RPM · ${state.ceilingSampleCount}/3`
+      ? `${formatRpm(state.usableCeiling)} · ${state.ceilingSampleCount}/3`
       : state.ceilingSampleCount > 0 ? `LEARNING · ${state.ceilingSampleCount}/3` : 'NOT OBSERVED'
     const activeGear = state.gears.find(gear => gear.gear === state.currentGear)
     const activeStatus = activeGear?.status || 'learning'
@@ -3827,9 +3831,9 @@
       ? fallbackTarget
       : activeGear?.shiftRpm ?? state.shiftRpm
     shiftLightCurrentTarget.textContent = activeTarget
-      ? `${activeStatus === 'optimal' ? 'OPTIMAL' : activeStatus === 'potential' ? 'POTENTIAL' : 'LEARNING'} · ${activeTarget} RPM`
+      ? `${activeStatus === 'optimal' ? 'OPTIMAL' : activeStatus === 'potential' ? 'POTENTIAL' : 'LEARNING'} · ${formatRpm(activeTarget)}`
       : fallbackTarget
-        ? `LEARNING · ${fallbackTarget} RPM`
+        ? `LEARNING · ${formatRpm(fallbackTarget)}`
         : 'WAITING FOR RPM LIMIT'
     const activeState = activeStatus === 'potential'
       ? `POTENTIAL ${Math.max(1, activeGear?.confirmationCount || 1)}/3`
@@ -3845,7 +3849,8 @@
       const row = document.createElement('tr')
       row.dataset.state = diagnosticStatus
 
-      const gearCell = document.createElement('td')
+      const gearCell = document.createElement('th')
+      gearCell.scope = 'row'
       gearCell.textContent = `G${gear.gear}`
       row.append(gearCell)
 
@@ -3881,6 +3886,7 @@
       row.append(dataCell)
 
       const stateCell = document.createElement('td')
+      stateCell.className = 'events-run-table__end'
       appendCellText(
         stateCell,
         diagnosticStatus === 'potential'
