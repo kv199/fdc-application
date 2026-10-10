@@ -92,6 +92,10 @@
   --accent-hover: #d5f6a6;
   --accent-pressed: #b2df6c;
   --accent-soft: #d5f6a6;
+  /* Lime used as text on a light surface, and as a focus outline. Equal to
+     --accent in dark; light theme sets them to darker greens. */
+  --accent-ink: #c3ed83;
+  --focus-ring: #c3ed83;
   --text-on-accent: #162314;
   --text-on-accent-deep: #162314;
 
@@ -110,6 +114,7 @@
   --best: #c39be7;
   --text-on-badge: #141914;
   --text-on-class: #fff;
+  --text-on-class-s2: #fff;
 
   /* Vehicle classes */
   --class-d: #7dd3fc;
@@ -139,6 +144,21 @@
   --problem-brake-steering: #818cf8;
   --problem-abrupt-release: #d8b4fe;
 
+  /* Map-only ink roles for Lap and Driver Analysis maps. The map canvas, its
+     outline, and the clean-check dots have their own roles so the light theme
+     can darken them without changing the HUD. Dark values equal today's ones. */
+  --map-canvas: #0b110e;
+  --map-track: #edf0df;
+  --map-throttle: #69e83f;
+  --map-brake: #ef4444;
+  --map-coast: #facc15;
+  --map-slip: #22d3ee;
+  --map-front-scrub: #fb923c;
+  --map-exit-wheelspin: #f472b6;
+  --map-brake-steering: #818cf8;
+  --map-abrupt-release: #d8b4fe;
+  --map-clean: #b0bcae;
+
   /* In-game HUD telemetry */
   --telemetry-throttle: #69e83f;
   --telemetry-brake: #ff312b;
@@ -165,4 +185,95 @@
      widget and Delta. */
   --hud-cut-grouped: 14px;
   --hud-cut-widget: 7px;
+}
+
+/* Light theme for Configuration only. The page sets data-theme="light" on
+   <html>; the in-game HUD never does and stays on the :root values above.
+   Values come from the design book's light-theme proposal. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces, darkest to lightest */
+  --bg: #f1f3ee;
+  --surface-deep: #e5e9e2;
+  --surface: #fafbf8;
+  --panel: #e8ede5;
+  --surface-hover: #e8eedc;
+  --shade: #dde3da;
+  --shade-deep: #e1e6de;
+  --shade-overlay: rgb(16 24 18 / 44%);
+  --shadow: #152016;
+  --meter-track: #d1d9ce;
+
+  /* Map surfaces and ink */
+  --map-canvas: #e5e9e2;
+  --map-track: #b7c2b6;
+  --map-throttle: #446b24;
+  --map-brake: #a51d16;
+  --map-coast: #765a0a;
+  --map-slip: #126f80;
+  --map-front-scrub: #a85313;
+  --map-exit-wheelspin: #a53872;
+  --map-brake-steering: #4754af;
+  --map-abrupt-release: #76529a;
+  --map-clean: #68756a;
+
+  /* Lines */
+  --line-subtle: #d5dbd2;
+  --line: #b7c2b6;
+  --line-strong: #829184;
+  --line-light: #263329;
+
+  /* Text */
+  --text: #1b241d;
+  --text-bright: #111a13;
+  --text-soft: #364238;
+  --text-muted: #566357;
+  --text-subtle: #68756a;
+  --text-faint: #89938b;
+  --text-slate: #566357;
+
+  /* Interaction accent: lime stays a fill; ink and focus are darker greens */
+  --accent: #c3ed83;
+  --accent-hover: #d5f6a6;
+  --accent-pressed: #b2df6c;
+  --accent-soft: #d5f6a6;
+  --accent-ink: #446b24;
+  --focus-ring: #557a2c;
+  --text-on-accent: #162314;
+  --text-on-accent-deep: #162314;
+
+  /* Status */
+  --danger: #a51d16;
+  --danger-text: #a51d16;
+  --danger-soft: #f6c3bd;
+  --danger-rose: #a51d16;
+  --text-on-danger: #fff;
+  --warning: #765a0a;
+  --caution: #795b08;
+  --caution-strong: #624706;
+  --notice: #8a4d17;
+  --notice-soft: #f3d3b3;
+  --best: #6b3f91;
+  --text-on-badge: #141914;
+  --text-on-class: #0c150e;
+  --text-on-class-s2: #fff;
+}
+
+/* The painted Configuration header stays dark in the light theme. Its
+   children read these roles, so restoring them on the header is enough. */
+:root[data-theme="light"] .settings-header {
+  color-scheme: dark;
+  color: #edf0df;
+  --text: #edf0df;
+  --text-muted: #b0bcae;
+  --text-subtle: #9dab9c;
+  --surface-deep: #152019;
+  --line: #58695c;
+  --line-strong: #8c9b82;
+  --warning: #e2c876;
+  --danger-text: #f2877f;
+  --accent: #c3ed83;
+  --accent-ink: #c3ed83;
+  --focus-ring: #c3ed83;
 }

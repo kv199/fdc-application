@@ -7,6 +7,7 @@
   <title>FDC · HUD</title>
   <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="settings.css">
+  <script src="theme-boot.js"></script>
 </head>
 <body>
   <main class="settings-shell">
@@ -584,6 +585,26 @@
               <button id="confirm-before-quit" class="visibility-toggle" type="button" aria-label="Confirm before quitting FDC" aria-pressed="true">
                 <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
               </button>
+            </div>
+            <div class="display-setting-row" data-display-preference role="group" aria-labelledby="theme-title">
+              <div class="display-setting-row__copy">
+                <strong id="theme-title">THEME</strong>
+                <small>Choose a dark or light Configuration window, or follow Windows. The HUD stays dark.</small>
+              </div>
+              <div class="unit-options" aria-label="Theme">
+                <label class="unit-option">
+                  <input type="radio" name="theme" value="dark">
+                  <span>DARK</span>
+                </label>
+                <label class="unit-option">
+                  <input type="radio" name="theme" value="light">
+                  <span>LIGHT</span>
+                </label>
+                <label class="unit-option">
+                  <input type="radio" name="theme" value="system">
+                  <span>SYSTEM</span>
+                </label>
+              </div>
             </div>
           </section>
           <section class="settings-group" aria-labelledby="settings-hud-title">

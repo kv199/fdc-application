@@ -1,8 +1,9 @@
 # FDC design system
 
 This is the rulebook for building or changing a Configuration screen, so new
-features look and behave like the rest of FDC. FDC has one dark visual
-direction; there is no light theme or theme switch.
+features look and behave like the rest of FDC. The in-game HUD and the
+painted header are dark; Configuration also has a light theme (see "Light
+theme").
 
 ## Sources and checks
 
@@ -68,8 +69,9 @@ The application header is the only textured surface: it shows
 ## Accent and status colors
 
 - Lime `--accent` is for interaction: hover fills, selected tabs and choices,
-  switches that are on, slider fills, and the focus outline. As text it is
-  reserved for sparse ready, positive, or timing values, never decoration.
+  switches that are on, and slider fills. Focus outlines use `--focus-ring`.
+  As text it is reserved for sparse ready, positive, or timing values, never
+  decoration. Lime text uses `--accent-ink`, which equals `--accent` in dark.
 - Ready actions use `.settings-button--ready`, filled with `--accent` and
   `--text-on-accent` at rest and with `--accent-hover` on hover or focus. They
   mark the one next step: CREATE and CREATE EVENT in Events, DETAILS in
@@ -240,6 +242,32 @@ The application header is the only textured surface: it shows
   text and border, fills `--caution` on hover), CANCEL (neutral dark, fills
   lime on hover), and SAVE (filled with lime at rest). While the grid is on,
   an alignment grid of thin lines and dots sits under the HUD.
+
+## Light theme
+
+- Configuration offers a light theme. Settings → THEME chooses DARK, LIGHT, or
+  SYSTEM, and SYSTEM follows Windows. When light is active the Configuration
+  document carries `data-theme="light"`; otherwise it carries
+  `data-theme="dark"`.
+- `overlay/tokens.css` redefines the surface, line, text, accent-ink,
+  focus-ring, status, and map roles under `:root[data-theme="light"]`. The
+  dark `:root` values do not change.
+- The painted header, the in-game HUD, and Delta stay dark. The header restores
+  its dark roles under `:root[data-theme="light"] .settings-header`. The HUD
+  page never receives the attribute.
+- Lime stays a fill: `--accent` with `--text-on-accent`. Lime text uses
+  `--accent-ink`, and focus outlines and state borders use `--focus-ring`. Both
+  equal lime in dark.
+- Lap and Driver Analysis maps draw on `--map-canvas`. Their outline uses
+  `--map-track`, clean checks use `--map-clean`, and trace and problem colors
+  come from the map-only `--map-*` roles in light. Dark values equal the
+  previous map colors.
+- Vehicle classes, event modes, and HUD telemetry colors keep their tokens in
+  both themes. Class badges use `--text-on-class` text, except S2, which uses
+  `--text-on-class-s2` (white). In light, the white EventLab card edge and mode
+  badge get a `--line-strong` edge so they stay visible.
+- `overlay/theme-boot.js` sets the attribute from the saved preference before
+  the first paint, so a light window does not flash dark.
 
 ## Checklist for a new screen or feature
 

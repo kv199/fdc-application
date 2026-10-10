@@ -198,7 +198,7 @@ to 100%. The default is 80%, and **RESET** restores it.
 
 Configuration → **Settings** opens with a short intro that also notes all FDC
 data stays on this PC. Its rows sit in a centered column at most 960 px wide,
-grouped under **WINDOW & EXIT** (the first two below), **HUD BEHAVIOR** (the
+grouped under **WINDOW & EXIT** (the first three below), **HUD BEHAVIOR** (the
 next two), and **UNITS** (the last two):
 
 - **Configuration always on top**, off by default;
@@ -206,6 +206,12 @@ next two), and **UNITS** (the last two):
   **QUIT FDC?** first. From the second confirmed quit the question offers
   **Don't ask again**, which turns this off. A Driver Analysis or Event
   recording in progress always asks;
+- **Theme**: `DARK`, the default, `LIGHT`, or `SYSTEM`. `LIGHT` gives the
+  Configuration window a light palette and a light Windows title bar. `SYSTEM`
+  follows the Windows app mode and switches the Configuration window when that
+  mode changes; its title bar follows Windows as well. The in-game HUD and Delta
+  stay dark in every choice. The choice is saved with the other display
+  preferences on this PC;
 - **Show HUD with telemetry**, described above;
 - **HUD rendering**: `GPU`, the default, or `CPU`. With `CPU` the HUD and
   Configuration are drawn on the processor and composited by Windows, so the

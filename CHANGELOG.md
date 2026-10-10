@@ -50,6 +50,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   now appear in a **POINT DATA** panel beside the map, instead of a box that
   followed the pointer and covered the route. The panel clears when the pointer
   leaves the map.
+- **Settings**: a new **THEME** setting gives the Configuration window a light
+  look. Choose **DARK** (the default), **LIGHT**, or **SYSTEM** to follow
+  Windows. The light theme also lightens the Events and Driver Analysis maps
+  and the window title bar; the painted header, the in-game HUD, and Delta stay
+  dark.
 
 ### Improved
 

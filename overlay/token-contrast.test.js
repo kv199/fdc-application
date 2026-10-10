@@ -111,3 +111,15 @@ test('WCAG 2.x contrast ratios for non-text controls', () => {
     assertContrast(lineStrongHex, bgHex, 3, `--line-strong on ${bgToken}`)
   }
 })
+
+test('Light theme contrast for the pairs the design book checks', () => {
+  const tokens = readTokens('light')
+  const surface = tokens.get('--surface')
+  for (const textToken of ['--text', '--text-soft', '--text-muted', '--accent-ink', '--danger-text', '--best', '--warning', '--notice']) {
+    assertContrast(tokens.get(textToken), surface, 4.5, `light ${textToken} on --surface`)
+  }
+  assertContrast(tokens.get('--text-faint'), surface, 3, 'light --text-faint on --surface')
+  assertContrast(tokens.get('--focus-ring'), tokens.get('--bg'), 3, 'light --focus-ring on --bg')
+  assertContrast(tokens.get('--text-on-accent'), tokens.get('--accent'), 4.5, 'light --text-on-accent on --accent')
+  assertContrast(tokens.get('--text-on-danger'), tokens.get('--danger'), 4.5, 'light --text-on-danger on --danger')
+})

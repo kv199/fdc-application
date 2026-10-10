@@ -13,7 +13,8 @@
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
     hudOpacity: 80,
-    configurationAlwaysOnTop: false
+    configurationAlwaysOnTop: false,
+    theme: 'dark'
   })
   const REDLINE_BRIGHTNESS_STOPS = Object.freeze([
     Object.freeze({ percent: 0, rgb: Object.freeze([18, 3, 2]) }),
@@ -54,6 +55,8 @@
     const distanceUnit = ['km', 'mi'].includes(candidate.distanceUnit)
       ? candidate.distanceUnit
       : speedUnit === 'mph' ? 'mi' : DEFAULTS.distanceUnit
+    // Records saved before the theme setting existed keep the dark Configuration window.
+    const theme = ['light', 'system'].includes(candidate.theme) ? candidate.theme : DEFAULTS.theme
 
     return {
       speedUnit,
@@ -63,7 +66,8 @@
       fdcShiftLightEnabled: candidate.fdcShiftLightEnabled !== false,
       showHudWithTelemetry: candidate.showHudWithTelemetry !== false,
       hudOpacity,
-      configurationAlwaysOnTop: candidate.configurationAlwaysOnTop === true
+      configurationAlwaysOnTop: candidate.configurationAlwaysOnTop === true,
+      theme
     }
   }
 

@@ -96,6 +96,7 @@
   const hudRenderingNote = document.getElementById('hud-rendering-note')
   const HUD_RENDERING_NOTE = hudRenderingNote?.textContent || ''
   const distanceUnitInputs = [...document.querySelectorAll('input[name="distance-unit"]')]
+  const themeInputs = [...document.querySelectorAll('input[name="theme"]')]
   const configurationAlwaysOnTop = document.getElementById('configuration-always-on-top')
   const confirmBeforeQuit = document.getElementById('confirm-before-quit')
   const showHudWithTelemetry = document.getElementById('show-hud-with-telemetry')
@@ -212,8 +213,37 @@
     fdcShiftLightEnabled: true,
     showHudWithTelemetry: true,
     hudOpacity: DEFAULT_HUD_OPACITY,
-    configurationAlwaysOnTop: false
+    configurationAlwaysOnTop: false,
+    theme: 'dark'
   }
+  // The Configuration page is themed only; the HUD never receives this preference.
+  const themeMediaQuery = typeof globalScope.matchMedia === 'function'
+    ? globalScope.matchMedia('(prefers-color-scheme: light)')
+    : null
+  const CONFIGURATION_WINDOW_LABEL = globalScope.__TAURI_INTERNALS__?.metadata?.currentWindow?.label || 'settings'
+
+  function setConfigurationWindowTheme(windowTheme) {
+    if (typeof invoke !== 'function') return
+    try {
+      Promise.resolve(invoke('plugin:window|set_theme', { label: CONFIGURATION_WINDOW_LABEL, value: windowTheme })).catch(() => {})
+    } catch {
+      // A restricted webview must not stop the Configuration page from rendering.
+    }
+  }
+
+  function applyConfigurationTheme(theme) {
+    const resolved = theme === 'system'
+      ? (themeMediaQuery?.matches ? 'light' : 'dark')
+      : theme === 'light' ? 'light' : 'dark'
+    document.documentElement.dataset.theme = resolved
+    // SYSTEM passes null so the Windows title bar follows the app mode.
+    setConfigurationWindowTheme(theme === 'system' ? null : resolved)
+  }
+
+  themeMediaQuery?.addEventListener?.('change', () => {
+    if (displayPreferences.theme === 'system') applyConfigurationTheme('system')
+  })
+  applyConfigurationTheme(displayPreferences.theme)
   let latestShiftLightState = null
   let latestRouteRevision = -1
   let latestRouteStatus = globalScope.HudTelemetryRoute?.normalizeRouteStatus?.({ phase: 'offline' })
@@ -3562,6 +3592,10 @@
     for (const input of distanceUnitInputs) {
       input.checked = input.value === preferences.distanceUnit
     }
+    for (const input of themeInputs) {
+      input.checked = input.value === preferences.theme
+    }
+    applyConfigurationTheme(preferences.theme)
     renderRedlineBrightness(preferences.redlineBrightness)
     renderShiftLightBrightness(preferences.shiftLightBrightness)
     renderHudOpacity(preferences.hudOpacity)
@@ -3613,6 +3647,7 @@
     displayPreferencesPending = pending
     for (const input of speedUnitInputs) input.disabled = pending
     for (const input of distanceUnitInputs) input.disabled = pending
+    for (const input of themeInputs) input.disabled = pending
     if (configurationAlwaysOnTop) configurationAlwaysOnTop.disabled = pending
     if (showHudWithTelemetry) showHudWithTelemetry.disabled = pending
     if (fdcShiftLightEnabled) fdcShiftLightEnabled.disabled = pending
@@ -4274,6 +4309,15 @@
   for (const input of hudRenderingInputs) {
     input.addEventListener('change', () => {
       if (input.checked) void updateHudRendering(input.value)
+    })
+  }
+  for (const input of themeInputs) {
+    input.addEventListener('change', () => {
+      if (!input.checked) return
+      void updateDisplayPreferences(
+        { theme: input.value },
+        next => `THEME SET TO ${next.theme.toUpperCase()}`
+      )
     })
   }
   for (const input of speedUnitInputs) {

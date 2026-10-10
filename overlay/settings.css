@@ -33,7 +33,7 @@ textarea {
 
 /* Keyboard focus is always visible: a lime outline outside the control. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -107,7 +107,7 @@ textarea {
 }
 
 .telemetry-status-button:hover .telemetry-status {
-  border-color: var(--accent);
+  border-color: var(--focus-ring);
 }
 
 .settings-eyebrow,
@@ -168,7 +168,7 @@ textarea {
 }
 
 .telemetry-status[data-state='live'] {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .telemetry-status[data-state='live'] .telemetry-status__dot {
@@ -304,7 +304,7 @@ h1 {
 }
 
 .settings-tab:hover {
-  border-color: var(--accent);
+  border-color: var(--focus-ring);
   color: var(--text);
 }
 
@@ -414,7 +414,7 @@ h1 {
 
 .garage-current-car__name:hover,
 .garage-current-car__name:focus-visible {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .garage-current-car__input {
@@ -422,7 +422,7 @@ h1 {
   min-height: 34px;
   padding: 4px 0;
   border: 0;
-  border-bottom: 1px solid var(--accent);
+  border-bottom: 1px solid var(--focus-ring);
   border-radius: 0;
   color: var(--text);
   background: transparent;
@@ -626,7 +626,7 @@ h1 {
 /* Forza-style paired rank + PI badges. */
 .garage-performance__class {
   border-color: transparent;
-  color: var(--text-on-class);
+  color: var(--class-text, var(--text-on-class));
   background: var(--garage-rank-color);
   font-size: var(--type-label);
   font-weight: 600;
@@ -714,7 +714,7 @@ h1 {
 
 .events-sort-control select:focus-visible,
 .hud-display-card select:focus-visible {
-  border-color: var(--accent);
+  border-color: var(--focus-ring);
 }
 
 .events-grid {
@@ -816,7 +816,7 @@ h1 {
 .events-card__badge--class {
   --events-class-color: var(--text-muted);
   border-color: transparent;
-  color: var(--text-on-class);
+  color: var(--class-text, var(--text-on-class));
   background: var(--events-class-color);
 }
 
@@ -933,7 +933,7 @@ h1 {
 .events-form input:focus,
 .events-form select:focus,
 .events-form textarea:focus {
-  border-color: var(--accent);
+  border-color: var(--focus-ring);
   outline: none;
 }
 
@@ -1053,9 +1053,9 @@ h1 {
 }
 
 .connect-guide[data-stage='connected'] .connect-guide__status {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  border-color: color-mix(in srgb, var(--focus-ring) 55%, transparent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .connect-guide[data-stage='connected'] .connect-guide__dot {
@@ -1379,7 +1379,7 @@ h1 {
 .events-lap-detail__map {
   min-width: 0;
   border: 1px solid var(--line-subtle);
-  background: var(--shade);
+  background: var(--map-canvas);
 }
 
 /* The map is at least as tall as a full POINT DATA panel, so the panel does not scroll. */
@@ -1400,12 +1400,12 @@ h1 {
 }
 
 .events-lap-detail__surface {
-  fill: var(--shade);
+  fill: var(--map-canvas);
 }
 
 .events-lap-detail__outline {
   fill: none;
-  stroke: var(--text);
+  stroke: var(--map-track);
   stroke-width: 1.4;
 }
 
@@ -1431,7 +1431,7 @@ h1 {
 
 .events-lap-detail__hover-marker {
   fill: var(--trace-slip);
-  stroke: var(--shade);
+  stroke: var(--map-canvas);
   stroke-width: 1;
   pointer-events: none;
 }
@@ -1451,7 +1451,7 @@ h1 {
 
 .events-lap-detail__start {
   fill: var(--text);
-  stroke: var(--shade);
+  stroke: var(--map-canvas);
   stroke-width: 2;
 }
 
@@ -1538,7 +1538,7 @@ h1 {
 /* Driver Analysis drive maps: problem segments over a dark casing and clean checks. */
 .events-lap-detail__mark-casing {
   fill: none;
-  stroke: var(--shade);
+  stroke: var(--map-canvas);
   stroke-width: 11;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -1559,9 +1559,9 @@ h1 {
 .events-lap-detail__mark--abrupt_brake_release { stroke: var(--problem-abrupt-release); }
 
 .events-lap-detail__clean {
-  fill: var(--text-muted);
+  fill: var(--map-clean);
   fill-opacity: 0.55;
-  stroke: var(--shade);
+  stroke: var(--map-canvas);
   stroke-width: 1.5;
 }
 
@@ -1569,7 +1569,7 @@ h1 {
 .events-lap-detail__swatch--exit_wheelspin { background: var(--problem-exit-wheelspin); }
 .events-lap-detail__swatch--brake_steering_overload { background: var(--problem-brake-steering); }
 .events-lap-detail__swatch--abrupt_brake_release { background: var(--problem-abrupt-release); }
-.events-lap-detail__swatch--clean { background: var(--text-muted); border-radius: 50%; }
+.events-lap-detail__swatch--clean { background: var(--map-clean); border-radius: 50%; }
 
 .events-lap-detail__stat--front_scrub .events-lap-detail__stat-value { color: var(--problem-front-scrub); }
 .events-lap-detail__stat--exit_wheelspin .events-lap-detail__stat-value { color: var(--problem-exit-wheelspin); }
@@ -1818,7 +1818,7 @@ h1 {
 .events-run-table__sort:focus-visible,
 .events-run-table__sort[aria-sort="ascending"],
 .events-run-table__sort[aria-sort="descending"] {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .events-run-table__sort[aria-sort="ascending"]::after { content: ' ↑'; }
@@ -1833,7 +1833,7 @@ h1 {
 }
 
 .events-run-table__time[data-tone="best"] { color: var(--best); }
-.events-run-table__time[data-tone="second"] { color: var(--accent); }
+.events-run-table__time[data-tone="second"] { color: var(--accent-ink); }
 .events-run-table__time.is-missing { color: var(--text-faint); }
 
 .events-detail-view__actions {
@@ -1863,7 +1863,7 @@ h1 {
 
 .detail-back:hover,
 .detail-back:focus-visible {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .events-detail-view__heading {
@@ -1923,7 +1923,7 @@ h1 {
 
 /* As in the design book, the title keeps its color under the pointer; only keyboard focus marks it. */
 .events-detail-view__title:focus-visible {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* Driver Analysis pages name the recording, car, or drive at the larger object size of the design book. */
@@ -1936,7 +1936,7 @@ h1 {
   min-height: 38px;
   padding: 4px 0;
   border: 0;
-  border-bottom: 1px solid var(--accent);
+  border-bottom: 1px solid var(--focus-ring);
   color: var(--text);
   background: transparent;
   font: inherit;
@@ -1982,7 +1982,7 @@ h1 {
 .events-detail-view__badge--class {
   --events-class-color: var(--text-muted);
   border-color: transparent;
-  color: var(--text-on-class);
+  color: var(--class-text, var(--text-on-class));
   background: var(--events-class-color);
 }
 
@@ -2075,7 +2075,7 @@ h1 {
 }
 
 .event-recorder__status[data-state="armed"],
-.event-recorder__status[data-state="recording"] { color: var(--accent); }
+.event-recorder__status[data-state="recording"] { color: var(--accent-ink); }
 .event-recorder__status[data-state="finalizing"] { color: var(--caution-strong); }
 .event-recorder__status[data-state="stopped"] { color: var(--danger); }
 .event-recorder__status[hidden] { display: none; }
@@ -2111,7 +2111,7 @@ h1 {
 
 .event-recorder__feedback {
   margin: -8px 0 18px;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 12px;
   font-weight: 400;
   letter-spacing: 0;
@@ -2305,7 +2305,7 @@ h1 {
 }
 
 .driver-analysis-recording-status[data-state='ready'] {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .driver-analysis-recording-status[data-state='waiting'],
@@ -2953,7 +2953,7 @@ h1 {
 }
 
 .visibility-toggle:not(:disabled):hover {
-  border-color: var(--accent);
+  border-color: var(--focus-ring);
   background: var(--surface-hover);
 }
 
@@ -3101,7 +3101,7 @@ h1 {
 }
 
 #shift-light-state {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* The gear table is the shared events table; these rules add only the Shift Light states. */
@@ -3175,7 +3175,7 @@ h1 {
   min-width: 0;
   z-index: 10;
   margin: 0;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: var(--type-label);
   font-weight: 400;
   letter-spacing: 0.14em;
@@ -3399,9 +3399,11 @@ h1 {
   line-height: 1.35;
 }
 
+/* One column per option: two for the units, three for the theme. */
 .unit-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(62px, 1fr));
+  grid-auto-columns: minmax(62px, 1fr);
+  grid-auto-flow: column;
   flex: 0 0 auto;
   gap: 4px;
   padding: 3px;
@@ -3442,7 +3444,7 @@ h1 {
 }
 
 .unit-option input:focus-visible + span {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -3516,9 +3518,9 @@ h1 {
 .shift-light-brightness-card__heading output {
   min-width: 76px;
   padding: 6px 8px 5px;
-  border: 1px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--focus-ring) 72%, transparent);
   border-radius: 0;
-  color: var(--accent);
+  color: var(--accent-ink);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   font-size: 20px;
   font-weight: 600;
@@ -3668,4 +3670,51 @@ h1 {
   .settings-header__connection {
     margin-left: 0;
   }
+}
+
+/* Light theme (data-theme="light" on the Configuration document). Dark values
+   are unchanged: these rules only redirect or darken what the light palette
+   would otherwise leave hard to read. */
+:root[data-theme="light"] .events-lap-detail {
+  --trace-throttle: var(--map-throttle);
+  --trace-brake: var(--map-brake);
+  --trace-coast: var(--map-coast);
+  --trace-slip: var(--map-slip);
+  --problem-front-scrub: var(--map-front-scrub);
+  --problem-exit-wheelspin: var(--map-exit-wheelspin);
+  --problem-brake-steering: var(--map-brake-steering);
+  --problem-abrupt-release: var(--map-abrupt-release);
+}
+
+/* These pale dark-theme text roles (--danger-soft, --notice-soft) are too weak
+   on light surfaces, so the light theme reads the stronger ink roles instead. */
+:root[data-theme="light"] .confirm-dialog .confirm-dialog__yes {
+  color: var(--danger-text);
+}
+
+:root[data-theme="light"] .driver-analysis-warning {
+  color: var(--notice);
+}
+
+:root[data-theme="light"] .driver-analysis-warning strong {
+  color: var(--map-front-scrub);
+}
+
+/* S2's blue needs white text; the other class hues take --text-on-class. */
+.garage-variant-row[data-car-class="S2"],
+.garage-card[data-car-class="S2"],
+.garage-performance--s2,
+.events-card__badge--class[data-event-class="S2"],
+.events-detail-view__badge--class[data-event-class="S2"] {
+  --class-text: var(--text-on-class-s2);
+}
+
+/* The white EventLab hue needs an edge to read on light surfaces. */
+:root[data-theme="light"] .events-card[data-event-mode="eventlab"] {
+  border-left-color: var(--line-strong);
+}
+
+:root[data-theme="light"] .events-card[data-event-mode="eventlab"] .events-card__badge--mode,
+:root[data-theme="light"] .events-detail-view__summary[data-event-mode="eventlab"] .events-detail-view__badge--mode {
+  border-color: var(--line-strong);
 }

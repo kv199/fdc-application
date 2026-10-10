@@ -5,9 +5,23 @@ const path = require('node:path')
 
 const overlayDir = path.join(__dirname, '..', 'overlay')
 
-function readTokens() {
+// Declarations of the first block whose selector is exactly `selector`.
+function tokenBlock(css, selector) {
+  const start = css.indexOf(`${selector} {`)
+  if (start === -1) return new Map()
+  const body = css.slice(css.indexOf('{', start) + 1, css.indexOf('}', start))
+  return new Map([...body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)].map(match => [match[1], match[2].trim()]))
+}
+
+// The dark defaults from :root; theme 'light' lays the Configuration light
+// palette from :root[data-theme="light"] over them.
+function readTokens(theme = 'dark') {
   const css = fs.readFileSync(path.join(overlayDir, 'tokens.css'), 'utf8')
-  return new Map([...css.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)].map(match => [match[1], match[2].trim()]))
+  const tokens = tokenBlock(css, ':root')
+  if (theme === 'light') {
+    for (const [name, value] of tokenBlock(css, ':root[data-theme="light"]')) tokens.set(name, value)
+  }
+  return tokens
 }
 
 function hexToRgb(hex) {

@@ -205,7 +205,7 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsCss, /\.events-detail-view__badge--class\[data-event-class="A"\][\s\S]*#ef4444/)
   assert.match(settingsCss, /\.events-detail-view__badge--class\[data-event-class="S1"\][\s\S]*#c084fc/)
   assert.match(settingsStyles, /\.events-run-table__time\[data-tone="best"\]\s*\{[^}]*var\(--best\)/)
-  assert.match(settingsStyles, /\.events-run-table__time\[data-tone="second"\]\s*\{[^}]*var\(--accent\)/)
+  assert.match(settingsStyles, /\.events-run-table__time\[data-tone="second"\]\s*\{[^}]*var\(--accent-ink\)/)
   assert.match(settingsStyles, /\.events-detail-view__absolute-best-value\s*\{[^}]*var\(--best\)/)
 })
 
@@ -480,11 +480,30 @@ test('Settings groups its display rows under three headings in order', () => {
   assert.match(settingsHtml, /<h3 id="settings-units-title">UNITS<\/h3>/)
   assert.ok(settingsHtml.indexOf('WINDOW &amp; EXIT') < settingsHtml.indexOf('HUD BEHAVIOR'))
   assert.ok(settingsHtml.indexOf('HUD BEHAVIOR') < settingsHtml.indexOf('>UNITS<'))
-  assert.deepEqual(rowTitles(windowGroup), ['CONFIGURATION ALWAYS ON TOP', 'CONFIRM BEFORE QUITTING'])
+  assert.deepEqual(rowTitles(windowGroup), ['CONFIGURATION ALWAYS ON TOP', 'CONFIRM BEFORE QUITTING', 'THEME'])
   assert.deepEqual(rowTitles(hudGroup), ['SHOW HUD WITH TELEMETRY', 'HUD RENDERING'])
   assert.deepEqual(rowTitles(unitsGroup), ['SPEED UNIT', 'DISTANCE UNIT'])
   assert.match(settingsStyles, /\.settings-board\s*\{[^}]*width:\s*min\(100%,\s*960px\)/)
   assert.match(settingsStyles, /\.settings-group\s*\{[^}]*border:\s*1px solid var\(--line\)[^}]*background:\s*var\(--surface\)/)
+})
+
+test('Settings exposes a THEME row with dark, light, and system radios after CONFIRM BEFORE QUITTING', () => {
+  const windowStart = settingsHtml.indexOf('<section class="settings-group" aria-labelledby="settings-window-title">')
+  const windowGroup = settingsHtml.slice(windowStart, settingsHtml.indexOf('</section>', windowStart))
+  const themeStart = windowGroup.indexOf('aria-labelledby="theme-title"')
+  assert.ok(themeStart > windowGroup.indexOf('CONFIRM BEFORE QUITTING'), 'THEME follows CONFIRM BEFORE QUITTING')
+  const themeRow = windowGroup.slice(themeStart)
+
+  assert.match(themeRow, /<strong id="theme-title">THEME<\/strong>/)
+  assert.match(themeRow, /<small>Choose a dark or light Configuration window, or follow Windows\. The HUD stays dark\.<\/small>/)
+  assert.match(themeRow, /<div class="unit-options" aria-label="Theme">/)
+  assert.deepEqual([...themeRow.matchAll(/<input type="radio" name="theme" value="([^"]+)">\s*<span>([^<]+)<\/span>/gu)].map(match => [match[1], match[2]]), [['dark', 'DARK'], ['light', 'LIGHT'], ['system', 'SYSTEM']])
+  assert.match(settingsJs, /themeInputs\s*=\s*\[\.\.\.document\.querySelectorAll\('input\[name="theme"\]'\)\]/)
+  assert.match(settingsJs, /applyConfigurationTheme/)
+  assert.match(settingsJs, /prefers-color-scheme: light/)
+  assert.match(settingsJs, /dataset\.theme/)
+  assert.match(settingsJs, /plugin:window\|set_theme/)
+  assert.doesNotMatch(settingsJs.slice(settingsJs.indexOf("'set_display_preferences'"), settingsJs.indexOf("'set_display_preferences'") + 400), /theme/)
 })
 
 test('Shift Light exposes separate redline and FDC cue controls in the Shift Light tab', () => {
