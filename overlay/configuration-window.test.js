@@ -56,7 +56,7 @@ test('Configuration exposes Events second and Driver Analysis third in the prima
   assert.match(settingsHtml, /id="garage-panel"[^>]+data-settings-panel="garage"/)
   assert.match(settingsHtml, /id="garage-grid"[^>]+aria-live="polite"/)
   assert.match(settingsHtml, /id="garage-current-car"/)
-  assert.match(settingsHtml, /id="garage-current-variants-toggle"[^>]*>VIEW<\/button>/)
+  assert.match(settingsHtml, /id="garage-current-variants-toggle" class="settings-button settings-button--ready"[^>]*>VIEW VARIANTS<\/button>/)
   assert.match(settingsHtml, /id="garage-current-variants"[^>]+class="garage-variants"/)
   assert.match(settingsHtml, /id="garage-cars-count">0 CARS/)
   assert.doesNotMatch(settingsHtml, /ONE CARD PER CAR ORDINAL/)
@@ -86,8 +86,23 @@ test('Configuration exposes Events second and Driver Analysis third in the prima
   assert.match(settingsCss, /\.garage-variants\s*\{[\s\S]*width:\s*100%[\s\S]*border:\s*1px solid/)
   assert.match(settingsCss, /\.garage-variant-row\s*\{[\s\S]*justify-content:\s*flex-start/)
   assert.match(settingsCss, /\.garage-variant-row\s*\{[\s\S]*border-left:\s*3px solid var\(--garage-rank-color\)/)
-  assert.doesNotMatch(settingsCss, /\.garage-current-variants-toggle\s*\{[^}]*position:\s*absolute/)
-  assert.match(settingsCss, /\.garage-current-variants-toggle\s*\{[\s\S]*margin-left:\s*auto/)
+  assert.doesNotMatch(settingsCss, /\.garage-current-variants-toggle/)
+  assert.match(settingsJs, /garageCurrentVariantsToggle\.textContent = open \? 'HIDE VARIANTS' : 'VIEW VARIANTS'/)
+  assert.match(settingsJs, /garageCurrentVariantsToggle\.setAttribute\('aria-expanded', String\(open\)\)/)
+})
+
+test('Garage typography follows the design book: readout car name, no weight above 600, caps labels only', () => {
+  const tokensCss = fs.readFileSync(path.join(__dirname, 'tokens.css'), 'utf8')
+  assert.match(tokensCss, /--type-garage-car:\s*38px;/)
+  assert.match(settingsStyles, /\.garage-current-car__name\s*\{[^}]*font-family:\s*var\(--font-readout\)[^}]*font-size:\s*var\(--type-garage-car\)[^}]*font-weight:\s*500/)
+  assert.match(settingsStyles, /\.garage-current-car__name\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/)
+  assert.match(settingsStyles, /\.garage-section-heading h3\s*\{[^}]*font-size:\s*var\(--type-panel-title\)[^}]*font-weight:\s*600/)
+  assert.match(settingsStyles, /\.garage-card__name\s*\{[^}]*font-family:\s*var\(--font-readout\)[^}]*font-size:\s*22px[^}]*font-weight:\s*500/)
+  assert.match(settingsStyles, /\.garage-variant-row \.garage-performance__pi\s*\{[^}]*font-family:\s*var\(--font-readout\)[^}]*font-size:\s*22px/)
+  for (const [, selector, body] of settingsStyles.matchAll(/(\.garage-[^{}]+)\{([^}]*)\}/g)) {
+    const weight = body.match(/font-weight:\s*(\d+)/)
+    if (weight) assert.ok(Number(weight[1]) <= 600, `${selector.trim()} must not exceed weight 600`)
+  }
 })
 
 test('Events keeps the existing navigation and exposes the create/detail flow', () => {
@@ -509,7 +524,7 @@ test('HUD heading has no redundant position and visibility label, and status use
   assert.match(settingsStyles, /\.settings-footer\s*{[\s\S]*?position:\s*fixed;[\s\S]*?height:\s*var\(--settings-footer-height\);[\s\S]*?border-top:[\s\S]*?background:\s*var\(--bg\);/)
   assert.match(settingsCss, /\.settings-footer__right\s*{[\s\S]*?margin-left:\s*auto/)
   assert.match(settingsCss, /\.settings-footer__version\s*{[\s\S]*?cursor:\s*pointer/)
-  assert.match(settingsCss, /\.settings-footer__help\s*{[\s\S]*?font-weight:\s*800/)
+  assert.match(settingsCss, /\.settings-footer__help\s*{[\s\S]*?font-weight:\s*600/)
   assert.match(settingsCss, /\.settings-help-menu\s*{[\s\S]*?position:\s*absolute/)
   assert.match(settingsCss, /\.settings-help-menu button\s*{[\s\S]*?width:\s*100%/)
   assert.doesNotMatch(settingsCss, /\.settings-status\s*{[^}]*position:\s*fixed;/)
@@ -841,4 +856,9 @@ test('every widget switch is the only element bound to its widget', () => {
     assert.equal(settingsHtml.match(new RegExp(`data-hud-toggle="${name}"`, 'g'))?.length, 1, name)
   }
   assert.equal(settingsHtml.match(/data-overlay-toggle="delta"/g)?.length, 1)
+})
+
+test('Configuration type roles follow the design book', () => {
+  assert.match(settingsStyles, /button,\s*input,\s*select,\s*textarea\s*\{\s*font: inherit;/)
+  assert.doesNotMatch(settingsStyles, /font-weight:\s*(650|750|800|850|900)/)
 })

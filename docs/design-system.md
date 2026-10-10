@@ -97,6 +97,21 @@ The application header is the only textured surface: it shows
   section headings and the event and run titles, `--type-object-title` 36px for
   the object title on Driver Analysis recording, car, and drive pages,
   `--type-body` 14px, `--type-label` 11px.
+- Type roles in the Configuration window:
+  - Panel or card title (an `h3` naming a panel or card): `--type-panel-title`
+    19px, 600, no tracking.
+  - Row title (the bold name of a setting row): `--type-body` 14px, 600, no
+    tracking.
+  - Caps label or metadata (field labels, captions, counts, status words):
+    `--type-label` 11px, 400, 0.14em tracking, `--text-muted` unless the text
+    carries a semantic color.
+  - Badge: `--type-label` 11px, 600, 0.06em tracking.
+  - Button text: `--type-body` 14px, 600, no tracking.
+  - Body and supporting text: 400 at `--type-body` 14px, or 13px where space is
+    tight.
+  - Weights are limited to the shipped Barlow 400 and 600 (`--font-ui`) and
+    Barlow Condensed 500 and 600 (`--font-readout`).
+  - Form controls (`button`, `input`, `select`, `textarea`) inherit the UI font.
 - The font files and their SIL Open Font License texts are in
   `overlay/assets/fonts/`. Windows fonts in the fallback stack cover glyphs
   Barlow lacks, such as Cyrillic in user-entered names.

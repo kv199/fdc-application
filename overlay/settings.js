@@ -303,7 +303,7 @@
     garageCurrentVariants.replaceChildren()
     garageCurrentVariants.hidden = !open
     garageCurrentVariantsToggle.hidden = !vehicle
-    garageCurrentVariantsToggle.textContent = open ? 'HIDE' : 'VIEW'
+    garageCurrentVariantsToggle.textContent = open ? 'HIDE VARIANTS' : 'VIEW VARIANTS'
     garageCurrentVariantsToggle.setAttribute('aria-expanded', String(open))
     if (!open || !vehicle) return
 

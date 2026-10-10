@@ -80,6 +80,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   `#`, for example `DRIVE 2`.
 - **Events**: a saved run's `BEST` column shows only the time, without the
   best lap or `SPRINT` next to it.
+- **Design**: Configuration text follows the FDC Dark type roles: lighter
+  panel titles, row names, labels, and buttons without the extra-bold spaced
+  lettering, and the New Event lists and notes now use the app font instead of
+  a system font. The Garage shows the current car's number larger, its PI,
+  drive, and cylinders as badges, and a highlighted **VIEW VARIANTS** button.
 
 ## 7.24.67 - 2026-10-06
 

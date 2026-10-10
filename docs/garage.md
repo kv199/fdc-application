@@ -9,14 +9,15 @@ Garage is the Configuration tab immediately to the right of Shift Light. It
 opens with a short intro.
 
 - **Current car** updates immediately when a new valid vehicle telemetry sample
-  is observed. It shows an empty square reserved for a future image, then the
-  saved vehicle name or its numeric car ordinal. A positive current `CarGroup`
-  value is displayed below that name as `GROUP <value>`, followed by a paired
-  Forza-style class and performance-index badge, drivetrain label, and cylinder
-  count. It does not carry a Last Used badge.
-- The current-car block has a right-aligned `VIEW` button in the same detail row
-  as its class/PI badge, drivetrain, and cylinder count. It changes to `HIDE`
-  and reveals a separate framed configuration area directly below the block.
+  is observed. It shows the saved vehicle name or its numeric car ordinal in
+  large readout type. A positive current `CarGroup` value is displayed below
+  that name as `GROUP <value>`, followed by a paired Forza-style class and
+  performance-index badge, drivetrain label, and cylinder count, each as a
+  bordered badge. It does not carry a Last Used badge.
+- The current-car block has a `VIEW VARIANTS` button, styled as the primary
+  action, in the same detail row as its class/PI badge, drivetrain, and cylinder
+  count. It changes to `HIDE VARIANTS` and reveals a separate framed
+  configuration area directly below the block.
   Escape closes that area, except while the inline name field owns Escape to
   cancel its edit. Each configuration row uses the Saved Cars border style and
   shows, from left to right, a Forza-style class/PI badge, its recorded
@@ -29,9 +30,12 @@ opens with a short intro.
   shows the saved count. The most recently observed car is first and carries a
   `LAST USED` badge in its upper-right corner. Each card displays the car's name,
   class, performance index, and drivetrain.
-- Class and performance index are displayed as the paired Forza-style badge:
-  D is light blue, C yellow, B orange, A red, S1 purple, S2 dark blue, R pink,
-  and X bright green. The class color also marks the left edge of a saved card.
+- Class is displayed as a Forza-style colored badge followed by the
+  performance index: D is light blue, C yellow, B orange, A red, S1 purple, S2
+  dark blue, R pink, and X bright green. The current car frames the performance
+  index as a badge; configuration rows show it in large readout type and saved
+  cards as plain text, with drivetrain and cylinders as plain text in the rows.
+  The class color also marks the left edge of a saved card.
 - UI text uses player-facing values only: for example, `2112`, `S1`, and `900`.
   The `S32` and `U32` field names are internal telemetry contract terms and are
   not rendered in cards.
