@@ -103,6 +103,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   BEHAVIOR**, and **UNITS**, in a narrower centered column.
 - **Design**: FDC has a new app icon, the Chroma F, in the taskbar, tray,
   window, and installer, and beside the FDC name in the Configuration header.
+- **Events** and **Driver Analysis**: the **POINT DATA** panel is easier to
+  read. Distance and time lead in large type, the other values sit in two
+  columns, the per-wheel table is larger, and the notes sit at the foot, so
+  the panel fills the height of the map.
 
 ## 7.24.67 - 2026-10-06
 

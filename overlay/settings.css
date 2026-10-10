@@ -1382,11 +1382,13 @@ h1 {
   background: var(--shade);
 }
 
+/* The map is at least as tall as a full POINT DATA panel, so the panel does not scroll. */
 .events-lap-detail__map-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: 12px;
   align-items: stretch;
+  min-height: 560px;
 }
 
 .events-lap-detail__svg {
@@ -1613,8 +1615,10 @@ h1 {
 }
 
 .events-lap-detail__tooltip-heading {
-  font-size: 12px;
-  font-weight: 600;
+  font-family: var(--font-readout);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.1;
   letter-spacing: 0;
 }
 
@@ -1624,13 +1628,17 @@ h1 {
 .events-lap-detail__tooltip-heading--abrupt_brake_release { color: var(--problem-abrupt-release); }
 
 .events-lap-detail__tooltip-line {
-  padding-top: 4px;
   color: var(--text);
+  font-size: var(--type-body);
+  line-height: 1.4;
 }
 
 .events-lap-detail__tooltip-instruction {
-  padding-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-subtle);
   color: var(--text-muted);
+  font-size: var(--type-body);
+  line-height: 1.4;
 }
 
 .events-lap-detail__legend-all {
@@ -1654,9 +1662,11 @@ h1 {
 }
 
 .events-lap-detail__inspector {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--line);
   background: var(--surface-deep);
   overflow-y: auto;
@@ -1665,23 +1675,48 @@ h1 {
 
 .events-lap-detail__inspector-title {
   display: block;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
   color: var(--text-muted);
   font-size: var(--type-label);
   font-weight: 400;
   letter-spacing: 0.14em;
 }
 
+/* The point values fill the panel: a large lead, two value columns, the wheel table, and notes at the foot. */
 .events-lap-detail__inspector-body {
-  font-size: 11px;
-  font-weight: 600;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.events-lap-detail__point-lead,
+.events-lap-detail__point-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.events-lap-detail__point-lead {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-subtle);
+}
+
+.events-lap-detail__point-metric {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.events-lap-detail__point-lead .events-lap-detail__tooltip-value {
+  font-size: 24px;
 }
 
 .events-lap-detail__tooltip-row {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 3px 0;
 }
 
 .events-lap-detail__tooltip-label {
@@ -1693,54 +1728,71 @@ h1 {
 }
 
 .events-lap-detail__tooltip-value {
+  overflow: hidden;
   color: var(--text);
   font-family: var(--font-readout);
+  font-size: 17px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.events-lap-detail__tooltip-row .events-lap-detail__tooltip-value {
+  font-size: var(--type-body);
   text-align: right;
-  flex-shrink: 0;
 }
 
 .events-lap-detail__tooltip-table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 4px;
-  font-size: 10px;
+  border-top: 1px solid var(--line-subtle);
 }
 
 .events-lap-detail__tooltip-table th {
-  padding: 2px 3px;
+  padding: 8px 3px 4px;
   color: var(--text-muted);
+  font-size: var(--type-label);
   font-weight: 400;
   letter-spacing: 0.14em;
-  text-align: center;
-  border-bottom: 1px solid var(--line-subtle);
+  text-align: right;
 }
 
 .events-lap-detail__tooltip-table td {
-  padding: 2px 3px;
+  padding: 3px;
   color: var(--text);
-  text-align: center;
+  text-align: right;
   font-family: var(--font-readout);
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
-  font-size: 10px;
 }
 
-.events-lap-detail__tooltip-wheel-label {
-  text-align: left;
-  color: var(--text-muted);
-  font-weight: 400;
-  letter-spacing: 0.14em;
+.events-lap-detail__tooltip-table td.events-lap-detail__tooltip-wheel-label {
   padding-right: 6px;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--type-label);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.events-lap-detail__point-notes {
+  display: grid;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-subtle);
 }
 
 .events-lap-detail__tooltip-caption {
-  padding-top: 3px;
-  margin-top: 4px;
-  border-top: 1px solid var(--line-subtle);
-  color: var(--text-slate);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0;
+  color: var(--text-muted);
+  font-size: var(--type-label);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
 }
 
 .events-run-table tbody th {
@@ -2124,6 +2176,7 @@ h1 {
 @media (max-width: 760px) {
   .events-lap-detail__map-layout {
     grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
   }
 
   .events-lap-detail__inspector {

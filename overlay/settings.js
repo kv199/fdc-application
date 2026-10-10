@@ -1908,19 +1908,28 @@
       return
     }
 
-    // Simple rows
-    for (const row of model.rows) {
-      const div = document.createElement('div')
-      div.className = 'events-lap-detail__tooltip-row'
-      const label = document.createElement('span')
-      label.className = 'events-lap-detail__tooltip-label'
-      label.textContent = row.label
-      const value = document.createElement('span')
-      value.className = 'events-lap-detail__tooltip-value'
-      value.textContent = row.value
-      div.append(label, value)
-      container.append(div)
+    // DIST and TIME lead the panel in large type; the other values sit in two columns below.
+    const appendMetrics = (className, rows) => {
+      if (!rows.length) return
+      const group = document.createElement('div')
+      group.className = className
+      for (const row of rows) {
+        const metric = document.createElement('div')
+        metric.className = 'events-lap-detail__point-metric'
+        const label = document.createElement('span')
+        label.className = 'events-lap-detail__tooltip-label'
+        label.textContent = row.label
+        const value = document.createElement('span')
+        value.className = 'events-lap-detail__tooltip-value'
+        value.textContent = row.value
+        metric.append(label, value)
+        group.append(metric)
+      }
+      container.append(group)
     }
+    const isLead = row => row.label === 'DIST' || row.label === 'TIME'
+    appendMetrics('events-lap-detail__point-lead', model.rows.filter(isLead))
+    appendMetrics('events-lap-detail__point-metrics', model.rows.filter(row => !isLead(row)))
 
     // Wheel table
     if (model.wheelTable.length > 0) {
@@ -1981,11 +1990,16 @@
       container.append(div)
     }
 
-    for (const note of model.notes || []) {
-      const caption = document.createElement('div')
-      caption.className = 'events-lap-detail__tooltip-caption'
-      caption.textContent = note
-      container.append(caption)
+    if (model.notes?.length) {
+      const notes = document.createElement('div')
+      notes.className = 'events-lap-detail__point-notes'
+      for (const note of model.notes) {
+        const caption = document.createElement('div')
+        caption.className = 'events-lap-detail__tooltip-caption'
+        caption.textContent = note
+        notes.append(caption)
+      }
+      container.append(notes)
     }
   }
 

@@ -298,7 +298,11 @@ test('Event lap rows expose trace details and time-weighted pedal statistics', (
   assert.match(settingsJs, /events-lap-detail__inspector/)
   assert.match(settingsJs, /'POINT DATA'/)
   assert.match(settingsJs, /aria-live/)
-  assert.match(settingsStyles, /\.events-lap-detail__map-layout\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\) 260px;/)
+  assert.match(settingsStyles, /\.events-lap-detail__map-layout\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\) 300px;/)
+  // The panel groups its values: a large DIST/TIME lead, two value columns, and notes at the foot.
+  assert.match(settingsJs, /events-lap-detail__point-lead/)
+  assert.match(settingsJs, /events-lap-detail__point-metrics/)
+  assert.match(settingsJs, /events-lap-detail__point-notes/)
   assert.match(settingsStyles, /@media \(max-width: 760px\) \{[^@]*?\.events-lap-detail__map-layout\s*\{/)
   assert.doesNotMatch(settingsJs, /events-lap-detail__stat-key/)
   assert.match(settingsCss, /\.events-run-view__metric\s*\{[\s\S]*align-items: center;/)
