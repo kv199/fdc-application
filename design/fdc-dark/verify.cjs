@@ -11,13 +11,13 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const context = { window: {} };
 vm.createContext(context);
 
-for (const file of ['screens.js', 'screens-current.js', 'foundations.js', 'style-spec.js', 'overlays.js', 'light-theme.js', 'light-maps.js', 'icon/icon.js']) {
+for (const file of ['screens.js', 'screens-current.js', 'foundations.js', 'style-spec.js', 'overlays.js', 'light-theme.js', 'light-maps.js', 'icon/icon.js', 'sector-indicators.js']) {
   vm.runInContext(read(file), context, { filename: file });
 }
 
 const boards = [...context.window.FDC_SCREENS, ...context.window.FDC_FOUNDATIONS];
 const ids = new Set(boards.map(board => board.id));
-if (boards.length !== 25 || ids.size !== 25) throw Error('Expected 25 unique boards');
+if (boards.length !== 26 || ids.size !== 26) throw Error('Expected 26 unique boards');
 
 for (const board of boards) {
   if (!board.html || !board.description) throw Error(`Empty board: ${board.id}`);
@@ -37,7 +37,7 @@ if (!fs.existsSync(path.join(repo, 'overlay', 'assets', 'textures', 'paint.jpg')
 for (const file of ['fonts', 'paint.png']) {
   if (exists(file)) throw Error(`Duplicate of an app asset in the book: ${file}`);
 }
-for (const css of ['book.css', 'design-system.css', 'light-theme.css', 'light-maps.css', 'icon/icon.css']) {
+for (const css of ['book.css', 'design-system.css', 'light-theme.css', 'light-maps.css', 'sector-indicators.css', 'icon/icon.css']) {
   for (const match of read(css).matchAll(/url\(([^)]+)\)/g)) {
     if (!exists(match[1])) throw Error(`Broken asset in ${css}: ${match[1]}`);
   }
@@ -115,4 +115,5 @@ if (!boards.find(board => board.id === 'driver-list').html.includes('Ctrl + Shif
   throw Error('Driver specimen shows the wrong default hotkey');
 }
 
-console.log('FDC design book: 22 implemented boards, 3 proposals, links, app assets, and specification tokens verified.');
+const proposalCount = boards.filter(board => board.status === 'proposal').length;
+console.log(`FDC design book: ${boards.length - proposalCount} implemented boards, ${proposalCount} proposals, links, app assets, and specification tokens verified.`);

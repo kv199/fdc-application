@@ -1,7 +1,7 @@
 # FDC design book — FDC Dark
 
 The design book shows the FDC Dark design as it is implemented in the app,
-with fixture data, plus separate light Configuration, map, and app icon proposals.
+with fixture data, plus separate light Configuration, map, app icon, and Delta sector indicator proposals.
 It lives on the `design` branch only and never merges into `develop` or
 `main`; bring it up to date by merging the implementation branch into `design`.
 
@@ -62,9 +62,10 @@ geometry and shift states, Driver history, recording, car, and drive pages,
 Shift Light, Garage, Events library, create, event, run, and map, and Settings.
 Six reference boards cover the implemented exact style specification,
 materials, fonts, the component and state kit, the screen map, and the
-connection guide with the confirmation dialogs. Two additional proposal boards
+connection guide with the confirmation dialogs. Additional proposal boards
 show a light Configuration specimen with the existing dark painted header and
-nine app-icon candidates at Windows taskbar and tray sizes.
+nine app-icon candidates at Windows taskbar and tray sizes,
+and Delta sector indicators.
 
 Boards follow the implemented app: the tab description and the Direct Data Out
 status in the header, the compact drill-down path such as `← RECORDING / CAR`,
@@ -78,3 +79,16 @@ never live telemetry; map paths are schematic and identify no track.
 Barlow and Barlow Condensed are bundled by the app under the SIL Open Font
 License 1.1. The UI is English; Windows fonts in the fallback stack cover
 glyphs Barlow lacks, such as Cyrillic in user-entered names.
+
+## Delta sector indicators proposal
+
+Open `?board=foundation-sectors` for the **Delta · Sector indicators** study
+based on [issue #40](https://github.com/kv199/forza-horizon-6-suite/issues/40).
+`sector-indicators.js` and `sector-indicators.css` add a compact S1 / S2 / S3
+row under the existing Delta bar, with signed differences in seconds and
+Better (green), Worse (yellow), Best (purple), and neutral states.
+Lap-state controls demonstrate sector completion, next-lap reset, an equal
+sector, missing reference and missing telemetry with synthetic values only.
+The reference source and Best scope remain open product decisions. Reset and
+equal-sector handling are proposed treatments for review. This page does not
+change FDC runtime, the comparison engine, persistence, or HUD visibility.
