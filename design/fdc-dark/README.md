@@ -45,9 +45,10 @@ the tokens named on both specification boards.
 - The **Light theme · Events and Driver maps** board compares current dark
   and proposed light treatments of the same schematic map geometry, layers,
   and sample values. A persistent, full-height point inspector occupies the
-  right side of each map; numbered samples and hover update it. The light
-  neutral route has a darker contour, stable screen-pixel strokes and markers,
-  and fully opaque layer labels to separate geometry from semantic overlays.
+  right side of each map; numbered samples and hover update it. Only the route
+  canvas is dark, with a light contour and the existing bright trace inks.
+  POINT DATA, the legend and controls remain light grey. Stable screen-pixel
+  strokes, markers and fully opaque layer labels preserve readability.
   `light-maps.css` and `light-maps.js` are proposal-only; no runtime map,
   saved data, or HUD style is changed.
 - The **App icon · F studies** board pairs light and black tiles carrying

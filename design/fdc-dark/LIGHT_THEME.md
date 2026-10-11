@@ -73,16 +73,25 @@ compares dark and revised light treatments with the same schematic geometry
 and illustrative point values. It is a design fixture, not a recorded drive,
 basemap, identified track, ideal line or assessment of real driving.
 
-| Map role | Candidate |
-| --- | --- |
-| Canvas / neutral route | `#d1d3d1` / `#5a645e` |
-| Throttle / brake / coast / slip | `#355d27` / `#981f19` / `#73530e` / `#176575` |
-| Front scrub / exit wheelspin | `#92501e` / `#943568` |
-| Brake + steering / abrupt release | `#464e9b` / `#6e488b` |
-| Clean check | `#58645c` |
+Only the route canvas is dark. POINT DATA, its check details and per-wheel
+table, the caption, legend, sample controls and surrounding card keep the
+existing light surfaces and dark text. Scope dark inks to the plot container;
+do not apply them to the whole map card or inspector.
 
-Use these as map-only inks; do not redefine the HUD's telemetry or problem
-colors. The neutral route must remain visible when semantic layers are off.
+| Route canvas role | Value / source |
+| --- | --- |
+| Canvas / neutral route | `#0d1211` / `#edf0df` |
+| Throttle / brake / coast / slip | Existing `--trace-*` inks: `#69e83f` / `#ef4444` / `#facc15` / `#22d3ee` |
+| Front scrub / exit wheelspin | Existing problem inks: `#fb923c` / `#f472b6` |
+| Brake + steering / abrupt release | Existing problem inks: `#818cf8` / `#d8b4fe` |
+| Clean checks / route labels and cursor | `#b0bcae` / `#edf0df` |
+| Selected segment casing | `#0d1211` |
+
+The legend retains the darker semantic `--map-*` inks from
+`light-theme.css` so swatches remain visible on grey. Canvas and legend
+share hue meanings, with brightness adapted to their different surfaces.
+The in-game HUD and its telemetry colors remain unchanged. The neutral route
+must remain visible when semantic layers are off.
 Use `vector-effect: non-scaling-stroke` so SVG geometry scaling does not
 shrink the contour: route 2.4 px, pedal trace 3 px, problem segment 6 px,
 selected casing 10 px, slip band 9 px and sector ticks 2 px. These are screen
@@ -100,8 +109,8 @@ older recordings.
 
 ## Verification and handoff
 
-The book verifier checks links, assets, named tokens and the approved neutral
-route role. Review the Configuration and map boards at desktop and narrow
+The book verifier checks links, assets, named tokens and the dark canvas
+boundary of the light map. Review the Configuration and map boards at desktop and narrow
 widths, with semantic layers both on and off. Contrast checks must include
 inset labels, header status, disabled-layer labels and markers, as well as
 ordinary text. Token-pair checks alone do not cover opacity or SVG scaling.

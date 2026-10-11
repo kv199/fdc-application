@@ -8,7 +8,10 @@ The proposed light Configuration palette is in
 design-book specimen. The approved revision uses neutral grey panels and a
 new light masthead texture in `design/fdc-dark/textures/paint-light.jpg`
 (original: `paint-light-source.png`). This revision is not implemented in
-FDC. The in-game HUD and Delta stay on the current dark design.
+FDC. The Events and Driver map proposal scopes a dark palette to the route
+canvas only; POINT DATA, legends and controls retain the light theme. Its
+styles are in `design/fdc-dark/light-maps.css`. The in-game HUD and Delta
+stay on the current dark design.
 
 The `settings` board is also a proposal. It groups the six current preferences
 into Window & Exit, HUD Behavior, and Units on ordinary surfaces. It shows the

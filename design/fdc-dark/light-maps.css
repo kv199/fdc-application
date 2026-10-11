@@ -26,6 +26,23 @@
   --map-inspector: var(--surface-deep); --map-selected: var(--text);
   background: var(--surface); color: var(--map-ink);
 }
+/* Only the route canvas inherits the dark map inks. The caption, point
+   inspector, legend and sample controls keep the light card's roles. */
+.map-study__card--light .map-study__plot {
+  --map-field: #0d1211;
+  --map-rail: #edf0df;
+  --map-throttle-color: var(--trace-throttle);
+  --map-brake-color: var(--trace-brake);
+  --map-coast-color: var(--trace-coast);
+  --map-slip-color: var(--trace-slip);
+  --map-scrub-color: var(--problem-front-scrub);
+  --map-wheelspin-color: var(--problem-exit-wheelspin);
+  --map-overload-color: var(--problem-brake-steering);
+  --map-clean-color: #b0bcae;
+  --map-ink: #edf0df;
+  --map-selected: #0d1211;
+  color-scheme: dark;
+}
 .map-study__caption { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--map-divider); }
 .map-study__caption strong { font: 600 18px/1.1 var(--font-readout); }
 .map-study__caption span { color: var(--map-secondary); font-size: 11px; font-weight: 700; }
