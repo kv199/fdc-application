@@ -52,9 +52,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   leaves the map.
 - **Settings**: a new **THEME** setting gives the Configuration window a light
   look. Choose **DARK** (the default), **LIGHT**, or **SYSTEM** to follow
-  Windows. The light theme also lightens the Events and Driver Analysis maps
-  and the window title bar; the painted header, the in-game HUD, and Delta stay
-  dark.
+  Windows. The light theme uses neutral grey cards and fields on a light
+  background, a light painted header, clearer Events and Driver Analysis maps,
+  and a light window title bar; the in-game HUD and Delta stay dark.
 
 ### Improved
 

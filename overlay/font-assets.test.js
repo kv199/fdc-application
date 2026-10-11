@@ -67,3 +67,12 @@ test('paint.jpg exists and is under 350 KB', () => {
   const maxBytes = 350 * 1024
   assert.ok(stats.size <= maxBytes, `paint.jpg should be at most 350 KB, got ${(stats.size / 1024).toFixed(2)} KB`)
 })
+
+test('paint-light.jpg exists and is under 350 KB', () => {
+  const paintPath = path.join(__dirname, 'assets', 'textures', 'paint-light.jpg')
+  assert.ok(fs.existsSync(paintPath), 'paint-light.jpg should exist')
+
+  const stats = fs.statSync(paintPath)
+  const maxBytes = 350 * 1024
+  assert.ok(stats.size <= maxBytes, `paint-light.jpg should be at most 350 KB, got ${(stats.size / 1024).toFixed(2)} KB`)
+})

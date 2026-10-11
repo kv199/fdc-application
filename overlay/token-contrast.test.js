@@ -115,8 +115,12 @@ test('WCAG 2.x contrast ratios for non-text controls', () => {
 test('Light theme contrast for the pairs the design book checks', () => {
   const tokens = readTokens('light')
   const surface = tokens.get('--surface')
+  // Reading and status text stays readable on every grey surface, the darkest
+  // inset (fields, tables, POINT DATA), and the light painted header base.
   for (const textToken of ['--text', '--text-soft', '--text-muted', '--accent-ink', '--danger-text', '--best', '--warning', '--notice']) {
-    assertContrast(tokens.get(textToken), surface, 4.5, `light ${textToken} on --surface`)
+    for (const bgToken of ['--bg', '--surface', '--panel', '--surface-deep', '--paint']) {
+      assertContrast(tokens.get(textToken), tokens.get(bgToken), 4.5, `light ${textToken} on ${bgToken}`)
+    }
   }
   assertContrast(tokens.get('--text-faint'), surface, 3, 'light --text-faint on --surface')
   assertContrast(tokens.get('--focus-ring'), tokens.get('--bg'), 3, 'light --focus-ring on --bg')

@@ -92,10 +92,11 @@
   --accent-hover: #d5f6a6;
   --accent-pressed: #b2df6c;
   --accent-soft: #d5f6a6;
-  /* Lime used as text on a light surface, and as a focus outline. Equal to
-     --accent in dark; light theme sets them to darker greens. */
+  /* Lime used as text on a light surface, as a focus outline, and as the edge
+     of a lime fill. Equal to --accent in dark; light theme darkens them. */
   --accent-ink: #c3ed83;
   --focus-ring: #c3ed83;
+  --accent-edge: #c3ed83;
   --text-on-accent: #162314;
   --text-on-accent-deep: #162314;
 
@@ -189,91 +190,80 @@
 
 /* Light theme for Configuration only. The page sets data-theme="light" on
    <html>; the in-game HUD never does and stays on the :root values above.
-   Values come from the design book's light-theme proposal. */
+   Values come from the design book's light Configuration revision: a light
+   canvas with neutral grey panels and fields, and a light painted header. */
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* Surfaces, darkest to lightest */
+  /* Painted header: the light matte texture over a neutral grey base */
+  --paint: #c9ccca;
+
+  /* Surfaces: light canvas, grey cards, raised plate, darker inset */
   --bg: #f1f3ee;
-  --surface-deep: #e5e9e2;
-  --surface: #fafbf8;
-  --panel: #e8ede5;
-  --surface-hover: #e8eedc;
-  --shade: #dde3da;
-  --shade-deep: #e1e6de;
-  --shade-overlay: rgb(16 24 18 / 44%);
-  --shadow: #152016;
-  --meter-track: #d1d9ce;
+  --surface-deep: #c2c5c3;
+  --surface: #d8d9d8;
+  --panel: #cccecc;
+  --surface-hover: #cccecc;
+  --shade: #b8bdb9;
+  --shade-deep: #b2b8b3;
+  --shade-overlay: rgb(38 42 40 / 44%);
+  --shadow: #262a28;
+  --meter-track: #afb5b1;
 
   /* Map surfaces and ink */
-  --map-canvas: #e5e9e2;
-  --map-track: #b7c2b6;
-  --map-throttle: #446b24;
-  --map-brake: #a51d16;
-  --map-coast: #765a0a;
-  --map-slip: #126f80;
-  --map-front-scrub: #a85313;
-  --map-exit-wheelspin: #a53872;
-  --map-brake-steering: #4754af;
-  --map-abrupt-release: #76529a;
-  --map-clean: #68756a;
+  --map-canvas: #d1d3d1;
+  --map-track: #5a645e;
+  --map-throttle: #355d27;
+  --map-brake: #981f19;
+  --map-coast: #73530e;
+  --map-slip: #176575;
+  --map-front-scrub: #92501e;
+  --map-exit-wheelspin: #943568;
+  --map-brake-steering: #464e9b;
+  --map-abrupt-release: #6e488b;
+  --map-clean: #58645c;
 
   /* Lines */
-  --line-subtle: #d5dbd2;
-  --line: #b7c2b6;
-  --line-strong: #829184;
-  --line-light: #263329;
+  --line-subtle: #afb5b1;
+  --line: #8c948f;
+  --line-strong: #65716a;
+  --line-light: #262a28;
 
-  /* Text */
-  --text: #1b241d;
-  --text-bright: #111a13;
-  --text-soft: #364238;
-  --text-muted: #566357;
-  --text-subtle: #68756a;
-  --text-faint: #89938b;
-  --text-slate: #566357;
+  /* Text. Supporting text is one step darker than the book's #4b5450 so it
+     keeps 4.5:1 on the darkest inset. */
+  --text: #262a28;
+  --text-bright: #1c201e;
+  --text-soft: #3c4440;
+  --text-muted: #4a5350;
+  --text-subtle: #4a5350;
+  --text-faint: #6a736e;
+  --text-slate: #4a5350;
 
-  /* Interaction accent: lime stays a fill; ink and focus are darker greens */
-  --accent: #c3ed83;
-  --accent-hover: #d5f6a6;
-  --accent-pressed: #b2df6c;
-  --accent-soft: #d5f6a6;
-  --accent-ink: #446b24;
-  --focus-ring: #557a2c;
+  /* Interaction accent: lime stays a fill with a dark edge; ink and focus
+     are dark green */
+  --accent: #bddb87;
+  --accent-hover: #c9e39d;
+  --accent-pressed: #aecb79;
+  --accent-soft: #c9e39d;
+  --accent-ink: #365829;
+  --focus-ring: #365829;
+  --accent-edge: #65716a;
   --text-on-accent: #162314;
   --text-on-accent-deep: #162314;
 
   /* Status */
-  --danger: #a51d16;
-  --danger-text: #a51d16;
+  --danger: #981f19;
+  --danger-text: #981f19;
   --danger-soft: #f6c3bd;
-  --danger-rose: #a51d16;
+  --danger-rose: #981f19;
   --text-on-danger: #fff;
-  --warning: #765a0a;
-  --caution: #795b08;
-  --caution-strong: #624706;
-  --notice: #8a4d17;
+  --warning: #614806;
+  --caution: #614806;
+  --caution-strong: #533d05;
+  --notice: #774619;
   --notice-soft: #f3d3b3;
-  --best: #6b3f91;
+  --best: #62407f;
   --text-on-badge: #141914;
   --text-on-class: #0c150e;
   --text-on-class-s2: #fff;
-}
-
-/* The painted Configuration header stays dark in the light theme. Its
-   children read these roles, so restoring them on the header is enough. */
-:root[data-theme="light"] .settings-header {
-  color-scheme: dark;
-  color: #edf0df;
-  --text: #edf0df;
-  --text-muted: #b0bcae;
-  --text-subtle: #9dab9c;
-  --surface-deep: #152019;
-  --line: #58695c;
-  --line-strong: #8c9b82;
-  --warning: #e2c876;
-  --danger-text: #f2877f;
-  --accent: #c3ed83;
-  --accent-ink: #c3ed83;
-  --focus-ring: #c3ed83;
 }

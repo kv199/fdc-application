@@ -314,7 +314,7 @@ h1 {
 
 /* The selected tab keeps its lime fill without hover. */
 .settings-tab.is-active {
-  border-color: var(--accent);
+  border-color: var(--accent-edge);
   color: var(--text-on-accent);
   background: var(--accent);
 }
@@ -1100,7 +1100,7 @@ h1 {
 }
 
 .connect-guide .connect-guide__done {
-  border-color: var(--accent);
+  border-color: var(--accent-edge);
   color: var(--text-on-accent);
   background: var(--accent);
 }
@@ -1175,7 +1175,7 @@ h1 {
 }
 
 .confirm-dialog .confirm-dialog__no {
-  border-color: var(--accent);
+  border-color: var(--accent-edge);
   color: var(--text-on-accent);
   background: var(--accent);
 }
@@ -2083,7 +2083,7 @@ h1 {
 .settings-button.event-recorder__record {
   width: auto;
   margin-top: 0;
-  border-color: var(--accent);
+  border-color: var(--accent-edge);
   color: var(--text-on-accent);
   background: var(--accent);
 }
@@ -2327,7 +2327,7 @@ h1 {
 }
 
 .settings-button.driver-analysis-record--ready {
-  border-color: var(--accent);
+  border-color: var(--accent-edge);
   color: var(--text-on-accent-deep);
   background: var(--accent);
 }
@@ -2754,7 +2754,7 @@ h1 {
 
 .calibration-help-button:hover,
 .calibration-help-button:focus-visible {
-  border-color: var(--accent);
+  border-color: var(--accent-edge);
   color: var(--text-on-accent);
   background: var(--accent);
 }
@@ -2876,7 +2876,7 @@ h1 {
 
 .settings-button:not(:disabled):hover,
 .settings-button:not(:disabled):focus-visible {
-  border-color: var(--accent);
+  border-color: var(--accent-edge);
   color: var(--text-on-accent);
   background: var(--accent);
 }
@@ -2892,7 +2892,7 @@ h1 {
 /* The one next step of a screen is filled with lime at rest. The compound
    selector keeps it above the base button rules. */
 .settings-button.settings-button--ready {
-  border-color: var(--accent);
+  border-color: var(--accent-edge);
   color: var(--text-on-accent);
   background: var(--accent);
 }
@@ -3450,7 +3450,7 @@ h1 {
 
 /* The selected unit keeps its lime fill without hover. */
 .unit-option input:checked + span {
-  border-color: var(--accent);
+  border-color: var(--accent-edge);
   color: var(--text-on-accent);
   background: var(--accent);
 }
@@ -3684,6 +3684,42 @@ h1 {
   --problem-exit-wheelspin: var(--map-exit-wheelspin);
   --problem-brake-steering: var(--map-brake-steering);
   --problem-abrupt-release: var(--map-abrupt-release);
+}
+
+/* The light header uses its own light matte paint; its text reads the dark
+   light-theme roles. */
+:root[data-theme="light"] .settings-header::before {
+  background-image: url('assets/textures/paint-light.jpg');
+}
+
+/* Light maps keep screen-pixel strokes, so the route and traces stay readable
+   however far the SVG is scaled. */
+:root[data-theme="light"] .events-lap-detail__svg :is(polyline, line, circle) {
+  vector-effect: non-scaling-stroke;
+}
+
+:root[data-theme="light"] .events-lap-detail__outline { stroke-width: 2.4px; }
+:root[data-theme="light"] .events-lap-detail__trace { stroke-width: 3px; }
+:root[data-theme="light"] .events-lap-detail__slip-line { stroke-width: 9px; opacity: 1; }
+:root[data-theme="light"] .events-lap-detail__sector-tick { stroke-width: 2px; }
+:root[data-theme="light"] .events-lap-detail__mark { stroke-width: 6px; }
+:root[data-theme="light"] .events-lap-detail__mark-casing,
+:root[data-theme="light"] .events-lap-detail__mark-casing.is-selected { stroke-width: 10px; }
+:root[data-theme="light"] :is(.events-lap-detail__start, .events-lap-detail__clean) { stroke-width: 1.5px; }
+:root[data-theme="light"] .events-lap-detail__clean { fill-opacity: 1; }
+
+/* A hidden layer keeps a full-opacity label; its swatch turns hollow. */
+:root[data-theme="light"] .events-lap-detail__stat[aria-pressed="false"]:not(:disabled) {
+  opacity: 1;
+}
+
+:root[data-theme="light"] .events-lap-detail__stat[aria-pressed="false"] .events-lap-detail__swatch {
+  padding: 2px;
+  mask: linear-gradient(currentColor 0 0) content-box exclude, linear-gradient(currentColor 0 0);
+}
+
+:root[data-theme="light"] .events-lap-detail__stat[aria-pressed="true"] {
+  background: var(--panel);
 }
 
 /* These pale dark-theme text roles (--danger-soft, --notice-soft) are too weak

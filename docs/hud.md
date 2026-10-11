@@ -210,7 +210,8 @@ next two), and **UNITS** (the last two):
   Configuration window a light palette and a light Windows title bar. `SYSTEM`
   follows the Windows app mode and switches the Configuration window when that
   mode changes; its title bar follows Windows as well. The in-game HUD and Delta
-  stay dark in every choice. The choice is saved with the other display
+  stay dark in every choice, and the light theme gives the Configuration
+  header a light painted finish. The choice is saved with the other display
   preferences on this PC;
 - **Show HUD with telemetry**, described above;
 - **HUD rendering**: `GPU`, the default, or `CPU`. With `CPU` the HUD and
