@@ -39,11 +39,12 @@
   --text-faint: #6a736e;
   --text-slate: #4b5450;
 
-  /* Keep FDC lime as a fill, but give text and focus their own contrast roles. */
-  --accent: #bddb87;
-  --accent-hover: #c9e39d;
-  --accent-pressed: #aecb79;
-  --accent-soft: #c9e39d;
+  /* Muted lime for every light control and action; readable text keeps dark ink. */
+  --accent: #9fac88;
+  --accent-hover: #adb996;
+  --accent-pressed: #8e9e78;
+  --accent-soft: #adb996;
+  --range-fill: #8e9e78;
   --accent-ink: #365829;
   --focus-ring: #365829;
   --text-on-accent: #162314;
@@ -157,3 +158,57 @@
 
 .app--light-proposal .appnav a { border: 1px solid transparent; }
 .app--light-proposal .appnav a.active { border-color: var(--line-strong); }
+
+/* Match the agreed control study without changing the shared dark styles. */
+.app--light-proposal .toggle {
+  background: var(--surface-deep);
+  border-color: var(--line-strong);
+}
+.app--light-proposal .toggle::after { background: var(--accent); }
+.app--light-proposal .toggle:is([aria-checked="false"], [aria-pressed="false"])::after { background: var(--text-muted); }
+.app--light-proposal .segmented { background: var(--surface-deep); }
+.app--light-proposal .segmented button { border: 1px solid transparent; background: transparent; }
+.app--light-proposal .segmented button.selected {
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border-color: var(--line-strong);
+}
+.app--light-proposal input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ew-resize;
+}
+.app--light-proposal input[type="range"]::-webkit-slider-runnable-track {
+  height: 7px;
+  background: linear-gradient(to right, var(--range-fill) 0%, var(--range-fill) var(--range-position, 60%), var(--meter-track) var(--range-position, 60%), var(--meter-track) 100%);
+}
+.app--light-proposal input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 24px;
+  margin-top: -8.5px;
+  border: 2px solid var(--surface);
+  border-radius: 0;
+  background: var(--text);
+}
+.app--light-proposal input[type="range"]::-moz-range-track { height: 7px; background: var(--meter-track); }
+.app--light-proposal input[type="range"]::-moz-range-progress { height: 7px; background: var(--range-fill); }
+.app--light-proposal input[type="range"]::-moz-range-thumb {
+  width: 10px;
+  height: 20px;
+  border: 2px solid var(--surface);
+  border-radius: 0;
+  background: var(--text);
+}
+.light-proposal__controls { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; scroll-margin-top: 90px; }
+.light-proposal__controls > div { min-width: 0; }
+.light-proposal__controls .row p { margin: 5px 0 0; }
+.light-proposal__controls .light-proposal__widget { padding: 10px 0; margin: 0; min-height: 43px; }
+.light-proposal__controls .light-proposal__widget:last-child { padding-bottom: 0; }
+.light-proposal__control-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+@media (max-width: 760px) { .light-proposal__controls { grid-template-columns: 1fr; } }

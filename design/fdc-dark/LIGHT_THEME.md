@@ -43,8 +43,17 @@ labels must remain readable on the darkest inset, including POINT DATA.
 ## Actions and states
 
 - Lime is an accent for selected tabs, ready actions and selected controls:
-  `--accent: #bddb87`, hover `#c9e39d`, pressed `#aecb79`, with dark
-  `--text-on-accent: #162314`. Use a visible dark edge as well as a fill.
+  `--accent: #9fac88`, hover `#adb996`, pressed `#8e9e78`, with dark
+  `--text-on-accent: #162314`. This muted lime applies to toggle thumbs,
+  selected options, tabs and ready actions, including EDIT LAYOUT. Keep a
+  visible dark edge; do not restore a brighter lime for the main action.
+- Range progress uses `--range-fill: #8e9e78` against `--meter-track`, with
+  a dark `--text` thumb. Fill follows the value as the control moves.
+  Off toggles use `--text-muted` on the same neutral inset. Shape, position,
+  focus and semantic meaning remain consistent with the dark theme.
+- The [interactive control specimen](index.html?board=foundation-light#light-controls)
+  shows opacity, arrangement, EDIT LAYOUT and widget toggles. These are local
+  demonstrations and never modify FDC preferences or HUD visibility.
 - `--accent-ink: #365829` is the readable green text and focus role. Pale
   `--accent-soft` is a fill only, never a text color for a success or clean
   state. A light-theme implementation needs role-specific selectors.
