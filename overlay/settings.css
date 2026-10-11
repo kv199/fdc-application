@@ -3693,6 +3693,12 @@ h1 {
   background-image: url('assets/textures/paint-light.jpg');
 }
 
+/* The route canvas stays dark in light (its dark roles are in tokens.css);
+   the SVG fills its whole box, letterbox and padding included. */
+:root[data-theme="light"] .events-lap-detail__svg {
+  background: var(--map-canvas);
+}
+
 /* Light maps keep screen-pixel strokes, so the route and traces stay readable
    however far the SVG is scaled. */
 :root[data-theme="light"] .events-lap-detail__svg :is(polyline, line, circle) {

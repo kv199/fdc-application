@@ -268,9 +268,12 @@ Delta use even fills.
   EDIT LAYOUT; slider fills use the slightly darker `--range-fill` behind the
   dark thumb.
 - Lap and Driver Analysis maps draw on `--map-canvas`. Their outline uses
-  `--map-track`, clean checks use `--map-clean`, and trace and problem colors
-  come from the map-only `--map-*` roles in light. Dark values equal the
-  previous map colors. In light, map strokes keep fixed screen widths
+  `--map-track` and clean checks use `--map-clean`. The route canvas, the map
+  SVG, stays dark in both themes: in light, `tokens.css` returns the map,
+  trace, problem, and `--text` roles to their dark values inside
+  `.events-lap-detail__svg`. The legend, POINT DATA, and the map card stay
+  light; in light their trace and problem colors come from the darker
+  map-only `--map-*` roles so swatches read on grey. In light, map strokes keep fixed screen widths
   (`vector-effect: non-scaling-stroke`): outline 2.4 px, pedal trace 3 px,
   problem segment 6 px, its casing 10 px, slip band 9 px, and sector ticks
   2 px. Clean checks are fully opaque, and a hidden layer keeps a full-opacity

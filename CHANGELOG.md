@@ -54,7 +54,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   look. Choose **DARK** (the default), **LIGHT**, or **SYSTEM** to follow
   Windows. The light theme uses neutral grey cards and fields on a light
   background, a muted lime for controls and actions, a light painted header,
-  clearer Events and Driver Analysis maps, and a light window title bar; the in-game HUD and Delta stay dark.
+  Events and Driver Analysis maps that keep their dark route canvas, and a
+  light window title bar; the in-game HUD and Delta stay dark.
 
 ### Improved
 

@@ -270,3 +270,23 @@
   --text-on-class: #0c150e;
   --text-on-class-s2: #fff;
 }
+
+/* The route canvas of Lap and Driver Analysis maps stays dark in the light
+   theme: inside the map SVG the map, trace, and problem roles return to
+   their dark values. The legend, POINT DATA, and the card around them keep
+   the light roles, so legend swatches use the darker light --map-* inks. */
+:root[data-theme="light"] .events-lap-detail__svg {
+  color-scheme: dark;
+  --text: #edf0df;
+  --map-canvas: #0b110e;
+  --map-track: #edf0df;
+  --map-clean: #b0bcae;
+  --trace-throttle: #69e83f;
+  --trace-brake: #ef4444;
+  --trace-coast: #facc15;
+  --trace-slip: #22d3ee;
+  --problem-front-scrub: #fb923c;
+  --problem-exit-wheelspin: #f472b6;
+  --problem-brake-steering: #818cf8;
+  --problem-abrupt-release: #d8b4fe;
+}
