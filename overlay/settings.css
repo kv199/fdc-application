@@ -3574,7 +3574,7 @@ h1 {
   border-radius: 0;
   background: linear-gradient(
     90deg,
-    var(--accent) 0 var(--brightness-fill),
+    var(--range-fill) 0 var(--brightness-fill),
     var(--meter-track) var(--brightness-fill) 100%
   );
   cursor: pointer;
@@ -3723,8 +3723,14 @@ h1 {
   background: var(--panel);
 }
 
-/* These pale dark-theme text roles (--danger-soft, --notice-soft) are too weak
-   on light surfaces, so the light theme reads the stronger ink roles instead. */
+/* These pale dark-theme text roles (--danger-soft, --notice-soft, --accent-soft)
+   are too weak on light surfaces, so the light theme reads the stronger ink
+   roles instead. */
+:root[data-theme="light"] .driver-analysis-history-row strong[data-result='no_recurring_problem'],
+:root[data-theme="light"] .driver-analysis-detail-view strong[data-result='no_recurring_problem'] {
+  color: var(--accent-ink);
+}
+
 :root[data-theme="light"] .confirm-dialog .confirm-dialog__yes {
   color: var(--danger-text);
 }

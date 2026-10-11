@@ -70,7 +70,8 @@ Delta use even fills.
 ## Accent and status colors
 
 - Lime `--accent` is for interaction: hover fills, selected tabs and choices,
-  switches that are on, and slider fills. Focus outlines use `--focus-ring`.
+  and switches that are on. Slider fills use `--range-fill`, which equals
+  `--accent` in dark. Focus outlines use `--focus-ring`.
   As text it is reserved for sparse ready, positive, or timing values, never
   decoration. Lime text uses `--accent-ink`, which equals `--accent` in dark.
 - Ready actions use `.settings-button--ready`, filled with `--accent` and
@@ -262,7 +263,10 @@ Delta use even fills.
 - Lime stays a fill: `--accent` with `--text-on-accent` and an
   `--accent-edge` border, which is dark in light. Lime text uses
   `--accent-ink`, and focus outlines and state borders use `--focus-ring`. All
-  three equal lime in dark.
+  three equal lime in dark. In light, `--accent` is a muted lime shared by
+  selected tabs and options, switches that are on, and ready actions such as
+  EDIT LAYOUT; slider fills use the slightly darker `--range-fill` behind the
+  dark thumb.
 - Lap and Driver Analysis maps draw on `--map-canvas`. Their outline uses
   `--map-track`, clean checks use `--map-clean`, and trace and problem colors
   come from the map-only `--map-*` roles in light. Dark values equal the

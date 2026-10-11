@@ -92,6 +92,8 @@
   --accent-hover: #d5f6a6;
   --accent-pressed: #b2df6c;
   --accent-soft: #d5f6a6;
+  /* Filled part of a range slider. Equal to --accent in dark. */
+  --range-fill: #c3ed83;
   /* Lime used as text on a light surface, as a focus outline, and as the edge
      of a lime fill. Equal to --accent in dark; light theme darkens them. */
   --accent-ink: #c3ed83;
@@ -239,12 +241,13 @@
   --text-faint: #6a736e;
   --text-slate: #4a5350;
 
-  /* Interaction accent: lime stays a fill with a dark edge; ink and focus
-     are dark green */
-  --accent: #bddb87;
-  --accent-hover: #c9e39d;
-  --accent-pressed: #aecb79;
-  --accent-soft: #c9e39d;
+  /* Interaction accent: a muted lime fill with a dark edge for every control
+     and action; ink and focus are dark green */
+  --accent: #9fac88;
+  --accent-hover: #adb996;
+  --accent-pressed: #8e9e78;
+  --accent-soft: #adb996;
+  --range-fill: #8e9e78;
   --accent-ink: #365829;
   --focus-ring: #365829;
   --accent-edge: #65716a;
