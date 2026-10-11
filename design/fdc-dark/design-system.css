@@ -276,3 +276,24 @@
 .overlay-card .guide-status i { width: 8px; height: 8px; border-radius: 50%; background: var(--caution); }
 .event-identity h2 { margin-right: 0; }
 .event-identity { gap: 12px; }
+
+/* Settings grouping proposal. Each group uses an ordinary surface; no raised plate. */
+.settings-board { width: 100%; margin: 0; }
+.settings-group { margin: 0 0 18px; padding: 0 22px; border: 1px solid var(--line); background: var(--surface); }
+.settings-group__head { padding: 18px 0 12px; border-bottom: 1px solid var(--line); }
+.settings-group__head h2 { margin: 0; font: 500 23px/1.1 var(--font-readout); letter-spacing: .02em; }
+.settings-group .setting-row { min-height: 82px; padding: 15px 0; gap: 24px; }
+.settings-group .setting-row:last-child { border-bottom: 0; }
+.settings-group .setting-row__copy { min-width: 0; max-width: 650px; }
+.settings-group .setting-row__copy strong { font-size: 13px; letter-spacing: .02em; }
+.settings-group .setting-row__copy p { margin: 5px 0 0; font-size: 13px; line-height: 1.45; }
+.settings-group .toggle, .settings-group .segmented { flex: none; }
+.settings-render-status { display: block; margin-top: 8px; color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.settings-render-status[data-pending="true"] { color: var(--warning); }
+@media (max-width: 760px) {
+  .settings-group { padding: 0 16px; }
+  .settings-group .setting-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+  .settings-group .setting-row > div:first-child { max-width: none; }
+  .settings-group .setting-row--rendering { grid-template-columns: 1fr; }
+  .settings-group .setting-row--rendering .segmented { justify-self: start; }
+}

@@ -1,7 +1,8 @@
 # FDC design book — FDC Dark
 
 The design book shows the FDC Dark design as it is implemented in the app,
-with fixture data, plus separate light Configuration, map, app icon, and Delta sector indicator proposals.
+with fixture data, plus separate Settings grouping, light Configuration, map,
+app icon, and Delta sector indicator proposals.
 It lives on the `design` branch only and never merges into `develop` or
 `main`; bring it up to date by merging the implementation branch into `design`.
 
@@ -32,6 +33,10 @@ the tokens named on both specification boards.
   files.
 - The **Exact style specification** board reads each token's value from the
   loaded stylesheet, so it always shows what the app uses.
+- The **Settings · Grouped controls** board proposes three ordinary sections
+  for the six current preferences. It includes the HUD GPU/CPU choice and a
+  restart-required preview state. All three sections span the content width
+  and align with the navigation edges. The app's Settings page remains unchanged.
 - The **Light theme · Configuration** board is explicitly a proposal. Its
   approved neutral grey direction lives in `light-theme.css`, with usage and
   boundary notes in `LIGHT_THEME.md`. It keeps the light outer canvas and uses
@@ -62,7 +67,8 @@ tokens and components; the book illustrates it.
 
 Sixteen application boards cover HUD configuration, Grouped and Freeform
 geometry and shift states, Driver history, recording, car, and drive pages,
-Shift Light, Garage, Events library, create, event, run, and map, and Settings.
+Shift Light, Garage, Events library, create, event, run, and map. The Settings
+board is a grouped design proposal based on the six current app preferences.
 Six reference boards cover the implemented exact style specification,
 materials, fonts, the component and state kit, the screen map, and the
 connection guide with the confirmation dialogs. Additional proposal boards

@@ -37,7 +37,37 @@ let zoom=.5;function setZoom(z){zoom=Math.max(.25,Math.min(.85,z));document.docu
 if(selected){const b=boards.find(x=>x.id===selected);document.body.classList.add(embed?'embed':'single');canvas.innerHTML=b?`${embed?'':`<p class="boardnote"><span class="badge">${b.status==='proposal'?'PROPOSAL':'SPECIMEN'}</span> ${esc(b.description)}</p>`}${shell(b)}`:'<p>Board not found. <a href="index.html">Return to overview</a></p>';document.querySelectorAll('#plus,#minus,#zoomLabel').forEach(x=>x.hidden=true);if(b){document.title=b.title+' / FDC design book';if(b.status==='proposal')document.querySelector('.revision').textContent=b.proposalLabel||'FDC / PROPOSAL';}}
 else{document.querySelector('.revision').textContent='FDC DESIGN / IMPLEMENTED + PROPOSALS';const references=(window.FDC_FOUNDATIONS||[]).filter(b=>b.status!=='proposal'),proposals=(window.FDC_FOUNDATIONS||[]).filter(b=>b.status==='proposal');const groups=[['01 / Application surfaces',window.FDC_SCREENS||[]],['02 / Design reference pages',references],['03 / Design proposals',proposals]];canvas.innerHTML=groups.map(([title,items])=>`<section class="boardgroup"><h2 class="grouphead">${title}</h2><div class="boardgrid">${items.map(b=>`<article class="boardtile"><div class="boardcaption"><a href="?board=${b.id}">${esc(b.title)} ↗</a><small>${b.status==='proposal'?'PROPOSAL':'SPECIMEN'}</small></div><div class="framewrap"><iframe loading="lazy" title="${esc(b.title)}" src="?board=${b.id}&embed=1"></iframe></div><p class="boardnote">${esc(b.description)}</p></article>`).join('')}</div></section>`).join('');setZoom(innerWidth<760?.28:.5);}
 let toastTimer;function toast(message){const t=document.querySelector('#toast');t.textContent=message;t.style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.style.display='none',3500)}
-document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.closest('.bookbar'))return;if(b.classList.contains('toggle')){const attr=b.hasAttribute('aria-checked')?'aria-checked':'aria-pressed';b.setAttribute(attr,String(b.getAttribute(attr)!=='true'));return;}if(b.closest('.segmented')){b.parentElement.querySelectorAll('button').forEach(x=>{x.classList.toggle('selected',x===b);x.setAttribute('aria-pressed',String(x===b))});return;}const text=b.textContent.trim();const target=text==='CREATE'?'events-create':text==='VIEW VARIANTS'?'garage':null;if(target){location.href='?board='+target+(embed?'&embed=1':'');return;}toast('Preview only — no FDC data or settings were changed.');});
+document.addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || b.closest('.bookbar')) return;
+  if (b.classList.contains('toggle')) {
+    const attr = b.hasAttribute('aria-checked') ? 'aria-checked' : 'aria-pressed';
+    b.setAttribute(attr, String(b.getAttribute(attr) !== 'true'));
+    return;
+  }
+  if (b.closest('.segmented')) {
+    b.parentElement.querySelectorAll('button').forEach(x => {
+      x.classList.toggle('selected', x === b);
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    if (b.dataset.renderingMode) {
+      const status = b.closest('.setting-row').querySelector('[data-renderer-status]');
+      const pending = b.dataset.renderingMode === 'cpu';
+      status.dataset.pending = String(pending);
+      status.textContent = pending
+        ? 'GPU ACTIVE · Restart FDC to use the selected CPU mode.'
+        : 'GPU ACTIVE · A new mode applies after restarting FDC.';
+    }
+    return;
+  }
+  const text = b.textContent.trim();
+  const target = text === 'CREATE' ? 'events-create' : text === 'VIEW VARIANTS' ? 'garage' : null;
+  if (target) {
+    location.href = '?board=' + target + (embed ? '&embed=1' : '');
+    return;
+  }
+  toast('Preview only — no FDC data or settings were changed.');
+});
 document.addEventListener('input',e=>{if(e.target.matches('[data-hud-opacity]')){e.target.closest('.appcontent').style.setProperty('--hud-preview-opacity',String(Number(e.target.value)/100));e.target.closest('.hud-spec-opacity-control').querySelector('output').value=e.target.value+'%';return;}if(e.target.type==='range'){const scope=e.target.closest('.range-card,.panel,.plate,.row')||e.target.parentElement;const out=scope.querySelector('output');if(out)out.value=e.target.value+'%';const num=scope.querySelector('.num');if(num&&scope.classList.contains('range-card'))num.textContent=e.target.value+'%';}});
 document.addEventListener('submit',e=>{e.preventDefault();toast('Preview only — this form does not save an event.');});
 // Board links inside overview iframes open the full board rather than staying clipped.

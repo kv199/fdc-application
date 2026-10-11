@@ -10,6 +10,10 @@ new light masthead texture in `design/fdc-dark/textures/paint-light.jpg`
 (original: `paint-light-source.png`). This revision is not implemented in
 FDC. The in-game HUD and Delta stay on the current dark design.
 
+The `settings` board is also a proposal. It groups the six current preferences
+into Window & Exit, HUD Behavior, and Units on ordinary surfaces. It shows the
+GPU/CPU restart state, but does not change `#settings-panel` or persistence.
+
 The three application icon proposals are in `design/fdc-dark/icon/`. Each SVG is
 the editable source and PNG/ICO are exports. The installed Tauri icon is
 unchanged.
@@ -49,7 +53,7 @@ Checks that keep the design consistent:
 | `shift-light` | `#shift-light-panel` |
 | `garage` | `#garage-panel` |
 | `events-library`, `events-create`, `events-detail`, `events-run`, `events-map` | `#events-panel`; drill-down path in the header |
-| `settings` | `#settings-panel` |
+| `settings` (grouping proposal) | `#settings-panel`; current behavior and stored preferences stay authoritative |
 | `foundation-overlays` | `#connect-guide` and `.confirm-dialog` in `overlay/settings.html` |
 
 The application header (tab title, tab description, Direct Data Out status

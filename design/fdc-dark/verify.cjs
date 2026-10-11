@@ -108,9 +108,12 @@ for (const match of icon.html.matchAll(/(?:src|href)="(icon\/[^\"]+)"/g)) {
   if (!exists(match[1])) throw Error(`Missing proposed icon asset: ${match[1]}`);
 }
 
-if (!boards.find(board => board.id === 'settings').html.includes('DISTANCE UNIT')) {
-  throw Error('Settings specimen is missing the distance unit');
+const settings = boards.find(board => board.id === 'settings');
+if (!settings || settings.status !== 'proposal') throw Error('Grouped Settings board must be marked as a proposal');
+for (const label of ['WINDOW & EXIT', 'HUD BEHAVIOR', 'UNITS', 'CONFIGURATION ALWAYS ON TOP', 'CONFIRM BEFORE QUITTING', 'HUD ONLY WHILE DRIVING', 'HUD RENDERING', 'SPEED UNIT', 'DISTANCE UNIT']) {
+  if (!settings.html.includes(label)) throw Error(`Grouped Settings board is missing ${label}`);
 }
+if (settings.html.includes('class="panel plate"')) throw Error('Settings proposal must use ordinary surfaces');
 if (!boards.find(board => board.id === 'driver-list').html.includes('Ctrl + Shift + F9')) {
   throw Error('Driver specimen shows the wrong default hotkey');
 }
