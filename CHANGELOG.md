@@ -105,7 +105,7 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   below it. RPM values use thousands separators, such as `9,360 RPM`, as in
   the HUD.
 - **Settings**: the settings are grouped into **WINDOW & EXIT**, **HUD
-  BEHAVIOR**, and **UNITS**, in a narrower centered column.
+  BEHAVIOR**, and **UNITS**, which span the full width like the other tabs.
 - **Design**: FDC has a new app icon, the Chroma F, in the taskbar, tray,
   window, and installer, and beside the FDC name in the Configuration header.
 - **Events** and **Driver Analysis**: the **POINT DATA** panel is easier to

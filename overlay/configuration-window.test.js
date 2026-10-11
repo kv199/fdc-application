@@ -483,7 +483,7 @@ test('Settings groups its display rows under three headings in order', () => {
   assert.deepEqual(rowTitles(windowGroup), ['CONFIGURATION ALWAYS ON TOP', 'CONFIRM BEFORE QUITTING', 'THEME'])
   assert.deepEqual(rowTitles(hudGroup), ['SHOW HUD WITH TELEMETRY', 'HUD RENDERING'])
   assert.deepEqual(rowTitles(unitsGroup), ['SPEED UNIT', 'DISTANCE UNIT'])
-  assert.match(settingsStyles, /\.settings-board\s*\{[^}]*width:\s*min\(100%,\s*960px\)/)
+  assert.match(settingsStyles, /\.settings-board\s*\{[^}]*width:\s*100%;[^}]*margin:\s*0;/)
   assert.match(settingsStyles, /\.settings-group\s*\{[^}]*border:\s*1px solid var\(--line\)[^}]*background:\s*var\(--surface\)/)
 })
 
