@@ -23,7 +23,7 @@
   --map-scrub-color: var(--map-front-scrub); --map-wheelspin-color: var(--map-exit-wheelspin);
   --map-overload-color: var(--map-brake-steering); --map-clean-color: var(--map-clean);
   --map-ink: var(--text); --map-secondary: var(--text-muted); --map-divider: var(--line);
-  --map-inspector: var(--surface-deep); --map-selected: var(--surface);
+  --map-inspector: var(--surface-deep); --map-selected: var(--text);
   background: var(--surface); color: var(--map-ink);
 }
 .map-study__caption { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--map-divider); }
@@ -50,6 +50,16 @@
 .map-study__problem--wheelspin { stroke: var(--map-wheelspin-color); }
 .map-study__problem--overload { stroke: var(--map-overload-color); }
 .map-study__clean { fill: var(--map-clean-color); stroke: var(--map-field); stroke-width: 3; }
+/* Screen-pixel widths remain stable when the light SVG is resized. */
+.map-study__card--light svg :is(path, circle) { vector-effect: non-scaling-stroke; }
+.map-study__card--light .map-study__route { stroke-width: 2.4px; }
+.map-study__card--light .map-study__trace { stroke-width: 3px; }
+.map-study__card--light .map-study__slip { stroke-width: 9px; opacity: 1; }
+.map-study__card--light .map-study__problem { stroke-width: 6px; }
+.map-study__card--light .map-study__problem-halo { stroke-width: 10px; }
+.map-study__card--light .map-study__sector-tick { stroke-width: 2px; }
+.map-study__card--light :is(.map-study__clean, .map-study__start) { stroke-width: 1.5px; }
+.map-study__card--light .map-study__cursor { stroke-width: 2px; }
 .map-study__is-hidden { opacity: 0; pointer-events: none; }
 .map-study__inspector { min-width: 0; height: 100%; overflow-y: auto; border-left: 1px solid var(--map-divider); background: var(--map-inspector); scrollbar-color: var(--map-divider) var(--map-inspector); }
 .map-study__inspector-inner { padding: 14px; }
@@ -79,6 +89,9 @@
 .map-study__legend button, .map-study__sample-nav button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 28px; padding: 5px 7px; border: 1px solid var(--map-divider); border-radius: 0; color: var(--map-secondary); background: transparent; font: 700 10px/1 var(--font-ui); letter-spacing: .04em; cursor: pointer; }
 .map-study__legend button[aria-pressed="true"], .map-study__sample-nav button[aria-pressed="true"] { border-color: var(--map-ink); color: var(--map-ink); }
 .map-study__legend button[aria-pressed="false"] { opacity: .6; }
+.map-study__card--light .map-study__legend button[aria-pressed="false"] { opacity: 1; }
+.map-study__card--light .map-study__legend button[aria-pressed="false"] .map-study__swatch { background: transparent; border: 1px solid var(--map-swatch); }
+.map-study__card--light :is(.map-study__legend, .map-study__sample-nav) button[aria-pressed="true"] { background: var(--panel); border-width: 2px; }
 .map-study__legend button:hover, .map-study__sample-nav button:hover { border-color: var(--map-ink); opacity: 1; }
 .map-study__legend button:focus-visible, .map-study__sample-nav button:focus-visible { outline: 2px solid var(--map-ink); outline-offset: 2px; }
 .map-study__sample-nav { display: flex; gap: 5px; padding: 10px 12px; white-space: nowrap; }
@@ -97,3 +110,7 @@
 .map-study__rules li { margin: 5px 0; }
 @media (max-width: 800px) { .map-study__body { grid-template-columns: minmax(0, 1fr) 250px; height: 490px; } .map-study__footer { align-items: flex-start; } }
 @media (max-width: 650px) { .map-study__section-head, .map-study__footer { display: block; } .map-study__body { display: block; height: auto; } .map-study__plot { height: 330px; } .map-study__inspector { height: 390px; border-left: 0; border-top: 1px solid var(--map-divider); } .map-study__sample-nav { padding-top: 0; } }
+
+.map-study__card--light :is(.map-study__legend, .map-study__sample-nav) button { border-width: 2px; }
+
+.map-study__card--light .map-study__finding strong { color: var(--map-ink); }

@@ -16,9 +16,9 @@
   };
   const svg = kind => `<svg viewBox="0 0 820 360" role="img" aria-label="Schematic ${kind === 'events' ? 'lap' : 'drive'} route with three illustrative saved points">
     <rect class="map-study__surface" width="820" height="360"/>
-    ${kind === 'events' ? '<path class="map-study__slip" data-map-layer="slip" d="M381 92 Q483 67 521 103"/>' : ''}
+    ${kind === 'events' ? '<path class="map-study__slip" data-map-layer="slip" data-route-span="381,92,521,103"/>' : ''}
     <path class="map-study__route ${kind === 'driver' ? 'map-study__route--driver' : ''}" d="${route}"/>
-    ${kind === 'events' ? `<path class="map-study__trace map-study__trace--throttle" data-map-layer="throttle" d="${route}" stroke-dasharray="150 31 70 19 136 34 100 22"/><path class="map-study__trace map-study__trace--brake" data-map-layer="brake" d="M178 208 Q227 173 301 169 M632 168 Q716 177 711 245"/><path class="map-study__trace map-study__trace--coast" data-map-layer="coast" d="M301 169 Q338 123 381 92"/><g aria-hidden="true"><path class="map-study__sector-tick" d="M310 145l-8 18 M531 111l-7 19 M685 264l13 10"/><text class="map-study__sector" x="284" y="137">S1</text><text class="map-study__sector" x="530" y="105">S2</text><text class="map-study__sector" x="690" y="260">S3</text></g>` : `<g data-map-layer="scrub"><path class="map-study__problem-halo" d="M178 208 Q227 173 301 169"/><path class="map-study__problem map-study__problem--scrub" d="M178 208 Q227 173 301 169"/></g><path class="map-study__problem map-study__problem--wheelspin" data-map-layer="wheelspin" d="M632 168 Q716 177 711 245"/><path class="map-study__problem map-study__problem--overload" data-map-layer="overload" d="M381 92 Q483 67 521 103"/><g data-map-layer="clean"><circle class="map-study__clean" cx="127" cy="271" r="8"/><circle class="map-study__clean" cx="331" cy="139" r="8"/><circle class="map-study__clean" cx="550" cy="151" r="8"/></g>`}
+    ${kind === 'events' ? `<path class="map-study__trace map-study__trace--throttle" data-map-layer="throttle" d="${route}" /><path class="map-study__trace map-study__trace--brake" data-map-layer="brake" data-route-span="178,208,301,169;632,168,711,245"/><path class="map-study__trace map-study__trace--coast" data-map-layer="coast" data-route-span="301,169,381,92"/><g aria-hidden="true"><path class="map-study__sector-tick" d="M310 145l-8 18 M531 111l-7 19 M685 264l13 10"/><text class="map-study__sector" x="284" y="137">S1</text><text class="map-study__sector" x="530" y="105">S2</text><text class="map-study__sector" x="690" y="260">S3</text></g>` : `<g data-map-layer="scrub"><path class="map-study__problem-halo" data-route-span="178,208,301,169"/><path class="map-study__problem map-study__problem--scrub" data-route-span="178,208,301,169"/></g><path class="map-study__problem map-study__problem--wheelspin" data-map-layer="wheelspin" data-route-span="632,168,711,245"/><path class="map-study__problem map-study__problem--overload" data-map-layer="overload" data-route-span="381,92,521,103"/><g data-map-layer="clean"><circle class="map-study__clean" cx="127" cy="271" r="8"/><circle class="map-study__clean" cx="331" cy="139" r="8"/><circle class="map-study__clean" cx="550" cy="151" r="8"/></g>`}
     <circle class="map-study__start" cx="92" cy="286" r="8"/><circle class="map-study__cursor" cx="${samples[kind][kind === 'events' ? 1 : 0].x}" cy="${samples[kind][kind === 'events' ? 1 : 0].y}" r="12"/>
   </svg>`;
   const layers = { events: [['throttle', 'THROTTLE 85%'], ['brake', 'BRAKE 13%'], ['coast', 'COAST 2%'], ['slip', 'SLIP 4%']], driver: [['scrub', 'SCRUB 1'], ['wheelspin', 'WHEELSPIN 1'], ['overload', 'BRAKE + STEERING 1'], ['clean', 'CLEAN 3']] };
@@ -34,13 +34,49 @@
   const card = (kind, tone) => `<article class="map-study__card map-study__card--${tone}" data-map-tone="${tone}" data-map-active="${kind === 'events' ? 1 : 0}"><div class="map-study__caption"><strong>${tone === 'dark' ? 'Current dark' : 'Light proposal'}</strong><span>${kind === 'events' ? 'LAP 7' : 'DRIVE #2'}</span></div><div class="map-study__body"><div class="map-study__plot">${svg(kind)}</div><aside class="map-study__inspector" aria-label="Selected map point details">${inspector(kind, kind === 'events' ? 1 : 0)}</aside></div><div class="map-study__footer">${legend(kind)}${sampleNav(kind)}</div></article>`;
   window.FDC_FOUNDATIONS.push({
     id: 'foundation-light-maps', title: 'Light theme · Events and Driver maps', section: 'FOUNDATIONS', status: 'proposal', theme: 'light', proposalLabel: 'FDC LIGHT MAPS / PROPOSAL', proposalKicker: 'CONFIGURATION MAPS / HUD UNCHANGED',
-    description: 'Dark and light map studies for Events and Driver with a full-height point inspector beside each map.',
-    html: `<h2>Maps as measured traces</h2><p class="map-study__intro">The route is recorded geometry, not a named track. Each map keeps point data in a fixed panel on the right. Move over the route or choose a numbered sample below it; the panel stays visible when the pointer leaves. The light map uses a neutral rail from the FDC palette so throttle green reads clearly. The in-game HUD stays as it is.</p><section class="map-study__section" data-map-study="events"><div class="map-study__section-head"><h3>Events · Lap 7</h3><span>THROTTLE / BRAKE / COAST / SLIP · SECTOR TICKS</span></div><div class="map-study__pair">${card('events', 'dark')}${card('events', 'light')}</div><p class="map-study__note">Illustrative saved-point data. Hover either route or use 01–03; both inspectors update together. Layer buttons remain synchronized.</p></section><section class="map-study__section" data-map-study="driver"><div class="map-study__section-head"><h3>Driver · Drive #2</h3><span>PROBLEM SEGMENTS / CLEAN CHECKS</span></div><div class="map-study__pair">${card('driver', 'dark')}${card('driver', 'light')}</div><p class="map-study__note">Problem details appear above point telemetry when a sample belongs to a check. The inspector never covers the route.</p></section><section class="panel map-study__rules"><h3>Map rules for the light theme</h3><ul><li>The light route uses the existing neutral line value; throttle green keeps its established meaning in a darker map-only ink.</li><li>A visible, full-height inspector replaces cursor-following tooltips. It starts on a saved point, follows hover or keyboard selection, and retains the last point after pointer exit.</li><li>Events and Driver share the same panel layout; Driver adds check details. The real app should bind it to every saved trace point, including missing-field states.</li></ul><p class="muted">Schematic fixture for design review. No FDC runtime map, data, or HUD is changed.</p><a href="LIGHT_THEME.md">Light theme token notes ↗</a></section>`
+    description: 'Events and Driver map studies with a neutral grey light canvas, stable stroke widths, readable layer switches and a full-height point inspector.',
+    html: `<h2>Maps as measured traces</h2><p class="map-study__intro">The route is recorded geometry, not a named track. Each map keeps point data in a fixed panel on the right. Move over the route or choose a numbered sample below it; the panel stays visible when the pointer leaves. The revised light map uses a darker neutral route on a grey canvas. Stroke widths and markers stay readable as the map scales, and hidden layer labels remain at full opacity. The in-game HUD stays as it is.</p><section class="map-study__section" data-map-study="events"><div class="map-study__section-head"><h3>Events · Lap 7</h3><span>THROTTLE / BRAKE / COAST / SLIP · SECTOR TICKS</span></div><div class="map-study__pair">${card('events', 'dark')}${card('events', 'light')}</div><p class="map-study__note">Illustrative saved-point data. Hover either route or use 01–03; both inspectors update together. Layer buttons remain synchronized.</p></section><section class="map-study__section" data-map-study="driver"><div class="map-study__section-head"><h3>Driver · Drive #2</h3><span>PROBLEM SEGMENTS / CLEAN CHECKS</span></div><div class="map-study__pair">${card('driver', 'dark')}${card('driver', 'light')}</div><p class="map-study__note">Problem details appear above point telemetry when a sample belongs to a check. The inspector never covers the route.</p></section><section class="panel map-study__rules"><h3>Map rules for the light theme</h3><ul><li>Use a neutral grey map field and a dark route contour. Keep route, pedal, problem and selected strokes at 2.4 / 3 / 6 / 10 screen pixels, independent of SVG scaling; throttle green retains its meaning.</li><li>Layer labels stay fully opaque when switched off; filled and outlined swatches distinguish states. Selected layers have a grey fill and a strong border. Clean markers are fully opaque.</li><li>A visible, full-height inspector replaces cursor-following tooltips. It starts on a saved point, follows hover or keyboard selection, and retains the last point after pointer exit.</li><li>Events and Driver share the same panel layout; Driver adds check details. The real app should bind it to every saved trace point, including missing-field states.</li></ul><p class="muted">Schematic fixture for design review. No FDC runtime map, data, or HUD is changed.</p><a href="LIGHT_THEME.md">Light theme token notes ↗</a></section>`
   });
   window.FDC_MAP_STUDY = { samples, inspector };
 })();
 
 if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.map-study__plot svg').forEach(svg => {
+      const route = svg.querySelector('.map-study__route');
+      const total = route.getTotalLength();
+      const nearestDistance = (x, y) => {
+        let nearest = 0, best = Infinity;
+        for (let i = 0; i <= 1000; i++) {
+          const distance = total * i / 1000;
+          const point = route.getPointAtLength(distance);
+          const delta = Math.hypot(point.x - x, point.y - y);
+          if (delta < best) { best = delta; nearest = distance; }
+        }
+        return nearest;
+      };
+      svg.querySelectorAll('[data-route-span]').forEach(segment => {
+        const paths = segment.dataset.routeSpan.split(';').map(span => {
+          const [x1, y1, x2, y2] = span.split(',').map(Number);
+          const from = nearestDistance(x1, y1), to = nearestDistance(x2, y2);
+          return Array.from({ length: 61 }, (_, i) => {
+            const point = route.getPointAtLength(from + (to - from) * i / 60);
+            return (i ? 'L' : 'M') + point.x.toFixed(2) + ' ' + point.y.toFixed(2);
+          }).join(' ');
+        });
+        segment.setAttribute('d', paths.join(' '));
+      });
+    });
+    const sizeMarkers = svg => {
+      const scale = svg.getScreenCTM()?.a;
+      if (!scale) return;
+      for (const [selector, radius] of [['.map-study__clean', 4.5], ['.map-study__start', 4], ['.map-study__cursor', 6]]) {
+        svg.querySelectorAll(selector).forEach(marker => marker.setAttribute('r', radius / Math.abs(scale)));
+      }
+    };
+    const observer = new ResizeObserver(entries => entries.forEach(entry => sizeMarkers(entry.target)));
+    document.querySelectorAll('.map-study__card--light svg').forEach(svg => { sizeMarkers(svg); observer.observe(svg); });
+  });
   const selectSample = (section, index) => {
     const kind = section.dataset.mapStudy;
     const sample = window.FDC_MAP_STUDY.samples[kind][index];

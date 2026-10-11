@@ -5,8 +5,10 @@ for values and behavior. This map shows where each part is implemented.
 
 The proposed light Configuration palette is in
 `design/fdc-dark/light-theme.css` and `LIGHT_THEME.md`. It is scoped to its
-design-book specimen and is not implemented in the application. The in-game HUD
-and Delta stay on the current dark design.
+design-book specimen. The approved revision uses neutral grey panels and a
+new light masthead texture in `design/fdc-dark/textures/paint-light.jpg`
+(original: `paint-light-source.png`). This revision is not implemented in
+FDC. The in-game HUD and Delta stay on the current dark design.
 
 The three application icon proposals are in `design/fdc-dark/icon/`. Each SVG is
 the editable source and PNG/ICO are exports. The installed Tauri icon is

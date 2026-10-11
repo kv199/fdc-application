@@ -33,13 +33,16 @@ the tokens named on both specification boards.
 - The **Exact style specification** board reads each token's value from the
   loaded stylesheet, so it always shows what the app uses.
 - The **Light theme · Configuration** board is explicitly a proposal. Its
-  scoped candidate values live in `light-theme.css`, with usage and boundary
-  notes in `LIGHT_THEME.md`; it does not change the app or its HUD.
+  approved neutral grey direction lives in `light-theme.css`, with usage and
+  boundary notes in `LIGHT_THEME.md`. It keeps the light outer canvas and uses
+  the new `textures/paint-light.jpg` header with dark text; it does not change
+  the app or its HUD. The original generated PNG is preserved beside the JPEG.
 - The **Light theme · Events and Driver maps** board compares current dark
   and proposed light treatments of the same schematic map geometry, layers,
   and sample values. A persistent, full-height point inspector occupies the
   right side of each map; numbered samples and hover update it. The light
-  neutral route uses the existing line color to separate it from throttle.
+  neutral route has a darker contour, stable screen-pixel strokes and markers,
+  and fully opaque layer labels to separate geometry from semantic overlays.
   `light-maps.css` and `light-maps.js` are proposal-only; no runtime map,
   saved data, or HUD style is changed.
 - The **App icon · F studies** board pairs light and black tiles carrying
@@ -63,7 +66,7 @@ Shift Light, Garage, Events library, create, event, run, and map, and Settings.
 Six reference boards cover the implemented exact style specification,
 materials, fonts, the component and state kit, the screen map, and the
 connection guide with the confirmation dialogs. Additional proposal boards
-show a light Configuration specimen with the existing dark painted header and
+show a light Configuration specimen with a light painted header and grey panels,
 nine app-icon candidates at Windows taskbar and tray sizes,
 and Delta sector indicators.
 

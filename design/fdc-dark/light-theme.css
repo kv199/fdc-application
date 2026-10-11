@@ -1,71 +1,71 @@
 /* Configuration light-theme proposal. Loaded by the design book only.
-   These roles are scoped to its specimen; the app and in-game HUD stay dark. */
+   These roles are scoped to its specimen; no application or HUD styles change. */
 .app--light-proposal {
   color-scheme: light;
   --bg: #f1f3ee;
-  --surface-deep: #e5e9e2;
-  --surface: #fafbf8;
-  --panel: #e8ede5;
-  --surface-hover: #e8eedc;
-  --shade: #dde3da;
-  --shade-deep: #e1e6de;
-  --shade-overlay: rgb(16 24 18 / 44%);
-  --shadow: #152016;
-  --meter-track: #d1d9ce;
+  --surface-deep: #c2c5c3;
+  --surface: #d8d9d8;
+  --panel: #cccecc;
+  --surface-hover: #cccecc;
+  --shade: #b8bdb9;
+  --shade-deep: #b2b8b3;
+  --shade-overlay: rgb(38 42 40 / 44%);
+  --shadow: #262a28;
+  --meter-track: #afb5b1;
 
-  /* Map-only ink variants for traces on the light Configuration inset. */
-  --map-canvas: #e5e9e2;
-  --map-track: #b7c2b6;
-  --map-throttle: #446b24;
-  --map-brake: #a51d16;
-  --map-coast: #765a0a;
-  --map-slip: #126f80;
-  --map-front-scrub: #a85313;
-  --map-exit-wheelspin: #a53872;
-  --map-brake-steering: #4754af;
-  --map-abrupt-release: #76529a;
-  --map-clean: #68756a;
+  /* Map-only inks on a neutral grey canvas; keep the established meanings. */
+  --map-canvas: #d1d3d1;
+  --map-track: #5a645e;
+  --map-throttle: #355d27;
+  --map-brake: #981f19;
+  --map-coast: #73530e;
+  --map-slip: #176575;
+  --map-front-scrub: #92501e;
+  --map-exit-wheelspin: #943568;
+  --map-brake-steering: #464e9b;
+  --map-abrupt-release: #6e488b;
+  --map-clean: #58645c;
 
-  --line-subtle: #d5dbd2;
-  --line: #b7c2b6;
-  --line-strong: #829184;
-  --line-light: #263329;
+  --line-subtle: #afb5b1;
+  --line: #8c948f;
+  --line-strong: #65716a;
+  --line-light: #262a28;
 
-  --text: #1b241d;
-  --text-bright: #111a13;
-  --text-soft: #364238;
-  --text-muted: #566357;
-  --text-subtle: #68756a;
-  --text-faint: #89938b;
-  --text-slate: #566357;
+  --text: #262a28;
+  --text-bright: #1c201e;
+  --text-soft: #3c4440;
+  --text-muted: #4b5450;
+  --text-subtle: #4b5450;
+  --text-faint: #6a736e;
+  --text-slate: #4b5450;
 
   /* Keep FDC lime as a fill, but give text and focus their own contrast roles. */
-  --accent: #c3ed83;
-  --accent-hover: #d5f6a6;
-  --accent-pressed: #b2df6c;
-  --accent-soft: #d5f6a6;
-  --accent-ink: #446b24;
-  --focus-ring: #557a2c;
+  --accent: #bddb87;
+  --accent-hover: #c9e39d;
+  --accent-pressed: #aecb79;
+  --accent-soft: #c9e39d;
+  --accent-ink: #365829;
+  --focus-ring: #365829;
   --text-on-accent: #162314;
   --text-on-accent-deep: #162314;
 
-  --danger: #a51d16;
-  --danger-text: #a51d16;
+  --danger: #981f19;
+  --danger-text: #981f19;
   --danger-soft: #f6c3bd;
-  --danger-rose: #a51d16;
+  --danger-rose: #981f19;
   --text-on-danger: #fff;
-  --warning: #765a0a;
-  --caution: #795b08;
-  --caution-strong: #624706;
-  --notice: #8a4d17;
+  --warning: #614806;
+  --caution: #614806;
+  --caution-strong: #533d05;
+  --notice: #774619;
   --notice-soft: #f3d3b3;
-  --best: #6b3f91;
+  --best: #62407f;
   --text-on-badge: #141914;
   --text-on-class: #0c150e;
   --text-on-class-s2: #fff;
 
   /* Book aliases used by the specimen. Existing HUD, telemetry, class, mode,
-     trace, problem, typography, spacing, and paint tokens remain unchanged. */
+     trace, problem, typography, and spacing tokens remain unchanged. */
   --muted: var(--text-muted);
   --lime: var(--accent);
   --purple: var(--best);
@@ -75,20 +75,17 @@
   color: var(--text);
 }
 
-/* The existing painted header stays in the FDC Dark palette. */
+/* The approved light material is a book asset, confined to the masthead. */
 .app--light-proposal .appmast {
-  --text: #edf0df;
-  --text-muted: #b0bcae;
-  --text-subtle: #9dab9c;
-  --surface-deep: #152019;
-  --line: #58695c;
-  --line-strong: #8c9b82;
-  --warning: #e2c876;
-  --accent: #c3ed83;
-  --focus-ring: #c3ed83;
+  background: #c9ccca;
   color: var(--text);
   border-color: var(--line-strong);
 }
+.app--light-proposal .appmast::before {
+  background-image: url(textures/paint-light.jpg);
+  opacity: .9;
+}
+.app--light-proposal .appmast .connection { border-color: var(--line); }
 
 .app--light-proposal .appmast .label,
 .app--light-proposal .appmast__intro { color: var(--text); }
@@ -107,7 +104,7 @@
 .app--light-proposal .appcontent .button.primary {
   color: var(--text-on-accent);
   background: var(--accent);
-  border-color: var(--accent);
+  border-color: var(--line-strong);
 }
 .app--light-proposal .appcontent .button.primary:hover {
   background: var(--accent-hover);
@@ -155,3 +152,8 @@
   .light-proposal__swatches { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .light-proposal__samples { grid-template-columns: 1fr; }
 }
+
+.light-proposal__material { height: 140px; border: 1px solid var(--line-strong); background: #c9ccca url(textures/paint-light.jpg) center / cover; }
+
+.app--light-proposal .appnav a { border: 1px solid transparent; }
+.app--light-proposal .appnav a.active { border-color: var(--line-strong); }

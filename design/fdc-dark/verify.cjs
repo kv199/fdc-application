@@ -30,7 +30,7 @@ for (const board of boards) {
 }
 
 // The book has no copies of app assets: it uses the app's tokens, fonts, and texture.
-for (const file of ['index.html', 'book.css', 'design-system.css', 'light-theme.css', 'light-maps.css', 'light-maps.js', 'icon/icon.css', 'icon/fdc-icon.svg', 'icon/fdc-icon.png', 'icon/fdc-icon.ico', 'icon/fdc-icon-pulse.svg', 'icon/fdc-icon-pulse.png', 'icon/fdc-icon-pulse.ico', 'icon/fdc-icon-lift.svg', 'icon/fdc-icon-lift.png', 'icon/fdc-icon-lift.ico', 'icon/fdc-icon-lift-mark.svg', 'icon/fdc-icon-chroma.svg', 'icon/fdc-icon-chroma.png', 'icon/fdc-icon-chroma.ico', 'icon/fdc-icon-spectrum.svg', 'icon/fdc-icon-spectrum.png', 'icon/fdc-icon-spectrum.ico', 'icon/fdc-icon-chroma-light.svg', 'icon/fdc-icon-chroma-light.png', 'icon/fdc-icon-chroma-light.ico', 'icon/fdc-icon-chroma-black.svg', 'icon/fdc-icon-chroma-black.png', 'icon/fdc-icon-chroma-black.ico', 'icon/fdc-icon-split.svg', 'icon/fdc-icon-split.png', 'icon/fdc-icon-split.ico', 'icon/fdc-icon-chroma-fdc.svg', 'icon/fdc-icon-chroma-fdc.png', 'icon/fdc-icon-chroma-fdc.ico', 'icon/fdc-icon-chroma-fdc-texture.jpg', 'icon/fdc-icon-chroma-fdc-texture-source.png', 'book.js', 'overlays.js', 'README.md', 'IMPLEMENTATION.md', 'LIGHT_THEME.md']) {
+for (const file of ['index.html', 'book.css', 'design-system.css', 'light-theme.css', 'light-maps.css', 'light-maps.js', 'textures/paint-light.jpg', 'textures/paint-light-source.png', 'icon/icon.css', 'icon/fdc-icon.svg', 'icon/fdc-icon.png', 'icon/fdc-icon.ico', 'icon/fdc-icon-pulse.svg', 'icon/fdc-icon-pulse.png', 'icon/fdc-icon-pulse.ico', 'icon/fdc-icon-lift.svg', 'icon/fdc-icon-lift.png', 'icon/fdc-icon-lift.ico', 'icon/fdc-icon-lift-mark.svg', 'icon/fdc-icon-chroma.svg', 'icon/fdc-icon-chroma.png', 'icon/fdc-icon-chroma.ico', 'icon/fdc-icon-spectrum.svg', 'icon/fdc-icon-spectrum.png', 'icon/fdc-icon-spectrum.ico', 'icon/fdc-icon-chroma-light.svg', 'icon/fdc-icon-chroma-light.png', 'icon/fdc-icon-chroma-light.ico', 'icon/fdc-icon-chroma-black.svg', 'icon/fdc-icon-chroma-black.png', 'icon/fdc-icon-chroma-black.ico', 'icon/fdc-icon-split.svg', 'icon/fdc-icon-split.png', 'icon/fdc-icon-split.ico', 'icon/fdc-icon-chroma-fdc.svg', 'icon/fdc-icon-chroma-fdc.png', 'icon/fdc-icon-chroma-fdc.ico', 'icon/fdc-icon-chroma-fdc-texture.jpg', 'icon/fdc-icon-chroma-fdc-texture-source.png', 'book.js', 'overlays.js', 'README.md', 'IMPLEMENTATION.md', 'LIGHT_THEME.md']) {
   if (!exists(file)) throw Error(`Missing book file: ${file}`);
 }
 if (!fs.existsSync(path.join(repo, 'overlay', 'assets', 'textures', 'paint.jpg'))) throw Error('Missing FDC paint texture used by the icon finish preview');
@@ -76,7 +76,7 @@ for (const key of ['events', 'driver']) {
 }
 if (!lightMaps.html.includes('map-study__inspector') || !lightMaps.html.includes('data-map-sample')) throw Error('Map study must show fixed point inspectors and keyboard samples');
 if (!read('light-maps.css').includes('grid-template-columns: minmax(0, 1fr) 290px')) throw Error('Map inspector must be beside the desktop map');
-if (!lightCss.includes('--map-track: #b7c2b6;')) throw Error('Light map route must use the established neutral line color');
+if (!lightCss.includes('--map-track: #5a645e;')) throw Error('Light map route must use the approved dark neutral contour');
 for (const token of ['--map-canvas', '--map-track', '--map-throttle', '--map-brake', '--map-coast', '--map-slip', '--map-front-scrub', '--map-exit-wheelspin', '--map-brake-steering', '--map-clean']) {
   if (!lightCss.includes(`${token}:`)) throw Error(`Missing light map role: ${token}`);
 }
