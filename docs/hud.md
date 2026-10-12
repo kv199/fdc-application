@@ -11,7 +11,7 @@ has no other data source.
 - The HUD window is transparent, always on top, frameless, and never takes
   focus. It lives on the monitor chosen in **HUD DISPLAY**. Outside a layout
   edit the window shrinks to the rectangle around the visible blocks and
-  Delta, with an 8 px margin, so Windows composes less of the screen; blocks
+  Delta, and the Shift Bar, with an 8 px margin, so Windows composes less of the screen; blocks
   stay where the layout puts them on the monitor. A layout edit expands the
   window to the whole monitor, and saving or cancelling shrinks it again.
   While no block is visible, for example without live telemetry, the window
@@ -39,6 +39,12 @@ The telemetry HUD has six blocks. A separate Delta strip belongs to Events.
 | Gear / Speed / RPM | Speed in the selected unit, the gear (`R`, `N`, or `1`–`10`), and engine RPM. This block also carries the shift cue. |
 | Engine / Boost | Boost in bar, power in HP, and torque in N·m. Negative values show as zero, and all three show zero while the throttle is released. |
 | Input Graph | The last eight seconds of throttle (green) and brake (red) input. |
+
+**Shift Bar** is an optional block, off by default, above the telemetry HUD. It
+shows the Gear block's shift signal as a row of triangles that fills with RPM,
+which is described under [Shift cue](#shift-cue). It has its own switch in
+**WIDGETS** and is positioned, moved, resized, and reset independently, like
+Delta. It shows no text.
 
 **Delta** compares the current lap with the active Event reference. It appears
 only while recording an Event with a known reference:
@@ -83,17 +89,29 @@ The red and purple intensities follow the Redline Brightness and FDC Shift
 Light Brightness settings. How targets are learned is described in
 [Shift Light](shift-light.md).
 
+The **Shift Bar** widget shows the same signal as a row of 36 alternating
+triangles. Its green fill rises with RPM from idle to the current gear's
+threshold: the learned shift RPM for that gear when Shift Light has a
+calibrated target, otherwise 85% of the car's maximum RPM. Filled segments are
+whole, so the bar is full only at the threshold. While the Gear block shows red
+or purple, every segment lights in that color: steady red for redline, and
+purple flashing in step with the Gear block for the learned shift. The bar
+shows no text.
+
 ## Visibility
 
-- With **Show HUD with telemetry** enabled (the default), the HUD and Delta are
-  visible only while Forza reports live driving; Delta additionally needs an
-  active Event reference. Forza keeps sending Data Out
+- With **Show HUD with telemetry** enabled (the default), the HUD, Delta, and
+  the Shift Bar are visible only while Forza reports live driving; Delta
+  additionally needs an active Event reference. Forza keeps sending Data Out
   in the pause menu, garage, and other menus but reports that racing is not
   on, so the HUD hides there. A 500 ms hold keeps a single non-live packet from
   making it blink.
 - With the option disabled, the HUD stays visible without live telemetry.
+- The Shift Bar is off until its switch is turned on, after an update too. It
+  keeps showing with the Gear / Speed / RPM block switched off.
 - In Configuration, each widget in the **WIDGETS** list has its own switch,
-  and **ALL** turns every widget, Delta included, on or off at once. When
+  and **ALL** turns every widget, Delta and the Shift Bar included, on or off at
+  once. When
   every block is hidden, the telemetry HUD is not shown. Versions before
   7.28 had one switch for the whole telemetry HUD; if it was off, FDC turns
   every block off on its first start after the update, so the HUD stays
@@ -107,9 +125,9 @@ below HUD OPACITY, the same in both arrangements:
 1. **ARRANGEMENT**, a segmented choice of GROUPED (default) and FREEFORM; the
    selected one keeps a lime fill. Grouped keeps the visible blocks side by
    side in one panel and moves and resizes that panel as a whole. Freeform
-   places and sizes every block independently. Delta is positioned
-   independently in both arrangements, and each arrangement keeps its own
-   saved positions.
+   places and sizes every block independently. Delta and the Shift Bar are
+   positioned independently in both arrangements and keep one saved position
+   for both; the HUD blocks keep a saved position for each arrangement.
 2. The layout editor, built like the Driver Analysis recorder: two rows,
    each with a title and a sentence on the left and its controls on the
    right. **EDIT THE LAYOUT** has **RESET LAYOUT** and **EDIT LAYOUT** (the
@@ -118,14 +136,16 @@ below HUD OPACITY, the same in both arrangements:
    **CHANGE**, like GLOBAL RECORD HOTKEY.
 3. **WIDGETS**: one compact row per widget with its name and a switch (Tires,
    Throttle & Brake, Steering, Gear / Speed / RPM, Engine / Boost, Input
-   Graph, Delta), and **ALL** in the block header. Clicking anywhere on a
-   row toggles its widget. **ALL** is on only while every widget is on.
+   Graph, Delta, Shift Bar), and **ALL** in the block header. Clicking anywhere
+   on a row toggles its widget. The Shift Bar row starts off. **ALL** is on only
+   while every widget is on, the Shift Bar included.
 
 Below 560 px of window width the arrangement choice moves under its
 description, and each editor row stacks its controls under its text.
 
-A layout edit covers every enabled target at once: in Grouped, the HUD panel
-and Delta; in Freeform, each block whose switch is on and Delta. A switched-off
+A layout edit covers every enabled target at once: in Grouped, the HUD panel,
+Delta, and the Shift Bar; in Freeform, each block whose switch is on, Delta, and
+the Shift Bar. A switched-off
 widget stays out of the edit; switch it on to place it. Two ways start it:
 
 - **EDIT LAYOUT**. While the edit runs, **SAVE** and **CANCEL** take its place
@@ -135,8 +155,15 @@ widget stays out of the edit; switch it on to place it. Two ways start it:
   focus. Pressing it again saves the edit. With every widget off, the hotkey
   does nothing.
 
-**RESET LAYOUT** asks for confirmation and then returns every block and Delta
-to its default place and size in both arrangements.
+**RESET LAYOUT** asks for confirmation and then returns every block, Delta, and
+the Shift Bar to its default place and size in both arrangements.
+
+By default the Shift Bar sits directly above the telemetry HUD, centered on it
+with a 10 px gap. At 1× HUD scale it is as wide as the full Grouped HUD (736 px)
+and 48 px high; resizing scales both. Delta sits 10 px above the Shift Bar while
+the bar is on, and 10 px above the HUD while it is off. A saved position always
+wins over these defaults, and a Delta or Shift Bar place that is not saved
+follows the HUD and the Shift Bar switch.
 
 During the edit:
 
@@ -208,7 +235,8 @@ visible blocks, and remembers the monitor as the choice.
 
 ## HUD opacity
 
-**HUD Opacity** sets the opacity of the whole overlay, including Delta, from 1%
+**HUD Opacity** sets the opacity of the whole overlay, including Delta and the
+Shift Bar, from 1%
 to 100%. The default is 80%, and **RESET** restores it.
 
 ## Display settings

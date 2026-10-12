@@ -82,6 +82,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   shows its distance and its throttle, brake, coast, and slip shares, and
   **FIT SECTOR** zooms to it. Sector times in the lap table open the same
   view. The run page shows its own **THEORETICAL BEST** time.
+- **HUD**: a new **Shift Bar** widget, off by default: a wide row of triangles
+  that fills green as RPM climbs to the shift point, then turns red or flashes
+  purple exactly when the Gear block does. Turn it on in **WIDGETS**; it can be
+  moved and resized like Delta and works with Speed / Gear / RPM switched off.
 
 ### Improved
 

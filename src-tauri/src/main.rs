@@ -6402,7 +6402,15 @@ fn set_window_edit_mode(app: AppHandle, enabled: bool) -> tauri::Result<()> {
 fn is_valid_layout_target(target: &str) -> bool {
     matches!(
         target,
-        "delta" | "hud" | "tires" | "pedals" | "steering" | "gear" | "engine" | "history"
+        "delta"
+            | "hud"
+            | "shiftBar"
+            | "tires"
+            | "pedals"
+            | "steering"
+            | "gear"
+            | "engine"
+            | "history"
     )
 }
 
@@ -6441,6 +6449,7 @@ fn layout_action(app: AppHandle, action: String, target: String) -> Result<(), S
                 "edit" => match target.as_str() {
                     "delta" => "window.HudLayout?.enterEditMode?.('delta')",
                     "hud" => "window.HudLayout?.enterEditMode?.('hud')",
+                    "shiftBar" => "window.HudLayout?.enterEditMode?.('shiftBar')",
                     "tires" => "window.HudLayout?.enterEditMode?.('tires')",
                     "pedals" => "window.HudLayout?.enterEditMode?.('pedals')",
                     "steering" => "window.HudLayout?.enterEditMode?.('steering')",
@@ -6454,6 +6463,7 @@ fn layout_action(app: AppHandle, action: String, target: String) -> Result<(), S
                 "reset" => match target.as_str() {
                     "delta" => "window.HudLayout?.resetPosition?.('delta')",
                     "hud" => "window.HudLayout?.resetPosition?.('hud')",
+                    "shiftBar" => "window.HudLayout?.resetPosition?.('shiftBar')",
                     "tires" => "window.HudLayout?.resetPosition?.('tires')",
                     "pedals" => "window.HudLayout?.resetPosition?.('pedals')",
                     "steering" => "window.HudLayout?.resetPosition?.('steering')",
@@ -6499,7 +6509,7 @@ fn set_hud_visibility(app: AppHandle, component: String, visible: bool) -> Resul
 #[tauri::command]
 fn set_overlay_visibility(app: AppHandle, component: String, visible: bool) -> Result<(), String> {
     let safe_component = match component.as_str() {
-        "delta" | "hud" => component,
+        "delta" | "hud" | "shiftBar" => component,
         _ => return Err("unknown overlay component".to_string()),
     };
     let value = if visible { "true" } else { "false" };
@@ -6913,7 +6923,7 @@ mod tests {
     #[test]
     fn layout_targets_cover_grouped_and_freeform_hud_widgets() {
         for target in [
-            "delta", "hud", "tires", "pedals", "steering", "gear", "engine", "history",
+            "delta", "hud", "shiftBar", "tires", "pedals", "steering", "gear", "engine", "history",
         ] {
             assert!(
                 is_valid_layout_target(target),

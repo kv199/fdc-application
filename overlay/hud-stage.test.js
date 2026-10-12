@@ -6,7 +6,7 @@ const assert = require('node:assert/strict')
 const GLOBALS = ['document', 'window', 'location', 'addEventListener', 'requestAnimationFrame', 'localStorage',
   'setTimeout', 'clearTimeout', 'HudWidgets', 'HudGrid', 'HudLayout', 'HudTauriEvents', '__TAURI_INTERNALS__', 'devicePixelRatio']
 const MODULES = ['./hud-grid.js', './hud-widgets.js', './hud-layout.js'].map(file => require.resolve(file))
-const BLOCK_IDS = ['delta-strip', 'hud-frame', 'hud-tires', 'hud-pedals', 'hud-steering', 'hud-gear', 'hud-engine', 'hud-history', 'hud']
+const BLOCK_IDS = ['delta-strip', 'shift-bar', 'hud-frame', 'hud-tires', 'hud-pedals', 'hud-steering', 'hud-gear', 'hud-engine', 'hud-history', 'hud']
 
 const tick = () => new Promise(resolve => setImmediate(resolve))
 
@@ -246,5 +246,24 @@ test('editing keeps the whole monitor and the cropped bounds return after the ed
     emitStage({ stageWidth: 1920, stageHeight: 1080, offsetX: 492, offsetY: 892 })
     flushFrames()
     assert.equal(shellClasses.contains('is-restaging'), false)
+  })
+})
+
+test('a visible Shift Bar joins the window-shrink rectangle, and a hidden one does not', async () => {
+  await withStageRuntime(async ({ elements, sent, flushFrames }) => {
+    await tick()
+    flushFrames()
+
+    setRect(elements.get('hud-frame'), 500, 900, 920, 69)
+    setRect(elements.get('shift-bar'), 500, 800, 920, 48)
+    HudLayout.refreshLayout()
+    flushFrames()
+    // Union of the HUD (900 to 969) and the bar (800 to 848), padded by 8 px.
+    assert.deepEqual(sent().at(-1).args, { bounds: { left: 492, top: 792, width: 936, height: 185 } })
+
+    setRect(elements.get('hud-frame'), 0, 0, 0, 0)
+    HudLayout.refreshLayout()
+    flushFrames()
+    assert.deepEqual(sent().at(-1).args, { bounds: { left: 492, top: 792, width: 936, height: 64 } }, 'the bar alone')
   })
 })

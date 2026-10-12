@@ -300,6 +300,100 @@ body {
   }
 }
 
+/* Shift Bar: 36 alternating triangles that show the Gear block's signal. The
+   surface is a cut layer behind the row, as for Delta, so edit tools stay
+   visible. Padding, the 2 px seam between triangles, and the cut follow the
+   HUD scale and the user scale together, like the bar's width and height. */
+.shift-bar {
+  --shift-bar-scale: calc(var(--hud-scale, 1) * var(--shift-bar-user-scale, 1));
+  --shift-bar-seam: calc(2px * var(--shift-bar-scale));
+  --shift-bar-cut: calc(var(--hud-cut-widget) * var(--shift-bar-scale));
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: calc(8px * var(--shift-bar-scale)) calc(12px * var(--shift-bar-scale));
+  pointer-events: none;
+}
+
+.shift-bar::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--hud-shade) 74%, transparent);
+  clip-path: polygon(var(--shift-bar-cut) 0, 100% 0, 100% calc(100% - var(--shift-bar-cut)), calc(100% - var(--shift-bar-cut)) 100%, 0 100%, 0 var(--shift-bar-cut));
+  content: '';
+}
+
+.shift-bar[hidden] {
+  display: none;
+}
+
+.shift-bar__segments {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+/* 36 triangles: two widths per pair of triangles, so each one overlaps its
+   neighbor by half a width and leaves the seam between them. */
+.shift-bar__segment {
+  display: block;
+  flex: 0 0 calc((100% - 35 * var(--shift-bar-seam)) / 18.5);
+  width: calc((100% - 35 * var(--shift-bar-seam)) / 18.5);
+  min-width: 0;
+  height: auto;
+  aspect-ratio: 3 / 2;
+  overflow: visible;
+}
+
+.shift-bar__segment + .shift-bar__segment {
+  margin-left: calc((100% - 35 * var(--shift-bar-seam)) / -37 + var(--shift-bar-seam));
+}
+
+.shift-bar__empty {
+  fill: var(--hud-panel);
+  stroke: var(--hud-divider);
+  stroke-width: 1;
+}
+
+.shift-bar__fill {
+  display: none;
+  fill: var(--gas);
+}
+
+.shift-bar__segment.is-filled .shift-bar__fill {
+  display: inline;
+}
+
+.shift-bar[data-signal='redline'] .shift-bar__fill {
+  fill: var(--redline-background);
+}
+
+.shift-bar[data-signal='shift'] .shift-bar__segments {
+  filter: brightness(var(--shift-light-brightness-scale));
+}
+
+.shift-bar[data-signal='shift'] .shift-bar__fill {
+  animation: shift-bar-alert 440ms steps(2, end) infinite;
+}
+
+@keyframes shift-bar-alert {
+  0%,
+  44%,
+  100% {
+    fill: var(--hud-shift-alert);
+  }
+
+  45%,
+  72% {
+    fill: var(--hud-shift-alert-flash);
+  }
+}
+
 .history {
   position: relative;
   min-height: 0;
@@ -531,6 +625,37 @@ body {
   width: min(1472px, calc(var(--stage-width, 100vw) - 16px));
   margin: 0 auto;
   z-index: 1;
+}
+
+/* Shift Bar is an independent layout target above the HUD. Its surface and
+   segments come from the rules above; this block places and sizes the bar in
+   stage space and shows its layout-edit state. The default geometry is the
+   736 px HUD width and 48 px height, scaled by the HUD and the user scale. */
+.shift-bar {
+  position: absolute;
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 0;
+  width: calc(736px * var(--hud-scale) * var(--shift-bar-user-scale, 1));
+  height: calc(48px * var(--hud-scale) * var(--shift-bar-user-scale, 1));
+  margin: 0;
+  z-index: 1;
+}
+
+.shift-bar.is-editing {
+  pointer-events: auto;
+  outline: 2px dashed var(--caution);
+  outline-offset: 5px;
+  cursor: grab;
+}
+
+.shift-bar.is-editing:active {
+  cursor: grabbing;
+}
+
+.shift-bar.is-editing.is-selected .layout-resize-handle {
+  display: block;
 }
 
 .layout-positioned {

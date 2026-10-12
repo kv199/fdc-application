@@ -10,9 +10,17 @@
   const GROUPED_TARGETS = HudWidgets.OVERLAY_COMPONENTS
   const FREEFORM_TARGETS = HudWidgets.COMPONENTS
   const TARGET_NAMES = [...GROUPED_TARGETS, ...FREEFORM_TARGETS]
+  // Blocks positioned independently in both arrangements (one shared position map).
+  const SHARED_TARGETS = ['delta', 'shiftBar']
   const COLUMN_WIDTHS = HudWidgets.COLUMN_WIDTHS
   const HUD_BASE_WIDTH = Object.values(COLUMN_WIDTHS).reduce((total, width) => total + width, 0)
   const HUD_BASE_HEIGHT = 69
+  const SHIFT_BAR_BASE_HEIGHT = 48
+  // Gap between stacked blocks: Delta above the Shift Bar, the Shift Bar above the HUD.
+  const STACK_GAP = 10
+  // Target names whose DOM ids differ from the target name (camelCase in code, kebab-case in markup).
+  const TARGET_DOM_IDS = Object.freeze({ shiftBar: 'shift-bar' })
+  const TARGET_LABELS = Object.freeze({ shiftBar: 'SHIFT BAR' })
   const DEFAULT_SIZE = 0
   const MIN_WIDGET_SIZE = 0.5
   const MAX_WIDGET_SIZE = 2
@@ -131,7 +139,7 @@
       }
       return {
         mode: readStoredMode(),
-        shared: sanitizePositionMap(stored.shared, ['delta']),
+        shared: sanitizePositionMap(stored.shared, SHARED_TARGETS),
         grouped: sanitizePositionMap(stored.grouped, ['hud']),
         freeform: sanitizePositionMap(stored.freeform, FREEFORM_TARGETS)
       }
@@ -143,7 +151,7 @@
   function saveStoredLayout(layout) {
     storageSet(STORAGE_KEY, JSON.stringify({
       version: 2,
-      shared: sanitizePositionMap(layout.shared, ['delta']),
+      shared: sanitizePositionMap(layout.shared, SHARED_TARGETS),
       grouped: sanitizePositionMap(layout.grouped, ['hud']),
       freeform: sanitizePositionMap(layout.freeform, FREEFORM_TARGETS)
     }))
@@ -158,6 +166,7 @@
   function createLayout() {
     const elements = {
       delta: document.getElementById('delta-strip'),
+      shiftBar: document.getElementById('shift-bar'),
       hud: document.getElementById('hud-frame'),
       tires: document.getElementById('hud-tires'),
       pedals: document.getElementById('hud-pedals'),
@@ -172,21 +181,22 @@
     const tools = {}
     function createTools(name) {
       if (tools[name]) return tools[name]
-      const existingRoot = document.getElementById(`${name}-edit-tools`)
+      const domId = TARGET_DOM_IDS[name] || name
+      const existingRoot = document.getElementById(`${domId}-edit-tools`)
       if (existingRoot) {
         tools[name] = {
           root: existingRoot,
-          reset: document.getElementById(`${name}-reset`),
-          cancel: document.getElementById(`${name}-cancel`),
-          save: document.getElementById(`${name}-save`),
-          snap: document.getElementById(`${name}-snap`)
+          reset: document.getElementById(`${domId}-reset`),
+          cancel: document.getElementById(`${domId}-cancel`),
+          save: document.getElementById(`${domId}-save`),
+          snap: document.getElementById(`${domId}-snap`)
         }
         return tools[name]
       }
       const root = document.createElement('div')
       root.className = 'layout-edit-tools'
       root.hidden = true
-      root.innerHTML = `<span class="layout-edit__hint">DRAG ${name.toUpperCase()} TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT</span><button class="layout-edit__button layout-edit__button--toggle" type="button" data-layout-snap aria-pressed="true">GRID ON</button><button class="layout-edit__button layout-edit__button--reset" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
+      root.innerHTML = `<span class="layout-edit__hint">DRAG ${TARGET_LABELS[name] || name.toUpperCase()} TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT</span><button class="layout-edit__button layout-edit__button--toggle" type="button" data-layout-snap aria-pressed="true">GRID ON</button><button class="layout-edit__button layout-edit__button--reset" type="button">RESET</button><button class="layout-edit__button" type="button">CANCEL</button><button class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>`
       const editorFrame = FREEFORM_TARGETS.includes(name) ? document.createElement('div') : null
       const editorSurface = editorFrame || elements[name]
       if (editorFrame) {
@@ -234,7 +244,7 @@
     }
 
     function positionMap(name) {
-      if (name === 'delta') return positions.shared
+      if (SHARED_TARGETS.includes(name)) return positions.shared
       if (name === 'hud') return positions.grouped
       return positions.freeform
     }
@@ -381,7 +391,7 @@
 
     // Visible blocks only: a hidden block measures zero and computeWindowBounds ignores it.
     function getVisibleTargetRects() {
-      const names = mode === 'grouped' ? ['delta', 'hud'] : [...FREEFORM_TARGETS, 'delta']
+      const names = mode === 'grouped' ? ['delta', 'shiftBar', 'hud'] : [...FREEFORM_TARGETS, 'delta', 'shiftBar']
       return names.map(name => elements[name].getBoundingClientRect())
     }
 
@@ -439,7 +449,16 @@
     function getFallbackSize(name, viewport) {
       if (name === 'delta') return { width: Math.min(1472, Math.max(0, viewport.width - 16)), height: 60 }
       if (name === 'hud') return { width: Math.min(1472, Math.max(0, viewport.width - 16)), height: 138 }
+      if (name === 'shiftBar') {
+        const factor = getWidgetScaleFactor(name) * getHudScale()
+        return { width: HUD_BASE_WIDTH * factor, height: SHIFT_BAR_BASE_HEIGHT * factor }
+      }
       return { width: COLUMN_WIDTHS[name] * getHudScale(), height: HUD_BASE_HEIGHT * getHudScale() }
+    }
+
+    // The Shift Bar is off by default; Delta's default place depends on it.
+    function isShiftBarSwitchedOn() {
+      return globalScope.HudPreferences?.getOverlayState?.().shiftBar === true
     }
 
     function getDefaultHudRect(viewport) {
@@ -470,16 +489,32 @@
       const hudRect = getStageRect(elements.hud)
       const hudLeft = hudRect.width ? hudRect.left : defaultHudRect.left
       const hudTop = hudRect.height ? hudRect.top : defaultHudRect.top
+      const hudWidth = hudRect.width ? hudRect.width : defaultHudRect.width
       if (name === 'hud') {
         return {
           left: (viewport.width - elementSize.width) / 2,
           top: viewport.height - elementSize.height - 28
         }
       }
-      if (name === 'delta') return { left: hudLeft, top: hudTop - elementSize.height - 10 }
+      // The Shift Bar sits directly above the HUD, centered on it.
+      if (name === 'shiftBar') {
+        return {
+          left: hudLeft + hudWidth / 2 - elementSize.width / 2,
+          top: hudTop - STACK_GAP - elementSize.height
+        }
+      }
+      if (name === 'delta') {
+        // Delta sits above the Shift Bar's default slot while the bar is on, and above the HUD otherwise.
+        const shiftBarSlot = isShiftBarSwitchedOn()
+          ? STACK_GAP + SHIFT_BAR_BASE_HEIGHT * getHudScale() * getWidgetScaleFactor('shiftBar')
+          : 0
+        return { left: hudLeft, top: hudTop - shiftBarSlot - STACK_GAP - elementSize.height }
+      }
       return { left: hudLeft, top: hudTop }
     }
 
+    // Defaults are derived from the current layout (Delta follows the Shift Bar switch and the HUD place),
+    // so they are not stored: only a block the user placed or resized is kept in the layout.
     function ensurePosition(name) {
       const map = positionMap(name)
       if (map[name]) return map[name]
@@ -487,14 +522,14 @@
       const elementSize = getElementSize(elements[name], getFallbackSize(name, viewport))
       const anchor = getDefaultAnchor(name, elementSize, viewport)
       const available = getAvailableSize(viewport, elementSize)
-      map[name] = { x: available.width > 0 ? clamp(anchor.left / available.width, 0, 1) : 0, y: available.height > 0 ? clamp(anchor.top / available.height, 0, 1) : 0, size: DEFAULT_SIZE }
-      return map[name]
+      return { x: available.width > 0 ? clamp(anchor.left / available.width, 0, 1) : 0, y: available.height > 0 ? clamp(anchor.top / available.height, 0, 1) : 0, size: DEFAULT_SIZE }
     }
 
     function applyWidgetScale(name) {
       const scale = String(getWidgetScaleFactor(name))
       if (name === 'hud') elements.hud.style.setProperty('--hud-user-scale', scale)
       if (name === 'delta') elements.delta.style.setProperty('--delta-user-scale', scale)
+      if (name === 'shiftBar') elements.shiftBar.style.setProperty('--shift-bar-user-scale', scale)
       if (isFreeformTarget(name)) elements[name].style.setProperty('--hud-widget-scale', scale)
     }
 
@@ -579,6 +614,7 @@
         FREEFORM_TARGETS.forEach(applyPosition)
       }
       applyPosition('delta')
+      applyPosition('shiftBar')
       syncGrid()
       scheduleWindowBounds()
     }
@@ -723,7 +759,9 @@
     function enterEditMode(name = 'hud') {
       const unavailableGroupedTarget = name === 'hud' && mode !== 'grouped'
       const unavailableFreeformTarget = FREEFORM_TARGETS.includes(name) && mode !== 'freeform'
-      if (!TARGET_NAMES.includes(name) || unavailableGroupedTarget || unavailableFreeformTarget) return
+      // A switched-off Shift Bar stays out of the edit.
+      const unavailableShiftBar = name === 'shiftBar' && !isShiftBarSwitchedOn()
+      if (!TARGET_NAMES.includes(name) || unavailableGroupedTarget || unavailableFreeformTarget || unavailableShiftBar) return
       if (!sessionTargets.length) {
         const targets = editableTargets()
         if (!targets.includes(name)) targets.push(name)

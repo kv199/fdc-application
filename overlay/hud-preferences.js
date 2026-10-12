@@ -1,17 +1,22 @@
 (function (globalScope) {
   'use strict'
 
-  const { COMPONENTS, OVERLAY_COMPONENTS, COLUMN_WIDTHS } = globalScope.HudWidgets || require('./hud-widgets.js')
+  const { COMPONENTS, OVERLAY_COMPONENTS, COLUMN_WIDTHS, isOverlayComponentOn } = globalScope.HudWidgets || require('./hud-widgets.js')
   const STORAGE_KEY = 'fdc.hud-visibility.v1'
   const OVERLAY_STORAGE_KEY = 'fdc.overlay-visibility.v1'
   const DEFAULT_STATE = COMPONENTS.reduce((state, name) => {
     state[name] = true
     return state
   }, {})
-  const DEFAULT_OVERLAY_STATE = OVERLAY_COMPONENTS.reduce((state, name) => {
-    state[name] = true
-    return state
-  }, {})
+
+  function overlayStateFrom(stored) {
+    return OVERLAY_COMPONENTS.reduce((state, name) => {
+      state[name] = isOverlayComponentOn(stored, name)
+      return state
+    }, {})
+  }
+
+  const DEFAULT_OVERLAY_STATE = overlayStateFrom(null)
 
   function readState() {
     try {
@@ -35,16 +40,13 @@
   }
 
   function readOverlayState() {
+    let stored = null
     try {
-      const stored = JSON.parse(localStorage.getItem(OVERLAY_STORAGE_KEY) || 'null')
-      if (!stored || typeof stored !== 'object') return { ...DEFAULT_OVERLAY_STATE }
-      return OVERLAY_COMPONENTS.reduce((state, name) => {
-        state[name] = stored[name] !== false
-        return state
-      }, {})
+      stored = JSON.parse(localStorage.getItem(OVERLAY_STORAGE_KEY) || 'null')
     } catch {
-      return { ...DEFAULT_OVERLAY_STATE }
+      stored = null
     }
+    return overlayStateFrom(stored)
   }
 
   function resolveEditableTargets({ state, overlayState, mode }) {
@@ -56,6 +58,7 @@
       if (hudOn) targets.push(...COMPONENTS.filter(name => state[name] !== false))
     }
     if (overlayState.delta !== false) targets.push('delta')
+    if (overlayState.shiftBar === true) targets.push('shiftBar')
     return targets
   }
 
@@ -69,6 +72,8 @@
     let hud = !hasVisibleContent
     let hudFrame = !telemetryVisible || overlayState.hud === false || !hasVisibleContent
     let delta = !telemetryVisible || overlayState.delta === false || deltaReferenceActive !== true
+    // The Shift Bar is off unless its switch is on; it follows telemetry like the HUD.
+    let shiftBar = !telemetryVisible || overlayState.shiftBar !== true
 
     // A layout edit keeps its targets and the targets' containers visible,
     // whatever telemetry or the visibility switches would otherwise hide.
@@ -76,6 +81,8 @@
     for (const target of edits) {
       if (target === 'delta') {
         delta = false
+      } else if (target === 'shiftBar') {
+        shiftBar = false
       } else if (target === 'hud' && mode === 'grouped') {
         hudFrame = false
       } else if (COMPONENTS.includes(target) && mode === 'freeform') {
@@ -85,7 +92,7 @@
       }
     }
 
-    return { hud, hudFrame, delta, sections }
+    return { hud, hudFrame, delta, shiftBar, sections }
   }
 
   function saveOverlayState(state) {
@@ -100,7 +107,8 @@
     const hud = document.getElementById('hud')
     const hudFrame = document.getElementById('hud-frame')
     const overlayElements = {
-      delta: document.getElementById('delta-strip')
+      delta: document.getElementById('delta-strip'),
+      shiftBar: document.getElementById('shift-bar')
     }
     if (!hud || !hudFrame || Object.values(overlayElements).some(element => !element)) return null
 
@@ -138,6 +146,7 @@
       hud.hidden = visibility.hud
       hudFrame.hidden = visibility.hudFrame
       overlayElements.delta.hidden = visibility.delta
+      overlayElements.shiftBar.hidden = visibility.shiftBar
 
       const visibleColumns = COMPONENTS
         .filter(name => state[name])

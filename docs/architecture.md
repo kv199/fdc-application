@@ -226,7 +226,7 @@ telemetry path. It provides:
   arrangement that moves and resizes the compact panel as one target, and a
   `FREEFORM` arrangement that moves and resizes Tires, Throttle and Brake,
   Steering, Gear / Speed / RPM, Engine / Boost, and Input Graph
-  independently; Delta is its own target in both. Each arrangement keeps its
+  independently; Delta and the Shift Bar are their own targets in both. Each arrangement keeps its
   own layout, while visibility and opacity remain shared. **EDIT LAYOUT**, or
   the HUD edit hotkey while Forza keeps focus, starts one edit of every
   enabled target on the HUD itself, with an alignment grid; the target to
@@ -234,10 +234,10 @@ telemetry path. It provides:
   target in both arrangements to its default size and position;
 - a **HUD DISPLAY** monitor selector that moves the HUD to cover the chosen
   monitor and is unavailable during a layout edit;
-- a **WIDGETS** list with one switch per HUD block and Delta and an **ALL**
-  switch for every widget at once, plus a
+- a **WIDGETS** list with one switch per HUD block, Delta, and the Shift Bar
+  (off by default), and an **ALL** switch for every widget at once, plus a
   `SHOW HUD WITH TELEMETRY` preference that defaults to enabled and shows the
-  HUD and Delta only while live samples (`IsRaceOn`) arrive, and hides them
+  HUD, Delta, and the Shift Bar only while live samples (`IsRaceOn`) arrive, and hides them
   500 ms after the last live sample. Forza keeps sending samples in menus, and
   some menu states, such as the garage, can still report `IsRaceOn`, so the HUD
   and Delta can briefly or intermittently appear there;

@@ -70,6 +70,7 @@ let latestShiftLight = {
   method: null
 }
 const shiftLightPresentation = window.ShiftLightPresentation.createShiftLightPresentation()
+const shiftBar = window.HudShiftBar?.createShiftBar?.() ?? null
 let shiftLightLatchTimer = null
 let garageRuntime = null
 
@@ -262,6 +263,27 @@ function getShiftLightSignal(telemetry) {
   return getRpmSignal(telemetry.rpm, telemetry.rpmMax)
 }
 
+// The learned shift RPM of the current gear, or null when Shift Light has no
+// calibrated target for it. The Shift Bar then falls back to max RPM.
+function getLearnedShiftRpm() {
+  if (latestShiftLight.status !== 'calibrated' || latestShiftLight.currentGear == null) return null
+  return latestShiftLight.shiftRpm
+}
+
+// Receives the signal the Gear block was just given, so both always agree.
+function renderShiftBar(telemetry, signal) {
+  if (!shiftBar) return
+  shiftBar.render({
+    fraction: window.HudShiftBar.fillFraction({
+      rpm: telemetry.rpm,
+      rpmIdle: telemetry.rpmIdle,
+      rpmMax: telemetry.rpmMax,
+      shiftRpm: getLearnedShiftRpm()
+    }),
+    signal
+  })
+}
+
 function queueShiftLight(shiftLight) {
   if (!shiftLight || typeof shiftLight !== 'object') return
   const status = ['fallback', 'learning', 'calibrated'].includes(shiftLight.status)
@@ -287,6 +309,7 @@ function setDemoSignal(signal) {
 
   demoSignal = DEMO_SIGNALS.includes(signal) ? signal : 'normal'
   setRpmSignal(demoSignal)
+  scheduleTelemetryRender()
 }
 
 // Remembers the last value written to each property of each element, so a
@@ -504,6 +527,7 @@ function renderTelemetry() {
   updateEngine(telemetry)
   const signal = DEMO_MODE ? demoSignal : getShiftLightSignal(telemetry)
   setRpmSignal(signal)
+  renderShiftBar(telemetry, signal)
   if (!DEMO_MODE) pushHistory(throttle, brake)
   drawHistory()
   if (DEMO_MODE) setConnection(telemetry.isRaceOn ? 'is-live' : 'is-waiting')
@@ -566,6 +590,7 @@ function resetDirectPresentation() {
   shiftLightPresentation.reset()
   window.HudShiftLightRuntime?.update?.(null)
   setRpmSignal('normal')
+  shiftBar?.render({ fraction: 0, signal: 'normal' })
   scheduleTelemetryRender()
 }
 

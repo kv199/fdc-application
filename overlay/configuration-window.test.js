@@ -367,7 +367,7 @@ test('HUD layout exposes grouped and freeform modes with unified widgets and lay
   assert.match(settingsStyles, /\.driver-analysis-recorder__main,\s*\.driver-analysis-hotkey,\s*\.action-panel__row \{/)
   assert.match(settingsStyles, /\.action-panel__status\[data-state='editing'\] \{\s*color: var\(--warning\);/)
   // Widgets are compact rows with a name only; the whole row toggles its widget.
-  assert.equal(settingsHtml.match(/<label class="widget-row">\s*<span class="widget-row__name">[^<]+<\/span>\s*<button class="visibility-toggle"/g)?.length, 7)
+  assert.equal(settingsHtml.match(/<label class="widget-row">\s*<span class="widget-row__name">[^<]+<\/span>\s*<button class="visibility-toggle"/g)?.length, 8)
   assert.doesNotMatch(settingsHtml, /layout-row|visibility-row/)
   assert.doesNotMatch(settingsHtml, /data-freeform-layout-list|data-grouped-layout-row/)
   assert.match(settingsHtml, /data-layout-mode="grouped" checked/)
@@ -982,6 +982,21 @@ test('every widget switch is the only element bound to its widget', () => {
     assert.equal(settingsHtml.match(new RegExp(`data-hud-toggle="${name}"`, 'g'))?.length, 1, name)
   }
   assert.equal(settingsHtml.match(/data-overlay-toggle="delta"/g)?.length, 1)
+  assert.equal(settingsHtml.match(/data-overlay-toggle="shiftBar"/g)?.length, 1)
+})
+
+test('the Shift Bar is a WIDGETS row with its own switch that defaults off and ALL covers it', () => {
+  const row = settingsHtml.match(/<label class="widget-row">\s*<span class="widget-row__name">Shift Bar<\/span>\s*<button class="visibility-toggle" type="button" data-overlay-toggle="shiftBar" aria-label="Toggle Shift Bar" aria-pressed="false">/)
+  assert.ok(row, 'Shift Bar row with an off switch')
+  // Missing keys read as off for the Shift Bar only; Delta and the HUD keep their default on.
+  assert.match(settingsJs, /function readOverlayVisibility\(\)[\s\S]*?isOverlayComponentOn\(stored, name\)/)
+  assert.match(settingsJs, /const \{ COMPONENTS, OVERLAY_COMPONENTS, isOverlayComponentOn \} = globalScope\.HudWidgets/)
+  assert.match(settingsJs, /function allWidgetsOn\(\) \{[\s\S]*?overlayVisibility\.shiftBar === true/)
+  assert.match(settingsJs, /function anyWidgetOn\(\) \{[\s\S]*?overlayVisibility\.shiftBar === true/)
+  assert.match(settingsJs, /if \(\(overlayVisibility\.shiftBar === true\) !== next\) \{\s*await setOverlayComponentVisibility\('shiftBar', next\)/)
+  assert.match(settingsJs, /shiftBar: 'SHIFT BAR',/)
+  assert.match(settingsHtml, /Show the HUD, Delta and Shift Bar only while live telemetry is received\./)
+  assert.match(settingsJs, /Every HUD block, Delta and the Shift Bar goes back to its default place/)
 })
 
 test('Configuration type roles follow the design book', () => {

@@ -45,7 +45,7 @@ test('uses a fresh v2 namespace and never reads the old layout', () => {
 })
 
 test('keeps Delta and grouped HUD separate from freeform telemetry targets', () => {
-  assert.deepEqual(layout.GROUPED_TARGETS, ['delta', 'hud'])
+  assert.deepEqual(layout.GROUPED_TARGETS, ['delta', 'hud', 'shiftBar'])
   assert.deepEqual(layout.FREEFORM_TARGETS, ['tires', 'pedals', 'steering', 'gear', 'engine', 'history'])
   assert.match(source, /shared: stored\.shared/)
   assert.match(source, /grouped: stored\.grouped/)
@@ -128,8 +128,59 @@ test('resolveEditableTargets returns correct targets for each mode', () => {
 
 test('static toolbars bind CANCEL and SNAP to their own buttons', () => {
   const source = fs.readFileSync(path.join(__dirname, 'hud-layout.js'), 'utf8')
-  assert.match(source, /cancel: document\.getElementById\(`\$\{name\}-cancel`\)/)
-  assert.match(source, /snap: document\.getElementById\(`\$\{name\}-snap`\)/)
+  assert.match(source, /cancel: document\.getElementById\(`\$\{domId\}-cancel`\)/)
+  assert.match(source, /snap: document\.getElementById\(`\$\{domId\}-snap`\)/)
+  assert.match(source, /const domId = TARGET_DOM_IDS\[name\] \|\| name/)
+})
+
+test('Shift Bar is an independent shared target with its own markup, handles and toolbar', () => {
+  assert.match(source, /const SHARED_TARGETS = \['delta', 'shiftBar'\]/)
+  assert.match(source, /if \(SHARED_TARGETS\.includes\(name\)\) return positions\.shared/)
+  assert.match(source, /sanitizePositionMap\(stored\.shared, SHARED_TARGETS\)/)
+  assert.match(source, /sanitizePositionMap\(layout\.shared, SHARED_TARGETS\)/)
+  assert.match(source, /const TARGET_DOM_IDS = Object\.freeze\(\{ shiftBar: 'shift-bar' \}\)/)
+  assert.match(source, /shiftBar: document\.getElementById\('shift-bar'\)/)
+  assert.match(source, /elements\.shiftBar\.style\.setProperty\('--shift-bar-user-scale', scale\)/)
+  assert.match(source, /applyPosition\('shiftBar'\)/)
+  assert.match(source, /const names = mode === 'grouped' \? \['delta', 'shiftBar', 'hud'\] : \[\.\.\.FREEFORM_TARGETS, 'delta', 'shiftBar'\]/)
+
+  const section = html.match(/<section id="shift-bar" class="shift-bar" aria-label="Shift bar" data-signal="normal" hidden>[\s\S]*?<\/section>/)
+  assert.ok(section, 'the Shift Bar section is in index.html, hidden until its switch is on')
+  assert.match(section[0], /<div id="shift-bar-segments" class="shift-bar__segments" aria-hidden="true"><\/div>/)
+  assert.match(section[0], /<div id="shift-bar-edit-tools" class="layout-edit-tools" hidden>/)
+  assert.match(section[0], /DRAG SHIFT BAR TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT/)
+  for (const id of ['shift-bar-snap', 'shift-bar-reset', 'shift-bar-cancel', 'shift-bar-save']) {
+    assert.match(section[0], new RegExp(`id="${id}"`))
+  }
+  for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right']) {
+    assert.match(section[0], new RegExp(`data-layout-resize-target="shiftBar" data-layout-resize-handle="${corner}"`))
+  }
+  // The Shift Bar sits between Delta and the HUD frame in the shell.
+  const deltaEnd = html.indexOf('</section>', html.indexOf('id="delta-strip"'))
+  assert.ok(deltaEnd < html.indexOf('<section id="shift-bar"') && html.indexOf('<section id="shift-bar"') < html.indexOf('id="hud-frame"'))
+})
+
+test('Shift Bar positioning: absolute, sized from the HUD scale and the user scale, edit state visible', () => {
+  assert.match(css, /\.shift-bar \{[^}]*position: absolute;[^}]*width: calc\(736px \* var\(--hud-scale\) \* var\(--shift-bar-user-scale, 1\)\);[^}]*height: calc\(48px \* var\(--hud-scale\) \* var\(--shift-bar-user-scale, 1\)\);/s)
+  assert.match(css, /\.shift-bar\.is-editing \{[^}]*pointer-events: auto;/s)
+  assert.match(css, /\.shift-bar\.is-editing\.is-selected \.layout-resize-handle \{\s*display: block;\s*\}/)
+  assert.match(source, /const SHIFT_BAR_BASE_HEIGHT = 48/)
+  assert.match(source, /const STACK_GAP = 10/)
+})
+
+test('Shift Bar defaults: above the HUD, Delta above the Shift Bar only while the bar is on', () => {
+  assert.match(source, /if \(name === 'shiftBar'\) \{[\s\S]*?top: hudTop - STACK_GAP - elementSize\.height/)
+  assert.match(source, /const shiftBarSlot = isShiftBarSwitchedOn\(\)[\s\S]*?: 0/)
+  assert.match(source, /return \{ left: hudLeft, top: hudTop - shiftBarSlot - STACK_GAP - elementSize\.height \}/)
+  // Defaults are not cached, so turning the bar on moves an unsaved Delta above it.
+  assert.match(source, /function ensurePosition\(name\)[\s\S]*?return \{ x: [^}]*size: DEFAULT_SIZE \}\r?\n\s*\}/)
+  assert.doesNotMatch(source, /map\[name\] = \{ x: available\.width/)
+})
+
+test('Shift Bar is a window-shrink target and uses the edit guard', () => {
+  assert.match(source, /function isShiftBarSwitchedOn\(\)/)
+  assert.match(source, /const unavailableShiftBar = name === 'shiftBar' && !isShiftBarSwitchedOn\(\)/)
+  assert.match(source, /unavailableFreeformTarget \|\| unavailableShiftBar\) return/)
 })
 
 test('native layout_action maps start and reset_all actions', () => {

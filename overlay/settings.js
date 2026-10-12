@@ -8,10 +8,11 @@
   const HUD_EDIT_HOTKEY_STORAGE_KEY = 'fdc.hud-edit-hotkey.v1'
   const DEFAULT_HUD_EDIT_HOTKEY = 'Ctrl+Shift+F8'
   const EVENT_SORT_OPTIONS = ['id-desc', 'id-asc', 'last-recorded-desc', 'last-recorded-asc']
-  const { COMPONENTS, OVERLAY_COMPONENTS } = globalScope.HudWidgets
+  const { COMPONENTS, OVERLAY_COMPONENTS, isOverlayComponentOn } = globalScope.HudWidgets
   const LAYOUT_TARGET_LABELS = Object.freeze({
     delta: 'DELTA',
     hud: 'HUD',
+    shiftBar: 'SHIFT BAR',
     tires: 'TIRES',
     pedals: 'THROTTLE & BRAKE',
     steering: 'STEERING',
@@ -4423,24 +4424,17 @@
   }
 
   function readOverlayVisibility() {
+    let stored = null
     try {
-      const stored = JSON.parse(localStorage.getItem(OVERLAY_VISIBILITY_STORAGE_KEY) || 'null')
-      if (!stored || typeof stored !== 'object') {
-        return OVERLAY_COMPONENTS.reduce((state, name) => {
-          state[name] = true
-          return state
-        }, {})
-      }
-      return OVERLAY_COMPONENTS.reduce((state, name) => {
-        state[name] = stored[name] !== false
-        return state
-      }, {})
+      stored = JSON.parse(localStorage.getItem(OVERLAY_VISIBILITY_STORAGE_KEY) || 'null')
     } catch {
-      return OVERLAY_COMPONENTS.reduce((state, name) => {
-        state[name] = true
-        return state
-      }, {})
+      stored = null
     }
+    // A stored state without a key keeps that block's default: on for Delta and the HUD, off for the Shift Bar.
+    return OVERLAY_COMPONENTS.reduce((state, name) => {
+      state[name] = isOverlayComponentOn(stored, name)
+      return state
+    }, {})
   }
 
   function saveOverlayVisibility(state) {
@@ -4833,7 +4827,7 @@
   })
 
   hudLayoutResetBtn?.addEventListener('click', async () => {
-    if (!(await confirmDestructive('Every HUD block and Delta goes back to its default place and size, in both arrangements.'))) return
+    if (!(await confirmDestructive('Every HUD block, Delta and the Shift Bar goes back to its default place and size, in both arrangements.'))) return
     try {
       await call('layout_action', { action: 'reset_all', target: 'hud' })
       setStatus('HUD LAYOUT RESET')
@@ -4879,7 +4873,7 @@
     saveOverlayVisibility(overlayVisibility)
     try {
       await call('set_overlay_visibility', { component, visible })
-      setStatus(`${component.toUpperCase()} ${visible ? 'ENABLED' : 'HIDDEN'}`)
+      setStatus(`${LAYOUT_TARGET_LABELS[component] || component.toUpperCase()} ${visible ? 'ENABLED' : 'HIDDEN'}`)
     } catch (error) {
       overlayVisibility[component] = previous
       renderOverlayComponentVisibility(component, previous)
@@ -4898,12 +4892,17 @@
     })
   }
 
+  // ALL covers every widget switch, the Shift Bar included; the Shift Bar is off by default.
   function allWidgetsOn() {
-    return COMPONENTS.every(c => visibility[c] !== false) && overlayVisibility.delta !== false
+    return COMPONENTS.every(c => visibility[c] !== false) &&
+      overlayVisibility.delta !== false &&
+      overlayVisibility.shiftBar === true
   }
 
   function anyWidgetOn() {
-    return COMPONENTS.some(c => visibility[c] !== false) || overlayVisibility.delta !== false
+    return COMPONENTS.some(c => visibility[c] !== false) ||
+      overlayVisibility.delta !== false ||
+      overlayVisibility.shiftBar === true
   }
 
   function renderAllToggle() {
@@ -4922,6 +4921,9 @@
     }
     if ((overlayVisibility.delta !== false) !== next) {
       await setOverlayComponentVisibility('delta', next)
+    }
+    if ((overlayVisibility.shiftBar === true) !== next) {
+      await setOverlayComponentVisibility('shiftBar', next)
     }
     renderAllToggle()
     setStatus(next ? 'ALL WIDGETS ON' : 'ALL WIDGETS OFF')

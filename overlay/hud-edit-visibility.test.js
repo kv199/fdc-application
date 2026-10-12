@@ -8,6 +8,8 @@ const EDIT_CASES = [
   ['grouped', 'delta'],
   ['freeform', 'delta'],
   ['grouped', 'hud'],
+  ['grouped', 'shiftBar'],
+  ['freeform', 'shiftBar'],
   ...COMPONENTS.map(name => ['freeform', name])
 ]
 const ALL_HIDDEN = Object.fromEntries(COMPONENTS.map(name => [name, false]))
@@ -26,13 +28,14 @@ function visibilityInput(overrides = {}) {
     deltaReferenceActive: true,
     ...overrides,
     state: { ...Object.fromEntries(COMPONENTS.map(name => [name, true])), ...overrides.state },
-    overlayState: { delta: true, hud: true, ...overrides.overlayState }
+    overlayState: { delta: true, hud: true, shiftBar: true, ...overrides.overlayState }
   }
 }
 
 // Hidden flags that must all be false for an edit target to be on screen.
 function editChain(visibility, target) {
   if (target === 'delta') return [visibility.delta]
+  if (target === 'shiftBar') return [visibility.shiftBar]
   if (target === 'hud') return [visibility.hudFrame]
   return [visibility.sections[target], visibility.hud, visibility.hudFrame]
 }
@@ -111,12 +114,13 @@ const RUNTIME_MODULES = [
 
 // Loads the real overlay layout and visibility modules on a minimal DOM, in
 // the index.html script order.
-function withOverlayRuntime(run) {
+function withOverlayRuntime(run, seed = {}) {
   const previous = Object.fromEntries(RUNTIME_GLOBALS.map(name => [name, global[name]]))
   const ids = ['layout-grid', 'delta-strip', 'hud-frame', 'hud', ...COMPONENTS.map(name => `hud-${name}`)]
   for (const name of ['delta', 'hud']) ids.push(`${name}-edit-tools`, `${name}-snap`, `${name}-reset`, `${name}-cancel`, `${name}-save`)
+  ids.push('shift-bar', 'shift-bar-edit-tools', 'shift-bar-snap', 'shift-bar-reset', 'shift-bar-cancel', 'shift-bar-save')
   const elements = new Map(ids.map(id => [id, createFakeElement()]))
-  const storage = new Map()
+  const storage = new Map(Object.entries(seed))
   const counters = { storageWrites: 0 }
 
   try {
@@ -157,9 +161,12 @@ function withOverlayRuntime(run) {
 
 function editChainElements(target) {
   if (target === 'delta') return ['delta-strip']
+  if (target === 'shiftBar') return ['shift-bar']
   if (target === 'hud') return ['hud-frame']
   return [`hud-${target}`, 'hud', 'hud-frame']
 }
+
+const SWITCHED_ON_SHIFT_BAR = { 'fdc.overlay-visibility.v1': JSON.stringify({ shiftBar: true }) }
 
 test('layout edit survives non-live telemetry packets in both layout modes', () => {
   withOverlayRuntime(({ element }) => {
@@ -179,11 +186,11 @@ test('layout edit survives non-live telemetry packets in both layout modes', () 
         }
 
         HudLayout[finish]()
-        const outerId = target === 'delta' ? 'delta-strip' : 'hud-frame'
+        const outerId = { delta: 'delta-strip', shiftBar: 'shift-bar' }[target] || 'hud-frame'
         assert.equal(element(outerId).hidden, true, `${mode} ${target}: #${outerId} after ${finish}`)
       }
     }
-  })
+  }, SWITCHED_ON_SHIFT_BAR)
 })
 
 test('a hidden freeform block is shown only while it is edited', () => {
@@ -408,5 +415,87 @@ test('snap buttons show GRID ON when enabled and GRID OFF when disabled', () => 
     HudLayout.setSnapEnabled(true)
     assert.equal(element('delta-snap').textContent, 'GRID ON', 'delta snap button shows GRID ON after enable')
     assert.equal(element('hud-snap').textContent, 'GRID ON', 'hud snap button shows GRID ON after enable')
+  })
+})
+
+test('the Shift Bar follows its switch and telemetry, and shows during an edit without telemetry', () => {
+  assert.equal(resolveHudVisibility(visibilityInput()).shiftBar, false)
+  assert.equal(resolveHudVisibility(visibilityInput({ overlayState: { shiftBar: false } })).shiftBar, true)
+  assert.equal(resolveHudVisibility({ ...visibilityInput(), overlayState: { delta: true, hud: true } }).shiftBar, true, 'a missing key is off')
+  assert.equal(resolveHudVisibility(visibilityInput({ telemetryVisible: false })).shiftBar, true)
+  assert.equal(resolveHudVisibility(visibilityInput({ state: ALL_HIDDEN })).shiftBar, false, 'Speed, Gear and RPM do not hide it')
+  assert.equal(resolveHudVisibility(visibilityInput({ telemetryVisible: false, editingTargets: ['shiftBar'] })).shiftBar, false)
+  assert.equal(resolveHudVisibility(visibilityInput({ telemetryVisible: false, editingTargets: ['delta'] })).shiftBar, true)
+})
+
+// A rect in stage space, as getBoundingClientRect reports it on a 1920 x 1080 monitor.
+function rect(left, top, width, height) {
+  return { left, top, width, height, right: left + width, bottom: top + height }
+}
+
+test('Shift Bar defaults above the HUD, and Delta sits above the bar only while the bar is on', () => {
+  withOverlayRuntime(({ element }) => {
+    // HUD scale is 2 here: the HUD is 1472 x 138 at the bottom, 28 px above the edge.
+    element('hud-frame').getBoundingClientRect = () => rect(224, 914, 1472, 138)
+    element('shift-bar').getBoundingClientRect = () => rect(224, 808, 1472, 96)
+    element('delta-strip').getBoundingClientRect = () => rect(224, 738, 1472, 60)
+    // Delta is hidden without an Event reference, so its place is only applied with one.
+    HudPreferences.setDeltaReferenceActive(true)
+
+    HudPreferences.setOverlayVisibility('shiftBar', true)
+    assert.equal(element('shift-bar').style.left, '224px', 'centered on the HUD')
+    assert.equal(element('shift-bar').style.top, '808px', 'a 10 px gap above the HUD')
+    assert.equal(element('delta-strip').style.top, '738px', 'Delta 10 px above the bar: 914 - 10 - 96 - 10 - 60')
+
+    // Turning the bar off moves an unsaved Delta back above the HUD, because defaults are not stored.
+    HudPreferences.setOverlayVisibility('shiftBar', false)
+    assert.equal(element('shift-bar').hidden, true)
+    assert.equal(element('delta-strip').style.top, '844px', 'Delta 10 px above the HUD: 914 - 10 - 60')
+  })
+})
+
+test('a saved Shift Bar size sets its user scale, and RESET returns it to the default place', () => {
+  const seed = {
+    'fdc.overlay-visibility.v1': JSON.stringify({ shiftBar: true }),
+    'fdc.layout.v2': JSON.stringify({ version: 2, shared: { shiftBar: { x: 0.25, y: 0.5, size: 1.5 } }, grouped: {}, freeform: {} })
+  }
+  withOverlayRuntime(({ element }) => {
+    const props = {}
+    element('shift-bar').style.setProperty = (name, value) => { props[name] = value }
+    HudLayout.refreshLayout()
+    assert.equal(props['--shift-bar-user-scale'], '1.5')
+    assert.deepEqual(HudLayout.getPosition('shiftBar'), { x: 0.25, y: 0.5, size: 1.5 })
+
+    HudLayout.resetPosition('shiftBar')
+    assert.equal(HudLayout.getPosition('shiftBar').size, 0)
+    assert.equal(props['--shift-bar-user-scale'], '1')
+  }, seed)
+})
+
+test('RESET LAYOUT clears a saved Shift Bar place along with Delta and the HUD', () => {
+  const seed = {
+    'fdc.overlay-visibility.v1': JSON.stringify({ shiftBar: true }),
+    'fdc.layout.v2': JSON.stringify({ version: 2, shared: { shiftBar: { x: 0.3, y: 0.3, size: 1 }, delta: { x: 0.1, y: 0.1, size: 0 } }, grouped: {}, freeform: {} })
+  }
+  withOverlayRuntime(() => {
+    HudLayout.resetAllPositions()
+    assert.equal(HudLayout.getPosition('shiftBar').size, 0)
+    assert.equal(HudLayout.getPosition('delta').size, 0)
+  }, seed)
+})
+
+test('the Shift Bar joins a layout edit only while its switch is on', () => {
+  withOverlayRuntime(({ element }) => {
+    HudLayout.setMode('grouped')
+    HudLayout.enterEditMode('shiftBar')
+    assert.equal(HudLayout.isEditing('shiftBar'), false, 'a switched-off bar stays out of the edit')
+    assert.equal(element('shift-bar').hidden, true)
+
+    HudPreferences.setOverlayVisibility('shiftBar', true)
+    assert.equal(HudLayout.startEditSession(), 'started')
+    assert.deepEqual(HudLayout.getEditingTargets(), ['hud', 'delta', 'shiftBar'])
+    assert.equal(element('shift-bar').hidden, false)
+    assert.equal(element('shift-bar').classList.contains('is-editing'), true)
+    HudLayout.cancelEditMode()
   })
 })

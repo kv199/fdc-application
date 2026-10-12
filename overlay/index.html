@@ -41,6 +41,21 @@
       <button class="layout-resize-handle layout-resize-handle--bottom-right" type="button" data-layout-resize-target="delta" data-layout-resize-handle="bottom-right" aria-label="Resize Delta from bottom-right corner"></button>
     </section>
 
+    <section id="shift-bar" class="shift-bar" aria-label="Shift bar" data-signal="normal" hidden>
+      <div id="shift-bar-segments" class="shift-bar__segments" aria-hidden="true"></div>
+      <div id="shift-bar-edit-tools" class="layout-edit-tools" hidden>
+        <span class="layout-edit__hint">DRAG SHIFT BAR TO MOVE · CORNER TO RESIZE · CLICK A BLOCK TO SELECT</span>
+        <button id="shift-bar-snap" class="layout-edit__button layout-edit__button--toggle" type="button" data-layout-snap aria-pressed="true">GRID ON</button>
+        <button id="shift-bar-reset" class="layout-edit__button layout-edit__button--reset" type="button">RESET</button>
+        <button id="shift-bar-cancel" class="layout-edit__button" type="button">CANCEL</button>
+        <button id="shift-bar-save" class="layout-edit__button layout-edit__button--primary" type="button">SAVE</button>
+      </div>
+      <button class="layout-resize-handle layout-resize-handle--top-left" type="button" data-layout-resize-target="shiftBar" data-layout-resize-handle="top-left" aria-label="Resize Shift Bar from top-left corner"></button>
+      <button class="layout-resize-handle layout-resize-handle--top-right" type="button" data-layout-resize-target="shiftBar" data-layout-resize-handle="top-right" aria-label="Resize Shift Bar from top-right corner"></button>
+      <button class="layout-resize-handle layout-resize-handle--bottom-left" type="button" data-layout-resize-target="shiftBar" data-layout-resize-handle="bottom-left" aria-label="Resize Shift Bar from bottom-left corner"></button>
+      <button class="layout-resize-handle layout-resize-handle--bottom-right" type="button" data-layout-resize-target="shiftBar" data-layout-resize-handle="bottom-right" aria-label="Resize Shift Bar from bottom-right corner"></button>
+    </section>
+
     <div id="hud-frame" class="hud-frame">
       <div class="hud-visual">
         <main id="hud" class="hud is-waiting" aria-label="FDC telemetry HUD">
@@ -138,6 +153,7 @@
   <script src="shift-light-engine.js"></script>
   <script src="shift-light-runtime.js"></script>
   <script src="shift-light-presentation.js"></script>
+  <script src="shift-bar.js"></script>
   <script src="overlay.js"></script>
 </body>
 </html>
