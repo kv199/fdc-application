@@ -17,6 +17,7 @@
     usableCeiling: null,
     ceilingSampleCount: 0,
     ceilingClusterCount: 0,
+    provisionalCeiling: null,
     currentGear: null,
     lastKnownGear: false,
     method: null,

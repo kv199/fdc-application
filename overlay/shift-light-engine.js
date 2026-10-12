@@ -312,6 +312,18 @@ var HudShiftLight = (() => {
     getUsableCeiling() {
       return this.usableCeiling;
     }
+    /**
+     * Until the usable ceiling is trusted, the highest observation at or above
+     * CEILING_MIN_REDLINE_FRACTION of the redline stands in for the limiter. A first limiter
+     * hit is usually within about 2% below the real limiter, and the value only rises with
+     * later hits. It is a presentation fallback only; learning still uses the trusted ceiling.
+     */
+    getProvisionalCeiling(fallbackRedlineRpm = null) {
+      const redline = this.reportedRedlineRpm ?? fallbackRedlineRpm;
+      if (redline === null || !(redline > 0)) return null;
+      const considered = this.ceilingSamples.filter((sample) => sample / redline >= CEILING_MIN_REDLINE_FRACTION);
+      return considered.length ? Math.max(...considered) : null;
+    }
     getCeilingSampleCount() {
       return this.ceilingSamples.length;
     }
@@ -559,7 +571,9 @@ var HudShiftLight = (() => {
       const identity = this.parseIdentity(), currentGear = telemetry && isForwardGear2(telemetry.gear) ? telemetry.gear : null;
       const current = currentGear === null ? null : this.estimator.getState(currentGear);
       const rpmMax = telemetry?.rpmMax ?? this.latestRpmMax;
-      const fallbackShiftRpm = this.estimator.getUsableCeiling() ?? (rpmMax > 0 ? roundRpm2(rpmMax) : null);
+      const usableCeiling = this.estimator.getUsableCeiling();
+      const provisionalCeiling = usableCeiling === null ? this.estimator.getProvisionalCeiling(rpmMax > 0 ? rpmMax : null) : null;
+      const fallbackShiftRpm = usableCeiling ?? provisionalCeiling ?? (rpmMax > 0 ? roundRpm2(rpmMax) : null);
       const effectiveTargetRpm = current?.targetRpm ?? current?.candidateRpm ?? fallbackShiftRpm;
       const leadRpm = this.getLeadRpm(), lightOnRpm = effectiveTargetRpm === null ? null : Math.max(0, roundRpm2(effectiveTargetRpm - leadRpm));
       let phase = fallbackPhase(telemetry?.rpm ?? 0, rpmMax);
@@ -585,9 +599,10 @@ var HudShiftLight = (() => {
         pi: identity?.pi ?? null,
         rpmMax: rpmMax > 0 ? rpmMax : null,
         reportedRedlineRpm: this.estimator.getReportedRedlineRpm(),
-        usableCeiling: this.estimator.getUsableCeiling(),
+        usableCeiling,
         ceilingSampleCount: this.estimator.getCeilingSampleCount(),
         ceilingClusterCount: this.estimator.getCeilingClusterCount(),
+        provisionalCeiling,
         fallbackShiftRpm,
         carClass: identity?.carClass ?? null,
         drivetrain: identity?.drivetrain ?? null,

@@ -83,8 +83,9 @@ Shift Bar shows the same signal, and the signal is decided once per frame for
 both:
 
 - **Flashing red** from 97% of the car's limiter RPM. The limiter is the usable
-  RPM ceiling that Shift Light has measured for the car, or the game's maximum
-  RPM until that ceiling is measured. Red takes priority over purple. When
+  RPM ceiling that Shift Light has measured for the car; before that, the
+  highest limiter hit so far (from the first hit on); and only before any hit,
+  the game's maximum RPM. Red takes priority over purple. When
   purple can show and the gear's Shift Light target lies above 97% of the
   limiter, red starts only once RPM reaches that target (at most the limiter),
   so a gear best shifted at the limiter shows purple first. There is no red

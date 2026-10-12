@@ -16,6 +16,7 @@
     usableCeiling: null,
     ceilingSampleCount: 0,
     ceilingClusterCount: 0,
+    provisionalCeiling: null,
     gears: [],
     diagnostics: [],
     acceptedShiftCount: 0,
@@ -106,6 +107,8 @@
         ? Math.round(state.usableCeiling) : null,
       ceilingSampleCount: Math.min(12, nonNegativeInteger(state.ceilingSampleCount)),
       ceilingClusterCount: Math.min(3, nonNegativeInteger(state.ceilingClusterCount)),
+      provisionalCeiling: Number.isFinite(state.provisionalCeiling) && state.provisionalCeiling > 0
+        ? Math.round(state.provisionalCeiling) : null,
       fallbackShiftRpm: finiteOrNull(state.fallbackShiftRpm),
       currentGear: Number.isInteger(state.currentGear) && state.currentGear >= 1 && state.currentGear <= 10
         ? state.currentGear : null,

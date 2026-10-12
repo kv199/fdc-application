@@ -31,11 +31,12 @@
   }
 
   /**
-   * The limiter RPM: the measured usable ceiling when it is positive, otherwise
-   * the game's max RPM. Null when neither is known.
+   * The limiter RPM: the measured usable ceiling when it is positive, then the
+   * provisional ceiling (the highest limiter hit so far, before three agree),
+   * otherwise the game's max RPM. Null when none is known.
    */
-  function limiterRpm({ usableCeiling, rpmMax } = {}) {
-    return finitePositive(usableCeiling) ?? finitePositive(rpmMax)
+  function limiterRpm({ usableCeiling, provisionalCeiling, rpmMax } = {}) {
+    return finitePositive(usableCeiling) ?? finitePositive(provisionalCeiling) ?? finitePositive(rpmMax)
   }
 
   /**
@@ -44,8 +45,8 @@
    * until RPM passes the target (at most the limiter), so a gear that should be
    * shifted at the limiter still shows purple first.
    */
-  function redlineRpm({ rpmMax, usableCeiling, shiftCueEnabled = false, effectiveTargetRpm } = {}) {
-    const limiter = limiterRpm({ usableCeiling, rpmMax })
+  function redlineRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled = false, effectiveTargetRpm } = {}) {
+    const limiter = limiterRpm({ usableCeiling, provisionalCeiling, rpmMax })
     if (limiter === null) return null
     const threshold = limiter * LIMITER_RPM_FRACTION
     const target = shiftCueEnabled === true ? finitePositive(effectiveTargetRpm) : null
@@ -57,9 +58,9 @@
    * redlineRpm, takes priority over purple. Purple is the Shift Light cue:
    * phase 'shift' while the cue is enabled. The 'approach' phase shows nothing.
    */
-  function resolveSignal({ rpm, rpmMax, usableCeiling, shiftCueEnabled = false, shiftPhase = 'normal', effectiveTargetRpm } = {}) {
+  function resolveSignal({ rpm, rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled = false, shiftPhase = 'normal', effectiveTargetRpm } = {}) {
     const current = finite(rpm)
-    const redline = redlineRpm({ rpmMax, usableCeiling, shiftCueEnabled, effectiveTargetRpm })
+    const redline = redlineRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled, effectiveTargetRpm })
     if (current !== null && redline !== null && current >= redline) return 'redline'
     if (shiftCueEnabled === true && shiftPhase === 'shift') return 'shift'
     return 'normal'
@@ -70,12 +71,12 @@
    * cue is enabled (lightOnRpm, else effectiveTargetRpm), otherwise
    * LIMITER_RPM_FRACTION of the limiter. Null when no threshold is known.
    */
-  function resolveThresholdRpm({ rpmMax, usableCeiling, shiftCueEnabled = false, lightOnRpm, effectiveTargetRpm } = {}) {
+  function resolveThresholdRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled = false, lightOnRpm, effectiveTargetRpm } = {}) {
     if (shiftCueEnabled === true) {
       const cueRpm = finitePositive(lightOnRpm) ?? finitePositive(effectiveTargetRpm)
       if (cueRpm !== null) return cueRpm
     }
-    const limiter = limiterRpm({ usableCeiling, rpmMax })
+    const limiter = limiterRpm({ usableCeiling, provisionalCeiling, rpmMax })
     return limiter === null ? null : limiter * LIMITER_RPM_FRACTION
   }
 

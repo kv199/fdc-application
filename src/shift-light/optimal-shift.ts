@@ -297,6 +297,18 @@ export class OptimalShiftEstimator {
   reset(): void { this.gears.clear(); this.shiftSamples = []; this.ceilingSamples = []; this.usableCeiling = null; this.reportedRedlineRpm = null; this.resetTransient() }
   resetTransient(): void { this.limiterTracker = null; this.lastCleanTelemetry = null; this.limiterRearmed = true }
   getUsableCeiling(): number | null { return this.usableCeiling }
+  /**
+   * Until the usable ceiling is trusted, the highest observation at or above
+   * CEILING_MIN_REDLINE_FRACTION of the redline stands in for the limiter. A first limiter
+   * hit is usually within about 2% below the real limiter, and the value only rises with
+   * later hits. It is a presentation fallback only; learning still uses the trusted ceiling.
+   */
+  getProvisionalCeiling(fallbackRedlineRpm: number | null = null): number | null {
+    const redline = this.reportedRedlineRpm ?? fallbackRedlineRpm
+    if (redline === null || !(redline > 0)) return null
+    const considered = this.ceilingSamples.filter(sample => sample / redline >= CEILING_MIN_REDLINE_FRACTION)
+    return considered.length ? Math.max(...considered) : null
+  }
   getCeilingSampleCount(): number { return this.ceilingSamples.length }
   /** Size of the highest qualifying cluster, or the largest non-qualifying cluster while no ceiling exists. */
   getCeilingClusterCount(): number { return this.analyzeCeiling(this.ceilingSamples).clusterCount }

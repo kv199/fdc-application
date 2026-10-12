@@ -384,3 +384,12 @@ test('render without a container or root does not throw and reports state', () =
     signal: 'redline'
   })
 })
+
+test('a provisional ceiling sets red and the fill until the usable ceiling is trusted', () => {
+  // Real limiter 9195 under a reported 10000: without it the bar stopped short and red never showed.
+  assert.equal(resolveSignal({ rpm: 9195, rpmMax: 10000 }), 'normal')
+  assert.equal(resolveSignal({ rpm: 9195, rpmMax: 10000, provisionalCeiling: 9195 }), 'redline')
+  assert.equal(resolveThresholdRpm({ rpmMax: 10000, provisionalCeiling: 9195 }), 9195 * LIMITER_RPM_FRACTION)
+  // A trusted ceiling wins over the provisional one.
+  assert.equal(resolveThresholdRpm({ rpmMax: 10000, usableCeiling: 9000, provisionalCeiling: 9195 }), 9000 * LIMITER_RPM_FRACTION)
+})

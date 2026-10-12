@@ -4564,7 +4564,9 @@
     shiftLightCarRpmMax.textContent = state.rpmMax ? formatRpm(state.rpmMax) : '—'
     shiftLightUsableCeiling.textContent = state.usableCeiling
       ? `${formatRpm(state.usableCeiling)} · ${state.ceilingClusterCount}/3`
-      : state.ceilingSampleCount > 0 ? `LEARNING · ${state.ceilingClusterCount}/3` : 'NOT OBSERVED'
+      : state.provisionalCeiling
+        ? `LEARNING · ${state.ceilingClusterCount}/3 · ~${formatRpm(state.provisionalCeiling)}`
+        : state.ceilingSampleCount > 0 ? `LEARNING · ${state.ceilingClusterCount}/3` : 'NOT OBSERVED'
     const activeGear = state.gears.find(gear => gear.gear === state.currentGear)
     const activeStatus = activeGear?.status || 'learning'
     const fallbackTarget = state.usableCeiling || state.fallbackShiftRpm || state.reportedRedlineRpm || state.rpmMax

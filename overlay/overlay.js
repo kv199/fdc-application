@@ -258,6 +258,7 @@ function getHudSignal(telemetry) {
     rpm: telemetry.rpm,
     rpmMax: telemetry.rpmMax,
     usableCeiling: latestShiftLight.usableCeiling,
+    provisionalCeiling: latestShiftLight.provisionalCeiling,
     shiftCueEnabled: isShiftCueEnabled(),
     shiftPhase: shiftLightPresentation.getPhase(),
     effectiveTargetRpm: latestShiftLight.effectiveTargetRpm
@@ -268,6 +269,7 @@ function getShiftBarThresholdRpm(telemetry) {
   return window.HudShiftBar.resolveThresholdRpm({
     rpmMax: telemetry.rpmMax,
     usableCeiling: latestShiftLight.usableCeiling,
+    provisionalCeiling: latestShiftLight.provisionalCeiling,
     shiftCueEnabled: isShiftCueEnabled(),
     lightOnRpm: latestShiftLight.lightOnRpm,
     effectiveTargetRpm: latestShiftLight.effectiveTargetRpm

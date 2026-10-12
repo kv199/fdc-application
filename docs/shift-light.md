@@ -41,9 +41,16 @@ compatibility, but that suffix is not part of configuration identity.
 ## Safe baseline and usable ceiling
 
 The usable engine ceiling is the safe baseline target for every unlearned gear
-pair. Until the limiter has been measured reliably, the current positive
-game-reported redline is used instead. This means `LEARNING` still has a usable
-purple cue; it does not mean "no guidance".
+pair. Until the limiter has been measured reliably, the highest limiter
+observation at or above 85% of the reported redline stands in for it as the
+provisional ceiling, from the first such hit on: a first hit is usually within
+about 2% below the real limiter, and the value only rises with later hits. The
+HUD limiter and the Shift Bar fill use it too, and the Configuration shows it as
+`LEARNING · 1/3 · ~9,195 RPM`. Only before any such hit is the current positive
+game-reported redline used. The provisional ceiling is a presentation fallback;
+learning still compares against the trusted ceiling or the reported redline.
+This means `LEARNING` still has a usable purple cue; it does not mean "no
+guidance".
 
 A learned ceiling requires three stable limiter observations. An observation
 comes from a continuous same-gear full-throttle pull that rises by at least
@@ -134,7 +141,8 @@ cueOnRPM = effectiveTargetRPM - leadRPM
 
 The lead is clamped to `100–1000 RPM`; when a reliable acceleration rate is not
 available it defaults to `200 RPM`. The effective target priority is confirmed
-target, potential candidate, usable ceiling, then reported redline. The visual
+target, potential candidate, usable ceiling, provisional ceiling, then reported
+redline. The visual
 presentation latches the purple shift phase for at least `250 ms` so a brief
 telemetry change cannot erase the cue immediately.
 

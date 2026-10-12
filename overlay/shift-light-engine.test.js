@@ -172,3 +172,19 @@ test('keeps gear 10 as the last known gear', () => {
   assert.equal(learner.update(frame({ timestampMs: 0, gear: 10, rpm: 9000 })).lastKnownGear, true)
   assert.equal(learner.update(frame({ timestampMs: 16, gear: 9, rpm: 7000 })).lastKnownGear, false)
 })
+
+test('a first limiter hit gives a provisional ceiling that the cue and fallback target use at once', () => {
+  const learner = ceilingLearner([9195])
+  const snapshot = learner.snapshot(frame({ rpm: 5000, rpmMax: 10000 }))
+  assert.equal(snapshot.usableCeiling, null)
+  assert.equal(snapshot.provisionalCeiling, 9195)
+  assert.equal(snapshot.fallbackShiftRpm, 9195)
+  // Low false hits below 85% of the redline are not a limiter.
+  assert.equal(ceilingLearner([7106]).snapshot(frame({ rpmMax: 10000 })).provisionalCeiling, null)
+  // The provisional value only rises with later hits, and a trusted ceiling replaces it.
+  assert.equal(ceilingLearner([9100, 9195]).snapshot(frame({ rpmMax: 10000 })).provisionalCeiling, 9195)
+  const trusted = ceilingLearner([9190, 9195, 9196]).snapshot(frame({ rpmMax: 10000 }))
+  assert.equal(trusted.usableCeiling, 9195)
+  assert.equal(trusted.provisionalCeiling, null)
+  assert.equal(trusted.fallbackShiftRpm, 9195)
+})

@@ -49,6 +49,7 @@ test('normalizes compact per-pair calibration without legacy bin or reason field
     usableCeiling: 10220,
     ceilingSampleCount: 3,
     ceilingClusterCount: 3,
+    provisionalCeiling: null,
     fallbackShiftRpm: null,
     currentGear: 5,
     gears: [{
@@ -95,6 +96,7 @@ test('turns an unavailable or malformed state into a safe empty state', () => {
     usableCeiling: null,
     ceilingSampleCount: 0,
     ceilingClusterCount: 0,
+    provisionalCeiling: null,
     fallbackShiftRpm: null,
     currentGear: null,
     gears: [],

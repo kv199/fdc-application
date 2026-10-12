@@ -51,6 +51,8 @@ export interface ShiftLightSnapshot {
   ceilingSampleCount: number
   /** Size of the highest ceiling cluster (uncapped); the UI shows it out of three. */
   ceilingClusterCount: number
+  /** Highest considered limiter observation while the usable ceiling is not yet trusted. */
+  provisionalCeiling: number | null
   fallbackShiftRpm: number | null
   carClass: number | null
   drivetrain: number | null
@@ -159,7 +161,9 @@ export class ShiftLightLearner {
     const identity = this.parseIdentity(), currentGear = telemetry && isForwardGear(telemetry.gear) ? telemetry.gear : null
     const current = currentGear === null ? null : this.estimator.getState(currentGear)
     const rpmMax = telemetry?.rpmMax ?? this.latestRpmMax
-    const fallbackShiftRpm = this.estimator.getUsableCeiling() ?? (rpmMax > 0 ? roundRpm(rpmMax) : null)
+    const usableCeiling = this.estimator.getUsableCeiling()
+    const provisionalCeiling = usableCeiling === null ? this.estimator.getProvisionalCeiling(rpmMax > 0 ? rpmMax : null) : null
+    const fallbackShiftRpm = usableCeiling ?? provisionalCeiling ?? (rpmMax > 0 ? roundRpm(rpmMax) : null)
     const effectiveTargetRpm = current?.targetRpm ?? current?.candidateRpm ?? fallbackShiftRpm
     const leadRpm = this.getLeadRpm(), lightOnRpm = effectiveTargetRpm === null ? null : Math.max(0, roundRpm(effectiveTargetRpm - leadRpm))
     let phase = fallbackPhase(telemetry?.rpm ?? 0, rpmMax)
@@ -172,8 +176,8 @@ export class ShiftLightLearner {
       acceptedShiftCount: current?.evidence.length ?? 0, lastRpmBefore: lastEvidence?.beforeRpm ?? null, lastDeltaPct: lastEvidence?.powerDeltaPct ?? null,
       sampleCount: current?.evidence.length ?? 0, carKey: normalizeIdentityKey(this.key), gameId: identity?.gameId ?? null,
       carOrdinal: identity?.carOrdinal ?? null, pi: identity?.pi ?? null, rpmMax: rpmMax > 0 ? rpmMax : null,
-      reportedRedlineRpm: this.estimator.getReportedRedlineRpm(), usableCeiling: this.estimator.getUsableCeiling(),
-      ceilingSampleCount: this.estimator.getCeilingSampleCount(), ceilingClusterCount: this.estimator.getCeilingClusterCount(), fallbackShiftRpm,
+      reportedRedlineRpm: this.estimator.getReportedRedlineRpm(), usableCeiling,
+      ceilingSampleCount: this.estimator.getCeilingSampleCount(), ceilingClusterCount: this.estimator.getCeilingClusterCount(), provisionalCeiling, fallbackShiftRpm,
       carClass: identity?.carClass ?? null, drivetrain: identity?.drivetrain ?? null, cylinders: identity?.cylinders ?? null,
       gearCount: null, observedGearCount: this.maxObservedGear, gearboxChanged: false, gearboxValidation: null, gearboxSignature: null,
       currentGear, lastKnownGear, method: current?.status === 'optimal' || current?.status === 'potential' ? 'optimal' : null,

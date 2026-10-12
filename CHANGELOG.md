@@ -10,8 +10,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Shift Light**: the rev limiter is now learned for almost every car. One
   wrong reading, for example from wheelspin, no longer blocks it, so the red
   limiter flash and the purple cue use the car's real limiter instead of the
-  game's higher RPM limit, which many engines never reach. **LEARNED CEILING**
-  shows how many matching limiter hits it has, out of three.
+  game's higher RPM limit, which many engines never reach. From the first time
+  you hit the limiter, the HUD already uses that RPM, so red flashes and the
+  Shift Bar fills to the end without waiting for three hits. **LEARNED
+  CEILING** shows how many matching limiter hits it has, out of three, and the
+  RPM in use until then.
 - **Hotkeys**: the HUD edit and Driver Analysis hotkeys now accept Ctrl, Alt,
   or Shift with a number key, such as `Ctrl + Shift + 8`, and letter keys on
   any keyboard layout.
