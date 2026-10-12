@@ -292,3 +292,43 @@ test('tooltipModel uses imperial units when DisplayPreferences specifies them', 
     delete globalThis.DisplayPreferences
   }
 })
+
+test('sector span is the whole span for an Events lap or sprint without lap numbers', () => {
+  const points = [{ distanceM: 0 }, { distanceM: 500 }, { distanceM: 1500 }]
+  assert.deepEqual(EventTraceMap.sectorSpan(points), { startIndex: 0, endIndex: 2 })
+  // An unfinished sprint without a completed lap has no sectors.
+  assert.equal(EventTraceMap.sectorSpan(points, { requireFinish: true }), null)
+})
+
+test('sector span is the first completed lap when a later lap follows', () => {
+  const points = [
+    { lapNumber: 1, distanceM: 0 }, { lapNumber: 1, distanceM: 400 }, { lapNumber: 1, distanceM: 800 },
+    { lapNumber: 2, distanceM: 0 }, { lapNumber: 2, distanceM: 400 }
+  ]
+  assert.deepEqual(EventTraceMap.sectorSpan(points), { startIndex: 0, endIndex: 2 })
+  // Completed laps still show ticks when the drive did not reach its finish.
+  assert.deepEqual(EventTraceMap.sectorSpan(points, { requireFinish: true }), { startIndex: 0, endIndex: 2 })
+})
+
+test('sector span of an unfinished drive with only its current lap is null', () => {
+  const points = [{ lapNumber: 1, distanceM: 0 }, { lapNumber: 1, distanceM: 400 }]
+  assert.equal(EventTraceMap.sectorSpan(points, { requireFinish: true }), null)
+  assert.deepEqual(EventTraceMap.sectorSpan(points), { startIndex: 0, endIndex: 1 })
+})
+
+test('sector span ignores points without a distance and needs a positive range', () => {
+  const withGaps = [{ distanceM: null }, { distanceM: 100 }, { distanceM: null }, { distanceM: 300 }]
+  assert.deepEqual(EventTraceMap.sectorSpan(withGaps), { startIndex: 0, endIndex: 3 })
+  assert.equal(EventTraceMap.sectorSpan([{ distanceM: null }, { distanceM: null }]), null)
+  assert.equal(EventTraceMap.sectorSpan([{ distanceM: 50 }, { distanceM: 50 }]), null)
+  assert.equal(EventTraceMap.sectorSpan([{ distanceM: 50 }]), null)
+})
+
+test('sector span of a completed lap with no distance range is null', () => {
+  const points = [
+    { lapNumber: 1, distanceM: 10 }, { lapNumber: 1, distanceM: 10 },
+    { lapNumber: 2, distanceM: 0 }, { lapNumber: 2, distanceM: 900 }
+  ]
+  assert.equal(EventTraceMap.sectorSpan(points), null)
+  assert.equal(EventTraceMap.sectorSpan(points, { requireFinish: true }), null)
+})

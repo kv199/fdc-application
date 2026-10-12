@@ -91,7 +91,9 @@ The tab opens with a short intro and contains:
   wherever any wheel's absolute combined slip exceeds 1, the level at which the
   in-game tire friction telemetry shows more than 100% and turns red. Thin
   `S1`, `S2`, and `S3` ticks mark the ends of the three virtual distance
-  sectors. The white marker is the saved start point.
+  sectors: equal thirds of the lap's distance, or of a Sprint's whole distance.
+  Driver Analysis drive maps use the same rule. The white marker is the saved
+  start point.
 - The legend row shows **THROTTLE**, **BRAKE**, and **COAST** with their share
   of lap time, **SLIP** with the share of lap time in which any wheel was above
   100% combined slip, and **ALL**. The legend buttons also choose the visible
@@ -110,8 +112,11 @@ The tab opens with a short intro and contains:
   times around the view center and return to the whole lap; **+** is disabled
   at 12 times the whole lap and **FIT** at the whole lap. The view stays inside
   the lap. Lines, the track outline, the slip band, problem segments, the start
-  and hover markers, clean dots, sector ticks, and their labels keep their
-  on-screen size at every zoom. Opening another lap or drive resets the zoom.
+  and hover markers, and clean dots keep their on-screen size at every zoom.
+  Sector ticks and their 13 px labels, drawn with a dark halo, are sized in
+  screen pixels, so they read the same at every window width and zoom; a
+  label that would leave the visible map moves to the other side of its tick.
+  Opening another lap or drive resets the zoom.
 - Hovering the map marks the nearest trace point and shows its recorded values
   without interpretation: distance from the lap's first point, lap time, speed,
   gear, RPM, throttle, brake, steering, lateral, longitudinal, and vertical

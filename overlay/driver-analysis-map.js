@@ -65,6 +65,7 @@
         timestampMs: sample.timestampMs,
         elapsedMs: sample.timestampMs - firstTimestampMs,
         distanceM: finite(sample.lapDistance),
+        lapNumber: finite(sample.lapNumber),
         positionX: sample.position[0],
         positionY: sample.position[1],
         positionZ: sample.position[2],

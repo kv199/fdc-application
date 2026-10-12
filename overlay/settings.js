@@ -1599,28 +1599,51 @@
     return element
   }
 
-  function traceSectorTicks(points, minDistance, maxDistance, project, minX, maxX, minZ, maxZ) {
+  // Sector ticks are drawn at the view's base scale: half-length and the label gap are in whole-lap view units.
+  const SECTOR_TICK_HALF_UNITS = 11
+  // On screen, a sector tick reaches 11 px either side of the trace and its label starts 6 px beyond it.
+  const SECTOR_TICK_HALF_PX = 11
+  const SECTOR_LABEL_GAP_PX = 6
+  // Matches the sector label's CSS font size, which is also in screen pixels.
+  const SECTOR_LABEL_FONT_PX = 13
+
+  // The sectors are thirds of the distance of one span (see EventTraceMap.sectorSpan). Each tick crosses the trace at
+  // the span point nearest its third, and each point is searched only inside the span.
+  function traceSectorTicks(points, span, project) {
     const ticks = []
+    if (!span) return ticks
+    let minDistance = Infinity
+    let maxDistance = -Infinity
+    for (let index = span.startIndex; index <= span.endIndex; index += 1) {
+      const distance = points[index].distanceM
+      if (!Number.isFinite(distance)) continue
+      minDistance = Math.min(minDistance, distance)
+      maxDistance = Math.max(maxDistance, distance)
+    }
     const distanceRange = maxDistance - minDistance
     if (!(distanceRange > 0)) return ticks
     for (let sector = 1; sector <= 3; sector += 1) {
       const target = minDistance + distanceRange * sector / 3
-      let nearest = null
-      for (const point of points) {
-        if (point.distanceM === null) continue
-        const delta = Math.abs(point.distanceM - target)
-        if (!nearest || delta < nearest.delta) nearest = { point, delta }
+      let nearestIndex = null
+      let nearestDelta = Infinity
+      for (let index = span.startIndex; index <= span.endIndex; index += 1) {
+        const distance = points[index].distanceM
+        if (!Number.isFinite(distance)) continue
+        const delta = Math.abs(distance - target)
+        if (delta < nearestDelta) {
+          nearestIndex = index
+          nearestDelta = delta
+        }
       }
-      if (!nearest) continue
-      const pointIndex = points.indexOf(nearest.point)
-      const previous = points[Math.max(0, pointIndex - 1)] || nearest.point
-      const next = points[Math.min(points.length - 1, pointIndex + 1)] || nearest.point
-      const current = project(nearest.point)
-      const dx = project(next).x - project(previous).x
-      const dz = project(next).y - project(previous).y
+      if (nearestIndex === null) continue
+      const previous = project(points[Math.max(span.startIndex, nearestIndex - 1)])
+      const next = project(points[Math.min(span.endIndex, nearestIndex + 1)])
+      const current = project(points[nearestIndex])
+      const dx = next.x - previous.x
+      const dz = next.y - previous.y
       const length = Math.hypot(dx, dz) || 1
-      const normalX = -dz / length * 8
-      const normalY = dx / length * 8
+      const normalX = -dz / length * SECTOR_TICK_HALF_UNITS
+      const normalY = dx / length * SECTOR_TICK_HALF_UNITS
       ticks.push({
         x1: current.x - normalX,
         y1: current.y - normalY,
@@ -1632,8 +1655,9 @@
     return ticks
   }
 
-  // Events lap maps use the defaults. Driver Analysis drive maps pass marks (problem segments and clean checks), their
-  // own layer selection, and no sector ticks.
+  // Events lap maps and Driver Analysis drive maps share this map and its sector ticks. Events lap maps use the
+  // defaults. Driver Analysis drive maps pass marks (problem segments and clean checks), their own layer selection, and
+  // requireFinish, which keeps an unfinished drive without a completed lap free of sector ticks.
   function renderTraceMap(points, lapTimeMs, options = {}) {
     const marks = options.marks || null
     const selection = options.selection || {
@@ -1745,11 +1769,9 @@
     if (marks) svg.append(...renderTraceMarks(marks, projected))
 
     // Sector ticks and labels (on top)
-    const distances = points.map(point => point.distanceM).filter(value => value !== null)
-    const minDistance = distances.length ? Math.min(...distances) : 0
-    const maxDistance = distances.length ? Math.max(...distances) : 0
-    const ticks = options.sectorTicks === false ? [] : traceSectorTicks(points, minDistance, maxDistance, project, minX, maxX, minZ, maxZ)
-    // Each tick keeps its midpoint and half-vector, so zooming can redraw it at the same on-screen length.
+    const span = globalThis.EventTraceMap?.sectorSpan(points, { requireFinish: options.requireFinish === true }) ?? null
+    const ticks = traceSectorTicks(points, span, project)
+    // Each tick keeps its midpoint, half-vector, and unit normal, so zooming can redraw it at the same on-screen size.
     const scaledTicks = []
     for (const tick of ticks) {
       const line = svgElement('line', {
@@ -1759,16 +1781,31 @@
         x2: tick.x2,
         y2: tick.y2
       })
-      const label = svgElement('text', { class: 'events-lap-detail__sector-label', x: tick.x2 + 5, y: tick.y2 - 4 })
+      const label = svgElement('text', { class: 'events-lap-detail__sector-label' })
       label.textContent = tick.label
       svg.append(line, label)
+      const halfX = (tick.x2 - tick.x1) / 2
+      const halfY = (tick.y2 - tick.y1) / 2
+      const halfLength = Math.hypot(halfX, halfY) || 1
+      const unitX = halfX / halfLength
+      const unitY = halfY / halfLength
+      // The label sits beyond the outer end, anchored on the side it faces so it clears the tick and the trace.
+      if (Math.abs(unitX) >= Math.abs(unitY)) {
+        label.setAttribute('text-anchor', unitX >= 0 ? 'start' : 'end')
+        label.setAttribute('dominant-baseline', 'central')
+      } else {
+        label.setAttribute('text-anchor', 'middle')
+        label.setAttribute('dominant-baseline', unitY >= 0 ? 'hanging' : 'alphabetic')
+      }
       scaledTicks.push({
         line,
         label,
         midX: (tick.x1 + tick.x2) / 2,
         midY: (tick.y1 + tick.y2) / 2,
-        halfX: (tick.x2 - tick.x1) / 2,
-        halfY: (tick.y2 - tick.y1) / 2
+        halfX,
+        halfY,
+        unitX,
+        unitY
       })
     }
 
@@ -1850,19 +1887,55 @@
     const currentK = () => view.width / base.width
     // Hover reach stays 14 screen pixels, which is 14 viewBox units at the whole-lap view.
     const hoverReach = () => 14 * currentK()
+    // Sector ticks and labels are sized in screen pixels, not viewBox units, so they read the same at every window
+    // width and zoom. Before the SVG is laid out there is no screen matrix, and the viewBox scale stands in.
+    const sectorScale = () => {
+      const matrix = svg.getScreenCTM()
+      const pixelsPerUnit = matrix ? Math.hypot(matrix.a, matrix.b) : 0
+      return pixelsPerUnit > 0 ? 1 / pixelsPerUnit : currentK()
+    }
+    const applySectorScale = () => {
+      const s = sectorScale()
+      svg.style.setProperty('--map-sector-k', String(s))
+      for (const tick of scaledTicks) {
+        const half = SECTOR_TICK_HALF_PX * s
+        const labelOffset = (SECTOR_TICK_HALF_PX + SECTOR_LABEL_GAP_PX) * s
+        tick.line.setAttribute('x1', tick.midX - tick.unitX * half)
+        tick.line.setAttribute('y1', tick.midY - tick.unitY * half)
+        tick.line.setAttribute('x2', tick.midX + tick.unitX * half)
+        tick.line.setAttribute('y2', tick.midY + tick.unitY * half)
+        // A label that would leave the visible map, such as one beside a tick on the map edge, goes to the tick's
+        // other side instead. Its box is estimated from the font size: two condensed glyphs are about 1.4 em wide.
+        const fontUnits = SECTOR_LABEL_FONT_PX * s
+        const fits = side => {
+          const x = tick.midX + tick.unitX * labelOffset * side
+          const y = tick.midY + tick.unitY * labelOffset * side
+          const width = fontUnits * 1.4
+          const horizontal = Math.abs(tick.unitX) >= Math.abs(tick.unitY)
+          const left = horizontal ? (tick.unitX * side >= 0 ? x : x - width) : x - width / 2
+          const top = horizontal ? y - fontUnits / 2 : (tick.unitY * side >= 0 ? y : y - fontUnits)
+          return left >= view.x && left + width <= view.x + view.width
+            && top >= view.y && top + fontUnits <= view.y + view.height
+        }
+        const side = fits(1) || !fits(-1) ? 1 : -1
+        tick.label.setAttribute('x', tick.midX + tick.unitX * labelOffset * side)
+        tick.label.setAttribute('y', tick.midY + tick.unitY * labelOffset * side)
+        if (Math.abs(tick.unitX) >= Math.abs(tick.unitY)) {
+          tick.label.setAttribute('text-anchor', tick.unitX * side >= 0 ? 'start' : 'end')
+        } else {
+          tick.label.setAttribute('dominant-baseline', tick.unitY * side >= 0 ? 'hanging' : 'alphabetic')
+        }
+      }
+    }
+    if (scaledTicks.length > 0 && typeof ResizeObserver === 'function') {
+      new ResizeObserver(() => applySectorScale()).observe(svg)
+    }
     const applyView = () => {
       const k = currentK()
       svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.width} ${view.height}`)
       svg.style.setProperty('--map-k', String(k))
       for (const [circle, radius] of circleRadii) circle.setAttribute('r', radius * k)
-      for (const tick of scaledTicks) {
-        tick.line.setAttribute('x1', tick.midX - tick.halfX * k)
-        tick.line.setAttribute('y1', tick.midY - tick.halfY * k)
-        tick.line.setAttribute('x2', tick.midX + tick.halfX * k)
-        tick.line.setAttribute('y2', tick.midY + tick.halfY * k)
-        tick.label.setAttribute('x', tick.midX + tick.halfX * k + 5 * k)
-        tick.label.setAttribute('y', tick.midY + tick.halfY * k - 4 * k)
-      }
+      applySectorScale()
       const atBase = zoom.isAtBase(view, base)
       svg.classList.toggle('is-zoomed', !atBase)
       zoomInButton.disabled = zoom.zoomLevel(view, base) >= zoom.MAX_ZOOM - 1e-6
@@ -3502,7 +3575,8 @@
     const points = mapApi?.tracePointsFromSamples(samples) || []
     return renderTraceMap(points, Number(drive?.durationMs), {
       marks: mapApi?.checkMarks(Array.isArray(checks) ? checks : [], points) || { errors: [], clean: [] },
-      sectorTicks: false,
+      // Sector ticks need a finish for a sprint; a circuit shows its first completed lap even when unfinished.
+      requireFinish: drive?.finished !== true,
       emptyText: 'NO POSITION DATA WAS SAVED FOR THIS DRIVE',
       selection: {
         get: () => driveMapLayerSelection,

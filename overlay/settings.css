@@ -1500,15 +1500,21 @@ h1 {
 
 .events-lap-detail__sector-tick {
   stroke: var(--text);
-  stroke-width: calc(1.2 * var(--map-k, 1));
+  stroke-width: calc(2 * var(--map-sector-k, var(--map-k, 1)));
   stroke-linecap: square;
 }
 
+/* Sector ticks and labels are sized in screen pixels through --map-sector-k (viewBox units per screen pixel), so
+   they read the same at every window width and zoom; the dark halo keeps a label readable over a trace. */
 .events-lap-detail__sector-label {
   fill: var(--text);
-  font-size: calc(9px * var(--map-k, 1));
-  font-weight: 400;
-  letter-spacing: 0.14em;
+  stroke: var(--map-canvas);
+  stroke-width: calc(3px * var(--map-sector-k, var(--map-k, 1)));
+  stroke-linejoin: round;
+  paint-order: stroke;
+  font-size: calc(13px * var(--map-sector-k, var(--map-k, 1)));
+  font-weight: 600;
+  letter-spacing: 0.06em;
 }
 
 .events-lap-detail__start {

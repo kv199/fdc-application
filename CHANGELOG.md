@@ -69,8 +69,12 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   time is shown with `~`, because it can be a few milliseconds short.
 - **Events** and **Driver Analysis**: maps can be zoomed. Scroll over the map
   to zoom in around the pointer, drag to move around, double-click to zoom in,
-  or use **+**, **−**, and **FIT**. Lines, markers, and sector labels keep
-  their size at any zoom.
+  or use **+**, **−**, and **FIT**. Lines and markers keep their size at any
+  zoom, and the `S1`, `S2`, `S3` sector labels are larger and stay easy to read
+  at every zoom and window size.
+- **Driver Analysis**: the drive map shows the `S1`, `S2`, `S3` sector marks
+  like the Events lap map: thirds of the first completed lap in a circuit, or
+  of the whole drive in a finished sprint.
 
 ### Improved
 

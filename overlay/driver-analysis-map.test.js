@@ -99,3 +99,12 @@ test('error tooltip model uses imperial units when DisplayPreferences specifies 
     delete globalThis.DisplayPreferences
   }
 })
+
+test('trace points carry the lap number of their sample', () => {
+  const points = map.tracePointsFromSamples([
+    sample(0, { lapNumber: 1 }),
+    sample(100, { lapNumber: 2 }),
+    sample(200)
+  ])
+  assert.deepEqual(points.map(point => point.lapNumber), [1, 2, null])
+})

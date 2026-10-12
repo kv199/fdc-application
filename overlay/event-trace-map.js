@@ -392,10 +392,58 @@
     return totalMs > 0 ? Math.round(slipMs / totalMs * 100) : null
   }
 
+  /**
+   * The index span that the sector ticks divide into thirds. When the points carry lap numbers and a later lap
+   * follows a lap, the span is the first completed lap. Otherwise it is the whole span (one Events lap or one sprint).
+   * With requireFinish, a span without a completed lap is null, so an unfinished sprint shows no thirds of a partial
+   * distance. Points without a distance are ignored when measuring; a span with no positive distance range is null.
+   * @param {object[]} points - trace points, optionally with lapNumber and distanceM
+   * @param {object} [options]
+   * @param {boolean} [options.requireFinish=false] - return null instead of the whole span when no lap is completed
+   * @returns {{startIndex: number, endIndex: number}|null}
+   */
+  function sectorSpan(points, { requireFinish = false } = {}) {
+    if (!Array.isArray(points) || points.length < 2) return null
+    let completed = null
+    let currentLap = null
+    let currentStart = 0
+    let currentEnd = 0
+    for (let index = 0; index < points.length; index += 1) {
+      const lapNumber = finiteNumber(points[index]?.lapNumber)
+      if (lapNumber === null) continue
+      if (currentLap === null) {
+        currentLap = lapNumber
+        currentStart = index
+      }
+      if (lapNumber === currentLap) {
+        currentEnd = index
+        continue
+      }
+      // A higher lap number after the current lap completes it; a lower one is not expected and is skipped.
+      if (lapNumber > currentLap) {
+        completed = { startIndex: currentStart, endIndex: currentEnd }
+        break
+      }
+    }
+    if (!completed && requireFinish) return null
+    const span = completed || { startIndex: 0, endIndex: points.length - 1 }
+
+    let minDistance = Infinity
+    let maxDistance = -Infinity
+    for (let index = span.startIndex; index <= span.endIndex; index += 1) {
+      const distance = finiteNumber(points[index]?.distanceM)
+      if (distance === null) continue
+      minDistance = Math.min(minDistance, distance)
+      maxDistance = Math.max(maxDistance, distance)
+    }
+    return maxDistance - minDistance > 0 ? span : null
+  }
+
   return {
     TRACE_LAYERS,
     visibleLayers,
     nextLayerSelection,
+    sectorSpan,
     slipTimeShare,
     pedalState,
     isSlipPoint,
