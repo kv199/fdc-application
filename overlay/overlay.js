@@ -789,6 +789,12 @@ function installBetterDeltaReference(candidate) {
   const recorder = eventRecorder?.snapshot?.()
   if (!recorder?.armed || String(recorder.eventId) !== String(normalized.eventId)) return false
 
+  // Every completed lap of the armed Event finishes its last sector against the
+  // reference that was active while it was driven, even when this lap does not
+  // become the new reference. A database reference installed at arm time has no
+  // tracked lap here, so this is a no-op for it.
+  deltaRuntime.completeLap?.(normalized.timeMs)
+
   const current = deltaRuntime.getState?.().reference || null
   if (!window.HudDelta?.isBetterReference?.(normalized, current)) return false
 

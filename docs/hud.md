@@ -53,6 +53,23 @@ only while recording an Event with a known reference:
 
 See [Events](events.md#telemetry-recording).
 
+Under the Delta bar, a row of three cells shows FDC's three virtual sectors,
+which are equal thirds of the reference lap distance:
+
+- Each completed sector shows its signed time difference from the active Event
+  reference, in seconds with three decimals.
+- Green means the sector is faster than the reference and yellow means slower.
+  Purple means the sector is faster than the best time for that sector across
+  the Event's saved results and the current run, regardless of car; purple takes
+  priority over green. A sector exactly equal to the reference shows `0.000` in
+  a neutral color.
+- The sector being driven is shown with a dash and brighter text.
+- When a lap finishes, its results stay visible at the start of the next lap
+  and are replaced when that lap's first sector completes.
+- A sector without a result, such as one whose reference time is unknown, shows
+  a dash. A lap that FDC first sees after its start, for example after the
+  pause menu, produces no sector results.
+
 ### Shift cue
 
 The Gear / Speed / RPM block changes its background to signal shifts:

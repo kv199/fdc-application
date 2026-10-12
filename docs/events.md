@@ -155,7 +155,11 @@ that covers noticeably more distance replaces a partial reference regardless
 of time. When Delta accepts a faster reference, the Event page's purple
 **Absolute Best** time updates immediately and silently (no badge or message)
 before the run is saved. Circuit rows remain part of the active unsaved run
-until **STOP** or a confirmed restart.
+until **STOP** or a confirmed restart. The same load also returns the Event's
+best Sector 1, Sector 2 and Sector 3 times, each the quickest saved value across
+the Event's completed circuit laps and confirmed Sprint laps that pass the same
+97% distance rule as Absolute Best, regardless of car; the HUD uses them for
+sector indicators.
 
 In a live race Delta interpolates the active reference trace's elapsed time at
 the current lap distance and shows current elapsed time minus reference elapsed

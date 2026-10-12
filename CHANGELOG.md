@@ -56,6 +56,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   background, a muted lime for controls and actions, a light painted header,
   Events and Driver Analysis maps that keep their dark route canvas, and a
   light window title bar; the in-game HUD and Delta stay dark.
+- **Delta**: three sector results now appear under the Delta bar. Each third
+  of the lap shows how much faster or slower it was than the reference:
+  green when faster, yellow when slower, and purple for the Event's best time
+  in that sector. A finished lap's results stay on screen until the first
+  sector of the next lap is done.
 
 ### Improved
 

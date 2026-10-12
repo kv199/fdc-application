@@ -454,6 +454,51 @@ body {
   background: var(--brake);
 }
 
+.delta-strip__sectors {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(12px * var(--delta-user-scale));
+  margin-top: calc(8px * var(--delta-user-scale));
+}
+
+.delta-strip__sector {
+  --sector-ink: var(--hud-text-muted);
+  display: grid;
+  justify-items: center;
+  align-items: baseline;
+  padding-top: calc(5px * var(--delta-user-scale));
+  border-top: max(1px, calc(2px * var(--delta-user-scale))) solid color-mix(in srgb, var(--hud-text-muted) 30%, transparent);
+}
+
+.delta-strip__sector-value {
+  color: var(--sector-ink);
+  font-family: var(--font-readout);
+  font-size: calc(16px * var(--delta-user-scale));
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.delta-strip__sector[data-sector-tone='better'] {
+  --sector-ink: var(--gas);
+  border-color: var(--gas);
+}
+
+.delta-strip__sector[data-sector-tone='worse'] {
+  --sector-ink: var(--warning);
+  border-color: var(--warning);
+}
+
+.delta-strip__sector[data-sector-tone='best'] {
+  --sector-ink: var(--best);
+  border-color: var(--best);
+}
+
+.delta-strip__sector[data-sector-tone='active'] {
+  --sector-ink: var(--hud-text);
+  border-color: var(--hud-text-muted);
+}
+
 /* Layout editor: Delta and the telemetry HUD are independent targets. */
 .hud-frame {
   top: auto;

@@ -6,11 +6,37 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   const DEFAULT_LIMIT_SECONDS = 1
   const REFERENCE_DISTANCE_RATIO = 0.97
+  // FDC virtual sectors are equal thirds of the reference lap distance.
+  const SECTOR_COUNT = 3
+  // Sector timing needs the lap observed from its start.
+  const SECTOR_LAP_START_TOLERANCE_MS = 1000
+  const SECTOR_TONE_LABELS = {
+    better: 'better',
+    worse: 'worse',
+    best: 'best',
+    equal: 'equal',
+    active: 'current',
+    neutral: 'no result'
+  }
 
   function finite(value) {
     if (value === null || value === undefined || value === '') return null
     const number = Number(value)
     return Number.isFinite(number) ? number : null
+  }
+
+  function positiveMs(value) {
+    const milliseconds = finite(value)
+    return milliseconds !== null && milliseconds > 0 ? milliseconds : null
+  }
+
+  function smallestMs(...values) {
+    const known = values.filter(value => Number.isFinite(value))
+    return known.length ? Math.min(...known) : null
+  }
+
+  function neutralSectors() {
+    return Array.from({ length: SECTOR_COUNT }, () => ({ tone: 'neutral', deltaMs: null }))
   }
 
   function tracePointsFrom(value) {
@@ -147,6 +173,18 @@
     return null
   }
 
+  /** Event-wide best sector times as [s1, s2, s3] in ms; absent or invalid values are null. */
+  function bestSectorsMsFrom(...sources) {
+    const bestSectors = sources
+      .map(source => source?.bestSectors ?? source?.best_sectors)
+      .find(value => value && typeof value === 'object')
+    return [
+      positiveMs(bestSectors?.sector1TimeMs ?? bestSectors?.sector1_time_ms),
+      positiveMs(bestSectors?.sector2TimeMs ?? bestSectors?.sector2_time_ms),
+      positiveMs(bestSectors?.sector3TimeMs ?? bestSectors?.sector3_time_ms)
+    ]
+  }
+
   function normalizeReference(value) {
     const source = explicitReference(value)
     const tracePoints = normalizeTracePoints(source)
@@ -172,7 +210,8 @@
       tracePoints: rebasedTracePoints,
       startDistanceM: 0,
       endDistanceM: rebasedTracePoints.at(-1).distanceM,
-      durationMs: traceDurationMs
+      durationMs: traceDurationMs,
+      bestSectorsMs: bestSectorsMsFrom(source, value)
     }
   }
 
@@ -212,6 +251,27 @@
       return before.elapsedMs + ((after.elapsedMs - before.elapsedMs) * ratio)
     }
     return null
+  }
+
+  /**
+   * Sector durations [s1, s2, s3] of a reference in ms. Sector boundaries are
+   * thirds of the reference distance; null marks a sector that cannot be known.
+   */
+  function referenceSectorTimesMs(reference) {
+    const endDistanceM = finite(reference?.endDistanceM)
+    if (!reference || endDistanceM === null || endDistanceM <= 0) return neutralSectorTimes()
+    const firstBoundaryMs = interpolateReferenceMs(reference, endDistanceM / SECTOR_COUNT)
+    const secondBoundaryMs = interpolateReferenceMs(reference, (2 * endDistanceM) / SECTOR_COUNT)
+    const endMs = finite(reference.timeMs) ?? finite(reference.durationMs)
+    return [
+      firstBoundaryMs,
+      firstBoundaryMs === null || secondBoundaryMs === null ? null : secondBoundaryMs - firstBoundaryMs,
+      secondBoundaryMs === null || endMs === null ? null : endMs - secondBoundaryMs
+    ].map(positiveMs)
+  }
+
+  function neutralSectorTimes() {
+    return Array.from({ length: SECTOR_COUNT }, () => null)
   }
 
   function currentElapsedMs(telemetry) {
@@ -255,6 +315,14 @@
     return `${sign}${Math.abs(delta).toFixed(3)}`
   }
 
+  /** Signed sector difference in ms as seconds with three decimals; 0 is shown as 0.000. */
+  function formatSectorDelta(deltaMs) {
+    if (!Number.isFinite(deltaMs)) return '—'
+    if (deltaMs === 0) return '0.000'
+    const sign = deltaMs < 0 ? '-' : '+'
+    return `${sign}${(Math.abs(deltaMs) / 1000).toFixed(3)}`
+  }
+
   function formatRaceTime(timeMs) {
     const milliseconds = finite(timeMs)
     if (milliseconds === null || milliseconds < 0) return '—'
@@ -282,12 +350,29 @@
     const bestContainer = options.bestContainer
       || root?.querySelector?.('[data-delta-best-container]')
       || bestElement?.parentElement
+    const sectorElements = Array.isArray(options.sectorElements)
+      ? options.sectorElements
+      : Array.from(root?.querySelectorAll?.('[data-delta-sector]') || [])
     const limitSeconds = finite(options.limitSeconds) ?? DEFAULT_LIMIT_SECONDS
     let reference = null
     let latest = null
     let distanceOriginM = null
     let lastDistanceM = null
     let lastLapNumber = null
+    // Set when relativeDistance() re-establishes the lap origin; the next
+    // telemetry update consumes it to start a sector lap.
+    let lapStarted = false
+    // Samples and sector boundary times of the lap currently tracked.
+    let lapTrack = null
+    // Results shown for the three sectors, and the sector being driven (-1 for none).
+    let sectorResults = neutralSectors()
+    let activeSector = -1
+    // True while a finished lap's results remain visible at the start of a new
+    // lap, until that lap's first sector completes.
+    let holdingResults = false
+    // True once any sector of the row has completed since the row was cleared.
+    let rowHasResults = false
+    let bestSectorsMs = neutralSectorTimes()
 
     function resetDistanceTracking() {
       distanceOriginM = null
@@ -305,10 +390,121 @@
       const lapNumber = finite(telemetry?.lap?.number)
       const lapAdvanced = lastLapNumber !== null && lapNumber !== null && lapNumber > lastLapNumber
       const distanceRewound = lastDistanceM !== null && distanceM + 100 < lastDistanceM
-      if (distanceOriginM === null || lapAdvanced || distanceRewound) distanceOriginM = distanceM
+      if (distanceOriginM === null || lapAdvanced || distanceRewound) {
+        distanceOriginM = distanceM
+        lapStarted = true
+      }
       lastDistanceM = distanceM
       lastLapNumber = lapNumber
       return Math.max(0, distanceM - distanceOriginM)
+    }
+
+    // A lap first observed after its start, such as after the pause menu cleared
+    // the live flag, has a distance origin in mid-lap, so its sector boundaries
+    // would be wrong; it produces no sector results.
+    function startSectorLap(elapsedMs) {
+      lapTrack = elapsedMs !== null && elapsedMs <= SECTOR_LAP_START_TOLERANCE_MS
+        ? { previousSample: null, firstBoundaryMs: null, secondBoundaryMs: null, thirdDone: false }
+        : null
+      holdingResults = rowHasResults
+      activeSector = holdingResults || !lapTrack ? -1 : 0
+    }
+
+    function sectorResultFor(index, currentMs) {
+      if (currentMs === null) return { tone: 'neutral', deltaMs: null }
+      const bestMs = bestSectorsMs[index]
+      const elapsedMs = Math.round(currentMs)
+      const referenceMs = referenceSectorTimesMs(reference)[index]
+      // The best time is updated even when there is no reference to compare
+      // with, because the measured sector still counts toward the Event's best.
+      bestSectorsMs[index] = smallestMs(bestMs, currentMs)
+      if (referenceMs === null) return { tone: 'neutral', deltaMs: null }
+      const deltaMs = elapsedMs - Math.round(referenceMs)
+      let tone
+      if (bestMs !== null && elapsedMs < Math.round(bestMs)) tone = 'best'
+      else if (deltaMs === 0) tone = 'equal'
+      else tone = deltaMs < 0 ? 'better' : 'worse'
+      return { tone, deltaMs }
+    }
+
+    // currentMs is the measured sector duration, or null when it cannot be
+    // measured. Sectors of a held row are ignored until the first sector of
+    // the new lap completes, which replaces the held results.
+    function completeSector(index, currentMs) {
+      if (index === 0 && holdingResults) {
+        sectorResults = neutralSectors()
+        holdingResults = false
+      }
+      if (holdingResults) return
+      sectorResults[index] = sectorResultFor(index, currentMs)
+      rowHasResults = true
+      activeSector = index < SECTOR_COUNT - 1 ? index + 1 : -1
+    }
+
+    function crossesBoundary(previousM, boundaryM, currentM) {
+      return previousM < boundaryM && boundaryM <= currentM
+    }
+
+    function elapsedAtBoundary(previous, current, boundaryM) {
+      const ratio = (boundaryM - previous.distanceM) / (current.distanceM - previous.distanceM)
+      return previous.elapsedMs + ((current.elapsedMs - previous.elapsedMs) * ratio)
+    }
+
+    function trackSectors(telemetry, distanceM) {
+      const started = lapStarted
+      lapStarted = false
+      if (!reference) {
+        lapTrack = null
+        return
+      }
+      if (distanceM === null) return
+      const elapsedMs = currentElapsedMs(telemetry)
+      if (started) startSectorLap(elapsedMs)
+      if (!lapTrack || elapsedMs === null) return
+
+      const sample = { distanceM, elapsedMs }
+      const previous = lapTrack.previousSample
+      lapTrack.previousSample = sample
+      if (!previous) return
+
+      const endDistanceM = reference.endDistanceM
+      const firstBoundaryM = endDistanceM / SECTOR_COUNT
+      const secondBoundaryM = (2 * endDistanceM) / SECTOR_COUNT
+      if (lapTrack.firstBoundaryMs === null && crossesBoundary(previous.distanceM, firstBoundaryM, distanceM)) {
+        lapTrack.firstBoundaryMs = elapsedAtBoundary(previous, sample, firstBoundaryM)
+        completeSector(0, lapTrack.firstBoundaryMs)
+      }
+      if (lapTrack.secondBoundaryMs === null && crossesBoundary(previous.distanceM, secondBoundaryM, distanceM)) {
+        lapTrack.secondBoundaryMs = elapsedAtBoundary(previous, sample, secondBoundaryM)
+        const secondMs = lapTrack.firstBoundaryMs === null
+          ? null
+          : lapTrack.secondBoundaryMs - lapTrack.firstBoundaryMs
+        completeSector(1, secondMs)
+      }
+    }
+
+    function mergeBestSectors(nextReference) {
+      const referenceSectorsMs = referenceSectorTimesMs(nextReference)
+      bestSectorsMs = bestSectorsMs.map((bestMs, index) => smallestMs(
+        bestMs,
+        nextReference.bestSectorsMs?.[index],
+        referenceSectorsMs[index]
+      ))
+    }
+
+    function resetSectorRow() {
+      sectorResults = neutralSectors()
+      activeSector = -1
+      holdingResults = false
+      rowHasResults = false
+      lapTrack = null
+    }
+
+    /** Sector cells as the row presents them, with the driven sector marked active. */
+    function sectorDisplay() {
+      return sectorResults.map((sector, index) => (index === activeSector
+        ? { tone: 'active', deltaMs: null }
+        : { tone: sector.tone, deltaMs: sector.deltaMs }))
     }
 
     // Last value written to each DOM property. Telemetry renders on every
@@ -326,6 +522,30 @@
       bestAvailable: undefined,
       bestLabel: undefined,
       bestHidden: undefined
+    }
+    const sectorCells = sectorElements.map(element => ({
+      element,
+      valueElement: element?.querySelector?.('[data-delta-sector-value]') || null,
+      tone: undefined,
+      text: undefined,
+      label: undefined
+    }))
+
+    function renderSectors(display) {
+      sectorCells.forEach((cell, index) => {
+        const sector = display[index] || { tone: 'neutral', deltaMs: null }
+        const tone = sector.tone
+        const text = formatSectorDelta(sector.deltaMs)
+        const label = `Sector ${index + 1}, ${SECTOR_TONE_LABELS[tone] || SECTOR_TONE_LABELS.neutral}`
+        if (cell.element?.dataset && cell.tone !== tone) cell.element.dataset.sectorTone = tone
+        cell.tone = tone
+        if (cell.valueElement && cell.text !== text) cell.valueElement.textContent = text
+        cell.text = text
+        if (typeof cell.element?.setAttribute === 'function' && cell.label !== label) {
+          cell.element.setAttribute('aria-label', label)
+        }
+        cell.label = label
+      })
     }
 
     function render(delta) {
@@ -389,12 +609,21 @@
           written.bestHidden = hidden
         }
       }
+      renderSectors(sectorDisplay())
       return getState()
     }
 
+    // Installing a reference keeps the sector row and its hold state, so a
+    // lap that just finished stays visible until the next lap's first sector.
     function setReference(nextReference) {
       reference = normalizeReference(nextReference)
       resetDistanceTracking()
+      if (reference) {
+        mergeBestSectors(reference)
+      } else {
+        bestSectorsMs = neutralSectorTimes()
+        resetSectorRow()
+      }
       render(null)
       return reference
     }
@@ -406,12 +635,32 @@
     function clearReference() {
       reference = null
       resetDistanceTracking()
+      lapStarted = false
+      bestSectorsMs = neutralSectorTimes()
+      resetSectorRow()
       return render(null)
     }
 
     function update(telemetry) {
       const distanceM = relativeDistance(telemetry)
+      trackSectors(telemetry, distanceM)
       return render(calculateDelta(telemetry, reference, distanceM))
+    }
+
+    /**
+     * Finalize the last sector of the lap being tracked with the lap time. Call
+     * it before the next telemetry update so the tracked lap is still the one
+     * that just finished.
+     */
+    function completeLap(timeMs) {
+      const lapMs = finite(timeMs)
+      if (!reference || !lapTrack || lapMs === null || lapMs <= 0) return getState()
+      if (lapTrack.secondBoundaryMs !== null && !lapTrack.thirdDone) {
+        lapTrack.thirdDone = true
+        const thirdMs = lapMs - lapTrack.secondBoundaryMs
+        completeSector(2, thirdMs > 0 ? thirdMs : null)
+      }
+      return render(latest)
     }
 
     function getState() {
@@ -420,13 +669,16 @@
         tone: toneForDelta(latest),
         fillPercent: fillPercent(latest, limitSeconds),
         bestTimeMs: reference?.timeMs ?? null,
-        reference
+        reference,
+        sectors: sectorDisplay(),
+        bestSectorsMs: bestSectorsMs.slice()
       }
     }
 
     render(null)
     return {
       clearReference,
+      completeLap,
       getState,
       render,
       setActiveEvent,
@@ -444,10 +696,12 @@
     fillPercent,
     formatDelta,
     formatRaceTime,
+    formatSectorDelta,
     interpolateReferenceMs,
     isBetterReference,
     normalizeReference,
     normalizeTracePoints,
+    referenceSectorTimesMs,
     referenceTimeMsFrom,
     toneForDelta,
     createDeltaRuntime

@@ -3276,6 +3276,15 @@ struct EventAbsoluteBestReference {
     lap_number: Option<i32>,
     time_ms: i64,
     trace_points: Vec<EventRunTracePoint>,
+    best_sectors: EventBestSectors,
+}
+
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EventBestSectors {
+    sector_1_time_ms: Option<i64>,
+    sector_2_time_ms: Option<i64>,
+    sector_3_time_ms: Option<i64>,
 }
 
 fn validate_event_choice(value: &str, field: &str, allowed: &[&str]) -> Result<(), String> {
@@ -4014,6 +4023,7 @@ fn load_event_absolute_best_from_connection(
         })
         .transpose()?
         .unwrap_or_default();
+    let best_sectors = load_event_best_sectors_from_connection(connection, event_id)?;
     Ok(Some(EventAbsoluteBestReference {
         event_id,
         run_id,
@@ -4021,7 +4031,66 @@ fn load_event_absolute_best_from_connection(
         lap_number,
         time_ms,
         trace_points,
+        best_sectors,
     }))
+}
+
+// Each sector is the quickest saved value across the Event's eligible laps,
+// independently of the others and regardless of car. Eligible laps follow the
+// same rules as the Absolute Best candidates: completed circuit laps and
+// confirmed sprint laps, restricted to the longest traced distance when the
+// Event has traces.
+fn load_event_best_sectors_from_connection(
+    connection: &Connection,
+    event_id: i64,
+) -> Result<EventBestSectors, String> {
+    connection
+        .query_row(
+            "WITH spans AS (
+                SELECT points.run_id AS run_id,
+                       points.lap_number AS lap_number,
+                       MAX(points.distance) - MIN(points.distance) AS span
+                FROM event_run_lap_trace_points AS points
+                JOIN event_runs ON event_runs.id = points.run_id
+                WHERE event_runs.event_id = ?1
+                GROUP BY points.run_id, points.lap_number
+            ),
+            eligible_laps AS (
+                SELECT event_run_laps.sector_1_time_ms AS sector_1_time_ms,
+                       event_run_laps.sector_2_time_ms AS sector_2_time_ms,
+                       event_run_laps.sector_3_time_ms AS sector_3_time_ms
+                FROM event_runs
+                JOIN event_run_laps ON event_run_laps.run_id = event_runs.id
+                LEFT JOIN spans
+                  ON spans.run_id = event_runs.id
+                 AND spans.lap_number = event_run_laps.lap_number
+                WHERE event_runs.event_id = ?1
+                  AND (
+                    (event_runs.run_type = 'circuit'
+                     AND event_runs.result = 'completed'
+                     AND event_run_laps.lap_time_ms > 0)
+                    OR
+                    (event_runs.run_type = 'sprint'
+                     AND event_runs.result = 'confirmed'
+                     AND event_runs.result_time_ms > 0)
+                  )
+                  AND ((SELECT MAX(span) FROM spans) IS NULL
+                       OR spans.span >= (SELECT MAX(span) FROM spans) * ?2)
+            )
+            SELECT MIN(CASE WHEN sector_1_time_ms > 0 THEN sector_1_time_ms END),
+                   MIN(CASE WHEN sector_2_time_ms > 0 THEN sector_2_time_ms END),
+                   MIN(CASE WHEN sector_3_time_ms > 0 THEN sector_3_time_ms END)
+            FROM eligible_laps",
+            params![event_id, EVENT_REFERENCE_DISTANCE_RATIO],
+            |row| {
+                Ok(EventBestSectors {
+                    sector_1_time_ms: row.get(0)?,
+                    sector_2_time_ms: row.get(1)?,
+                    sector_3_time_ms: row.get(2)?,
+                })
+            },
+        )
+        .map_err(|error| format!("unable to load Event best sectors: {error}"))
 }
 
 fn record_event_run_in_connection(
@@ -7539,6 +7608,238 @@ mod tests {
                 .is_none()
         );
         assert!(load_event_absolute_best_from_connection(&connection, 999).is_err());
+    }
+
+    #[test]
+    fn event_best_sectors_take_independent_minima_across_eligible_laps() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Best sectors", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let lap = |lap_number: i32, lap_time_ms: i64, sectors: [Option<i64>; 3]| EventRunLapInput {
+            lap_number,
+            lap_time_ms,
+            sector_1_time_ms: sectors[0],
+            sector_2_time_ms: sectors[1],
+            sector_3_time_ms: sectors[2],
+            trace_points: Vec::new(),
+        };
+        record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![
+                    lap(1, 90_000, [Some(30_000), Some(31_000), Some(19_000)]),
+                    lap(2, 89_000, [None, Some(29_000), Some(20_000)]),
+                ],
+            ),
+        )
+        .unwrap();
+        record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![lap(1, 88_000, [Some(32_000), Some(28_000), None])],
+            ),
+        )
+        .unwrap();
+
+        let best = load_event_absolute_best_from_connection(&connection, event.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(best.time_ms, 88_000);
+        assert_eq!(best.best_sectors.sector_1_time_ms, Some(30_000));
+        assert_eq!(best.best_sectors.sector_2_time_ms, Some(28_000));
+        assert_eq!(best.best_sectors.sector_3_time_ms, Some(19_000));
+        let serialized = serde_json::to_value(&best).unwrap();
+        assert_eq!(serialized["bestSectors"]["sector1TimeMs"], 30_000);
+        assert_eq!(serialized["bestSectors"]["sector2TimeMs"], 28_000);
+        assert_eq!(serialized["bestSectors"]["sector3TimeMs"], 19_000);
+    }
+
+    #[test]
+    fn event_best_sectors_exclude_partial_distance_laps() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Partial sectors", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+
+        let trace = |end_distance: f64| {
+            vec![0.0, end_distance]
+                .into_iter()
+                .enumerate()
+                .map(|(index, distance)| {
+                    test_event_trace_point(
+                        index as i32,
+                        index as i64 * 1000,
+                        distance,
+                        1.0,
+                        2.0,
+                        3.0,
+                        0.75,
+                        0.0,
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let lap =
+            |lap_time_ms: i64, sectors: [i64; 3], end_distance: Option<f64>| EventRunLapInput {
+                lap_number: 1,
+                lap_time_ms,
+                sector_1_time_ms: Some(sectors[0]),
+                sector_2_time_ms: Some(sectors[1]),
+                sector_3_time_ms: Some(sectors[2]),
+                trace_points: end_distance.map(trace).unwrap_or_default(),
+            };
+        let full = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![lap(139_155, [40_000, 40_000, 40_000], Some(5_948.0))],
+            ),
+        )
+        .unwrap();
+        record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![lap(60_000, [10_000, 10_000, 10_000], Some(1_236.0))],
+            ),
+        )
+        .unwrap();
+        record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![lap(150_000, [5_000, 5_000, 5_000], None)],
+            ),
+        )
+        .unwrap();
+
+        let best = load_event_absolute_best_from_connection(&connection, event.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(best.run_id, full.id);
+        assert_eq!(best.best_sectors.sector_1_time_ms, Some(40_000));
+        assert_eq!(best.best_sectors.sector_2_time_ms, Some(40_000));
+        assert_eq!(best.best_sectors.sector_3_time_ms, Some(40_000));
+    }
+
+    #[test]
+    fn event_best_sectors_include_only_confirmed_sprint_results() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Sprint sectors", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let lap = |sectors: [i64; 3]| EventRunLapInput {
+            lap_number: 1,
+            lap_time_ms: 75_000,
+            sector_1_time_ms: Some(sectors[0]),
+            sector_2_time_ms: Some(sectors[1]),
+            sector_3_time_ms: Some(sectors[2]),
+            trace_points: Vec::new(),
+        };
+        let sprint = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "sprint",
+                "confirmed",
+                Some(75_000),
+                vec![lap([25_000, 26_000, 24_000])],
+            ),
+        )
+        .unwrap();
+        // The schema accepts only 'completed' and 'confirmed' results, so an
+        // unconfirmed sprint attempt is stored here with a non-confirmed result.
+        connection
+            .execute(
+                "INSERT INTO event_runs (event_id, car_ordinal, car_class, car_pi,
+                   drivetrain, started_at, run_type, result, result_time_ms)
+                 VALUES (?1, 260, 8, 700, 2, '2026-08-30T12:00:00Z',
+                   'sprint', 'completed', NULL)",
+                params![event.id],
+            )
+            .unwrap();
+        let unconfirmed_run_id = connection.last_insert_rowid();
+        connection
+            .execute(
+                "INSERT INTO event_run_laps (run_id, lap_number, lap_time_ms,
+                   sector_1_time_ms, sector_2_time_ms, sector_3_time_ms)
+                 VALUES (?1, 1, 70000, 20000, 20000, 20000)",
+                params![unconfirmed_run_id],
+            )
+            .unwrap();
+
+        let best = load_event_absolute_best_from_connection(&connection, event.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(best.run_id, sprint.id);
+        assert_eq!(best.run_type, "sprint");
+        assert_eq!(best.best_sectors.sector_1_time_ms, Some(25_000));
+        assert_eq!(best.best_sectors.sector_2_time_ms, Some(26_000));
+        assert_eq!(best.best_sectors.sector_3_time_ms, Some(24_000));
+    }
+
+    #[test]
+    fn event_best_sectors_are_none_without_sector_values() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("No sectors", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![EventRunLapInput {
+                    lap_number: 1,
+                    lap_time_ms: 90_000,
+                    sector_1_time_ms: None,
+                    sector_2_time_ms: None,
+                    sector_3_time_ms: None,
+                    trace_points: Vec::new(),
+                }],
+            ),
+        )
+        .unwrap();
+
+        let best = load_event_absolute_best_from_connection(&connection, event.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(best.time_ms, 90_000);
+        assert_eq!(best.best_sectors.sector_1_time_ms, None);
+        assert_eq!(best.best_sectors.sector_2_time_ms, None);
+        assert_eq!(best.best_sectors.sector_3_time_ms, None);
     }
 
     #[test]
