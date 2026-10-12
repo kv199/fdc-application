@@ -5,9 +5,8 @@
   else globalScope.HudShiftBar = api
 }(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   const SEGMENT_COUNT = 36
-  // Must match REDLINE_RPM_FRACTION in overlay.js, the threshold the Gear
-  // block uses for redline when Shift Light has no learned target.
-  const SHIFT_FALLBACK_FRACTION = 0.85
+  // The limiter flash starts at this share of the limiter RPM.
+  const LIMITER_RPM_FRACTION = 0.97
   const SEGMENT_VIEW_BOX = '0 0 48 32'
   const TRIANGLE_PATH = 'M19.2 6.4 Q24 0 28.8 6.4 L42 24 Q48 32 38 32 H10 Q0 32 6 24 Z'
   const ROTATED_TRIANGLE_TRANSFORM = 'rotate(180 24 16)'
@@ -26,21 +25,70 @@
     return Math.min(1, Math.max(0, value))
   }
 
+  function finitePositive(value) {
+    const number = finite(value)
+    return number !== null && number > 0 ? number : null
+  }
+
   /**
-   * Position of RPM between idle (0) and the current gear's threshold (1).
-   * The threshold is the learned shift RPM when one is supplied; otherwise it
-   * is SHIFT_FALLBACK_FRACTION of max RPM. Missing RPM or threshold data gives 0.
+   * The limiter RPM: the measured usable ceiling when it is positive, otherwise
+   * the game's max RPM. Null when neither is known.
    */
-  function fillFraction({ rpm, rpmIdle, rpmMax, shiftRpm } = {}) {
+  function limiterRpm({ usableCeiling, rpmMax } = {}) {
+    return finitePositive(usableCeiling) ?? finitePositive(rpmMax)
+  }
+
+  /**
+   * The RPM where red starts: LIMITER_RPM_FRACTION of the limiter. While the
+   * cue is enabled and the gear's shift target lies above that point, red waits
+   * until RPM passes the target (at most the limiter), so a gear that should be
+   * shifted at the limiter still shows purple first.
+   */
+  function redlineRpm({ rpmMax, usableCeiling, shiftCueEnabled = false, effectiveTargetRpm } = {}) {
+    const limiter = limiterRpm({ usableCeiling, rpmMax })
+    if (limiter === null) return null
+    const threshold = limiter * LIMITER_RPM_FRACTION
+    const target = shiftCueEnabled === true ? finitePositive(effectiveTargetRpm) : null
+    return target === null ? threshold : Math.min(limiter, Math.max(threshold, target))
+  }
+
+  /**
+   * The signal the Gear block and the Shift Bar both show. Red, from
+   * redlineRpm, takes priority over purple. Purple is the Shift Light cue:
+   * phase 'shift' while the cue is enabled. The 'approach' phase shows nothing.
+   */
+  function resolveSignal({ rpm, rpmMax, usableCeiling, shiftCueEnabled = false, shiftPhase = 'normal', effectiveTargetRpm } = {}) {
+    const current = finite(rpm)
+    const redline = redlineRpm({ rpmMax, usableCeiling, shiftCueEnabled, effectiveTargetRpm })
+    if (current !== null && redline !== null && current >= redline) return 'redline'
+    if (shiftCueEnabled === true && shiftPhase === 'shift') return 'shift'
+    return 'normal'
+  }
+
+  /**
+   * The RPM where the Shift Bar is full: the Shift Light cue-on RPM while the
+   * cue is enabled (lightOnRpm, else effectiveTargetRpm), otherwise
+   * LIMITER_RPM_FRACTION of the limiter. Null when no threshold is known.
+   */
+  function resolveThresholdRpm({ rpmMax, usableCeiling, shiftCueEnabled = false, lightOnRpm, effectiveTargetRpm } = {}) {
+    if (shiftCueEnabled === true) {
+      const cueRpm = finitePositive(lightOnRpm) ?? finitePositive(effectiveTargetRpm)
+      if (cueRpm !== null) return cueRpm
+    }
+    const limiter = limiterRpm({ usableCeiling, rpmMax })
+    return limiter === null ? null : limiter * LIMITER_RPM_FRACTION
+  }
+
+  /**
+   * Position of RPM between idle (0) and thresholdRpm (1). Missing RPM or
+   * threshold data, or a threshold at or below idle, gives 0.
+   */
+  function fillFraction({ rpm, rpmIdle, thresholdRpm } = {}) {
     const current = finite(rpm)
     if (current === null) return 0
 
     const idle = Math.max(0, finite(rpmIdle) ?? 0)
-    const learned = finite(shiftRpm)
-    const max = finite(rpmMax)
-    let threshold = null
-    if (learned !== null && learned > 0) threshold = learned
-    else if (max !== null && max > 0) threshold = max * SHIFT_FALLBACK_FRACTION
+    const threshold = finite(thresholdRpm)
     if (threshold === null || threshold <= idle) return 0
 
     return clamp01((current - idle) / (threshold - idle))
@@ -120,7 +168,8 @@
     }
 
     // A redline or shift signal lights the whole row in the signal color, the
-    // same moment the Gear block changes. Otherwise the row follows the fill.
+    // same moment the Gear block changes, and flashes in step with it. Otherwise
+    // the row follows the fill.
     function render({ fraction = 0, signal = 'normal' } = {}) {
       const nextSignal = normalizeSignal(signal)
       const nextCount = nextSignal === 'normal' ? filledSegments(fraction) : SEGMENT_COUNT
@@ -141,12 +190,16 @@
   }
 
   return {
+    LIMITER_RPM_FRACTION,
     SEGMENT_COUNT,
-    SHIFT_FALLBACK_FRACTION,
     TRIANGLE_PATH,
     createShiftBar,
     fillFraction,
     filledSegments,
+    limiterRpm,
+    redlineRpm,
+    resolveSignal,
+    resolveThresholdRpm,
     segmentTransform
   }
 }))

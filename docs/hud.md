@@ -78,25 +78,36 @@ which are equal thirds of the reference lap distance:
 
 ### Shift cue
 
-The Gear / Speed / RPM block changes its background to signal shifts:
+The Gear / Speed / RPM block flashes its background to signal shifts. The
+Shift Bar shows the same signal, and the signal is decided once per frame for
+both:
 
-- **Red** when Shift Light reports that the shift point is approaching, or,
-  without such a report, when RPM exceeds 85% of the car's maximum RPM.
-- **Purple** when Shift Light reports the learned optimal shift moment and the
-  **FDC Shift Light** option is enabled.
+- **Flashing red** from 97% of the car's limiter RPM. The limiter is the usable
+  RPM ceiling that Shift Light has measured for the car, or the game's maximum
+  RPM until that ceiling is measured. Red takes priority over purple. When
+  purple can show and the gear's Shift Light target lies above 97% of the
+  limiter, red starts only once RPM reaches that target (at most the limiter),
+  so a gear best shifted at the limiter shows purple first. There is no red
+  below 97%, and red never stays steady.
+- **Flashing purple** at the Shift Light cue, the RPM where Shift Light turns on
+  for the current gear, when the **FDC Shift Light** option is enabled. There
+  is no purple in the last known gear, the gear the car has never been upshifted
+  from. The approach phase of Shift Light shows nothing.
 
-The red and purple intensities follow the Redline Brightness and FDC Shift
-Light Brightness settings. How targets are learned is described in
-[Shift Light](shift-light.md).
+With **FDC Shift Light** off, only the red limiter flash appears. Both colors
+alternate every 440 ms between the full color and a dimmer tone, and the Gear
+block and the Shift Bar use the same timing, so they flash together. Red follows
+the Redline Brightness setting, and purple follows the FDC Shift Light
+Brightness setting. The Gear block's red text is unchanged. How targets are
+learned is described in [Shift Light](shift-light.md).
 
 The **Shift Bar** widget shows the same signal as a row of 36 alternating
-triangles. Its green fill rises with RPM from idle to the current gear's
-threshold: the learned shift RPM for that gear when Shift Light has a
-calibrated target, otherwise 85% of the car's maximum RPM. Filled segments are
-whole, so the bar is full only at the threshold. While the Gear block shows red
-or purple, every segment lights in that color: steady red for redline, and
-purple flashing in step with the Gear block for the learned shift. The bar
-shows no text.
+triangles. Its green fill rises from idle RPM to the signal point: the Shift
+Light cue RPM when purple can show, which falls back to Shift Light's target
+RPM if the cue RPM is missing, and otherwise 97% of the limiter. Filled segments
+are whole, so the bar is full only at the signal point. While red or purple is
+showing, every segment lights in that color and flashes in step with the Gear
+block. The bar shows no text.
 
 ## Visibility
 

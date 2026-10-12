@@ -11,7 +11,7 @@ test('Redline color and FDC Shift Light brightness affect their own alert layers
   assert.match(overlayCss, /:root\s*{[^}]*--shift-light-brightness-scale:\s*1;/s)
   assert.match(
     overlayCss,
-    /\.hud\.is-redline \.gear::before\s*{[^}]*background:\s*var\(--redline-background\);/s
+    /\.hud\.is-redline \.gear::before\s*{[^}]*animation:\s*redline-alert 440ms steps\(2, end\) infinite;/s
   )
   assert.match(
     overlayCss,

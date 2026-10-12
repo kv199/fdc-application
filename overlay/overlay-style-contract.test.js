@@ -20,6 +20,30 @@ test('Shift Light keeps the alert timing and distinct light-phase color', () => 
   assert.doesNotMatch(overlayCss, /rgb\(216 180 254 \/ 98%\)/)
 })
 
+test('Limiter red flashes in step on the Gear block and the Shift Bar', () => {
+  // Both alternate the Redline Brightness color with a dimmer mix of it, on the
+  // same keyframe timing as the purple cue.
+  assert.match(
+    overlayCss,
+    /@keyframes redline-alert\s*{\s*0%,\s*44%,\s*100%\s*{\s*background:\s*var\(--redline-background\);\s*}\s*45%,\s*72%\s*{\s*background:\s*color-mix\(in srgb, var\(--redline-background\) 45%, transparent\);\s*}\s*}/s
+  )
+  assert.match(
+    overlayCss,
+    /@keyframes shift-bar-redline-alert\s*{\s*0%,\s*44%,\s*100%\s*{\s*fill:\s*var\(--redline-background\);\s*}\s*45%,\s*72%\s*{\s*fill:\s*color-mix\(in srgb, var\(--redline-background\) 45%, transparent\);\s*}\s*}/s
+  )
+  assert.match(overlayCss, /\.hud\.is-redline \.gear::before\s*{\s*animation:\s*redline-alert 440ms steps\(2, end\) infinite;\s*}/s)
+  assert.match(
+    overlayCss,
+    /\.shift-bar\[data-signal='redline'\] \.shift-bar__fill\s*{\s*animation:\s*shift-bar-redline-alert 440ms steps\(2, end\) infinite;\s*}/s
+  )
+})
+
+test('Limiter red has no steady fill at 85 percent of max RPM', () => {
+  // The old steady red set a plain background or fill on the redline state.
+  assert.doesNotMatch(overlayCss, /\.hud\.is-redline \.gear::before\s*{[^}]*background:/s)
+  assert.doesNotMatch(overlayCss, /\.shift-bar\[data-signal='redline'\] \.shift-bar__fill\s*{\s*fill:/s)
+})
+
 test('Pedal tracks and tire shapes keep their form without borders', () => {
   const pedalTrack = cssBlock('.pedal__track')
   const tire = cssBlock('.tire')

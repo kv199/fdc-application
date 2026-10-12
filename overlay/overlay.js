@@ -34,7 +34,6 @@ const HISTORY_MS = 8000
 const DEMO_MODE = new URLSearchParams(window.location.search).has('demo')
 const DEMO_SIGNAL_FROM_URL = new URLSearchParams(window.location.search).get('signal')
 const DEMO_SIGNALS = ['normal', 'redline', 'shift']
-const REDLINE_RPM_FRACTION = 0.85
 
 let latestTelemetry = null
 let lapTimingState = window.HudLapTiming.createState()
@@ -246,28 +245,33 @@ function applyTelemetryVisibility() {
   window.HudPreferences?.setTelemetryVisible?.(hasTelemetryPresentation())
 }
 
-function getRpmSignal(rawRpm, rawRpmMax) {
-  const rpm = Number(rawRpm)
-  const rpmMax = Number(rawRpmMax)
-  if (!Number.isFinite(rpm) || !Number.isFinite(rpmMax) || rpmMax <= 0) return 'normal'
-
-  const rpmFraction = rpm / rpmMax
-  if (rpmFraction > REDLINE_RPM_FRACTION) return 'redline'
-  return 'normal'
+// Purple needs FDC Shift Light on and the last known gear excluded: in that
+// gear the car has never been upshifted, so there is no cue to show.
+function isShiftCueEnabled() {
+  return displayPreferences.fdcShiftLightEnabled !== false && latestShiftLight.lastKnownGear !== true
 }
 
-function getShiftLightSignal(telemetry) {
-  const phase = shiftLightPresentation.getPhase()
-  if (phase === 'shift' && displayPreferences.fdcShiftLightEnabled !== false) return 'shift'
-  if (phase === 'approach') return 'redline'
-  return getRpmSignal(telemetry.rpm, telemetry.rpmMax)
+// The one signal the Gear block and the Shift Bar both show in a render. The
+// limiter rules live in shift-bar.js so they can be tested without the DOM.
+function getHudSignal(telemetry) {
+  return window.HudShiftBar.resolveSignal({
+    rpm: telemetry.rpm,
+    rpmMax: telemetry.rpmMax,
+    usableCeiling: latestShiftLight.usableCeiling,
+    shiftCueEnabled: isShiftCueEnabled(),
+    shiftPhase: shiftLightPresentation.getPhase(),
+    effectiveTargetRpm: latestShiftLight.effectiveTargetRpm
+  })
 }
 
-// The learned shift RPM of the current gear, or null when Shift Light has no
-// calibrated target for it. The Shift Bar then falls back to max RPM.
-function getLearnedShiftRpm() {
-  if (latestShiftLight.status !== 'calibrated' || latestShiftLight.currentGear == null) return null
-  return latestShiftLight.shiftRpm
+function getShiftBarThresholdRpm(telemetry) {
+  return window.HudShiftBar.resolveThresholdRpm({
+    rpmMax: telemetry.rpmMax,
+    usableCeiling: latestShiftLight.usableCeiling,
+    shiftCueEnabled: isShiftCueEnabled(),
+    lightOnRpm: latestShiftLight.lightOnRpm,
+    effectiveTargetRpm: latestShiftLight.effectiveTargetRpm
+  })
 }
 
 // Receives the signal the Gear block was just given, so both always agree.
@@ -277,8 +281,7 @@ function renderShiftBar(telemetry, signal) {
     fraction: window.HudShiftBar.fillFraction({
       rpm: telemetry.rpm,
       rpmIdle: telemetry.rpmIdle,
-      rpmMax: telemetry.rpmMax,
-      shiftRpm: getLearnedShiftRpm()
+      thresholdRpm: getShiftBarThresholdRpm(telemetry)
     }),
     signal
   })
@@ -525,7 +528,7 @@ function renderTelemetry() {
   setTextContent(gearValue, formatGear(telemetry.gear))
   setTextContent(rpmValue, formatRpm(telemetry.rpm))
   updateEngine(telemetry)
-  const signal = DEMO_MODE ? demoSignal : getShiftLightSignal(telemetry)
+  const signal = DEMO_MODE ? demoSignal : getHudSignal(telemetry)
   setRpmSignal(signal)
   renderShiftBar(telemetry, signal)
   if (!DEMO_MODE) pushHistory(throttle, brake)

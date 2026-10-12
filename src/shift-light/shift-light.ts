@@ -59,6 +59,8 @@ export interface ShiftLightSnapshot {
   gearboxValidation: GearboxValidation
   gearboxSignature: null
   currentGear: number | null
+  /** True when the current forward gear is the highest gear ever seen for this configuration. */
+  lastKnownGear: boolean
   method: ShiftLightMethod | null
   gears: ShiftLightGearState[]
   diagnostics: ShiftLightGearDiagnostics[]
@@ -82,7 +84,7 @@ const MAX_POST_SHIFT_FRAMES = 5
 const REACTION_TIME_S = 0.15
 const DEFAULT_LEAD_RPM = 200
 const MIN_LEAD_RPM = 100
-const MAX_LEAD_RPM = 500
+const MAX_LEAD_RPM = 1000
 const MAX_RPM_RATE = 50_000
 const RPM_RATE_ALPHA = 0.25
 
@@ -160,6 +162,8 @@ export class ShiftLightLearner {
     const leadRpm = this.getLeadRpm(), lightOnRpm = effectiveTargetRpm === null ? null : Math.max(0, roundRpm(effectiveTargetRpm - leadRpm))
     let phase = fallbackPhase(telemetry?.rpm ?? 0, rpmMax)
     if (lightOnRpm !== null && telemetry) phase = telemetry.rpm >= lightOnRpm ? 'shift' : phase
+    const highestKnownGear = Math.max(this.maxObservedGear, this.estimator.getHighestKnownGear())
+    const lastKnownGear = currentGear !== null && currentGear >= highestKnownGear
     const status: ShiftLightStatus = current?.status === 'optimal' || current?.status === 'potential' ? 'calibrated' : current ? 'learning' : 'fallback'
     const lastEvidence = current?.evidence[current.evidence.length - 1] ?? null
     return { status, phase, shiftRpm: effectiveTargetRpm, effectiveTargetRpm, lightOnRpm, leadRpm,
@@ -170,7 +174,7 @@ export class ShiftLightLearner {
       ceilingSampleCount: this.estimator.getCeilingSampleCount(), fallbackShiftRpm,
       carClass: identity?.carClass ?? null, drivetrain: identity?.drivetrain ?? null, cylinders: identity?.cylinders ?? null,
       gearCount: null, observedGearCount: this.maxObservedGear, gearboxChanged: false, gearboxValidation: null, gearboxSignature: null,
-      currentGear, method: current?.status === 'optimal' || current?.status === 'potential' ? 'optimal' : null,
+      currentGear, lastKnownGear, method: current?.status === 'optimal' || current?.status === 'potential' ? 'optimal' : null,
       gears: this.getGearStates(), diagnostics: this.getGearDiagnostics() }
   }
 

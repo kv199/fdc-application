@@ -101,3 +101,21 @@ test('turns an unavailable or malformed state into a safe empty state', () => {
     persistenceError: null
   })
 })
+
+test('marks only learned shift points within 100 RPM of the usable ceiling as at the limiter', () => {
+  const { isShiftAtLimiter } = require('./shift-light-settings.js')
+  assert.equal(isShiftAtLimiter('optimal', 10950, 11000), true)
+  assert.equal(isShiftAtLimiter('potential', 10900, 11000), true)
+  assert.equal(isShiftAtLimiter('optimal', 10899, 11000), false)
+  assert.equal(isShiftAtLimiter('optimal', 9550, 11000), false)
+  assert.equal(isShiftAtLimiter('learning', 11000, 11000), false)
+  assert.equal(isShiftAtLimiter('optimal', 10950, null), false)
+  assert.equal(isShiftAtLimiter('optimal', null, 11000), false)
+})
+
+test('renders the SHIFT AT LIMITER hint with its explanatory title in the gear table', () => {
+  const settingsJs = require('node:fs').readFileSync(require('node:path').join(__dirname, 'settings.js'), 'utf8')
+  assert.match(settingsJs, /isShiftAtLimiter\(diagnosticStatus, gearTargetRpm, state\.usableCeiling\)/)
+  assert.match(settingsJs, /limiterHint\.textContent = 'SHIFT AT LIMITER'/)
+  assert.match(settingsJs, /limiterHint\.title = 'The best shift point for this gear is at the rev limiter\.'/)
+})

@@ -183,6 +183,15 @@ var HudShiftLight = (() => {
     getStates() {
       return [...this.gears.values()].sort((a, b) => a.sourceGear - b.sourceGear).map(cloneGear);
     }
+    /** Highest forward gear proven by the learning state: any row's source gear, and the destination of a row with evidence. */
+    getHighestKnownGear() {
+      let highest = 0;
+      for (const state of this.gears.values()) {
+        highest = Math.max(highest, state.sourceGear);
+        if (state.evidence.length > 0) highest = Math.max(highest, state.destinationGear);
+      }
+      return highest;
+    }
     serializeLearningState(key) {
       return {
         modelVersion: SHIFT_LIGHT_LEARNING_VERSION,
@@ -408,7 +417,7 @@ var HudShiftLight = (() => {
   var REACTION_TIME_S = 0.15;
   var DEFAULT_LEAD_RPM = 200;
   var MIN_LEAD_RPM = 100;
-  var MAX_LEAD_RPM = 500;
+  var MAX_LEAD_RPM = 1e3;
   var MAX_RPM_RATE = 5e4;
   var RPM_RATE_ALPHA = 0.25;
   function isForwardGear2(gear) {
@@ -520,6 +529,8 @@ var HudShiftLight = (() => {
       const leadRpm = this.getLeadRpm(), lightOnRpm = effectiveTargetRpm === null ? null : Math.max(0, roundRpm2(effectiveTargetRpm - leadRpm));
       let phase = fallbackPhase(telemetry?.rpm ?? 0, rpmMax);
       if (lightOnRpm !== null && telemetry) phase = telemetry.rpm >= lightOnRpm ? "shift" : phase;
+      const highestKnownGear = Math.max(this.maxObservedGear, this.estimator.getHighestKnownGear());
+      const lastKnownGear = currentGear !== null && currentGear >= highestKnownGear;
       const status = current?.status === "optimal" || current?.status === "potential" ? "calibrated" : current ? "learning" : "fallback";
       const lastEvidence = current?.evidence[current.evidence.length - 1] ?? null;
       return {
@@ -551,6 +562,7 @@ var HudShiftLight = (() => {
         gearboxValidation: null,
         gearboxSignature: null,
         currentGear,
+        lastKnownGear,
         method: current?.status === "optimal" || current?.status === "potential" ? "optimal" : null,
         gears: this.getGearStates(),
         diagnostics: this.getGearDiagnostics()

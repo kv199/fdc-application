@@ -121,11 +121,32 @@ leadRPM = currentPositiveRpmRate × 0.15 seconds
 cueOnRPM = effectiveTargetRPM - leadRPM
 ```
 
-The lead is clamped to `100–500 RPM`; when a reliable acceleration rate is not
+The lead is clamped to `100–1000 RPM`; when a reliable acceleration rate is not
 available it defaults to `200 RPM`. The effective target priority is confirmed
 target, potential candidate, usable ceiling, then reported redline. The visual
 presentation latches the purple shift phase for at least `250 ms` so a brief
 telemetry change cannot erase the cue immediately.
+
+## Last known gear
+
+The published state includes `lastKnownGear: boolean`. It is `true` when the
+current forward gear is the highest gear known for the configuration, meaning
+the car has never been upshifted from it:
+
+```text
+lastKnownGear = currentGear !== null && currentGear >= highestKnownGear
+highestKnownGear = max(highest gear observed this session,
+  highest gear proven by the learning state)
+```
+
+The learning state proves a gear in two ways: any gear target row proves its
+source gear exists, and a row with accepted shift evidence for `G → G+1` also
+proves gear `G+1` exists. Gear 10 is always the last known gear. The field is
+derived from existing state and is not persisted; its value is `false` in
+empty and fallback states. `phase` keeps its `normal`, `approach` and `shift`
+values. The field is excluded from the Configuration change signature because
+the Configuration window does not render it and it only changes with
+`currentGear`.
 
 ## Persistence
 
@@ -239,7 +260,11 @@ RPM limit, learned ceiling progress, effective target and state. Reported and
 learned RPM values use thousands separators, for example `9,360 RPM`, matching
 the in-game HUD. Below the metadata, a table lists each observed gear with its
 shift point, accepted sample count, last power comparison and state. Each cell
-keeps its second line of detail. The `RESET CURRENT CALIBRATION` button sits
+keeps its second line of detail. When a potential or optimal gear's shift point
+is within `100 RPM` of the usable ceiling, its cell also shows `SHIFT AT LIMITER`
+with the title `The best shift point for this gear is at the rev limiter.`
+Learning gears never show this hint, because their displayed target is only the
+fallback ceiling rather than a learned shift point. The `RESET CURRENT CALIBRATION` button sits
 directly below the card and stays hidden until a car profile exists. The
 tab does not diagnose the driver's shift as "bad" or "too early" when the
 capture was unusable or the next gear was weaker.

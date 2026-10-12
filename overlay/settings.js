@@ -115,6 +115,7 @@
   const layoutModeInputs = [...document.querySelectorAll('[data-layout-mode]')]
   const displayPreferenceRows = [...document.querySelectorAll('[data-display-preference]')]
   const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
+  const isShiftAtLimiter = globalScope.ShiftLightSettings?.isShiftAtLimiter
   const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
   const settingsPanels = [...document.querySelectorAll('[data-settings-panel]')]
   const garageApi = globalScope.HudGarageRuntime
@@ -4595,15 +4596,23 @@
       row.append(gearCell)
 
       const targetCell = document.createElement('td')
+      const gearTargetRpm = diagnostic?.targetRpm ?? gear.shiftRpm
       appendCellText(
         targetCell,
-        formatRpm(diagnostic?.targetRpm ?? gear.shiftRpm ?? (gear.status === 'learning' ? fallbackTarget : null)),
+        formatRpm(gearTargetRpm ?? (gear.status === 'learning' ? fallbackTarget : null)),
         gear.status === 'potential'
           ? `POTENTIAL · ${Math.max(1, diagnostic?.confirmationCount ?? gear.confirmationCount)}/3`
           : gear.status === 'optimal'
             ? 'PURPLE CUE ACTIVE'
             : 'REDLINE FALLBACK'
       )
+      if (typeof isShiftAtLimiter === 'function' && isShiftAtLimiter(diagnosticStatus, gearTargetRpm, state.usableCeiling)) {
+        const limiterHint = document.createElement('span')
+        limiterHint.className = 'calibration-cell__sub'
+        limiterHint.textContent = 'SHIFT AT LIMITER'
+        limiterHint.title = 'The best shift point for this gear is at the rev limiter.'
+        targetCell.append(limiterHint)
+      }
       row.append(targetCell)
 
       const powerCell = document.createElement('td')

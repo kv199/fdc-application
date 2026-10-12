@@ -89,6 +89,12 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ### Improved
 
+- **HUD**: red no longer lights steadily from 85% of max RPM. The Gear block
+  and the Shift Bar now flash red only near the rev limiter, from 97%, and
+  flash purple at the Shift Light cue, which comes earlier on fast-revving
+  gears so there is time to react. The highest gear you have reached in a car
+  shows no purple, and Shift Light marks gears best shifted at the limiter with
+  **SHIFT AT LIMITER**.
 - **HUD**: the HUD and Configuration use less processor time while you drive.
   The HUD only redraws what changed, and Configuration only updates its Shift
   Light panel when its values change.

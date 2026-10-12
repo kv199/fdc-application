@@ -221,7 +221,7 @@ body {
 }
 
 .hud.is-redline .gear::before {
-  background: var(--redline-background);
+  animation: redline-alert 440ms steps(2, end) infinite;
 }
 
 .hud.is-redline .gear__speed,
@@ -300,6 +300,21 @@ body {
   }
 }
 
+/* Limiter flash: the Redline Brightness color alternates with a dimmer mix of
+   that same color, on the same 440 ms rhythm as the purple Shift Light cue. */
+@keyframes redline-alert {
+  0%,
+  44%,
+  100% {
+    background: var(--redline-background);
+  }
+
+  45%,
+  72% {
+    background: color-mix(in srgb, var(--redline-background) 45%, transparent);
+  }
+}
+
 /* Shift Bar: 36 alternating triangles that show the Gear block's signal. The
    surface is a cut layer behind the row, as for Delta, so edit tools stay
    visible. Padding, the 2 px seam between triangles, and the cut follow the
@@ -370,7 +385,7 @@ body {
 }
 
 .shift-bar[data-signal='redline'] .shift-bar__fill {
-  fill: var(--redline-background);
+  animation: shift-bar-redline-alert 440ms steps(2, end) infinite;
 }
 
 .shift-bar[data-signal='shift'] .shift-bar__segments {
@@ -391,6 +406,20 @@ body {
   45%,
   72% {
     fill: var(--hud-shift-alert-flash);
+  }
+}
+
+/* Same keyframe timing as redline-alert on the Gear block, so both flash together. */
+@keyframes shift-bar-redline-alert {
+  0%,
+  44%,
+  100% {
+    fill: var(--redline-background);
+  }
+
+  45%,
+  72% {
+    fill: color-mix(in srgb, var(--redline-background) 45%, transparent);
   }
 }
 

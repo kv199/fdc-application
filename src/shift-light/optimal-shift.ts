@@ -199,6 +199,15 @@ export class OptimalShiftEstimator {
 
   getState(gear: number): GearLearningState | null { const state = this.gears.get(gear); return state ? cloneGear(state) : null }
   getStates(): GearLearningState[] { return [...this.gears.values()].sort((a, b) => a.sourceGear - b.sourceGear).map(cloneGear) }
+  /** Highest forward gear proven by the learning state: any row's source gear, and the destination of a row with evidence. */
+  getHighestKnownGear(): number {
+    let highest = 0
+    for (const state of this.gears.values()) {
+      highest = Math.max(highest, state.sourceGear)
+      if (state.evidence.length > 0) highest = Math.max(highest, state.destinationGear)
+    }
+    return highest
+  }
 
   serializeLearningState(key: string): ShiftLightLearningState {
     return { modelVersion: SHIFT_LIGHT_LEARNING_VERSION, version: SHIFT_LIGHT_LEARNING_VERSION, key,

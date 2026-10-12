@@ -102,3 +102,27 @@ test('publishes hud_shift_light only when the displayed state changes, while upd
   assert.equal(emitCount(), beforeSync + 2)
   assert.equal(events.filter(event => event.name === 'hud_shift_light').at(-1).payload.currentGear, 2)
 })
+
+test('passes cue timing, ceiling and last known gear through to the overlay', () => {
+  const events = []
+  const { runtime } = createRuntime({ events })
+  const empty = runtime.update(null)
+  assert.equal(empty.lastKnownGear, false)
+  assert.equal(empty.lightOnRpm, null)
+  assert.equal(empty.effectiveTargetRpm, null)
+
+  const state = runtime.update(frame({ timestampMs: 0, gear: 1, rpm: 9400 }))
+  assert.equal(state.effectiveTargetRpm, 11000)
+  assert.equal(state.lightOnRpm, 10800)
+  assert.equal(state.rpmMax, 11000)
+  assert.equal(state.usableCeiling, null)
+  assert.equal(state.currentGear, 1)
+  assert.equal(state.lastKnownGear, true)
+
+  const lower = runtime.update(frame({ timestampMs: 16, gear: 2, rpm: 6000 }))
+  assert.equal(lower.lastKnownGear, true)
+  const back = runtime.update(frame({ timestampMs: 32, gear: 1, rpm: 6000 }))
+  assert.equal(back.lastKnownGear, false)
+  const published = events.filter(event => event.name === 'hud_shift_light').at(-1).payload
+  assert.equal(published.lastKnownGear, false)
+})

@@ -5,6 +5,8 @@
     status: 'fallback',
     phase: 'normal',
     shiftRpm: null,
+    effectiveTargetRpm: null,
+    lightOnRpm: null,
     sampleCount: 0,
     carKey: null,
     gameId: null,
@@ -15,6 +17,7 @@
     usableCeiling: null,
     ceilingSampleCount: 0,
     currentGear: null,
+    lastKnownGear: false,
     method: null,
     gears: [],
     diagnostics: [],
@@ -54,8 +57,9 @@
   // Configuration renders only discrete facts (car identity, gears, learned
   // targets, counts, persistence errors). These per-packet fields are never
   // rendered there, so they are excluded from the signature. Without this, an
-  // unchanged panel would be re-sent on every telemetry frame.
-  const UNDISPLAYED_PER_PACKET_FIELDS = new Set(['phase', 'leadRpm', 'lightOnRpm'])
+  // unchanged panel would be re-sent on every telemetry frame. lastKnownGear
+  // only changes with currentGear, which stays in the signature.
+  const UNDISPLAYED_PER_PACKET_FIELDS = new Set(['phase', 'leadRpm', 'lightOnRpm', 'lastKnownGear'])
   // Signature of the last state sent on hud_shift_light, or null if none is known to be delivered.
   let lastEmittedSignature = null
 

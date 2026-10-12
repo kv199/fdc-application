@@ -122,7 +122,17 @@
     }
   }
 
-  const api = { normalizeShiftLightState }
+  // A learned shift point within 100 RPM of the measured usable ceiling sits at the limiter.
+  // Learning gears are excluded: their shown target is only the fallback ceiling, not a learned best point.
+  const LIMITER_HINT_TOLERANCE_RPM = 100
+
+  function isShiftAtLimiter(status, targetRpm, usableCeiling) {
+    if (status !== 'potential' && status !== 'optimal') return false
+    if (!Number.isFinite(targetRpm) || !Number.isFinite(usableCeiling) || usableCeiling <= 0) return false
+    return Math.abs(targetRpm - usableCeiling) <= LIMITER_HINT_TOLERANCE_RPM
+  }
+
+  const api = { normalizeShiftLightState, isShiftAtLimiter }
   globalScope.ShiftLightSettings = api
   if (typeof module !== 'undefined') module.exports = api
 })(typeof globalThis === 'undefined' ? this : globalThis)

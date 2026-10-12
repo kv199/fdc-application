@@ -48,3 +48,43 @@ test('uses redline as an operational cue before an earlier candidate exists', ()
   assert.equal(state.lightOnRpm, 10800)
   assert.equal(state.phase, 'shift')
 })
+
+function leadAfterRpmStep(rpmStep, timestampStepMs = 16) {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  learner.update(frame({ timestampMs: 0, rpm: 9000 }))
+  return learner.update(frame({ timestampMs: timestampStepMs, rpm: 9000 + rpmStep })).leadRpm
+}
+
+test('derives the cue lead from the RPM rate and clamps it to 100–1000 RPM', () => {
+  assert.equal(new ShiftLightLearner(getShiftLightCarKey(frame())).snapshot(frame()).leadRpm, 200)
+  // 160 RPM in 16 ms is 10,000 RPM/s, so 0.15 s is 1,500 RPM and clamps to the maximum.
+  assert.equal(leadAfterRpmStep(160), 1000)
+  // 16 RPM in 16 ms is 1,000 RPM/s, so the lead is 150 RPM.
+  assert.equal(leadAfterRpmStep(16), 150)
+  // 8 RPM in 16 ms is 500 RPM/s, so the raw lead of 75 RPM clamps to the minimum.
+  assert.equal(leadAfterRpmStep(8), 100)
+})
+
+test('marks the highest forward gear as last known', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  assert.equal(learner.update(frame({ timestampMs: 0, gear: 1 })).lastKnownGear, true)
+
+  upshift(learner, 0, 9500)
+  assert.equal(learner.snapshot(frame({ gear: 2 })).lastKnownGear, true)
+  assert.equal(learner.update(frame({ timestampMs: 200, gear: 1, rpm: 6000 })).lastKnownGear, false)
+})
+
+test('treats persisted evidence of a higher gear as proof after a restart', () => {
+  const key = getShiftLightCarKey(frame())
+  const first = new ShiftLightLearner(key)
+  upshift(first, 0, 9500)
+  const restarted = new ShiftLightLearner(key)
+  restarted.importLearningState(first.serializeLearningState())
+  assert.equal(restarted.update(frame({ timestampMs: 0, gear: 1 })).lastKnownGear, false)
+})
+
+test('keeps gear 10 as the last known gear', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  assert.equal(learner.update(frame({ timestampMs: 0, gear: 10, rpm: 9000 })).lastKnownGear, true)
+  assert.equal(learner.update(frame({ timestampMs: 16, gear: 9, rpm: 7000 })).lastKnownGear, false)
+})
