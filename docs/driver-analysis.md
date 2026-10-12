@@ -294,7 +294,7 @@ lap trace to one point per 100 ms plus pedal and gear changes, with slip kept
 as the signed peak and curb contact kept as any contact since the previous
 point. It uses the Events lap map: the white track outline, the pedal and Slip
 layers, the legend row, and the hover values, without sector ticks. It needs no
-Events recording.
+Events recording. The map supports the same zoom and pan as the Events lap map; see [Events](events.md).
 
 On top of it, each check of the drive that ended as a problem is a thick
 segment from the check's start to its end, colored by problem type: front

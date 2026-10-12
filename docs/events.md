@@ -102,6 +102,16 @@ The tab opens with a short intro and contains:
   with the selection. The choice applies to every lap until the Configuration
   window is reloaded. **SLIP** is unavailable and shows `—` for a lap recorded
   without extended telemetry.
+- The map zooms in place. The mouse wheel over the map zooms around the
+  pointer without a modifier key, and a wheel elsewhere scrolls the page; at
+  the whole-lap view a zoom-out wheel scrolls the page instead. While zoomed,
+  dragging pans the map, and double-click zooms in twice around the clicked
+  point. The **+**, **−**, and **FIT** buttons in the map corner zoom by 1.5
+  times around the view center and return to the whole lap; **+** is disabled
+  at 12 times the whole lap and **FIT** at the whole lap. The view stays inside
+  the lap. Lines, the track outline, the slip band, problem segments, the start
+  and hover markers, clean dots, sector ticks, and their labels keep their
+  on-screen size at every zoom. Opening another lap or drive resets the zoom.
 - Hovering the map marks the nearest trace point and shows its recorded values
   without interpretation: distance from the lap's first point, lap time, speed,
   gear, RPM, throttle, brake, steering, lateral, longitudinal, and vertical

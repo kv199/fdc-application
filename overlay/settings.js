@@ -1647,6 +1647,9 @@
       empty.className = 'events-lap-detail__empty'
       empty.textContent = options.emptyText || 'NO TRACE DATA SAVED FOR THIS LAP'
       map.append(empty)
+      // A map without a trace has nothing to zoom, but callers can still call the zoom methods.
+      map.zoomToBounds = () => {}
+      map.resetZoom = () => {}
       return map
     }
     const coordinates = points.map(point => ({ x: point.positionX, z: point.positionZ }))
@@ -1668,6 +1671,11 @@
       y: height - offsetY - (point.positionZ - minZ) * scale
     })
     const projected = points.map(project)
+    // The zoom view is a window on this whole-lap viewBox; the zoom math lives in TraceMapZoom.
+    const zoom = globalThis.TraceMapZoom
+    const base = { x: 0, y: 0, width, height }
+    let view = zoom.createView(base)
+    let drag = null
 
     // Check if extended telemetry is available
     const hasExtended = globalThis.EventTraceMap?.hasExtendedTelemetry(points) ?? false
@@ -1741,17 +1749,27 @@
     const minDistance = distances.length ? Math.min(...distances) : 0
     const maxDistance = distances.length ? Math.max(...distances) : 0
     const ticks = options.sectorTicks === false ? [] : traceSectorTicks(points, minDistance, maxDistance, project, minX, maxX, minZ, maxZ)
+    // Each tick keeps its midpoint and half-vector, so zooming can redraw it at the same on-screen length.
+    const scaledTicks = []
     for (const tick of ticks) {
-      svg.append(svgElement('line', {
+      const line = svgElement('line', {
         class: 'events-lap-detail__sector-tick',
         x1: tick.x1,
         y1: tick.y1,
         x2: tick.x2,
         y2: tick.y2
-      }))
+      })
       const label = svgElement('text', { class: 'events-lap-detail__sector-label', x: tick.x2 + 5, y: tick.y2 - 4 })
       label.textContent = tick.label
-      svg.append(label)
+      svg.append(line, label)
+      scaledTicks.push({
+        line,
+        label,
+        midX: (tick.x1 + tick.x2) / 2,
+        midY: (tick.y1 + tick.y2) / 2,
+        halfX: (tick.x2 - tick.x1) / 2,
+        halfY: (tick.y2 - tick.y1) / 2
+      })
     }
 
     // Start marker
@@ -1769,9 +1787,21 @@
     inspector.setAttribute('aria-live', 'polite')
     inspector.setAttribute('aria-label', 'Point data')
     inspector.append(inspectorTitle, inspectorBody)
+    // Zoom controls sit over the SVG's top-right corner, beside the POINT DATA panel rather than inside it.
+    const zoomControls = document.createElement('div')
+    zoomControls.className = 'events-lap-detail__zoom'
+    zoomControls.setAttribute('role', 'group')
+    zoomControls.setAttribute('aria-label', 'Map zoom')
+    const zoomInButton = renderZoomButton('+', 'Zoom in')
+    const zoomOutButton = renderZoomButton('−', 'Zoom out')
+    const fitButton = renderZoomButton('FIT', 'Show whole lap')
+    zoomControls.append(zoomInButton, zoomOutButton, fitButton)
+    const canvas = document.createElement('div')
+    canvas.className = 'events-lap-detail__canvas'
+    canvas.append(svg, zoomControls)
     const layout = document.createElement('div')
     layout.className = 'events-lap-detail__map-layout'
-    layout.append(svg, inspector)
+    layout.append(canvas, inspector)
 
     // Hover functionality
     const markerCircle = svgElement('circle', { class: 'events-lap-detail__hover-marker', cx: 0, cy: 0, r: 4 })
@@ -1779,6 +1809,8 @@
     svg.append(markerCircle)
 
     svg.addEventListener('pointermove', (event) => {
+      // A pan keeps the hover marker and POINT DATA hidden until the pointer is released.
+      if (drag) return
       // The viewBox is letterboxed inside the padded element, so map through the screen matrix.
       const matrix = svg.getScreenCTM()
       if (!matrix) return
@@ -1786,8 +1818,8 @@
       const x = cursor.x
       const y = cursor.y
 
-      const nearestIdx = (marks ? globalThis.DriverAnalysisMap?.nearestErrorIndex(marks, projected, x, y, 14) : null)
-        ?? globalThis.EventTraceMap?.nearestPointIndex(projected, x, y, 14) ?? null
+      const nearestIdx = (marks ? globalThis.DriverAnalysisMap?.nearestErrorIndex(marks, projected, x, y, hoverReach()) : null)
+        ?? globalThis.EventTraceMap?.nearestPointIndex(projected, x, y, hoverReach()) ?? null
       if (nearestIdx !== null) {
         const p = projected[nearestIdx]
         markerCircle.setAttribute('cx', p.x)
@@ -1810,6 +1842,109 @@
       inspectorBody.replaceChildren()
       markerCircle.style.display = 'none'
     })
+
+    // Zoom and pan. Every change goes through applyView, which moves the viewBox and counter-scales the elements whose
+    // on-screen size must not change: k is the view width over the whole-lap width. Stroke widths are scaled in CSS
+    // through --map-k, and the circles, sector ticks, and labels are scaled here from their base geometry.
+    const circleRadii = new Map([...svg.querySelectorAll('circle')].map(circle => [circle, Number(circle.getAttribute('r'))]))
+    const currentK = () => view.width / base.width
+    // Hover reach stays 14 screen pixels, which is 14 viewBox units at the whole-lap view.
+    const hoverReach = () => 14 * currentK()
+    const applyView = () => {
+      const k = currentK()
+      svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.width} ${view.height}`)
+      svg.style.setProperty('--map-k', String(k))
+      for (const [circle, radius] of circleRadii) circle.setAttribute('r', radius * k)
+      for (const tick of scaledTicks) {
+        tick.line.setAttribute('x1', tick.midX - tick.halfX * k)
+        tick.line.setAttribute('y1', tick.midY - tick.halfY * k)
+        tick.line.setAttribute('x2', tick.midX + tick.halfX * k)
+        tick.line.setAttribute('y2', tick.midY + tick.halfY * k)
+        tick.label.setAttribute('x', tick.midX + tick.halfX * k + 5 * k)
+        tick.label.setAttribute('y', tick.midY + tick.halfY * k - 4 * k)
+      }
+      const atBase = zoom.isAtBase(view, base)
+      svg.classList.toggle('is-zoomed', !atBase)
+      zoomInButton.disabled = zoom.zoomLevel(view, base) >= zoom.MAX_ZOOM - 1e-6
+      zoomOutButton.disabled = atBase
+      fitButton.disabled = atBase
+    }
+    const setView = next => {
+      view = next
+      applyView()
+    }
+    const viewPoint = (clientX, clientY) => {
+      const matrix = svg.getScreenCTM()
+      if (!matrix) return null
+      const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse())
+      return { x: point.x, y: point.y }
+    }
+    const zoomAtPoint = (point, factor) => setView(zoom.zoomAt(view, base, point, factor))
+    const zoomAtCenter = factor => zoomAtPoint({ x: view.x + view.width / 2, y: view.y + view.height / 2 }, factor)
+
+    // Wheel over the map zooms about the pointer. At the whole-lap view a zoom-out wheel is left to the page, so the
+    // page keeps scrolling.
+    svg.addEventListener('wheel', event => {
+      if (event.deltaY === 0) return
+      const factor = zoom.wheelZoomFactor(event.deltaY, event.deltaMode, window.innerHeight)
+      if (factor < 1 && zoom.isAtBase(view, base)) return
+      const point = viewPoint(event.clientX, event.clientY)
+      if (!point) return
+      event.preventDefault()
+      zoomAtPoint(point, factor)
+    }, { passive: false })
+
+    // Dragging pans only while zoomed. The inverse matrix is taken at the start, so the pan follows the pointer.
+    const endDrag = event => {
+      if (!drag || event.pointerId !== drag.pointerId) return
+      if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId)
+      drag = null
+      svg.classList.remove('is-panning')
+    }
+    svg.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || zoom.isAtBase(view, base)) return
+      const matrix = svg.getScreenCTM()
+      if (!matrix) return
+      drag = {
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        startView: view,
+        inverse: matrix.inverse()
+      }
+      svg.setPointerCapture(event.pointerId)
+      svg.classList.add('is-panning')
+      inspectorBody.replaceChildren()
+      markerCircle.style.display = 'none'
+    })
+    svg.addEventListener('pointermove', event => {
+      if (!drag || event.pointerId !== drag.pointerId) return
+      const start = new DOMPoint(drag.clientX, drag.clientY).matrixTransform(drag.inverse)
+      const now = new DOMPoint(event.clientX, event.clientY).matrixTransform(drag.inverse)
+      // The content follows the pointer, so the window moves the opposite way.
+      setView(zoom.panBy(drag.startView, base, start.x - now.x, start.y - now.y))
+    })
+    svg.addEventListener('pointerup', endDrag)
+    svg.addEventListener('pointercancel', endDrag)
+
+    // Double-click zooms in twice as far around the clicked point.
+    svg.addEventListener('dblclick', event => {
+      const point = viewPoint(event.clientX, event.clientY)
+      if (point) zoomAtPoint(point, 2)
+    })
+
+    zoomInButton.addEventListener('click', () => zoomAtCenter(1.5))
+    zoomOutButton.addEventListener('click', () => zoomAtCenter(1 / 1.5))
+    fitButton.addEventListener('click', () => setView(zoom.createView(base)))
+
+    // The bounds are viewBox units; the padding is screen pixels converted at the current zoom.
+    map.zoomToBounds = (bounds, paddingPx = 24) => {
+      const matrix = svg.getScreenCTM()
+      const unitsPerPixel = matrix ? 1 / Math.hypot(matrix.a, matrix.b) : 1
+      setView(zoom.fitBounds(base, bounds, paddingPx * unitsPerPixel, zoom.MAX_ZOOM))
+    }
+    map.resetZoom = () => setView(zoom.createView(base))
+    applyView()
 
     const legend = renderTraceLegend(points, lapTimeMs, available, marks)
     const applyLayers = () => {
@@ -1834,6 +1969,15 @@
     map.append(layout, legend)
     if (marks && marks.errors.length > 0) map.append(renderTraceErrorList(marks, points, svg))
     return map
+  }
+
+  function renderZoomButton(text, label) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'events-lap-detail__zoom-button'
+    button.textContent = text
+    button.setAttribute('aria-label', label)
+    return button
   }
 
   // Problem segments are drawn thick over a dark casing, one group per problem type; clean checks are small dots.

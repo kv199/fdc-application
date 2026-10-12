@@ -1399,28 +1399,82 @@ h1 {
   min-height: 560px;
 }
 
+/* Holds the SVG and the zoom controls. The SVG stays centred in the row, as its letterboxed viewBox was. */
+.events-lap-detail__canvas {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
 .events-lap-detail__svg {
   display: block;
   width: 100%;
   height: auto;
   max-height: 560px;
   padding: 7px;
+  user-select: none;
+}
+
+/* While zoomed the map can be dragged; the whole-lap view has nothing to pan. */
+.events-lap-detail__svg.is-zoomed { cursor: grab; }
+.events-lap-detail__svg.is-panning { cursor: grabbing; }
+
+/* Zoom controls over the map's top-right corner, clear of the POINT DATA panel beside the SVG. */
+.events-lap-detail__zoom {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: flex;
+  gap: 4px;
+}
+
+.events-lap-detail__zoom-button {
+  min-width: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--type-label);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+
+.events-lap-detail__zoom-button:not(:disabled):hover,
+.events-lap-detail__zoom-button:not(:disabled):focus-visible {
+  border-color: var(--accent-edge);
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+
+.events-lap-detail__zoom-button:disabled {
+  border-color: var(--line-subtle);
+  color: var(--text-faint);
+  background: var(--surface-deep);
+  cursor: not-allowed;
 }
 
 .events-lap-detail__surface {
   fill: var(--map-canvas);
 }
 
+/* --map-k is the zoom's counter-scale (view width over the whole-lap width). Strokes, circles, ticks, and labels
+   are multiplied by it so their on-screen size stays the same at every zoom; at the whole-lap view it is 1. */
 .events-lap-detail__outline {
   fill: none;
   stroke: var(--map-track);
-  stroke-width: 1.4;
+  stroke-width: calc(1.4 * var(--map-k, 1));
 }
 
 .events-lap-detail__slip-line {
   fill: none;
   stroke: var(--trace-slip);
-  stroke-width: 9;
+  stroke-width: calc(9 * var(--map-k, 1));
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.6;
@@ -1428,7 +1482,7 @@ h1 {
 
 .events-lap-detail__trace {
   fill: none;
-  stroke-width: 2.4;
+  stroke-width: calc(2.4 * var(--map-k, 1));
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -1440,19 +1494,19 @@ h1 {
 .events-lap-detail__hover-marker {
   fill: var(--trace-slip);
   stroke: var(--map-canvas);
-  stroke-width: 1;
+  stroke-width: calc(1 * var(--map-k, 1));
   pointer-events: none;
 }
 
 .events-lap-detail__sector-tick {
   stroke: var(--text);
-  stroke-width: 1.2;
+  stroke-width: calc(1.2 * var(--map-k, 1));
   stroke-linecap: square;
 }
 
 .events-lap-detail__sector-label {
   fill: var(--text);
-  font-size: 9px;
+  font-size: calc(9px * var(--map-k, 1));
   font-weight: 400;
   letter-spacing: 0.14em;
 }
@@ -1460,7 +1514,7 @@ h1 {
 .events-lap-detail__start {
   fill: var(--text);
   stroke: var(--map-canvas);
-  stroke-width: 2;
+  stroke-width: calc(2 * var(--map-k, 1));
 }
 
 .events-lap-detail__empty {
@@ -1547,19 +1601,19 @@ h1 {
 .events-lap-detail__mark-casing {
   fill: none;
   stroke: var(--map-canvas);
-  stroke-width: 11;
+  stroke-width: calc(11 * var(--map-k, 1));
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .events-lap-detail__mark {
   fill: none;
-  stroke-width: 7;
+  stroke-width: calc(7 * var(--map-k, 1));
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-.events-lap-detail__mark-casing.is-selected { stroke: var(--text); stroke-width: 15; }
+.events-lap-detail__mark-casing.is-selected { stroke: var(--text); stroke-width: calc(15 * var(--map-k, 1)); }
 
 .events-lap-detail__mark--front_scrub { stroke: var(--problem-front-scrub); }
 .events-lap-detail__mark--exit_wheelspin { stroke: var(--problem-exit-wheelspin); }
@@ -1570,7 +1624,7 @@ h1 {
   fill: var(--map-clean);
   fill-opacity: 0.55;
   stroke: var(--map-canvas);
-  stroke-width: 1.5;
+  stroke-width: calc(1.5 * var(--map-k, 1));
 }
 
 .events-lap-detail__swatch--front_scrub { background: var(--problem-front-scrub); }
@@ -3721,6 +3775,7 @@ h1 {
 :root[data-theme="light"] .events-lap-detail__mark-casing,
 :root[data-theme="light"] .events-lap-detail__mark-casing.is-selected { stroke-width: 10px; }
 :root[data-theme="light"] :is(.events-lap-detail__start, .events-lap-detail__clean) { stroke-width: 1.5px; }
+:root[data-theme="light"] .events-lap-detail__hover-marker { stroke-width: 1px; }
 :root[data-theme="light"] .events-lap-detail__clean { fill-opacity: 1; }
 
 /* A hidden layer keeps a full-opacity label; its swatch turns hollow. */

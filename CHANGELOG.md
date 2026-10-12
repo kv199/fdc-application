@@ -67,6 +67,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   recorded is marked **LIVE**. After a Sprint finish, **STOP** waits up to
   five seconds for the game's result. A result taken from the last live race
   time is shown with `~`, because it can be a few milliseconds short.
+- **Events** and **Driver Analysis**: maps can be zoomed. Scroll over the map
+  to zoom in around the pointer, drag to move around, double-click to zoom in,
+  or use **+**, **−**, and **FIT**. Lines, markers, and sector labels keep
+  their size at any zoom.
 
 ### Improved
 
