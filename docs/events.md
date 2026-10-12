@@ -33,13 +33,30 @@ The tab opens with a short intro and contains:
   space permits; narrow layouts wrap that row below the title. Mode uses its
   configured color, and Class uses the existing Garage class color. The same
   row starts with the event's database ID number. Notes, when supplied,
-  appear in their own framed area directly beneath that row. The page also
-  shows a purple **Absolute Best**: the quickest actual saved circuit lap or
-  confirmed Sprint result across that Event. When the Event has saved traces,
-  only results whose trace covers at least 97% of the Event's longest traced
-  distance are eligible. During a recording, Absolute Best updates immediately
-  when Delta accepts a faster result, before the lap is saved. The header shows
-  a back link `← EVENTS` and Escape both return to the Events list.
+  appear in their own framed area directly beneath that row. Below the notes, a
+  purple **THEORETICAL BEST** block with the description `Best sectors across
+  saved runs in this event.` shows the sum of the quickest Sector 1, Sector 2,
+  and Sector 3 across the Event's completed circuit laps and confirmed Sprint
+  results, regardless of car. When the Event has saved traces, only laps whose
+  trace covers at least 97% of the Event's longest traced distance are
+  eligible. Each sector has one row, `S1`, `S2`, or `S3`, with its
+  time in seconds, its source `RUN #6 · LAP 3` (a Sprint shows
+  `RUN #6 · SPRINT`), and a **VIEW SECTOR** action that opens that run; see
+  the run detail bullet. When all three sectors come from one car, an
+  `ALL SECTORS` line names that car once and the rows omit it; otherwise each
+  row shows its car. A sector with no eligible saved value has a disabled row
+  with `No eligible sector saved` and `UNAVAILABLE`. The total shows `—` until
+  all three sectors have a time, and its footer then reads `Complete all three
+  sectors to calculate theoretical best.` With a complete total, the footer
+  reads `Sum of three virtual distance sectors; an estimate, not a recorded
+  result.` and `3 SECTORS · N RUNS`, where N counts the distinct runs that
+  supply a sector. **HIDE SECTORS** and **SHOW SECTORS** collapse the rows
+  until the Configuration window is reloaded. When sectors tie, the earliest
+  result wins, as described under Telemetry recording. The page reloads this
+  block when the Event opens and after each saved lap. Delta's reference is
+  still the Event's fastest saved result; the page does not display it. The
+  header shows a back link `← EVENTS` and Escape both return to the Events
+  list.
 - Selecting the event title starts inline renaming. Enter or leaving the input
   saves a non-empty name; Escape cancels that rename without leaving the page.
 - An event page has one green **RECORD RUN** control. Selecting it changes the same
@@ -64,26 +81,41 @@ The tab opens with a short intro and contains:
   progress is discarded.
 - While capture is recording, the saved run that receives laps shows a lime
   **LIVE** tag beside its ID. Each lap save updates that run's **BEST** and
-  **LAPS** values and the Event's Absolute Best during the session. An open run
-  detail page for that run reloads its laps after each save; its expanded lap
-  stays open while that lap still exists.
+  **LAPS** values and reloads the Event's **THEORETICAL BEST** block. An open
+  run detail page for that run reloads its laps after each save; its expanded
+  lap and focused sector stay as they are while that lap still exists.
 - Saved runs are a table with `ID`, `CAR`, `CLASS / PI / DRIVE`, `BEST`, `LAPS`,
   and `DATE` columns. `BEST` shows the run's best time, and `DATE` shows the
   local run start as `YYYY.MM.DD HH:MM:SS`.
 - The `ID`, `BEST`, and `DATE` headers sort the saved runs. The default is Date
   from newest to oldest, and that temporary choice is not persisted. Selecting
   a saved run opens its detail page.
-- A run detail repeats the Event identity and shows a **Best Hypothetical
-  Time** when all three virtual sectors are available. It is the sum of the
-  quickest Sector 1, Sector 2, and Sector 3 across that run's rows. Its lap
-  table is `Lap`, `Lap Time`, `Sector 1`, `Sector 2`, and `Sector 3`; it starts
-  from the highest lap number and a Lap-header click reverses that temporary
-  order. In each time column, every tied quickest value is purple, the next
-  distinct value is green, and all remaining values are white. Selecting a lap
-  row expands it beneath the table; selecting the same row again collapses it.
+- A run detail repeats the Event identity and shows a purple **THEORETICAL
+  BEST** time, described as `Best sectors from laps in this run.` (`Sector
+  times from this run.` for a Sprint). It is the sum of the quickest Sector 1,
+  Sector 2, and Sector 3 across that run's rows, and it has the same estimate
+  footer as the Event page. It has no sector rows and no show/hide toggle. Its
+  lap table is `Lap`, `Lap Time`, `Sector 1`, `Sector 2`, and `Sector 3`; it
+  starts from the highest lap number and a Lap-header click reverses that
+  temporary order. In each time column, every tied quickest value is purple,
+  the next distinct value is green, and all remaining values are white.
+  Selecting a lap row expands it beneath the table; selecting the same row again
+  collapses it. Each Sector 1, 2, or 3 cell is a button: selecting it expands
+  that lap and focuses that sector on its map. The focused sector's cell has a
+  purple outline.
   The expanded row shows a full-width top-down X/Z trace map shaped to the
-  track, at most 560 px tall, with a legend row beneath it. The first Escape collapses an open row; **← EVENT** or
-  a following Escape returns to the Event page.
+  track, at most 560 px tall, with a legend row beneath it. Escape clears a
+  focused sector first, then collapses the expanded lap, then returns to the
+  Event page; **← EVENT** returns to the Event page directly.
+- **VIEW SECTOR** on an Event sector row opens that run with its lap expanded
+  and that sector focused. The page shows `Opened Run #8, Lap 5, Sector 2.` (a
+  Sprint omits the lap), scrolls the expanded lap into view, and focuses that
+  sector's cell. While that lap stays expanded, a line above the lap table reads
+  `FROM EVENT THEORETICAL BEST · RUN #8 · LAP 5 · SECTOR 2`; the sector part shows
+  only while a sector is focused. Choosing a sector on the map updates the
+  outlined cell and that line in place. VIEW SECTOR does not zoom the map;
+  **FIT SECTOR** does. Selecting another lap or a sector cell, or collapsing the
+  lap, removes the line, because the lap is no longer opened from the Event.
 - The trace map draws a thin white track outline under its layers. Pedal
   segments use green for throttle, red for brake, and yellow for coasting.
   Brake takes precedence whenever both pedal inputs are at least five percent.
@@ -117,6 +149,27 @@ The tab opens with a short intro and contains:
   screen pixels, so they read the same at every window width and zoom; a
   label that would leave the visible map moves to the other side of its tick.
   Opening another lap or drive resets the zoom.
+- Events lap maps have sector focus controls above the map: **FULL LAP** (or
+  **FULL RUN** for a Sprint), **SECTOR 1**, **SECTOR 2**, and **SECTOR 3**. A
+  focused sector draws its part of the trace at full strength and dims the rest:
+  the track outline and pedal segments fade, and the Slip band shows only inside
+  the sector. The sector ticks and the start marker stay visible. The distance
+  caption in the map's bottom-left reads the sector's range, such as
+  `SECTOR 2 · 0.80–1.60 KM`, or the whole lap's distance. **CLEAR FOCUS**, which
+  appears only while a sector is focused, and **FULL LAP** return to the whole
+  lap. Choosing a sector does not change the zoom.
+- While a sector is focused, **FIT SECTOR** in the map's top-left corner fits the
+  sector with 24 px of margin and then reads **SHOW FULL ROUTE**, which returns
+  to the whole route. Any other zoom or pan, and any focus change, returns it to
+  **FIT SECTOR**.
+- While a sector is focused, the legend's first line reads `SECTOR N INPUT TIME`
+  (`LAP INPUT TIME`, or `RUN INPUT TIME` for a Sprint, otherwise), and THROTTLE,
+  BRAKE, COAST, and SLIP count only that sector's time. Each interval of lap time
+  belongs to one sector, so the three sectors add up to the whole lap. Hovering
+  picks only points inside the focused sector.
+- A lap recorded without a trace shows **TRACE UNAVAILABLE** and the text
+  "Sector times are saved. This older lap has no recorded trace." in place of the
+  map, with no sector controls.
 - Hovering the map marks the nearest trace point and shows its recorded values
   without interpretation: distance from the lap's first point, lap time, speed,
   gear, RPM, throttle, brake, steering, lateral, longitudinal, and vertical
@@ -167,23 +220,27 @@ Events consumes the normalized Direct Data Out sample delivered through the
 shared browser `queueTelemetry` path. It does not read the game's result-screen
 UI or use a second telemetry source.
 
-When **Record Run** arms an Event with an Absolute Best trace, the browser
-Delta widget loads that Event's exact fastest saved result as its reference. A
+When **Record Run** arms an Event, the browser Delta widget loads that Event's
+Absolute Best (its fastest saved result, which only Delta uses) as its
+reference. A
 new Event has no Delta during its first circuit lap or Sprint attempt. As soon
 as a completed lap or confirmed Sprint provides a faster usable trace, that
 trace becomes the in-memory reference before the next lap or attempt is
 processed; a slower result leaves the reference unchanged. A trace that covers
 less than 97% of the active reference distance never replaces it, and a trace
 that covers noticeably more distance replaces a partial reference regardless
-of time. When Delta accepts a faster reference, the Event page's purple
-**Absolute Best** time updates immediately and silently (no badge or message)
-before the lap is saved. Each completed circuit lap is saved as it completes,
+of time. The Event page does not show this Delta reference, and no page
+element changes when Delta accepts a faster one. Each completed circuit lap is saved as it completes,
 and **STOP** or a confirmed restart only ends that attempt. The same load also
 returns the Event's
 best Sector 1, Sector 2 and Sector 3 times, each the quickest saved value across
 the Event's completed circuit laps and confirmed Sprint laps that pass the same
 97% distance rule as Absolute Best, regardless of car; the HUD uses them for
-sector indicators.
+sector indicators. The Event page's Theoretical Best uses the same eligible laps
+through `load_event_theoretical_best`, which also returns each sector's source
+run, lap, car and whether that lap has a trace. When sectors tie, the earliest
+result wins: the earliest run start, then the lowest run ID, then the lowest lap
+number.
 
 In a live race Delta interpolates the active reference trace's elapsed time at
 the current lap distance and shows current elapsed time minus reference elapsed
@@ -217,7 +274,7 @@ distance span, whether Forza resets or accumulates `DistanceTraveled` between
 laps.
 It stores the resulting three virtual-sector durations with the lap. This does
 not persist the telemetry stream. Runs created before sector storage have no
-sector values and therefore show `—` for them and no hypothetical time.
+sector values and therefore show `—` for them and no theoretical best time.
 
 For a newly completed lap, FDC also stores a trace containing elapsed time,
 travelled distance, position, pedal inputs, and extended telemetry: speed,
@@ -352,3 +409,4 @@ notes before storing them; empty notes are stored as absent.
 - `load_event_runs`
 - `load_event_run`
 - `load_event_absolute_best`
+- `load_event_theoretical_best`

@@ -799,9 +799,6 @@ function installBetterDeltaReference(candidate) {
   if (!window.HudDelta?.isBetterReference?.(normalized, current)) return false
 
   deltaRuntime.setReference?.(normalized)
-  if (Number.isFinite(normalized.timeMs)) {
-    void emitRecorderEvent('event_recorder_reference', { eventId: normalized.eventId, timeMs: normalized.timeMs })
-  }
   syncDeltaVisibility()
   scheduleTelemetryRender()
   return true

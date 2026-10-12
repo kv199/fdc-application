@@ -160,14 +160,27 @@
   const eventsDetailSummary = document.getElementById('events-detail-summary')
   const eventsDetailNotes = document.getElementById('events-detail-notes')
   const eventsDetailNotesValue = document.getElementById('events-detail-notes-value')
-  const eventsDetailAbsoluteBest = document.getElementById('events-detail-absolute-best')
+  const eventsTheoryTime = document.getElementById('events-theory-time')
+  const eventsTheoryDescription = document.getElementById('events-theory-description')
+  const eventsTheoryToggle = document.getElementById('events-theory-toggle')
+  const eventsTheorySectors = document.getElementById('events-theory-sectors')
+  const eventsTheorySharedCar = document.getElementById('events-theory-shared-car')
+  const eventsTheorySharedCarName = document.getElementById('events-theory-shared-car-name')
+  const eventsTheoryRows = document.getElementById('events-theory-rows')
+  const eventsTheoryNote = document.getElementById('events-theory-note')
+  const eventsTheoryCount = document.getElementById('events-theory-count')
   const eventsDetailDelete = document.getElementById('events-detail-delete')
   const eventsRunView = document.getElementById('events-run-view')
   const eventsRunBack = document.getElementById('events-run-back')
   const eventsRunTitle = document.getElementById('events-run-title')
   const eventsRunSummary = document.getElementById('events-run-summary')
-  const eventsRunBht = document.getElementById('events-run-bht')
+  const eventsRunTheoryTime = document.getElementById('events-run-theory-time')
+  const eventsRunTheoryDescription = document.getElementById('events-run-theory-description')
+  const eventsRunTheoryNote = document.getElementById('events-run-theory-note')
+  const eventsRunTheoryCount = document.getElementById('events-run-theory-count')
   const eventsRunId = document.getElementById('events-run-id')
+  const eventsRunFeedback = document.getElementById('events-run-feedback')
+  const eventsRunSourceContext = document.getElementById('events-run-source-context')
   const eventsRunTableHint = document.getElementById('events-run-table-hint')
   const eventsRunLapSort = document.getElementById('events-run-lap-sort')
   const eventsRunLaps = document.getElementById('events-run-laps')
@@ -183,7 +196,10 @@
   const eventRunsCount = document.getElementById('event-runs-count')
   const eventsById = new Map()
   let currentEventRuns = []
-  let currentEventAbsoluteBestMs = null
+  // Sector 1-3 sources of the open Event's Theoretical Best, or null until they load.
+  let currentEventTheory = null
+  let eventTheoryOpen = true
+  let eventTheoryRequestSequence = 0
   let appVersionNumber = null
   let appVersionFeedbackTimer = null
   let currentEventRun = null
@@ -195,6 +211,12 @@
   let eventRunsSort = { key: 'date', direction: 'desc' }
   let eventRunLapSortDirection = 'desc'
   let expandedEventRunLap = null
+  // Sector focused on the expanded lap's map (1-3), or null. Only the map's own focus changes it.
+  let expandedEventRunSector = null
+  // Set while the expanded lap was opened by VIEW SECTOR on the Event page: { runId, lapNumber }.
+  let eventRunSource = null
+  // The trace map of the expanded lap, so Escape can clear its focus without rebuilding the table.
+  let eventRunLapMap = null
   // Live reloads of the open run can finish out of order; only the newest one may render.
   let openEventRunRefreshSequence = 0
   // Selected trace map layers shared by every lap until the window reloads; null shows all layers.
@@ -689,7 +711,8 @@
       currentEventRuns = [run, ...currentEventRuns.filter(existing => existing.id !== run.id)]
       if (updateEventLastRecordedAt(run)) renderEventsLibrary()
       renderEventRuns()
-      void loadEventAbsoluteBest()
+      // Each saved lap can change a sector's best, so the Event's Theoretical Best reloads after every save.
+      void loadEventTheoreticalBest()
       if (currentEventRun?.id === run.id && eventsView === 'run') void refreshOpenEventRun(run.id)
     })
     await eventApi.listen('event_recorder_result', event => {
@@ -720,17 +743,6 @@
         const message = `RUN SAVE FAILED${reason ? ` — ${reason}` : ''}`
         setEventRecorderFeedback(message, 'failed')
         setStatus(message, true)
-      }
-    })
-    await eventApi.listen('event_recorder_reference', event => {
-      const payload = event?.payload
-      if (!payload || typeof payload !== 'object') return
-      if (eventKey(payload.eventId) !== currentEventId || currentEventId === null) return
-      const timeMs = payload.timeMs
-      if (typeof timeMs !== 'number' || !Number.isFinite(timeMs)) return
-      if (currentEventAbsoluteBestMs === null || timeMs < currentEventAbsoluteBestMs) {
-        currentEventAbsoluteBestMs = timeMs
-        renderEventAbsoluteBest()
       }
     })
     await eventApi.emit('event_recorder_status_request')
@@ -1107,7 +1119,7 @@
     renderEventIdentity(eventsDetailTitle, eventsDetailSummary, event)
     if (eventsDetailNotes) eventsDetailNotes.hidden = !event.notes
     if (eventsDetailNotesValue) eventsDetailNotesValue.textContent = event.notes || ''
-    renderEventAbsoluteBest()
+    renderEventTheory()
     renderEventRecorder()
   }
 
@@ -1369,27 +1381,103 @@
     return run?.laps?.reduce((best, lap) => !best || lap.timeMs < best ? lap.timeMs : best, null)
   }
 
-  // The native loader owns eligibility (including the distance check that
-  // rejects abandoned attempts), so the page shows the same result as Delta.
-  async function loadEventAbsoluteBest(eventId = currentEventId) {
+  // The native loader picks the quickest Sector 1-3 across the Event's eligible laps and names the run and lap that
+  // supplied each one. It reloads on open and after every saved lap; only the newest response may render.
+  async function loadEventTheoreticalBest(eventId = currentEventId) {
     const key = eventKey(eventId)
     if (!key) return
+    const sequence = ++eventTheoryRequestSequence
     try {
       const nativeEventId = Number.isFinite(Number(key)) ? Math.round(Number(key)) : key
-      const reference = await call('load_event_absolute_best', { eventId: nativeEventId })
-      if (eventKey(currentEventId) !== key) return
-      const time = Number(reference?.timeMs)
-      currentEventAbsoluteBestMs = Number.isFinite(time) ? time : null
+      const payload = await call('load_event_theoretical_best', { eventId: nativeEventId })
+      if (sequence !== eventTheoryRequestSequence || eventKey(currentEventId) !== key) return
+      currentEventTheory = globalScope.EventTheoreticalBest.normalizeSectors(payload)
     } catch {
-      if (eventKey(currentEventId) !== key) return
-      currentEventAbsoluteBestMs = null
+      if (sequence !== eventTheoryRequestSequence || eventKey(currentEventId) !== key) return
+      currentEventTheory = null
     }
-    renderEventAbsoluteBest()
+    renderEventTheory()
   }
 
-  function renderEventAbsoluteBest() {
-    if (!eventsDetailAbsoluteBest) return
-    eventsDetailAbsoluteBest.textContent = formatRunTime(currentEventAbsoluteBestMs)
+  // A sector's car is the native name when it has one; otherwise the run list label, then the ordinal.
+  function theorySectorCarName(sector) {
+    if (sector.carName) return sector.carName
+    const run = currentEventRuns.find(candidate => candidate.id === sector.runId)
+    const listed = run ? runCarName(run) : ''
+    if (listed) return listed
+    return Number.isFinite(sector.carOrdinal) ? `Car ${Math.round(sector.carOrdinal)}` : '—'
+  }
+
+  function renderEventTheoryRow(sector, shared) {
+    const EventTheory = globalScope.EventTheoreticalBest
+    const timed = Number.isFinite(sector.timeMs) && Boolean(sector.runId)
+    const seconds = EventTheory.formatSectorSeconds(sector.timeMs)
+    const row = document.createElement('button')
+    row.type = 'button'
+    row.className = 'events-theory__row'
+    row.dataset.sector = String(sector.sector)
+    row.disabled = !timed
+    const name = document.createElement('span')
+    name.className = 'events-theory__sector'
+    name.textContent = `S${sector.sector}`
+    const time = document.createElement('span')
+    time.className = 'events-theory__sector-time'
+    time.textContent = seconds
+    if (timed) {
+      const unit = document.createElement('small')
+      unit.textContent = 'S'
+      time.append(unit)
+    }
+    const source = document.createElement('span')
+    source.className = 'events-theory__source'
+    if (timed) {
+      source.textContent = EventTheory.sourceLabel({ runId: sector.runId, lapNumber: sector.lapNumber, runType: sector.runType })
+      if (!shared) {
+        const car = document.createElement('small')
+        car.className = 'events-theory__car'
+        car.textContent = theorySectorCarName(sector)
+        source.append(car)
+      }
+    } else {
+      source.textContent = 'No eligible sector saved'
+    }
+    const action = document.createElement('span')
+    action.className = 'events-theory__action'
+    action.textContent = timed ? 'VIEW SECTOR' : 'UNAVAILABLE'
+    row.append(name, time, source, action)
+    if (timed) {
+      const lap = Number.isFinite(sector.lapNumber) && sector.runType !== 'sprint' ? `, Lap ${Math.round(sector.lapNumber)}` : ''
+      row.setAttribute('aria-label', `View sector ${sector.sector}, ${seconds} seconds, Run ${sector.runId}${lap}`)
+      row.addEventListener('click', () => void openEventSource(sector))
+    } else {
+      row.setAttribute('aria-label', `Sector ${sector.sector} unavailable`)
+    }
+    return row
+  }
+
+  // Sums the three sectors only when all have a time; the footer says which estimate is shown.
+  function renderEventTheory() {
+    if (!eventsTheoryTime) return
+    const EventTheory = globalScope.EventTheoreticalBest
+    const sectors = currentEventTheory || EventTheory.normalizeSectors(null)
+    const total = EventTheory.totalMs(sectors)
+    const complete = total !== null
+    const shared = EventTheory.sharedCarKey(sectors) !== null
+    eventsTheoryTime.textContent = formatRunTime(total)
+    if (eventsTheoryRows) eventsTheoryRows.replaceChildren(...sectors.map(sector => renderEventTheoryRow(sector, shared)))
+    if (eventsTheorySharedCar) eventsTheorySharedCar.hidden = !shared
+    if (eventsTheorySharedCarName) eventsTheorySharedCarName.textContent = shared ? theorySectorCarName(sectors[0]) : ''
+    if (eventsTheoryToggle) {
+      eventsTheoryToggle.textContent = eventTheoryOpen ? 'HIDE SECTORS' : 'SHOW SECTORS'
+      eventsTheoryToggle.setAttribute('aria-expanded', String(eventTheoryOpen))
+    }
+    if (eventsTheorySectors) eventsTheorySectors.hidden = !eventTheoryOpen
+    if (eventsTheoryNote) eventsTheoryNote.textContent = complete ? EventTheory.ESTIMATE_NOTE : EventTheory.INCOMPLETE_NOTE
+    if (eventsTheoryCount) {
+      const runCount = EventTheory.distinctRunCount(sectors)
+      eventsTheoryCount.textContent = `3 SECTORS · ${runCount} ${runCount === 1 ? 'RUN' : 'RUNS'}`
+      eventsTheoryCount.hidden = !complete
+    }
   }
 
   function distinctTimeRanks(values) {
@@ -1476,7 +1564,8 @@
   function renderEventRuns() {
     if (!eventRunsList) return
     eventRunsList.replaceChildren()
-    renderEventAbsoluteBest()
+    // Car labels in the theory rows come from this list, so the theory redraws with it.
+    renderEventTheory()
     updateEventRunSortButtons()
     const runs = [...currentEventRuns].sort(compareEventRuns)
     if (eventRunsEmpty) eventRunsEmpty.hidden = runs.length > 0
@@ -1611,31 +1700,11 @@
   // the span point nearest its third, and each point is searched only inside the span.
   function traceSectorTicks(points, span, project) {
     const ticks = []
-    if (!span) return ticks
-    let minDistance = Infinity
-    let maxDistance = -Infinity
-    for (let index = span.startIndex; index <= span.endIndex; index += 1) {
-      const distance = points[index].distanceM
-      if (!Number.isFinite(distance)) continue
-      minDistance = Math.min(minDistance, distance)
-      maxDistance = Math.max(maxDistance, distance)
-    }
-    const distanceRange = maxDistance - minDistance
-    if (!(distanceRange > 0)) return ticks
-    for (let sector = 1; sector <= 3; sector += 1) {
-      const target = minDistance + distanceRange * sector / 3
-      let nearestIndex = null
-      let nearestDelta = Infinity
-      for (let index = span.startIndex; index <= span.endIndex; index += 1) {
-        const distance = points[index].distanceM
-        if (!Number.isFinite(distance)) continue
-        const delta = Math.abs(distance - target)
-        if (delta < nearestDelta) {
-          nearestIndex = index
-          nearestDelta = delta
-        }
-      }
-      if (nearestIndex === null) continue
+    // The tick points are the sector boundaries (EventTraceMap.sectorBoundaries), so a focused sector ends at its tick.
+    const boundaries = globalThis.EventTraceMap?.sectorBoundaries(points, span)
+    if (!boundaries) return ticks
+    boundaries.ticks.forEach((nearestIndex, sectorIndex) => {
+      const sector = sectorIndex + 1
       const previous = project(points[Math.max(span.startIndex, nearestIndex - 1)])
       const next = project(points[Math.min(span.endIndex, nearestIndex + 1)])
       const current = project(points[nearestIndex])
@@ -1651,7 +1720,7 @@
         y2: current.y + normalY,
         label: `S${sector}`
       })
-    }
+    })
     return ticks
   }
 
@@ -1660,6 +1729,8 @@
   // requireFinish, which keeps an unfinished drive without a completed lap free of sector ticks.
   function renderTraceMap(points, lapTimeMs, options = {}) {
     const marks = options.marks || null
+    // Sector focus is only for Events lap maps (options.sectorFocus). Driver Analysis drive maps never set it.
+    const sectorFocus = options.sectorFocus === true
     const selection = options.selection || {
       get: () => traceMapLayerSelection,
       set: value => { traceMapLayerSelection = value }
@@ -1667,13 +1738,19 @@
     const map = document.createElement('div')
     map.className = 'events-lap-detail__map'
     if (points.length < 2) {
-      const empty = document.createElement('p')
-      empty.className = 'events-lap-detail__empty'
-      empty.textContent = options.emptyText || 'NO TRACE DATA SAVED FOR THIS LAP'
-      map.append(empty)
-      // A map without a trace has nothing to zoom, but callers can still call the zoom methods.
+      if (sectorFocus) {
+        map.append(renderTraceUnavailable())
+      } else {
+        const empty = document.createElement('p')
+        empty.className = 'events-lap-detail__empty'
+        empty.textContent = options.emptyText || 'NO TRACE DATA SAVED FOR THIS LAP'
+        map.append(empty)
+      }
+      // A map without a trace has nothing to zoom or focus, but callers can still call these methods.
       map.zoomToBounds = () => {}
       map.resetZoom = () => {}
+      map.focusSector = () => {}
+      map.getSectorFocus = () => null
       return map
     }
     const coordinates = points.map(point => ({ x: point.positionX, z: point.positionZ }))
@@ -1700,6 +1777,9 @@
     const base = { x: 0, y: 0, width, height }
     let view = zoom.createView(base)
     let drag = null
+    // Sector focus state: the focused sector (1 to 3, or null for the whole lap) and whether FIT SECTOR has fitted it.
+    let focusedSector = null
+    let sectorFitted = false
 
     // Check if extended telemetry is available
     const hasExtended = globalThis.EventTraceMap?.hasExtendedTelemetry(points) ?? false
@@ -1723,54 +1803,67 @@
     })
     svg.append(svgElement('rect', { class: 'events-lap-detail__surface', x: 0, y: 0, width, height, rx: 2 }))
 
-    // White track outline: always visible
-    const outlineGroup = svgElement('g', { class: 'events-lap-detail__outline-group' })
-    const outlinePoints = projected.map((p, i) => `${p.x},${p.y}`).join(' ')
-    outlineGroup.append(svgElement('polyline', {
-      class: 'events-lap-detail__outline',
-      points: outlinePoints
-    }))
-    svg.append(outlineGroup)
+    // The outline, slip, and pedal layers of the points from..to (inclusive). Run indexes are offset back to the whole lap,
+    // so the same builder draws the whole lap and the focused sector.
+    const traceLayers = (from, to) => {
+      const outlineGroup = svgElement('g', { class: 'events-lap-detail__outline-group' })
+      outlineGroup.append(svgElement('polyline', {
+        class: 'events-lap-detail__outline',
+        points: projected.slice(from, to + 1).map((p) => `${p.x},${p.y}`).join(' ')
+      }))
+      const layers = { outline: outlineGroup, slip: null, pedals: [] }
+      const rangePoints = points.slice(from, to + 1)
 
-    // Slip layer (drawn under pedal lines)
-    if (hasExtended) {
-      const slipGroup = svgElement('g', { class: 'events-lap-detail__slip-group', 'data-layer-group': 'slip' })
-      const slipRuns = globalThis.EventTraceMap?.groupRuns(points, (p) => globalThis.EventTraceMap?.isSlipPoint(p) ? 'slip' : 'no-slip') ?? []
-      for (const run of slipRuns) {
-        if (run.key !== 'slip') continue
-        const runPoints = projected.slice(run.startIndex, run.endIndex + 1)
-        const pointsStr = runPoints.map((p) => `${p.x},${p.y}`).join(' ')
-        slipGroup.append(svgElement('polyline', {
-          class: 'events-lap-detail__slip-line',
-          points: pointsStr
-        }))
+      // Slip layer (drawn under pedal lines)
+      if (hasExtended) {
+        const slipGroup = svgElement('g', { class: 'events-lap-detail__slip-group', 'data-layer-group': 'slip' })
+        const slipRuns = globalThis.EventTraceMap?.groupRuns(rangePoints, (p) => globalThis.EventTraceMap?.isSlipPoint(p) ? 'slip' : 'no-slip') ?? []
+        for (const run of slipRuns) {
+          if (run.key !== 'slip') continue
+          const runPoints = projected.slice(from + run.startIndex, from + run.endIndex + 1)
+          const pointsStr = runPoints.map((p) => `${p.x},${p.y}`).join(' ')
+          slipGroup.append(svgElement('polyline', {
+            class: 'events-lap-detail__slip-line',
+            points: pointsStr
+          }))
+        }
+        layers.slip = slipGroup
       }
-      svg.append(slipGroup)
-    }
 
-    // Pedal layers
-    const pedalLayers = ['throttle', 'brake', 'coast']
-    for (const pedal of pedalLayers) {
-      const group = svgElement('g', { class: `events-lap-detail__pedal-group events-lap-detail__pedal-group--${pedal}`, 'data-layer-group': pedal })
-      const runs = globalThis.EventTraceMap?.groupRuns(points, (p) => globalThis.EventTraceMap?.pedalState(p)) ?? []
-      for (const run of runs) {
-        if (run.key !== pedal) continue
-        const runPoints = projected.slice(run.startIndex, run.endIndex + 1)
-        if (runPoints.length < 2) continue
-        const pointsStr = runPoints.map((p) => `${p.x},${p.y}`).join(' ')
-        group.append(svgElement('polyline', {
-          class: `events-lap-detail__trace events-lap-detail__trace--${pedal}`,
-          points: pointsStr
-        }))
+      // Pedal layers
+      for (const pedal of ['throttle', 'brake', 'coast']) {
+        const group = svgElement('g', { class: `events-lap-detail__pedal-group events-lap-detail__pedal-group--${pedal}`, 'data-layer-group': pedal })
+        const runs = globalThis.EventTraceMap?.groupRuns(rangePoints, (p) => globalThis.EventTraceMap?.pedalState(p)) ?? []
+        for (const run of runs) {
+          if (run.key !== pedal) continue
+          const runPoints = projected.slice(from + run.startIndex, from + run.endIndex + 1)
+          if (runPoints.length < 2) continue
+          const pointsStr = runPoints.map((p) => `${p.x},${p.y}`).join(' ')
+          group.append(svgElement('polyline', {
+            class: `events-lap-detail__trace events-lap-detail__trace--${pedal}`,
+            points: pointsStr
+          }))
+        }
+        layers.pedals.push(group)
       }
-      svg.append(group)
+      return layers
     }
+    // Whole-lap layers: the white track outline is always visible, and sector focus dims it and the pedal lines.
+    const fullLayers = traceLayers(0, points.length - 1)
+    svg.append(fullLayers.outline)
+    if (fullLayers.slip) svg.append(fullLayers.slip)
+    svg.append(...fullLayers.pedals)
+    // The focused sector is drawn on top of the dimmed whole lap. It is rebuilt whenever the focus changes.
+    const focusGroup = sectorFocus ? svgElement('g', { class: 'events-lap-detail__focus' }) : null
+    if (focusGroup) svg.append(focusGroup)
 
     if (marks) svg.append(...renderTraceMarks(marks, projected))
 
     // Sector ticks and labels (on top)
     const span = globalThis.EventTraceMap?.sectorSpan(points, { requireFinish: options.requireFinish === true }) ?? null
     const ticks = traceSectorTicks(points, span, project)
+    // The focusable sectors are the ranges between the ticks. Without sector focus there are none.
+    const sectorRangeList = sectorFocus ? globalThis.EventTraceMap?.sectorRanges(points, span) ?? [] : []
     // Each tick keeps its midpoint, half-vector, and unit normal, so zooming can redraw it at the same on-screen size.
     const scaledTicks = []
     for (const tick of ticks) {
@@ -1833,12 +1926,19 @@
     const zoomOutButton = renderZoomButton('−', 'Zoom out')
     const fitButton = renderZoomButton('FIT', 'Show whole lap')
     zoomControls.append(zoomInButton, zoomOutButton, fitButton)
+    // Sector focus adds the FIT SECTOR button over the map's top-left corner and the distance caption over its bottom-left.
+    const sectorFitButton = sectorFocus ? renderSectorFitButton() : null
+    const distanceCaption = sectorFocus ? document.createElement('span') : null
+    if (distanceCaption) distanceCaption.className = 'events-lap-detail__distance'
     const canvas = document.createElement('div')
     canvas.className = 'events-lap-detail__canvas'
-    canvas.append(svg, zoomControls)
+    canvas.append(svg, zoomControls, ...[sectorFitButton, distanceCaption].filter(Boolean))
     const layout = document.createElement('div')
     layout.className = 'events-lap-detail__map-layout'
     layout.append(canvas, inspector)
+    // The controls row above the map: FULL LAP (or FULL RUN), SECTOR 1 to SECTOR 3, and CLEAR FOCUS while focused.
+    const fullLabel = options.fullLabel || 'FULL LAP'
+    const sectorControls = sectorFocus ? renderSectorControls(fullLabel) : null
 
     // Hover functionality
     const markerCircle = svgElement('circle', { class: 'events-lap-detail__hover-marker', cx: 0, cy: 0, r: 4 })
@@ -1856,7 +1956,7 @@
       const y = cursor.y
 
       const nearestIdx = (marks ? globalThis.DriverAnalysisMap?.nearestErrorIndex(marks, projected, x, y, hoverReach()) : null)
-        ?? globalThis.EventTraceMap?.nearestPointIndex(projected, x, y, hoverReach()) ?? null
+        ?? hoverIndex(x, y, hoverReach()) ?? null
       if (nearestIdx !== null) {
         const p = projected[nearestIdx]
         markerCircle.setAttribute('cx', p.x)
@@ -1941,9 +2041,15 @@
       zoomInButton.disabled = zoom.zoomLevel(view, base) >= zoom.MAX_ZOOM - 1e-6
       zoomOutButton.disabled = atBase
       fitButton.disabled = atBase
+      if (sectorFitButton) {
+        sectorFitButton.hidden = focusedSector === null
+        sectorFitButton.textContent = sectorFitted ? 'SHOW FULL ROUTE' : 'FIT SECTOR'
+      }
     }
-    const setView = next => {
+    // Every view change is a manual one unless it is the sector fit, so only the sector fit keeps its FIT state.
+    const setView = (next, fitted = false) => {
       view = next
+      sectorFitted = fitted
       applyView()
     }
     const viewPoint = (clientX, clientY) => {
@@ -2010,12 +2116,15 @@
     zoomOutButton.addEventListener('click', () => zoomAtCenter(1 / 1.5))
     fitButton.addEventListener('click', () => setView(zoom.createView(base)))
 
-    // The bounds are viewBox units; the padding is screen pixels converted at the current zoom.
-    map.zoomToBounds = (bounds, paddingPx = 24) => {
+    // Bounds are viewBox units and the padding is screen pixels of the resulting view. The current screen scale is
+    // taken back to the whole-lap view's scale, and fitBoundsPx solves the window width from it.
+    const fitToBounds = (bounds, paddingPx, fitted) => {
       const matrix = svg.getScreenCTM()
-      const unitsPerPixel = matrix ? 1 / Math.hypot(matrix.a, matrix.b) : 1
-      setView(zoom.fitBounds(base, bounds, paddingPx * unitsPerPixel, zoom.MAX_ZOOM))
+      const pixelsNow = matrix ? Math.hypot(matrix.a, matrix.b) : 0
+      const pixelsPerBaseUnit = pixelsNow > 0 ? pixelsNow * view.width / base.width : 1
+      setView(zoom.fitBoundsPx(base, bounds, paddingPx, pixelsPerBaseUnit, zoom.MAX_ZOOM), fitted)
     }
+    map.zoomToBounds = (bounds, paddingPx = 24) => fitToBounds(bounds, paddingPx, false)
     map.resetZoom = () => setView(zoom.createView(base))
     applyView()
 
@@ -2039,9 +2148,185 @@
     })
     applyLayers()
 
-    map.append(layout, legend)
+    // Sector focus. The focused sector keeps its own outline, slip, and pedal runs at full strength while the whole lap
+    // is dimmed, and the legend counts only that sector's time. Focus never zooms by itself: FIT SECTOR is a separate
+    // action, and any other view change returns it to FIT SECTOR. Without sectorFocus there are no sector ranges, so
+    // every function below does nothing.
+    const rangeOf = sector => (Number.isInteger(sector) ? sectorRangeList[sector - 1] : undefined) || null
+    const boundsOf = range => {
+      let minX = Infinity
+      let maxX = -Infinity
+      let minY = Infinity
+      let maxY = -Infinity
+      for (const point of projected.slice(range.startIndex, range.endIndex + 1)) {
+        minX = Math.min(minX, point.x)
+        maxX = Math.max(maxX, point.x)
+        minY = Math.min(minY, point.y)
+        maxY = Math.max(maxY, point.y)
+      }
+      return { minX, maxX, minY, maxY }
+    }
+    // While a sector is focused only its points can be picked; the whole lap is searched otherwise.
+    const hoverIndex = (x, y, reach) => {
+      const range = rangeOf(focusedSector)
+      if (!range) return globalThis.EventTraceMap?.nearestPointIndex(projected, x, y, reach) ?? null
+      const index = globalThis.EventTraceMap?.nearestPointIndex(projected.slice(range.startIndex, range.endIndex + 1), x, y, reach) ?? null
+      return index === null ? null : index + range.startIndex
+    }
+    const rebuildFocus = () => {
+      if (!focusGroup) return
+      focusGroup.replaceChildren()
+      const range = rangeOf(focusedSector)
+      if (range) {
+        const focused = traceLayers(range.startIndex, range.endIndex)
+        focusGroup.append(focused.outline, ...(focused.slip ? [focused.slip] : []), ...focused.pedals)
+      }
+      const dimmed = range !== null
+      fullLayers.outline.classList.toggle('events-lap-detail__layer--dimmed', dimmed)
+      for (const group of fullLayers.pedals) group.classList.toggle('events-lap-detail__layer--dimmed', dimmed)
+      fullLayers.slip?.classList.toggle('events-lap-detail__layer--hidden', dimmed)
+      svg.classList.toggle('is-sector-focused', dimmed)
+      applyLayers()
+    }
+    const scopeWord = fullLabel === 'FULL RUN' ? 'RUN' : 'LAP'
+    const legendLabel = document.createElement('span')
+    legendLabel.className = 'events-lap-detail__legend-label'
+    const fullShareText = Object.fromEntries(['throttle', 'brake', 'coast', 'slip'].map(key => [
+      key,
+      legend.querySelector(`[data-layer="${key}"] .events-lap-detail__stat-value`)?.textContent ?? '—'
+    ]))
+    // The controls, caption, legend label, and shares all follow the focused sector (or the whole lap).
+    const syncSectorFocusUi = () => {
+      if (!sectorControls) return
+      const range = rangeOf(focusedSector)
+      for (const button of sectorControls.querySelectorAll('.events-lap-detail__sector-button')) {
+        const sector = Number(button.dataset.sector)
+        button.setAttribute('aria-pressed', String(sector === (focusedSector ?? 0)))
+        button.disabled = sector > 0 && !rangeOf(sector)
+      }
+      sectorControls.querySelector('.events-lap-detail__clear-focus').hidden = !range
+      const unit = (globalThis.FdcUnits?.distanceLabel() || '').toUpperCase()
+      if (range) {
+        const from = traceMapDistance(range.startDistanceM)
+        const to = traceMapDistance(range.endDistanceM)
+        distanceCaption.textContent = from !== null && to !== null
+          ? `SECTOR ${focusedSector} · ${from}–${to} ${unit}`
+          : `SECTOR ${focusedSector}`
+        legendLabel.textContent = `SECTOR ${focusedSector} INPUT TIME`
+      } else {
+        const total = sectorRangeList.length > 0 ? traceMapDistance(sectorRangeList[2].endDistanceM) : null
+        distanceCaption.textContent = total !== null ? `${fullLabel.toUpperCase()} · ${total} ${unit}` : fullLabel.toUpperCase()
+        legendLabel.textContent = `${scopeWord} INPUT TIME`
+      }
+      const shares = range
+        ? globalThis.EventTraceMap?.sectorTimeShares(points, lapTimeMs, range, { final: focusedSector === 3 }) ?? null
+        : null
+      for (const key of ['throttle', 'brake', 'coast', 'slip']) {
+        const output = legend.querySelector(`[data-layer="${key}"] .events-lap-detail__stat-value`)
+        if (output) output.textContent = range ? traceShareText(shares?.[key]) : fullShareText[key]
+      }
+    }
+    const focusSector = (sector, { notify = false } = {}) => {
+      const number = Number(sector)
+      const next = rangeOf(number) ? number : null
+      if (next === focusedSector) return
+      focusedSector = next
+      sectorFitted = false
+      // POINT DATA and its marker belong to the previous focus, so they clear with it.
+      inspectorBody.replaceChildren()
+      markerCircle.style.display = 'none'
+      rebuildFocus()
+      applyView()
+      syncSectorFocusUi()
+      if (notify) options.onSectorChange?.(next)
+    }
+    if (sectorFocus) {
+      legend.prepend(legendLabel)
+      sectorControls.addEventListener('click', event => {
+        const button = event.target.closest('button')
+        if (!button || button.disabled) return
+        const clear = button.classList.contains('events-lap-detail__clear-focus')
+        focusSector(clear ? null : Number(button.dataset.sector), { notify: true })
+      })
+      sectorFitButton.addEventListener('click', () => {
+        if (focusedSector === null) return
+        if (sectorFitted) map.resetZoom()
+        else fitToBounds(boundsOf(rangeOf(focusedSector)), 24, true)
+      })
+      syncSectorFocusUi()
+      focusSector(options.initialSector ?? null)
+    }
+    map.focusSector = sector => focusSector(sector)
+    map.getSectorFocus = () => focusedSector
+
+    map.append(...(sectorControls ? [sectorControls] : []), layout, legend)
     if (marks && marks.errors.length > 0) map.append(renderTraceErrorList(marks, points, svg))
     return map
+  }
+
+  // Distance for the map caption: two decimals in the display unit, or null without a finite distance.
+  function traceMapDistance(meters) {
+    const value = globalThis.FdcUnits?.convertDistance(meters)
+    return Number.isFinite(value) ? value.toFixed(2) : null
+  }
+
+  // A shares value for the legend: whole percent, or a dash when the lap or sector has no time to share.
+  function traceShareText(value) {
+    return Number.isFinite(value) ? `${value}%` : '—'
+  }
+
+  // The sector controls above the map. CLEAR FOCUS is hidden until a sector is focused.
+  function renderSectorControls(fullLabel) {
+    const row = document.createElement('div')
+    row.className = 'events-lap-detail__tools'
+    const group = document.createElement('div')
+    group.className = 'events-lap-detail__sector-controls'
+    group.setAttribute('role', 'group')
+    group.setAttribute('aria-label', 'Map sector')
+    const sectorButton = (sector, text) => {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'events-lap-detail__sector-button'
+      button.dataset.sector = String(sector)
+      button.setAttribute('aria-pressed', 'false')
+      button.textContent = text
+      return button
+    }
+    group.append(
+      sectorButton(0, fullLabel),
+      sectorButton(1, 'SECTOR 1'),
+      sectorButton(2, 'SECTOR 2'),
+      sectorButton(3, 'SECTOR 3')
+    )
+    const clear = document.createElement('button')
+    clear.type = 'button'
+    clear.className = 'events-lap-detail__clear-focus'
+    clear.textContent = 'CLEAR FOCUS'
+    clear.hidden = true
+    row.append(group, clear)
+    return row
+  }
+
+  // FIT SECTOR sits over the map's top-left corner, clear of the zoom controls at the top-right.
+  function renderSectorFitButton() {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'events-lap-detail__fit-sector'
+    button.textContent = 'FIT SECTOR'
+    button.hidden = true
+    return button
+  }
+
+  // The legacy state for a lap saved before traces were recorded, shown in place of the map when sector focus is on.
+  function renderTraceUnavailable() {
+    const wrap = document.createElement('div')
+    wrap.className = 'events-lap-detail__unavailable'
+    const title = document.createElement('h3')
+    title.textContent = 'TRACE UNAVAILABLE'
+    const text = document.createElement('p')
+    text.textContent = 'Sector times are saved. This older lap has no recorded trace.'
+    wrap.append(title, text)
+    return wrap
   }
 
   function renderZoomButton(text, label) {
@@ -2288,20 +2573,104 @@
     }
   }
 
-  function toggleEventRunLap(lapNumber, row) {
+  // The lap row and its lap number expand or collapse the lap without focusing a sector.
+  function toggleEventRunLap(lapNumber) {
     const key = Number(lapNumber)
     expandedEventRunLap = expandedEventRunLap === key ? null : key
-    if (eventsRunLaps) renderEventRunDetail(currentEventRun)
-    if (expandedEventRunLap !== null) row?.nextElementSibling?.scrollIntoView?.({ block: 'nearest' })
+    expandedEventRunSector = null
+    eventRunSource = null
+    setEventRunFeedback('')
+    if (currentEventRun) renderEventRunDetail(currentEventRun)
+    if (expandedEventRunLap !== null) scrollEventRunLap(expandedEventRunLap, { detail: true })
+  }
+
+  // A sector cell expands its lap and focuses that sector. It was not opened from the Event, so no context line shows.
+  function selectEventRunSector(lapNumber, sector) {
+    expandedEventRunLap = Number(lapNumber)
+    expandedEventRunSector = sector
+    eventRunSource = null
+    setEventRunFeedback('')
+    if (currentEventRun) renderEventRunDetail(currentEventRun)
+    scrollEventRunLap(expandedEventRunLap, { detail: true })
+  }
+
+  // Called by the expanded lap's map when its sector focus changes. The lap table and context line update in place,
+  // so the map is not rebuilt while the user is using it.
+  function setEventRunSectorFocus(lapNumber, sector) {
+    if (expandedEventRunLap !== Number(lapNumber)) return
+    expandedEventRunSector = Number.isFinite(sector) ? sector : null
+    syncEventRunSectorFocus()
+  }
+
+  function syncEventRunSectorFocus() {
+    for (const cell of eventsRunLaps?.querySelectorAll('td[data-sector]') || []) {
+      const focused = Number(cell.dataset.lap) === expandedEventRunLap && Number(cell.dataset.sector) === expandedEventRunSector
+      cell.classList.toggle('is-sector-focus', focused)
+    }
+    renderEventRunSourceContext()
+  }
+
+  // The context line names the source only while its lap stays expanded; the sector appears while it is focused.
+  function renderEventRunSourceContext() {
+    if (!eventsRunSourceContext) return
+    const source = eventRunSource
+    const visible = Boolean(source && Number.isFinite(source.lapNumber) && currentEventRun?.id === source.runId
+      && expandedEventRunLap === source.lapNumber)
+    eventsRunSourceContext.hidden = !visible
+    eventsRunSourceContext.textContent = visible
+      ? globalScope.EventTheoreticalBest.sourceContext({
+        runId: source.runId,
+        lapNumber: source.lapNumber,
+        sector: expandedEventRunSector,
+        runType: currentEventRun.runType
+      })
+      : ''
+  }
+
+  function setEventRunFeedback(message) {
+    if (!eventsRunFeedback) return
+    eventsRunFeedback.textContent = message
+    eventsRunFeedback.hidden = !message
+  }
+
+  function scrollEventRunLap(lapNumber, { detail = false } = {}) {
+    const row = eventsRunLaps?.querySelector(`tr.events-run-table__lap-row[data-lap="${lapNumber}"]`)
+    const target = detail ? row?.nextElementSibling : row
+    target?.scrollIntoView?.({ block: detail ? 'nearest' : 'start' })
+  }
+
+  // VIEW SECTOR lands on the sector cell it names; the lap row is brought to the top so the map shows under it.
+  function focusEventRunSector(lapNumber, sector) {
+    const cell = eventsRunLaps?.querySelector(`[data-focus-key="sector-${lapNumber}-${sector}"]`)
+    if (cell) {
+      cell.focus({ preventScroll: true })
+      scrollEventRunLap(lapNumber)
+    } else {
+      eventsRunBack?.focus()
+    }
+  }
+
+  // Theoretical Best for a run page: quickest Sector 1-3 across this run's laps, shown without sources or a toggle.
+  function renderEventRunTheory(run) {
+    const EventTheory = globalScope.EventTheoreticalBest
+    const total = runBestHypotheticalTimeMs(run)
+    const complete = Number.isFinite(total)
+    if (eventsRunTheoryTime) eventsRunTheoryTime.textContent = formatRunTime(total)
+    if (eventsRunTheoryDescription) eventsRunTheoryDescription.textContent = EventTheory.runDescription(run.runType)
+    if (eventsRunTheoryNote) eventsRunTheoryNote.textContent = complete ? EventTheory.ESTIMATE_NOTE : EventTheory.INCOMPLETE_NOTE
+    if (eventsRunTheoryCount) eventsRunTheoryCount.hidden = !complete
   }
 
   function renderEventRunDetail(run) {
     if (!run) return
     const event = currentEventId === null ? null : eventsById.get(currentEventId)
     if (!event) return
+    // A re-render replaces the focused element, so focus returns to the same row or sector cell afterwards.
+    const active = document.activeElement
+    const focusKey = eventsRunLaps?.contains(active) ? active.dataset.focusKey || null : null
     renderEventIdentity(eventsRunTitle, eventsRunSummary, event)
     if (eventsRunId) eventsRunId.textContent = String(run.id)
-    if (eventsRunBht) eventsRunBht.textContent = formatRunTime(runBestHypotheticalTimeMs(run))
+    renderEventRunTheory(run)
     if (eventsRunTableHint) {
       eventsRunTableHint.textContent = run.runType === 'sprint' ? 'SPRINT · ONE PASS' : ''
     }
@@ -2314,6 +2683,7 @@
     if (eventsRunLapSort) {
       eventsRunLapSort.setAttribute('aria-sort', eventRunLapSortDirection === 'asc' ? 'ascending' : 'descending')
     }
+    eventRunLapMap = null
     if (eventsRunLaps) {
       eventsRunLaps.replaceChildren()
       for (const lap of laps) {
@@ -2321,14 +2691,17 @@
         const lapNumberValue = Number(lap.lapNumber)
         const expanded = expandedEventRunLap === lapNumberValue
         row.className = 'events-run-table__lap-row'
+        row.dataset.lap = String(lapNumberValue)
+        row.dataset.focusKey = `lap-${lapNumberValue}`
         row.tabIndex = 0
         row.setAttribute('aria-expanded', String(expanded))
         row.setAttribute('aria-label', `Lap ${Number.isFinite(lapNumberValue) ? lapNumberValue : 'unknown'} details`)
-        row.addEventListener('click', () => toggleEventRunLap(lapNumberValue, row))
+        row.addEventListener('click', () => toggleEventRunLap(lapNumberValue))
         row.addEventListener('keydown', event => {
-          if (event.key !== 'Enter' && event.key !== ' ') return
+          // Keys pressed on a sector button inside the row belong to that button, not to the row.
+          if (event.target !== row || (event.key !== 'Enter' && event.key !== ' ')) return
           event.preventDefault()
-          toggleEventRunLap(lapNumberValue, row)
+          toggleEventRunLap(lapNumberValue)
         })
         const lapNumber = document.createElement('th')
         lapNumber.scope = 'row'
@@ -2337,9 +2710,25 @@
         lapTime.append(renderRunTimeCell(lap.timeMs, lapRanks, isApproximateRunResult(run, lap.timeMs)))
         row.append(lapNumber, lapTime)
         for (let index = 0; index < 3; index += 1) {
-          const sector = document.createElement('td')
-          sector.append(renderRunTimeCell(lap[`sector${index + 1}TimeMs`], sectorRanks[index]))
-          row.append(sector)
+          const sectorNumber = index + 1
+          const sectorTimeMs = lap[`sector${sectorNumber}TimeMs`]
+          const cell = document.createElement('td')
+          cell.dataset.lap = String(lapNumberValue)
+          cell.dataset.sector = String(sectorNumber)
+          cell.classList.toggle('is-sector-focus', expanded && expandedEventRunSector === sectorNumber)
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.className = 'events-run-table__cell'
+          button.dataset.focusKey = `sector-${lapNumberValue}-${sectorNumber}`
+          button.disabled = !Number.isFinite(sectorTimeMs)
+          button.append(renderRunTimeCell(sectorTimeMs, sectorRanks[index]))
+          button.addEventListener('click', event => {
+            // The cell belongs to the sector, so its click must not also toggle the lap row.
+            event.stopPropagation()
+            selectEventRunSector(lapNumberValue, sectorNumber)
+          })
+          cell.append(button)
+          row.append(cell)
         }
         eventsRunLaps.append(row)
         if (expanded) {
@@ -2349,27 +2738,47 @@
           detailCell.colSpan = 5
           const detail = document.createElement('div')
           detail.className = 'events-lap-detail'
-          detail.append(renderTraceMap(lap.tracePoints || [], lap.timeMs))
+          const map = renderTraceMap(lap.tracePoints || [], lap.timeMs, {
+            sectorFocus: true,
+            initialSector: expandedEventRunSector,
+            fullLabel: run.runType === 'sprint' ? 'FULL RUN' : 'FULL LAP',
+            onSectorChange: sector => setEventRunSectorFocus(lapNumberValue, sector)
+          })
+          eventRunLapMap = map
+          detail.append(map)
           detailCell.append(detail)
           detailRow.append(detailCell)
           eventsRunLaps.append(detailRow)
         }
       }
     }
+    if (focusKey) eventsRunLaps?.querySelector(`[data-focus-key="${focusKey}"]`)?.focus({ preventScroll: true })
+    renderEventRunSourceContext()
     if (eventsRunEmpty) eventsRunEmpty.hidden = laps.length > 0
   }
 
-  async function openEventRun(id) {
+  // A run row opens the run with no lap expanded. VIEW SECTOR passes its source, so the run opens with that lap
+  // expanded, that sector focused, a status line, and the context line.
+  async function openEventRun(id, source = null) {
     if (currentEventId === null) return false
     const key = runId(id)
     const run = currentEventRuns.find(candidate => candidate.id === key)
     if (!run) return false
+    const firstLap = run.laps[0]?.lapNumber ?? null
+    const sourceLap = source ? (Number.isFinite(source.lapNumber) ? source.lapNumber : firstLap) : null
     currentEventRun = run
-    expandedEventRunLap = null
+    expandedEventRunLap = sourceLap
+    // A sector is focused only inside an expanded lap, so a source without a lap focuses none.
+    expandedEventRunSector = sourceLap !== null ? source.sector : null
+    eventRunSource = sourceLap !== null ? { runId: key, lapNumber: sourceLap } : null
+    setEventRunFeedback(source
+      ? globalScope.EventTheoreticalBest.openedStatus({ runId: key, lapNumber: sourceLap, sector: source.sector, runType: run.runType })
+      : '')
     eventRunLapSortDirection = 'desc'
     renderEventRunDetail(run)
     setEventsView('run')
-    eventsRunBack?.focus()
+    if (source) focusEventRunSector(sourceLap, source.sector)
+    else eventsRunBack?.focus()
     try {
       const nativeRunId = Number.isFinite(Number(key)) ? Math.round(Number(key)) : key
       const loaded = normalizeEventRun(await call('load_event_run', { runId: nativeRunId }))
@@ -2382,6 +2791,11 @@
       // The list payload remains usable; trace details simply stay unavailable.
     }
     return true
+  }
+
+  // VIEW SECTOR on the Event's Theoretical Best: the run that supplied the sector opens at its lap and sector.
+  function openEventSource(sector) {
+    return openEventRun(sector.runId, { lapNumber: sector.lapNumber, sector: sector.sector })
   }
 
   // Reloads the open run after one of its laps is saved. The expanded lap, sort, and focus stay as they are.
@@ -2398,6 +2812,8 @@
       currentEventRun = loaded
       if (expandedEventRunLap !== null && !loaded.laps.some(lap => lap.lapNumber === expandedEventRunLap)) {
         expandedEventRunLap = null
+        expandedEventRunSector = null
+        eventRunSource = null
       }
       renderEventRunDetail(loaded)
     } catch {
@@ -2408,6 +2824,10 @@
   function closeEventRun() {
     currentEventRun = null
     expandedEventRunLap = null
+    expandedEventRunSector = null
+    eventRunSource = null
+    eventRunLapMap = null
+    setEventRunFeedback('')
     if (eventsRunSummary) {
       eventsRunSummary.replaceChildren()
       delete eventsRunSummary.dataset.eventId
@@ -2463,7 +2883,7 @@
       currentEventRuns = normalizeEventRunsPayload(await call('load_event_runs', { eventId: nativeEventId }))
       if (currentEventRuns.some(updateEventLastRecordedAt)) renderEventsLibrary()
       renderEventRuns()
-      void loadEventAbsoluteBest(key)
+      void loadEventTheoreticalBest(key)
       if (eventsView === 'run' && currentEventRun) {
         const refreshed = currentEventRuns.find(run => run.id === currentEventRun.id)
         if (refreshed) {
@@ -2546,7 +2966,9 @@
     }
     if (!event) return false
     currentEventId = event.id
-    currentEventAbsoluteBestMs = null
+    // A response for the previously open Event must not fill the theory of this one.
+    currentEventTheory = null
+    eventTheoryRequestSequence += 1
     currentEventRun = null
     clearEventRecorderFeedback()
     setEventsCreateOpen(false)
@@ -2571,7 +2993,8 @@
     if (eventsDetailNotes) eventsDetailNotes.hidden = true
     if (eventsDetailNotesValue) eventsDetailNotesValue.textContent = ''
     currentEventRuns = []
-    currentEventAbsoluteBestMs = null
+    currentEventTheory = null
+    eventTheoryRequestSequence += 1
     currentEventRun = null
     setEventsView('library')
     renderEventsLibrary()
@@ -4770,6 +5193,11 @@
   }
   eventsDetailBack?.addEventListener('click', closeEventDetail)
   eventsRunBack?.addEventListener('click', closeEventRun)
+  // The show/hide choice is temporary: it lasts until the Configuration window is reloaded.
+  eventsTheoryToggle?.addEventListener('click', () => {
+    eventTheoryOpen = !eventTheoryOpen
+    renderEventTheory()
+  })
   eventsRunLapSort?.addEventListener('click', () => {
     eventRunLapSortDirection = eventRunLapSortDirection === 'desc' ? 'asc' : 'desc'
     if (currentEventRun) renderEventRunDetail(currentEventRun)
@@ -4862,8 +5290,17 @@
     }
     if (eventsView === 'run') {
       event.preventDefault()
+      // Escape peels one layer at a time: the focused sector, then the expanded lap, then the run.
+      if (expandedEventRunSector !== null) {
+        eventRunLapMap?.focusSector?.(null)
+        expandedEventRunSector = null
+        syncEventRunSectorFocus()
+        return
+      }
       if (expandedEventRunLap !== null) {
         expandedEventRunLap = null
+        eventRunSource = null
+        setEventRunFeedback('')
         if (currentEventRun) renderEventRunDetail(currentEventRun)
         return
       }

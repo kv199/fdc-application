@@ -332,3 +332,82 @@ test('sector span of a completed lap with no distance range is null', () => {
   assert.equal(EventTraceMap.sectorSpan(points), null)
   assert.equal(EventTraceMap.sectorSpan(points, { requireFinish: true }), null)
 })
+
+// Sector focus: the three sectors are the ranges between the S1, S2 and S3 ticks.
+test('sector ranges split the span into thirds at the nearest points to each tick', () => {
+  const points = [0, 100, 200, 300, 400, 500, 600].map((distanceM, index) => ({ distanceM, elapsedMs: index * 1000 }))
+  const span = EventTraceMap.sectorSpan(points)
+  assert.deepEqual(EventTraceMap.sectorRanges(points, span), [
+    { startIndex: 0, endIndex: 2, startDistanceM: 0, endDistanceM: 200 },
+    { startIndex: 2, endIndex: 4, startDistanceM: 200, endDistanceM: 400 },
+    { startIndex: 4, endIndex: 6, startDistanceM: 400, endDistanceM: 600 }
+  ])
+  assert.deepEqual(EventTraceMap.sectorBoundaries(points, span), { ticks: [2, 4, 6], minDistanceM: 0, maxDistanceM: 600 })
+})
+
+test('sector ranges are relative to the least distance of the span', () => {
+  const points = [1000, 1100, 1200, 1300, 1400, 1500, 1600].map(distanceM => ({ distanceM }))
+  const ranges = EventTraceMap.sectorRanges(points, EventTraceMap.sectorSpan(points))
+  assert.deepEqual(ranges.map(range => [range.startDistanceM, range.endDistanceM]), [[0, 200], [200, 400], [400, 600]])
+})
+
+test('sector ranges of a later lap use only its first completed lap', () => {
+  const points = [
+    { lapNumber: 1, distanceM: 0 }, { lapNumber: 1, distanceM: 100 }, { lapNumber: 1, distanceM: 200 }, { lapNumber: 1, distanceM: 300 },
+    { lapNumber: 2, distanceM: 0 }, { lapNumber: 2, distanceM: 100 }
+  ]
+  const span = EventTraceMap.sectorSpan(points)
+  assert.deepEqual(span, { startIndex: 0, endIndex: 3 })
+  assert.deepEqual(EventTraceMap.sectorRanges(points, span).map(range => [range.startIndex, range.endIndex]), [[0, 1], [1, 2], [2, 3]])
+})
+
+test('sector ranges are empty without a span or a distance range', () => {
+  const points = [{ distanceM: 50 }, { distanceM: 50 }]
+  assert.deepEqual(EventTraceMap.sectorRanges(points, null), [])
+  assert.deepEqual(EventTraceMap.sectorRanges(points, EventTraceMap.sectorSpan(points)), [])
+  assert.equal(EventTraceMap.sectorBoundaries(points, null), null)
+  // An unfinished sprint has no completed lap, so requireFinish leaves no span and no sectors.
+  const sprint = [{ lapNumber: 1, distanceM: 0 }, { lapNumber: 1, distanceM: 600 }]
+  assert.deepEqual(EventTraceMap.sectorRanges(sprint, EventTraceMap.sectorSpan(sprint, { requireFinish: true })), [])
+})
+
+// Five intervals of 1 s over a 6 s lap: throttle, throttle, coast, brake, brake, throttle.
+function sectorShareLap(extra = []) {
+  const pedals = [{ throttle: 1, brake: 0 }, { throttle: 1, brake: 0 }, { throttle: 0, brake: 0 },
+    { throttle: 0, brake: 1 }, { throttle: 0, brake: 1 }, { throttle: 1, brake: 0 }]
+  return pedals.map((pedal, index) => ({ distanceM: index * 100, elapsedMs: index * 1000, ...pedal, ...(extra[index] || {}) }))
+}
+
+test('sector time shares own each interval once, so the three sectors make the whole lap', () => {
+  const points = sectorShareLap()
+  const ranges = EventTraceMap.sectorRanges(points, EventTraceMap.sectorSpan(points))
+  assert.deepEqual(ranges.map(range => [range.startIndex, range.endIndex]), [[0, 2], [2, 3], [3, 5]])
+  // Sector 1 owns intervals 0 to 1 (throttle), sector 2 owns interval 2 (coast), and sector 3 owns intervals 3 to 4
+  // (brake) plus the last point's time to the lap end (throttle).
+  assert.deepEqual(EventTraceMap.sectorTimeShares(points, 6000, ranges[0]), { throttle: 100, brake: 0, coast: 0, slip: null })
+  assert.deepEqual(EventTraceMap.sectorTimeShares(points, 6000, ranges[1]), { throttle: 0, brake: 0, coast: 100, slip: null })
+  assert.deepEqual(EventTraceMap.sectorTimeShares(points, 6000, ranges[2], { final: true }), { throttle: 33, brake: 67, coast: 0, slip: null })
+  // Without the final flag the last point's time is left to the sector after it, so the whole lap is not counted twice.
+  assert.deepEqual(EventTraceMap.sectorTimeShares(points, 6000, ranges[2]), { throttle: 0, brake: 100, coast: 0, slip: null })
+})
+
+test('the whole-lap time share matches the three sectors added together', () => {
+  const points = sectorShareLap()
+  const whole = EventTraceMap.sectorTimeShares(points, 6000, { startIndex: 0, endIndex: 5 }, { final: true })
+  assert.deepEqual(whole, { throttle: 50, brake: 33, coast: 17, slip: null })
+})
+
+test('sector slip share counts slip time over the same ownership as the pedals', () => {
+  const extra = [{ combinedSlipFl: 0.2 }, { combinedSlipFl: 0.2 }, { combinedSlipFl: 0.2 }, { combinedSlipFl: 1.5 }, { combinedSlipFl: 0.2 }, { combinedSlipFl: 0.2 }]
+  const points = sectorShareLap(extra)
+  const ranges = EventTraceMap.sectorRanges(points, EventTraceMap.sectorSpan(points))
+  assert.equal(EventTraceMap.sectorTimeShares(points, 6000, ranges[0]).slip, 0)
+  // Interval 3 (1 s of brake) is the slip interval: 1 s of the 3 s the final sector owns.
+  assert.equal(EventTraceMap.sectorTimeShares(points, 6000, ranges[2], { final: true }).slip, 33)
+})
+
+test('sector time shares are null when the sector owns no time', () => {
+  const points = sectorShareLap()
+  assert.equal(EventTraceMap.sectorTimeShares(points, 6000, { startIndex: 1, endIndex: 1 }), null)
+  assert.equal(EventTraceMap.sectorTimeShares([], 6000, { startIndex: 0, endIndex: 0 }), null)
+})

@@ -439,11 +439,135 @@
     return maxDistance - minDistance > 0 ? span : null
   }
 
+  // Rounds shares to whole percent so they sum to 100, giving the spare percent to the largest remainders.
+  function wholePercentShares(values, total) {
+    const exact = Object.entries(values).map(([key, value]) => [key, value / total * 100])
+    const rounded = Object.fromEntries(exact.map(([key, value]) => [key, Math.floor(value)]))
+    let remainder = 100 - Object.values(rounded).reduce((sum, value) => sum + value, 0)
+    const byRemainder = [...exact].sort(([, left], [, right]) => (right - Math.floor(right)) - (left - Math.floor(left)))
+    for (const [key] of byRemainder) {
+      if (remainder <= 0) break
+      rounded[key] += 1
+      remainder -= 1
+    }
+    return rounded
+  }
+
+  /**
+   * The sector boundaries of a span: the point nearest each third of the span's distance, which is where the sector
+   * ticks S1, S2 and S3 cross the trace. Distances are measured from the span's least distance. Returns null when the
+   * span has no positive distance range.
+   * @param {object[]} points - trace points with distanceM
+   * @param {{startIndex: number, endIndex: number}|null} span - see sectorSpan
+   * @returns {{ticks: number[], minDistanceM: number, maxDistanceM: number}|null} ticks holds three point indexes
+   */
+  function sectorBoundaries(points, span) {
+    if (!Array.isArray(points) || !span) return null
+    let minDistanceM = Infinity
+    let maxDistanceM = -Infinity
+    for (let index = span.startIndex; index <= span.endIndex; index += 1) {
+      const distance = finiteNumber(points[index]?.distanceM)
+      if (distance === null) continue
+      minDistanceM = Math.min(minDistanceM, distance)
+      maxDistanceM = Math.max(maxDistanceM, distance)
+    }
+    const rangeM = maxDistanceM - minDistanceM
+    if (!(rangeM > 0)) return null
+    const ticks = [1, 2, 3].map(sector => {
+      const target = minDistanceM + rangeM * sector / 3
+      let nearestIndex = null
+      let nearestDelta = Infinity
+      for (let index = span.startIndex; index <= span.endIndex; index += 1) {
+        const distance = finiteNumber(points[index]?.distanceM)
+        if (distance === null) continue
+        const delta = Math.abs(distance - target)
+        if (delta < nearestDelta) {
+          nearestIndex = index
+          nearestDelta = delta
+        }
+      }
+      return nearestIndex
+    })
+    return { ticks, minDistanceM, maxDistanceM }
+  }
+
+  /**
+   * The three sectors of a span, as inclusive index ranges that share their boundary points so the polylines connect.
+   * Sector 1 runs from the span start to tick S1, sector 2 from S1 to S2, and sector 3 from S2 to S3. Distances are
+   * relative to the span's least distance, the same origin as the ticks.
+   * @param {object[]} points - trace points with distanceM
+   * @param {{startIndex: number, endIndex: number}|null} span - see sectorSpan
+   * @returns {{startIndex: number, endIndex: number, startDistanceM: number, endDistanceM: number}[]} empty when no span
+   */
+  function sectorRanges(points, span) {
+    const boundaries = sectorBoundaries(points, span)
+    if (!boundaries) return []
+    const { ticks, minDistanceM } = boundaries
+    const starts = [span.startIndex, ticks[0], ticks[1]]
+    const distanceOf = index => (finiteNumber(points[index]?.distanceM) ?? minDistanceM) - minDistanceM
+    return ticks.map((endIndex, sector) => ({
+      startIndex: starts[sector],
+      endIndex,
+      startDistanceM: sector === 0 ? 0 : distanceOf(starts[sector]),
+      endDistanceM: distanceOf(endIndex)
+    }))
+  }
+
+  /**
+   * Time-weighted pedal and slip shares for one sector, owned the same way as the whole lap (see slipTimeShare and the
+   * pedal statistics). A point owns the time until the next point. A sector owns the intervals of its points before its
+   * last point; that last point is the first point of the next sector, so every interval is owned once. The first
+   * sector (range starting at index 0) also owns the time from lap zero, and the final sector owns its last point's
+   * time until the lap ends. The three sectors together therefore give the whole lap's time.
+   * @param {object[]} points - trace points with elapsedMs, throttle, brake and combinedSlip values
+   * @param {number|null} lapTimeMs - lap time
+   * @param {{startIndex: number, endIndex: number}} range - the sector's inclusive index range
+   * @param {object} [options]
+   * @param {boolean} [options.final=false] - true for the sector that ends the lap
+   * @returns {{throttle: number, brake: number, coast: number, slip: number|null}|null} whole percent, null without time
+   */
+  function sectorTimeShares(points, lapTimeMs, range, { final = false } = {}) {
+    if (!Array.isArray(points) || !range) return null
+    const totals = { throttle: 0, brake: 0, coast: 0 }
+    let slipMs = 0
+    let totalMs = 0
+    const own = (point, durationMs) => {
+      if (!(durationMs > 0)) return
+      totals[pedalState(point)] += durationMs
+      totalMs += durationMs
+      if (isSlipPoint(point)) slipMs += durationMs
+    }
+    const { startIndex, endIndex } = range
+    if (startIndex === 0) own(points[0], finiteNumber(points[0]?.elapsedMs))
+    for (let index = startIndex; index < endIndex; index += 1) {
+      const elapsed = finiteNumber(points[index]?.elapsedMs)
+      const next = finiteNumber(points[index + 1]?.elapsedMs)
+      if (elapsed === null || next === null) continue
+      own(points[index], next - elapsed)
+    }
+    if (final) {
+      const lap = finiteNumber(lapTimeMs)
+      const last = finiteNumber(points[endIndex]?.elapsedMs)
+      if (lap !== null && last !== null) own(points[endIndex], lap - last)
+    }
+    if (!(totalMs > 0)) return null
+    const pedals = wholePercentShares(totals, totalMs)
+    return {
+      throttle: pedals.throttle,
+      brake: pedals.brake,
+      coast: pedals.coast,
+      slip: hasExtendedTelemetry(points) ? Math.round(slipMs / totalMs * 100) : null
+    }
+  }
+
   return {
     TRACE_LAYERS,
     visibleLayers,
     nextLayerSelection,
     sectorSpan,
+    sectorBoundaries,
+    sectorRanges,
+    sectorTimeShares,
     slipTimeShare,
     pedalState,
     isSlipPoint,

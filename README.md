@@ -59,7 +59,7 @@ learned optimal moment. [More about Shift Light](docs/shift-light.md)
 ### Events
 
 Create your own event library, record runs, and review every lap with sector
-times, a best hypothetical time, and a top-down trace colored by throttle,
+times, a theoretical best, and a top-down trace colored by throttle,
 brake, and coasting. While an event is recording, Delta compares your current
 lap with its fastest saved run. [More about Events](docs/events.md)
 

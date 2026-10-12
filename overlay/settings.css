@@ -1459,6 +1459,142 @@ h1 {
   cursor: not-allowed;
 }
 
+/* Sector focus controls above the map: FULL LAP (or FULL RUN), SECTOR 1 to SECTOR 3, and a quiet CLEAR FOCUS. The
+   pressed sector takes the lime accent. */
+.events-lap-detail__tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 11px 0;
+}
+
+.events-lap-detail__sector-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.events-lap-detail__sector-button,
+.events-lap-detail__clear-focus {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--type-label);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.events-lap-detail__sector-button:disabled {
+  border-color: var(--line-subtle);
+  color: var(--text-faint);
+  background: var(--surface-deep);
+  cursor: not-allowed;
+}
+
+.events-lap-detail__sector-button[aria-pressed="true"] {
+  border-color: var(--accent-edge);
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+
+.events-lap-detail__sector-button:not(:disabled):hover,
+.events-lap-detail__sector-button:not(:disabled):focus-visible,
+.events-lap-detail__clear-focus:hover,
+.events-lap-detail__clear-focus:focus-visible {
+  border-color: var(--accent-edge);
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+
+.events-lap-detail__clear-focus {
+  border-color: var(--line-subtle);
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.events-lap-detail__clear-focus[hidden],
+.events-lap-detail__fit-sector[hidden] {
+  display: none;
+}
+
+/* Sector focus dims the whole lap: the track outline and pedal lines fade, and the slip band is hidden because the
+   focused sector draws its own. The focus group above them keeps full strength. */
+.events-lap-detail__outline-group.events-lap-detail__layer--dimmed { opacity: 0.16; }
+.events-lap-detail__pedal-group.events-lap-detail__layer--dimmed { opacity: 0.12; }
+.events-lap-detail__slip-group.events-lap-detail__layer--hidden { display: none; }
+
+/* FIT SECTOR sits over the top-left corner, opposite the zoom group. The caption sits bottom-left. Both use the HUD
+   roles, because the route canvas stays dark in both themes. */
+.events-lap-detail__fit-sector {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+  min-width: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--hud-divider);
+  border-radius: 0;
+  color: var(--hud-text);
+  background: var(--hud-shade);
+  font: inherit;
+  font-size: var(--type-label);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+
+.events-lap-detail__fit-sector:hover,
+.events-lap-detail__fit-sector:focus-visible {
+  border-color: var(--accent-edge);
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+
+.events-lap-detail__distance {
+  position: absolute;
+  bottom: 10px;
+  left: 12px;
+  z-index: 1;
+  padding: 2px 6px;
+  background: var(--hud-shade);
+  color: var(--hud-text);
+  font-size: var(--type-label);
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
+
+/* The legend's first line names what its shares cover: the focused sector, or the whole lap or run. */
+.events-lap-detail__legend-label {
+  flex-basis: 100%;
+  color: var(--text-muted);
+  font-size: var(--type-label);
+  letter-spacing: 0.14em;
+}
+
+/* TRACE UNAVAILABLE replaces the map for a lap saved before traces were recorded. */
+.events-lap-detail__unavailable {
+  padding: 30px 18px;
+  color: var(--text-muted);
+}
+
+.events-lap-detail__unavailable h3 {
+  margin: 0;
+  color: var(--text-soft);
+  font: 500 23px/1.2 var(--font-readout);
+  letter-spacing: 0.02em;
+}
+
+.events-lap-detail__unavailable p {
+  margin: 9px 0 0;
+  font-size: var(--type-body);
+  line-height: 1.4;
+}
+
 .events-lap-detail__surface {
   fill: var(--map-canvas);
 }
@@ -1904,6 +2040,87 @@ h1 {
 .events-run-table__time[data-tone="second"] { color: var(--accent-ink); }
 .events-run-table__time.is-missing { color: var(--text-faint); }
 
+/* Sector cells are buttons that keep the tone colors of their time. */
+.events-run-table__cell {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.events-run-table__cell:disabled {
+  cursor: default;
+}
+
+.events-run-table__cell:not(:disabled):hover .events-run-table__time,
+.events-run-table__cell:not(:disabled):focus-visible .events-run-table__time {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* The focused sector of the expanded lap: a crisp purple ring and a light purple fill. */
+.events-run-table td.is-sector-focus {
+  background: color-mix(in srgb, var(--best) 14%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--best);
+}
+
+.events-run-view__feedback {
+  margin: 14px 0 0;
+  color: var(--accent-ink);
+  font-size: 13px;
+}
+
+.events-run-source-context {
+  margin: 0 0 14px;
+  color: var(--best);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+@media (max-width: 580px) {
+  .events-theory__top {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 15px;
+  }
+
+  .events-theory__time {
+    font-size: 34px;
+  }
+
+  .events-theory__sectors {
+    padding: 0 15px;
+  }
+
+  .events-theory__row {
+    grid-template-columns: 27px 74px minmax(0, 1fr);
+    gap: 10px;
+    padding: 11px 0;
+  }
+
+  .events-theory__sector-time {
+    font-size: 24px;
+  }
+
+  .events-theory__action {
+    grid-column: 3;
+    justify-self: end;
+    font-size: 12px;
+  }
+
+  .events-theory__shared-car {
+    padding: 11px 0;
+  }
+
+  .events-theory__footer {
+    flex-direction: column;
+    gap: 5px;
+    padding: 11px 15px;
+  }
+}
+
 .events-detail-view__actions {
   margin-left: auto;
   display: flex;
@@ -1942,32 +2159,208 @@ h1 {
   margin: 24px 0 16px;
 }
 
-.events-detail-view__absolute-best {
+/* THEORETICAL BEST: the Event page and the run page share this card. Its roles follow the design book. */
+.events-theory {
+  margin: 16px 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.events-run-view__theory {
+  margin: 0;
+}
+
+.events-theory__top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 16px 0;
-  padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--best) 44%, transparent);
-  background: color-mix(in srgb, var(--best) 7%, transparent);
+  gap: 18px;
+  padding: 18px 20px;
 }
 
-.events-detail-view__absolute-best-label {
+.events-theory__copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.events-theory__title {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-readout);
+  font-size: var(--type-panel-title);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.events-theory__description {
+  margin: 5px 0 0;
   color: var(--text-muted);
-  font-size: var(--type-label);
-  font-weight: 400;
-  letter-spacing: 0.14em;
+  font-size: 13px;
 }
 
-.events-detail-view__absolute-best-value {
+.events-theory__time {
   color: var(--best);
   font-family: var(--font-readout);
-  font-size: 24px;
+  font-size: 36px;
   font-weight: 600;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
   white-space: nowrap;
+}
+
+/* Compound selector: the base .settings-button rule comes later in this stylesheet. */
+.settings-button.events-theory__toggle {
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.events-theory__sectors {
+  padding: 0 20px;
+}
+
+.events-theory__sectors[hidden] {
+  display: none;
+}
+
+.events-theory__shared-car {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+  padding: 11px 0 13px;
+  border-top: 1px solid var(--line-subtle);
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+/* The flex display above would otherwise show the line for mixed cars. */
+.events-theory__shared-car[hidden] {
+  display: none;
+}
+
+.events-theory__shared-car-label {
+  color: var(--text-muted);
+  font-size: var(--type-label);
+  letter-spacing: 0.1em;
+}
+
+.events-theory__row {
+  display: grid;
+  grid-template-columns: 35px 110px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--line-subtle);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.events-theory__row:not(:disabled):hover {
+  background: var(--surface-hover);
+}
+
+.events-theory__row:disabled {
+  cursor: default;
+}
+
+.events-theory__sector {
+  color: var(--text-soft);
+  font-family: var(--font-readout);
+  font-size: 23px;
+  font-weight: 500;
+}
+
+.events-theory__sector-time {
+  color: var(--best);
+  font-family: var(--font-readout);
+  font-size: 26px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.events-theory__sector-time small {
+  margin-left: 5px;
+  color: var(--text-muted);
+  font: 400 11px var(--font-ui);
+}
+
+.events-theory__source {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.events-theory__car {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.events-theory__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: 600 var(--type-body)/1.2 var(--font-ui);
+  letter-spacing: 0;
+  white-space: nowrap;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.events-theory__row:not(:disabled):hover .events-theory__action,
+.events-theory__row:not(:disabled):focus-visible .events-theory__action {
+  background: var(--accent);
+  border-color: var(--accent-edge);
+  color: var(--text-on-accent);
+}
+
+.events-theory__row:disabled .events-theory__sector {
+  color: var(--text-faint);
+}
+
+.events-theory__row:disabled .events-theory__sector-time {
+  color: var(--text-faint);
+}
+
+.events-theory__row:disabled .events-theory__action {
+  background: var(--surface-deep);
+  border-color: var(--line-subtle);
+  color: var(--text-faint);
+}
+
+.events-theory__footer {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 11px 20px;
+  border-top: 1px solid var(--line-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.events-theory__count {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.events-theory__count[hidden] {
+  display: none;
 }
 
 .events-detail-view__title {
@@ -2222,7 +2615,6 @@ h1 {
 
   .events-detail-view__summary,
   .events-detail-view__notes,
-  .events-detail-view__absolute-best,
   .events-run-view__meta,
   .events-run-view__metric {
     width: 100%;
@@ -2250,6 +2642,23 @@ h1 {
   .events-lap-detail__inspector {
     contain: none;
     max-height: 320px;
+  }
+}
+
+/* On a narrow map the sector buttons share the row evenly, and CLEAR FOCUS wraps below them. */
+@media (max-width: 580px) {
+  .events-lap-detail__tools {
+    flex-wrap: wrap;
+  }
+
+  .events-lap-detail__sector-controls {
+    width: 100%;
+  }
+
+  .events-lap-detail__sector-button {
+    flex: 1 1 0;
+    padding: 6px 5px;
+    font-size: 10px;
   }
 }
 

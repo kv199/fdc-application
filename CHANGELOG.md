@@ -75,6 +75,13 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Driver Analysis**: the drive map shows the `S1`, `S2`, `S3` sector marks
   like the Events lap map: thirds of the first completed lap in a circuit, or
   of the whole drive in a finished sprint.
+- **Events**: the Event page shows **THEORETICAL BEST** instead of Absolute
+  Best: the sum of the Event's best three sectors, with the run, lap, and car
+  each sector came from. **VIEW SECTOR** opens that lap with the sector
+  highlighted on the map. On a lap map, **SECTOR 1–3** highlights one sector,
+  shows its distance and its throttle, brake, coast, and slip shares, and
+  **FIT SECTOR** zooms to it. Sector times in the lap table open the same
+  view. The run page shows its own **THEORETICAL BEST** time.
 
 ### Improved
 

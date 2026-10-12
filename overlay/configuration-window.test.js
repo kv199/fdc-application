@@ -140,7 +140,8 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsHtml, /id="events-detail-title"/)
   assert.match(settingsHtml, /id="events-detail-summary"[^>]+aria-label="Event details"/)
   assert.match(settingsHtml, /id="events-detail-notes"[^>]+hidden/)
-  assert.match(settingsHtml, /id="events-detail-absolute-best"/)
+  assert.doesNotMatch(settingsHtml, /events-detail-absolute-best|ABSOLUTE BEST/)
+  assert.match(settingsHtml, /id="events-theory-time" class="events-theory__time"/)
   assert.doesNotMatch(settingsHtml, /id="events-detail-hint"|id="events-detail-card"|id="events-detail-metadata"/)
   assert.doesNotMatch(settingsHtml, /id="events-detail-archive"/)
   assert.match(settingsHtml, /id="events-detail-delete"/)
@@ -148,7 +149,8 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsHtml, /id="events-run-back"[^>]*class="detail-back"[^>]*>← EVENT<\/button>/)
   assert.match(settingsHtml, /id="events-run-title"/)
   assert.match(settingsHtml, /id="events-run-summary"[^>]+aria-label="Event details"/)
-  assert.match(settingsHtml, /id="events-run-bht"/)
+  assert.match(settingsHtml, /id="events-run-theory-time" class="events-theory__time"/)
+  assert.doesNotMatch(settingsHtml, /events-run-bht|BEST HYPOTHETICAL TIME/)
   assert.match(settingsHtml, /id="events-run-lap-sort"[^>]+aria-sort="descending"/)
   assert.match(settingsHtml, /id="events-run-laps"/)
   assert.match(settingsJs, /call\('create_event', payload\)/)
@@ -173,12 +175,13 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsJs, /eventsDetailNotes\.hidden = !event\.notes/)
   assert.doesNotMatch(settingsJs, /function renderEventDetail\([^]*renderEventCard\(event, true\)/)
   assert.match(settingsJs, /id\.textContent = String\(event\.id\)/)
-  assert.match(settingsJs, /call\('load_event_absolute_best', \{ eventId: nativeEventId \}\)/)
-  assert.match(settingsJs, /eventsDetailAbsoluteBest\.textContent = formatRunTime\(currentEventAbsoluteBestMs\)/)
+  assert.doesNotMatch(settingsJs, /load_event_absolute_best|eventsDetailAbsoluteBest|currentEventAbsoluteBestMs|event_recorder_reference/)
+  assert.match(settingsJs, /call\('load_event_theoretical_best', \{ eventId: nativeEventId \}\)/)
+  assert.match(settingsJs, /globalScope\.EventTheoreticalBest\.normalizeSectors\(payload\)/)
   assert.doesNotMatch(settingsJs, /events-card__image/)
   assert.doesNotMatch(settingsJs, /copyEventId|events-card__copy/)
   assert.match(settingsJs, /eventsView === 'detail'/)
-  assert.match(settingsJs, /function openEventRun\(id\)/)
+  assert.match(settingsJs, /async function openEventRun\(id, source = null\)/)
   assert.match(settingsJs, /function closeEventRun\(\)/)
   assert.match(settingsJs, /function runBestHypotheticalTimeMs\(run\)/)
   assert.match(settingsJs, /function savedRunTimeLabel\(run\)/)
@@ -206,7 +209,7 @@ test('Events keeps the existing navigation and exposes the create/detail flow', 
   assert.match(settingsCss, /\.events-detail-view__badge--class\[data-event-class="S1"\][\s\S]*#c084fc/)
   assert.match(settingsStyles, /\.events-run-table__time\[data-tone="best"\]\s*\{[^}]*var\(--best\)/)
   assert.match(settingsStyles, /\.events-run-table__time\[data-tone="second"\]\s*\{[^}]*var\(--accent-ink\)/)
-  assert.match(settingsStyles, /\.events-detail-view__absolute-best-value\s*\{[^}]*var\(--best\)/)
+  assert.match(settingsStyles, /\.events-theory__time\s*\{[^}]*var\(--best\)/)
 })
 
 test('Event recorder uses the compact idle control and local run timestamps', () => {
@@ -274,7 +277,8 @@ test('Event lap rows expose trace details and time-weighted pedal statistics', (
   assert.match(settingsJs, /events-lap-detail__trace events-lap-detail__trace--\$\{pedal\}/)
   assert.match(settingsJs, /traceMapLayerSelection/)
   assert.match(settingsJs, /globalThis\.EventTraceMap\?\.nextLayerSelection/)
-  assert.match(settingsJs, /detail\.append\(renderTraceMap\(lap\.tracePoints \|\| \[\], lap\.timeMs\)\)/)
+  assert.match(settingsJs, /const map = renderTraceMap\(lap\.tracePoints \|\| \[\], lap\.timeMs, \{\s*sectorFocus: true,/)
+  assert.match(settingsJs, /detail\.append\(map\)/)
   assert.doesNotMatch(settingsJs, /function renderTraceStats/)
   assert.match(settingsJs, /globalThis\.EventTraceMap\?\.pedalState/)
   assert.match(settingsJs, /globalThis\.EventTraceMap\?\.groupRuns/)
@@ -1001,3 +1005,182 @@ test('Event run list marks the live run and the approximate sprint result', () =
   assert.match(settingsJs, /async function refreshOpenEventRun\(id\) \{/)
   assert.match(settingsJs, /call\('load_event_run', \{ runId: nativeRunId \}\)/)
 })
+
+test('Events lap maps offer sector focus and Driver Analysis drive maps do not', () => {
+  // Sector focus is opt-in: the page passes sectorFocus for Events lap maps only.
+  assert.match(settingsJs, /const sectorFocus = options\.sectorFocus === true/)
+  const driveMap = settingsJs.slice(settingsJs.indexOf('async function loadDriverAnalysisDriveMap'), settingsJs.indexOf('async function loadDriverAnalysisHistory'))
+  assert.match(driveMap, /return renderTraceMap\(points, Number\(drive\?\.durationMs\)/)
+  assert.doesNotMatch(driveMap, /sectorFocus|fullLabel|onSectorChange|initialSector/)
+  // Public contract for the Events page: options in, focusSector and getSectorFocus out.
+  assert.match(settingsJs, /options\.onSectorChange\?\.\(next\)/)
+  assert.match(settingsJs, /options\.initialSector \?\? null/)
+  assert.match(settingsJs, /const fullLabel = options\.fullLabel \|\| 'FULL LAP'/)
+  assert.match(settingsJs, /map\.focusSector = sector => focusSector\(sector\)/)
+  assert.match(settingsJs, /map\.getSectorFocus = \(\) => focusedSector/)
+  // The empty trace shows the legacy state in place of the old text when sector focus is on.
+  assert.match(settingsJs, /if \(sectorFocus\) \{\s*map\.append\(renderTraceUnavailable\(\)\)/)
+  assert.match(settingsJs, /'TRACE UNAVAILABLE'/)
+  assert.match(settingsJs, /'Sector times are saved\. This older lap has no recorded trace\.'/)
+  // Controls row, focus group, and the classes the dimming and visibility rules use.
+  for (const className of [
+    'events-lap-detail__tools',
+    'events-lap-detail__sector-controls',
+    'events-lap-detail__sector-button',
+    'events-lap-detail__clear-focus',
+    'events-lap-detail__fit-sector',
+    'events-lap-detail__distance',
+    'events-lap-detail__legend-label',
+    'events-lap-detail__unavailable',
+    'events-lap-detail__focus',
+    'events-lap-detail__layer--dimmed',
+    'events-lap-detail__layer--hidden'
+  ]) assert.match(settingsJs, new RegExp(className))
+  assert.match(settingsJs, /'FULL RUN' \? 'RUN' : 'LAP'/)
+  assert.match(settingsJs, /legendLabel\.textContent = `SECTOR \$\{focusedSector\} INPUT TIME`/)
+  assert.match(settingsJs, /legendLabel\.textContent = `\$\{scopeWord\} INPUT TIME`/)
+  assert.match(settingsJs, /focused\.outline, \.\.\.\(focused\.slip \? \[focused\.slip\] : \[\]\), \.\.\.focused\.pedals/)
+  assert.match(settingsJs, /\['throttle', 'brake', 'coast', 'slip'\]\.map\(key => \[/)
+  // Scoped shares come from the pure helper; hover picks only inside the focused sector.
+  assert.match(settingsJs, /globalThis\.EventTraceMap\?\.sectorTimeShares\(points, lapTimeMs, range, \{ final: focusedSector === 3 \}\)/)
+  assert.match(settingsJs, /const hoverIndex = \(x, y, reach\) => \{/)
+  assert.match(settingsJs, /\?\? hoverIndex\(x, y, hoverReach\(\)\) \?\? null/)
+  // FIT SECTOR fits the sector's bounds with 24 px padding; SHOW FULL ROUTE resets. Other view changes clear the state.
+  assert.match(settingsJs, /sectorFitButton\.textContent = sectorFitted \? 'SHOW FULL ROUTE' : 'FIT SECTOR'/)
+  assert.match(settingsJs, /fitToBounds\(boundsOf\(rangeOf\(focusedSector\)\), 24, true\)/)
+  assert.match(settingsJs, /if \(sectorFitted\) map\.resetZoom\(\)/)
+  assert.match(settingsJs, /const setView = \(next, fitted = false\) => \{/)
+  assert.match(settingsJs, /map\.zoomToBounds = \(bounds, paddingPx = 24\) => fitToBounds\(bounds, paddingPx, false\)/)
+  assert.match(settingsJs, /zoom\.fitBoundsPx\(base, bounds, paddingPx, pixelsPerBaseUnit, zoom\.MAX_ZOOM\)/)
+  // Sector ticks and focus share one boundary search.
+  assert.match(settingsJs, /const boundaries = globalThis\.EventTraceMap\?\.sectorBoundaries\(points, span\)/)
+  // Dimming and visibility rules for the whole lap under a focused sector.
+  assert.match(settingsStyles, /\.events-lap-detail__outline-group\.events-lap-detail__layer--dimmed \{ opacity: 0\.16; \}/)
+  assert.match(settingsStyles, /\.events-lap-detail__pedal-group\.events-lap-detail__layer--dimmed \{ opacity: 0\.12; \}/)
+  assert.match(settingsStyles, /\.events-lap-detail__slip-group\.events-lap-detail__layer--hidden \{ display: none; \}/)
+  // Pressed sector takes the lime accent, as in the design book.
+  assert.match(settingsStyles, /\.events-lap-detail__sector-button\[aria-pressed="true"\] \{\s*border-color: var\(--accent-edge\);\s*color: var\(--text-on-accent\);\s*background: var\(--accent\);/)
+  assert.match(settingsStyles, /\.events-lap-detail__clear-focus\[hidden\],\s*\.events-lap-detail__fit-sector\[hidden\] \{\s*display: none;/)
+  // The caption and FIT SECTOR use the HUD roles, so they read on the dark route canvas in both themes.
+  assert.match(settingsStyles, /\.events-lap-detail__distance \{[^}]*color: var\(--hud-text\);/)
+  assert.match(settingsStyles, /\.events-lap-detail__fit-sector \{[^}]*top: 10px;[^}]*left: 10px;/)
+  assert.match(settingsStyles, /\.events-lap-detail__unavailable h3 \{/)
+})
+
+test('Event page shows Theoretical Best with three sector sources in place of Absolute Best', () => {
+  const section = settingsHtml.slice(settingsHtml.indexOf('<section class="events-theory"'), settingsHtml.indexOf('<section class="event-recorder"'))
+  assert.match(section, /<h3 id="events-theory-title" class="events-theory__title">THEORETICAL BEST<\/h3>/)
+  assert.match(section, /<p id="events-theory-description" class="events-theory__description">Best sectors across saved runs in this event\.<\/p>/)
+  assert.match(section, /<output id="events-theory-time" class="events-theory__time" aria-live="polite">—<\/output>/)
+  assert.match(section, /id="events-theory-toggle" class="settings-button events-theory__toggle" type="button" aria-expanded="true" aria-controls="events-theory-sectors">HIDE SECTORS<\/button>/)
+  assert.match(section, /<div id="events-theory-sectors" class="events-theory__sectors">/)
+  assert.match(section, /id="events-theory-shared-car" class="events-theory__shared-car" hidden>/)
+  assert.match(section, /<span class="events-theory__shared-car-label">ALL SECTORS<\/span>/)
+  assert.match(section, /id="events-theory-rows" class="events-theory__rows"/)
+  assert.match(section, /id="events-theory-note">Complete all three sectors to calculate theoretical best\.<\/span>/)
+  assert.match(section, /id="events-theory-count" class="events-theory__count" hidden>/)
+  // The block takes the place Absolute Best held: after the notes, before the recorder.
+  assert.ok(settingsHtml.indexOf('id="events-detail-notes"') < settingsHtml.indexOf('<section class="events-theory"'))
+  assert.match(settingsHtml, /<script src="event-theoretical-best\.js"><\/script>\s*\n\s*<script src="settings\.js"><\/script>/)
+
+  assert.match(settingsJs, /function renderEventTheoryRow\(sector, shared\)/)
+  assert.match(settingsJs, /row\.className = 'events-theory__row'/)
+  assert.match(settingsJs, /row\.disabled = !timed/)
+  assert.match(settingsJs, /source\.textContent = 'No eligible sector saved'/)
+  assert.match(settingsJs, /action\.textContent = timed \? 'VIEW SECTOR' : 'UNAVAILABLE'/)
+  assert.match(settingsJs, /if \(!shared\) \{[\s\S]*?car\.className = 'events-theory__car'/)
+  assert.match(settingsJs, /eventsTheorySharedCar\.hidden = !shared/)
+  assert.match(settingsJs, /eventsTheoryToggle\.setAttribute\('aria-expanded', String\(eventTheoryOpen\)\)/)
+  assert.match(settingsJs, /eventsTheoryToggle\.textContent = eventTheoryOpen \? 'HIDE SECTORS' : 'SHOW SECTORS'/)
+  assert.match(settingsJs, /eventsTheorySectors\.hidden = !eventTheoryOpen/)
+  assert.match(settingsJs, /eventsTheoryCount\.textContent = `3 SECTORS · \$\{runCount\} \$\{runCount === 1 \? 'RUN' : 'RUNS'\}`/)
+  assert.match(settingsJs, /eventsTheoryNote\.textContent = complete \? EventTheory\.ESTIMATE_NOTE : EventTheory\.INCOMPLETE_NOTE/)
+  assert.match(settingsJs, /function theorySectorCarName\(sector\)/)
+  assert.match(settingsJs, /return Number\.isFinite\(sector\.carOrdinal\) \? `Car \$\{Math\.round\(sector\.carOrdinal\)\}` : '—'/)
+  assert.match(settingsJs, /row\.addEventListener\('click', \(\) => void openEventSource\(sector\)\)/)
+  assert.match(settingsJs, /return openEventRun\(sector\.runId, \{ lapNumber: sector\.lapNumber, sector: sector\.sector \}\)/)
+  // Every saved lap refreshes the theory, guarded against out-of-order responses.
+  assert.match(settingsJs, /event_recorder_run_saved[\s\S]{0,500}void loadEventTheoreticalBest\(\)/)
+  assert.match(settingsJs, /const sequence = \+\+eventTheoryRequestSequence/)
+  assert.match(settingsJs, /if \(sequence !== eventTheoryRequestSequence \|\| eventKey\(currentEventId\) !== key\) return/)
+  assert.match(settingsJs, /void loadEventTheoreticalBest\(key\)/)
+  assert.match(settingsJs, /eventsTheoryToggle\?\.addEventListener\('click'/)
+  assert.match(settingsStyles, /\.events-theory__row:not\(:disabled\):hover \.events-theory__action,/)
+  assert.match(settingsStyles, /\.events-theory__row:disabled \.events-theory__action \{\s*background: var\(--surface-deep\);/)
+})
+
+test('Run page shows only the Theoretical Best time with its estimate footer', () => {
+  const runSection = settingsHtml.slice(settingsHtml.indexOf('<section class="events-theory events-run-view__theory"'), settingsHtml.indexOf('<div class="events-run-view__metric events-run-view__metric--run">'))
+  assert.match(runSection, /<h3 id="events-run-theory-title" class="events-theory__title">THEORETICAL BEST<\/h3>/)
+  assert.match(runSection, /<p id="events-run-theory-description" class="events-theory__description">Best sectors from laps in this run\.<\/p>/)
+  assert.match(runSection, /id="events-run-theory-time" class="events-theory__time"/)
+  assert.match(runSection, /id="events-run-theory-count" class="events-theory__count" hidden>3 SECTORS<\/span>/)
+  // No sources, rows, or toggle on the run page.
+  assert.doesNotMatch(runSection, /breakdown|events-theory__toggle|events-theory__rows|events-theory__row|sector-list/)
+  assert.doesNotMatch(settingsHtml, /BEST HYPOTHETICAL TIME/)
+  assert.match(settingsJs, /function renderEventRunTheory\(run\)/)
+  assert.match(settingsJs, /const total = runBestHypotheticalTimeMs\(run\)/)
+  assert.match(settingsJs, /eventsRunTheoryDescription\.textContent = EventTheory\.runDescription\(run\.runType\)/)
+  assert.match(settingsJs, /if \(eventsRunTheoryNote\) eventsRunTheoryNote\.textContent = complete \? EventTheory\.ESTIMATE_NOTE : EventTheory\.INCOMPLETE_NOTE/)
+  assert.match(settingsJs, /renderEventRunTheory\(run\)/)
+})
+
+test('Run lap table: sector cells are buttons, focus shows an outline, and a source opens its lap and sector', () => {
+  const detailMarkup = settingsHtml.slice(settingsHtml.indexOf('<section class="events-run-table-section"'), settingsHtml.indexOf('<table class="events-run-table">', settingsHtml.indexOf('<section class="events-run-table-section"')))
+  assert.match(detailMarkup, /<p id="events-run-source-context" class="events-run-source-context" hidden><\/p>/)
+  assert.match(settingsHtml, /<p id="events-run-feedback" class="events-run-view__feedback" role="status" aria-live="polite" hidden><\/p>/)
+  // Sector cells are buttons. A click stops at the cell so it does not also toggle the lap row.
+  assert.match(settingsJs, /button\.className = 'events-run-table__cell'/)
+  assert.match(settingsJs, /button\.disabled = !Number\.isFinite\(sectorTimeMs\)/)
+  assert.match(settingsJs, /event\.stopPropagation\(\)\s*\n\s*selectEventRunSector\(lapNumberValue, sectorNumber\)/)
+  assert.match(settingsJs, /if \(event\.target !== row \|\| \(event\.key !== 'Enter' && event\.key !== ' '\)\) return/)
+  assert.match(settingsJs, /cell\.classList\.toggle\('is-sector-focus', expanded && expandedEventRunSector === sectorNumber\)/)
+  // The expanded lap's map follows the sector contract and reports its own focus changes back to the table.
+  assert.match(settingsJs, /onSectorChange: sector => setEventRunSectorFocus\(lapNumberValue, sector\)/)
+  assert.match(settingsJs, /fullLabel: run\.runType === 'sprint' \? 'FULL RUN' : 'FULL LAP'/)
+  assert.match(settingsJs, /initialSector: expandedEventRunSector/)
+  assert.match(settingsJs, /eventRunLapMap = map/)
+  // VIEW SECTOR: opens the run at its lap and sector, with a status line and the context line.
+  assert.match(settingsJs, /setEventRunFeedback\(source\s*\n?\s*\? globalScope\.EventTheoreticalBest\.openedStatus/)
+  assert.match(settingsJs, /if \(source\) focusEventRunSector\(sourceLap, source\.sector\)/)
+  assert.match(settingsJs, /eventRunSource = sourceLap !== null \? \{ runId: key, lapNumber: sourceLap \} : null/)
+  assert.match(settingsJs, /EventTheoreticalBest\.sourceContext\(\{/)
+  assert.match(settingsJs, /eventsRunSourceContext\.hidden = !visible/)
+  // A cell selection or lap toggle is not opened from the Event, so it never shows the context line.
+  const selectCell = settingsJs.slice(settingsJs.indexOf('function selectEventRunSector('), settingsJs.indexOf('function setEventRunSectorFocus('))
+  assert.match(selectCell, /eventRunSource = null/)
+  // Focus survives a re-render, so keyboard users keep their place after a save or a selection.
+  assert.match(settingsJs, /const focusKey = eventsRunLaps\?\.contains\(active\) \? active\.dataset\.focusKey \|\| null : null/)
+  assert.match(settingsJs, /if \(focusKey\) eventsRunLaps\?\.querySelector\(`\[data-focus-key="\$\{focusKey\}"\]`\)\?\.focus\(\{ preventScroll: true \}\)/)
+  // The focused sector's cell is outlined by a class; the outline is a crisp ring in the book's purple.
+  assert.match(settingsCssFor('.events-run-table td.is-sector-focus'), /box-shadow: inset 0 0 0 1px var\(--best\)/)
+  assert.match(settingsCssFor('.events-run-table__cell:disabled'), /cursor: default/)
+  assert.match(settingsCssFor('.events-run-source-context'), /color: var\(--best\)/)
+})
+
+test('Run page Escape clears a focused sector, then collapses the lap, then returns to the Event', () => {
+  const start = settingsJs.indexOf("if (eventsView === 'run') {\n      event.preventDefault()")
+  assert.ok(start > 0, 'run Escape branch')
+  const branch = settingsJs.slice(start, settingsJs.indexOf("if (eventsView === 'detail')", start))
+  const sector = branch.indexOf('expandedEventRunSector !== null')
+  const lap = branch.indexOf('expandedEventRunLap !== null')
+  const back = branch.indexOf('closeEventRun()')
+  assert.ok(sector >= 0 && lap > sector && back > lap)
+  assert.match(branch, /eventRunLapMap\?\.focusSector\?\.\(null\)/)
+  assert.match(branch, /syncEventRunSectorFocus\(\)/)
+})
+
+test('Event theory and run page: the recorder no longer emits the removed Delta reference event', () => {
+  const overlaySource = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
+  assert.doesNotMatch(overlaySource, /event_recorder_reference/)
+  assert.match(overlaySource, /function installBetterDeltaReference\(candidate\)/)
+  assert.match(overlaySource, /deltaRuntime\.setReference\?\.\(normalized\)\n\s*syncDeltaVisibility\(\)/)
+  assert.doesNotMatch(settingsCss, /absolute-best/)
+})
+
+// The first rule for a selector in the source stylesheet, so the assertion reads one declaration block.
+function settingsCssFor(selector) {
+  const start = settingsStyles.indexOf(`${selector} {`)
+  if (start < 0) return ''
+  return settingsStyles.slice(start, settingsStyles.indexOf('}', start) + 1)
+}

@@ -3322,6 +3322,27 @@ struct EventBestSectors {
     sector_3_time_ms: Option<i64>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EventTheoreticalBest {
+    event_id: i64,
+    total_ms: Option<i64>,
+    sectors: Vec<EventTheoreticalBestSector>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EventTheoreticalBestSector {
+    sector: i32,
+    time_ms: Option<i64>,
+    run_id: Option<i64>,
+    lap_number: Option<i32>,
+    run_type: Option<String>,
+    car_ordinal: Option<i64>,
+    car_name: Option<String>,
+    has_trace: bool,
+}
+
 fn validate_event_choice(value: &str, field: &str, allowed: &[&str]) -> Result<(), String> {
     if allowed.contains(&value) {
         Ok(())
@@ -3998,14 +4019,7 @@ fn load_event_runs_from_connection(
 
 const EVENT_REFERENCE_DISTANCE_RATIO: f64 = 0.97;
 
-fn load_event_absolute_best_from_connection(
-    connection: &Connection,
-    event_id: i64,
-) -> Result<Option<EventAbsoluteBestReference>, String> {
-    if event_id <= 0 {
-        return Err("Event ID must be positive".to_string());
-    }
-
+fn ensure_event_is_active(connection: &Connection, event_id: i64) -> Result<(), String> {
     let event_exists: bool = connection
         .query_row(
             "SELECT EXISTS(
@@ -4019,6 +4033,17 @@ fn load_event_absolute_best_from_connection(
     if !event_exists {
         return Err(format!("Event {event_id} does not exist"));
     }
+    Ok(())
+}
+
+fn load_event_absolute_best_from_connection(
+    connection: &Connection,
+    event_id: i64,
+) -> Result<Option<EventAbsoluteBestReference>, String> {
+    if event_id <= 0 {
+        return Err("Event ID must be positive".to_string());
+    }
+    ensure_event_is_active(connection, event_id)?;
 
     // A circuit candidate is each saved completed lap. A sprint candidate is
     // its confirmed final result; MIN(lap_number) is used only to locate the
@@ -4108,62 +4133,174 @@ fn load_event_absolute_best_from_connection(
     }))
 }
 
+// The Event's eligible laps: completed circuit laps and confirmed sprint laps,
+// restricted to the longest traced distance when the Event has traces. Both the
+// Delta sector reference and the Event page's Theoretical Best read this one
+// source so they always agree. Bind the Event ID to ?1 and
+// EVENT_REFERENCE_DISTANCE_RATIO to ?2.
+const EVENT_ELIGIBLE_LAPS_CTE: &str = "spans AS (
+    SELECT points.run_id AS run_id,
+           points.lap_number AS lap_number,
+           MAX(points.distance) - MIN(points.distance) AS span
+    FROM event_run_lap_trace_points AS points
+    JOIN event_runs ON event_runs.id = points.run_id
+    WHERE event_runs.event_id = ?1
+    GROUP BY points.run_id, points.lap_number
+),
+eligible_laps AS (
+    SELECT event_runs.id AS run_id,
+           event_runs.started_at AS started_at,
+           event_runs.car_ordinal AS car_ordinal,
+           event_runs.run_type AS run_type,
+           event_run_laps.lap_number AS lap_number,
+           event_run_laps.sector_1_time_ms AS sector_1_time_ms,
+           event_run_laps.sector_2_time_ms AS sector_2_time_ms,
+           event_run_laps.sector_3_time_ms AS sector_3_time_ms,
+           spans.run_id IS NOT NULL AS has_trace
+    FROM event_runs
+    JOIN event_run_laps ON event_run_laps.run_id = event_runs.id
+    LEFT JOIN spans
+      ON spans.run_id = event_runs.id
+     AND spans.lap_number = event_run_laps.lap_number
+    WHERE event_runs.event_id = ?1
+      AND (
+        (event_runs.run_type = 'circuit'
+         AND event_runs.result = 'completed'
+         AND event_run_laps.lap_time_ms > 0)
+        OR
+        (event_runs.run_type = 'sprint'
+         AND event_runs.result = 'confirmed'
+         AND event_runs.result_time_ms > 0)
+      )
+      AND ((SELECT MAX(span) FROM spans) IS NULL
+           OR spans.span >= (SELECT MAX(span) FROM spans) * ?2)
+)";
+
 // Each sector is the quickest saved value across the Event's eligible laps,
-// independently of the others and regardless of car. Eligible laps follow the
-// same rules as the Absolute Best candidates: completed circuit laps and
-// confirmed sprint laps, restricted to the longest traced distance when the
-// Event has traces.
+// independently of the others and regardless of car. A tie goes to the
+// earliest source: earliest run start, then lowest run ID, then lowest lap.
+fn load_event_theoretical_best_sector_from_connection(
+    connection: &Connection,
+    event_id: i64,
+    sector: i32,
+    sector_column: &str,
+) -> Result<EventTheoreticalBestSector, String> {
+    let sql = format!(
+        "WITH {EVENT_ELIGIBLE_LAPS_CTE}
+         SELECT eligible_laps.run_id, eligible_laps.lap_number,
+                eligible_laps.run_type, eligible_laps.car_ordinal,
+                garage_cars.display_name,
+                eligible_laps.{sector_column}, eligible_laps.has_trace
+         FROM eligible_laps
+         LEFT JOIN garage_cars
+           ON garage_cars.game_id = 'fh6'
+          AND garage_cars.car_ordinal = eligible_laps.car_ordinal
+         WHERE eligible_laps.{sector_column} > 0
+         ORDER BY eligible_laps.{sector_column} ASC,
+                  eligible_laps.started_at ASC,
+                  eligible_laps.run_id ASC,
+                  eligible_laps.lap_number ASC
+         LIMIT 1"
+    );
+    let source = connection
+        .query_row(
+            &sql,
+            params![event_id, EVENT_REFERENCE_DISTANCE_RATIO],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i32>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, bool>(6)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| format!("unable to load Event theoretical best: {error}"))?;
+
+    Ok(match source {
+        Some((run_id, lap_number, run_type, car_ordinal, car_name, time_ms, has_trace)) => {
+            EventTheoreticalBestSector {
+                sector,
+                time_ms: Some(time_ms),
+                run_id: Some(run_id),
+                lap_number: Some(lap_number),
+                run_type: Some(run_type),
+                car_ordinal: Some(car_ordinal),
+                car_name,
+                has_trace,
+            }
+        }
+        None => EventTheoreticalBestSector {
+            sector,
+            time_ms: None,
+            run_id: None,
+            lap_number: None,
+            run_type: None,
+            car_ordinal: None,
+            car_name: None,
+            has_trace: false,
+        },
+    })
+}
+
+// Returns Sectors 1 to 3 in order. The Event must already be verified as active.
+fn load_event_theoretical_sectors_from_connection(
+    connection: &Connection,
+    event_id: i64,
+) -> Result<Vec<EventTheoreticalBestSector>, String> {
+    [
+        (1, "sector_1_time_ms"),
+        (2, "sector_2_time_ms"),
+        (3, "sector_3_time_ms"),
+    ]
+    .into_iter()
+    .map(|(sector, sector_column)| {
+        load_event_theoretical_best_sector_from_connection(
+            connection,
+            event_id,
+            sector,
+            sector_column,
+        )
+    })
+    .collect()
+}
+
+fn load_event_theoretical_best_from_connection(
+    connection: &Connection,
+    event_id: i64,
+) -> Result<EventTheoreticalBest, String> {
+    if event_id <= 0 {
+        return Err("Event ID must be positive".to_string());
+    }
+    ensure_event_is_active(connection, event_id)?;
+
+    let sectors = load_event_theoretical_sectors_from_connection(connection, event_id)?;
+    // The total exists only when every sector has a source.
+    let total_ms = sectors
+        .iter()
+        .map(|sector| sector.time_ms)
+        .sum::<Option<i64>>();
+    Ok(EventTheoreticalBest {
+        event_id,
+        total_ms,
+        sectors,
+    })
+}
+
 fn load_event_best_sectors_from_connection(
     connection: &Connection,
     event_id: i64,
 ) -> Result<EventBestSectors, String> {
-    connection
-        .query_row(
-            "WITH spans AS (
-                SELECT points.run_id AS run_id,
-                       points.lap_number AS lap_number,
-                       MAX(points.distance) - MIN(points.distance) AS span
-                FROM event_run_lap_trace_points AS points
-                JOIN event_runs ON event_runs.id = points.run_id
-                WHERE event_runs.event_id = ?1
-                GROUP BY points.run_id, points.lap_number
-            ),
-            eligible_laps AS (
-                SELECT event_run_laps.sector_1_time_ms AS sector_1_time_ms,
-                       event_run_laps.sector_2_time_ms AS sector_2_time_ms,
-                       event_run_laps.sector_3_time_ms AS sector_3_time_ms
-                FROM event_runs
-                JOIN event_run_laps ON event_run_laps.run_id = event_runs.id
-                LEFT JOIN spans
-                  ON spans.run_id = event_runs.id
-                 AND spans.lap_number = event_run_laps.lap_number
-                WHERE event_runs.event_id = ?1
-                  AND (
-                    (event_runs.run_type = 'circuit'
-                     AND event_runs.result = 'completed'
-                     AND event_run_laps.lap_time_ms > 0)
-                    OR
-                    (event_runs.run_type = 'sprint'
-                     AND event_runs.result = 'confirmed'
-                     AND event_runs.result_time_ms > 0)
-                  )
-                  AND ((SELECT MAX(span) FROM spans) IS NULL
-                       OR spans.span >= (SELECT MAX(span) FROM spans) * ?2)
-            )
-            SELECT MIN(CASE WHEN sector_1_time_ms > 0 THEN sector_1_time_ms END),
-                   MIN(CASE WHEN sector_2_time_ms > 0 THEN sector_2_time_ms END),
-                   MIN(CASE WHEN sector_3_time_ms > 0 THEN sector_3_time_ms END)
-            FROM eligible_laps",
-            params![event_id, EVENT_REFERENCE_DISTANCE_RATIO],
-            |row| {
-                Ok(EventBestSectors {
-                    sector_1_time_ms: row.get(0)?,
-                    sector_2_time_ms: row.get(1)?,
-                    sector_3_time_ms: row.get(2)?,
-                })
-            },
-        )
-        .map_err(|error| format!("unable to load Event best sectors: {error}"))
+    let sectors = load_event_theoretical_sectors_from_connection(connection, event_id)?;
+    Ok(EventBestSectors {
+        sector_1_time_ms: sectors[0].time_ms,
+        sector_2_time_ms: sectors[1].time_ms,
+        sector_3_time_ms: sectors[2].time_ms,
+    })
 }
 
 fn insert_event_run_lap(
@@ -4473,6 +4610,15 @@ fn load_event_absolute_best(
 ) -> Result<Option<EventAbsoluteBestReference>, String> {
     let connection = open_shift_light_db(&app)?;
     load_event_absolute_best_from_connection(&connection, event_id)
+}
+
+#[tauri::command]
+fn load_event_theoretical_best(
+    app: AppHandle,
+    event_id: i64,
+) -> Result<EventTheoreticalBest, String> {
+    let connection = open_shift_light_db(&app)?;
+    load_event_theoretical_best_from_connection(&connection, event_id)
 }
 
 #[tauri::command]
@@ -6611,6 +6757,7 @@ fn main() {
             load_event_runs,
             load_event_run,
             load_event_absolute_best,
+            load_event_theoretical_best,
             record_garage_vehicle,
             load_garage_snapshot,
             load_garage,
@@ -8060,6 +8207,359 @@ mod tests {
         assert_eq!(best.best_sectors.sector_1_time_ms, None);
         assert_eq!(best.best_sectors.sector_2_time_ms, None);
         assert_eq!(best.best_sectors.sector_3_time_ms, None);
+    }
+
+    #[test]
+    fn event_theoretical_best_picks_sources_per_sector_with_car_names() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Theoretical sources", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        connection
+            .execute(
+                "INSERT INTO garage_cars
+                   (game_id, car_ordinal, first_seen_sequence, last_seen_sequence, display_name)
+                 VALUES ('fh6', 260, 1, 1, 'Named car')",
+                [],
+            )
+            .unwrap();
+        let lap = |lap_number: i32, lap_time_ms: i64, sectors: [Option<i64>; 3]| EventRunLapInput {
+            lap_number,
+            lap_time_ms,
+            sector_1_time_ms: sectors[0],
+            sector_2_time_ms: sectors[1],
+            sector_3_time_ms: sectors[2],
+            trace_points: Vec::new(),
+        };
+        let first = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![
+                    lap(1, 90_000, [Some(30_000), Some(31_000), Some(19_000)]),
+                    lap(2, 89_000, [None, Some(29_000), Some(20_000)]),
+                ],
+            ),
+        )
+        .unwrap();
+        // A different car without a Garage record: its name stays unknown.
+        let mut second_run = test_event_run(
+            event.id,
+            "circuit",
+            "completed",
+            None,
+            vec![lap(1, 88_000, [Some(32_000), Some(28_000), None])],
+        );
+        second_run.car_ordinal = 300;
+        let second = record_event_run_in_connection(&mut connection, second_run).unwrap();
+
+        let theoretical =
+            load_event_theoretical_best_from_connection(&connection, event.id).unwrap();
+        assert_eq!(theoretical.event_id, event.id);
+        assert_eq!(theoretical.total_ms, Some(77_000));
+        assert_eq!(theoretical.sectors.len(), 3);
+        assert_eq!(theoretical.sectors[0].sector, 1);
+        assert_eq!(theoretical.sectors[0].time_ms, Some(30_000));
+        assert_eq!(theoretical.sectors[0].run_id, Some(first.id));
+        assert_eq!(theoretical.sectors[0].lap_number, Some(1));
+        assert_eq!(theoretical.sectors[0].run_type.as_deref(), Some("circuit"));
+        assert_eq!(theoretical.sectors[0].car_ordinal, Some(260));
+        assert_eq!(
+            theoretical.sectors[0].car_name.as_deref(),
+            Some("Named car")
+        );
+        assert!(!theoretical.sectors[0].has_trace);
+        assert_eq!(theoretical.sectors[1].sector, 2);
+        assert_eq!(theoretical.sectors[1].time_ms, Some(28_000));
+        assert_eq!(theoretical.sectors[1].run_id, Some(second.id));
+        assert_eq!(theoretical.sectors[1].lap_number, Some(1));
+        assert_eq!(theoretical.sectors[1].car_ordinal, Some(300));
+        assert_eq!(theoretical.sectors[1].car_name, None);
+        assert_eq!(theoretical.sectors[2].sector, 3);
+        assert_eq!(theoretical.sectors[2].time_ms, Some(19_000));
+        assert_eq!(theoretical.sectors[2].run_id, Some(first.id));
+        assert_eq!(theoretical.sectors[2].lap_number, Some(1));
+
+        let serialized = serde_json::to_value(&theoretical).unwrap();
+        assert_eq!(serialized["eventId"], event.id);
+        assert_eq!(serialized["totalMs"], 77_000);
+        assert_eq!(serialized["sectors"][0]["timeMs"], 30_000);
+        assert_eq!(serialized["sectors"][0]["carName"], "Named car");
+        assert_eq!(serialized["sectors"][0]["hasTrace"], false);
+        assert!(serialized["sectors"][1]["carName"].is_null());
+
+        // Delta's best sector reference and the Event page's Theoretical Best
+        // come from the same eligible laps.
+        let best = load_event_absolute_best_from_connection(&connection, event.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(best.best_sectors.sector_1_time_ms, Some(30_000));
+        assert_eq!(best.best_sectors.sector_2_time_ms, Some(28_000));
+        assert_eq!(best.best_sectors.sector_3_time_ms, Some(19_000));
+    }
+
+    #[test]
+    fn event_theoretical_best_breaks_ties_by_earliest_run_then_run_id_then_lap() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Theoretical ties", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let lap = |lap_number: i32, lap_time_ms: i64, sectors: [i64; 3]| EventRunLapInput {
+            lap_number,
+            lap_time_ms,
+            sector_1_time_ms: Some(sectors[0]),
+            sector_2_time_ms: Some(sectors[1]),
+            sector_3_time_ms: Some(sectors[2]),
+            trace_points: Vec::new(),
+        };
+        let run_at = |started_at: &str, laps: Vec<EventRunLapInput>| {
+            let mut run = test_event_run(event.id, "circuit", "completed", None, laps);
+            run.started_at = started_at.to_string();
+            run
+        };
+
+        // Saved first with the lowest run ID, but it started latest.
+        let late_start = record_event_run_in_connection(
+            &mut connection,
+            run_at(
+                "2026-08-30T13:00:00Z",
+                vec![lap(1, 90_000, [20_000, 25_000, 25_000])],
+            ),
+        )
+        .unwrap();
+        // Same start as the next run; lap 1 and lap 2 tie on Sector 1.
+        let earliest_a = record_event_run_in_connection(
+            &mut connection,
+            run_at(
+                "2026-08-30T12:00:00Z",
+                vec![
+                    lap(1, 90_000, [20_000, 30_000, 40_000]),
+                    lap(2, 91_000, [20_000, 35_000, 41_000]),
+                ],
+            ),
+        )
+        .unwrap();
+        // Same start as earliest_a with a higher run ID.
+        let earliest_b = record_event_run_in_connection(
+            &mut connection,
+            run_at(
+                "2026-08-30T12:00:00Z",
+                vec![lap(1, 90_000, [20_000, 30_000, 40_000])],
+            ),
+        )
+        .unwrap();
+        assert!(late_start.id < earliest_a.id && earliest_a.id < earliest_b.id);
+
+        let theoretical =
+            load_event_theoretical_best_from_connection(&connection, event.id).unwrap();
+        assert_eq!(theoretical.sectors[0].time_ms, Some(20_000));
+        assert_eq!(theoretical.sectors[0].run_id, Some(earliest_a.id));
+        assert_eq!(theoretical.sectors[0].lap_number, Some(1));
+        assert_eq!(theoretical.sectors[1].time_ms, Some(25_000));
+        assert_eq!(theoretical.sectors[1].run_id, Some(late_start.id));
+        assert_eq!(theoretical.sectors[2].time_ms, Some(25_000));
+        assert_eq!(theoretical.sectors[2].run_id, Some(late_start.id));
+        assert_eq!(theoretical.total_ms, Some(70_000));
+    }
+
+    #[test]
+    fn event_theoretical_best_uses_eligible_laps_and_reports_trace_sources() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Theoretical traces", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+
+        let trace = |end_distance: f64| {
+            vec![0.0, end_distance]
+                .into_iter()
+                .enumerate()
+                .map(|(index, distance)| {
+                    test_event_trace_point(
+                        index as i32,
+                        index as i64 * 1000,
+                        distance,
+                        1.0,
+                        2.0,
+                        3.0,
+                        0.75,
+                        0.0,
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let lap =
+            |lap_time_ms: i64, sectors: [i64; 3], end_distance: Option<f64>| EventRunLapInput {
+                lap_number: 1,
+                lap_time_ms,
+                sector_1_time_ms: Some(sectors[0]),
+                sector_2_time_ms: Some(sectors[1]),
+                sector_3_time_ms: Some(sectors[2]),
+                trace_points: end_distance.map(trace).unwrap_or_default(),
+            };
+        let full = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![lap(139_155, [40_000, 40_000, 40_000], Some(5_948.0))],
+            ),
+        )
+        .unwrap();
+        // Partial distance: excluded despite its faster sectors.
+        record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![lap(60_000, [10_000, 10_000, 10_000], Some(1_236.0))],
+            ),
+        )
+        .unwrap();
+        // No trace while the Event has traces: excluded as well.
+        record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![lap(150_000, [5_000, 5_000, 5_000], None)],
+            ),
+        )
+        .unwrap();
+        let sprint = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "sprint",
+                "confirmed",
+                Some(75_000),
+                vec![lap(75_000, [35_000, 41_000, 39_000], Some(5_948.0))],
+            ),
+        )
+        .unwrap();
+
+        let theoretical =
+            load_event_theoretical_best_from_connection(&connection, event.id).unwrap();
+        assert_eq!(theoretical.total_ms, Some(114_000));
+        assert_eq!(theoretical.sectors[0].time_ms, Some(35_000));
+        assert_eq!(theoretical.sectors[0].run_id, Some(sprint.id));
+        assert_eq!(theoretical.sectors[0].run_type.as_deref(), Some("sprint"));
+        assert!(theoretical.sectors[0].has_trace);
+        assert_eq!(theoretical.sectors[1].time_ms, Some(40_000));
+        assert_eq!(theoretical.sectors[1].run_id, Some(full.id));
+        assert_eq!(theoretical.sectors[1].run_type.as_deref(), Some("circuit"));
+        assert!(theoretical.sectors[1].has_trace);
+        assert_eq!(theoretical.sectors[2].time_ms, Some(39_000));
+        assert_eq!(theoretical.sectors[2].run_id, Some(sprint.id));
+        assert!(theoretical.sectors[2].has_trace);
+    }
+
+    #[test]
+    fn event_theoretical_best_total_is_none_when_a_sector_has_no_source() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Missing sector", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let lap = |lap_number: i32, sectors: [Option<i64>; 3]| EventRunLapInput {
+            lap_number,
+            lap_time_ms: 90_000,
+            sector_1_time_ms: sectors[0],
+            sector_2_time_ms: sectors[1],
+            sector_3_time_ms: sectors[2],
+            trace_points: Vec::new(),
+        };
+        record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![
+                    lap(1, [Some(20_000), None, Some(18_000)]),
+                    lap(2, [Some(21_000), None, None]),
+                ],
+            ),
+        )
+        .unwrap();
+
+        let theoretical =
+            load_event_theoretical_best_from_connection(&connection, event.id).unwrap();
+        assert_eq!(theoretical.total_ms, None);
+        assert_eq!(theoretical.sectors[0].time_ms, Some(20_000));
+        assert_eq!(theoretical.sectors[1].sector, 2);
+        assert_eq!(theoretical.sectors[1].time_ms, None);
+        assert_eq!(theoretical.sectors[1].run_id, None);
+        assert_eq!(theoretical.sectors[1].lap_number, None);
+        assert_eq!(theoretical.sectors[1].run_type, None);
+        assert_eq!(theoretical.sectors[1].car_ordinal, None);
+        assert_eq!(theoretical.sectors[1].car_name, None);
+        assert!(!theoretical.sectors[1].has_trace);
+        assert_eq!(theoretical.sectors[2].time_ms, Some(18_000));
+
+        let serialized = serde_json::to_value(&theoretical).unwrap();
+        assert!(serialized["totalMs"].is_null());
+
+        let best = load_event_absolute_best_from_connection(&connection, event.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(best.best_sectors.sector_1_time_ms, Some(20_000));
+        assert_eq!(best.best_sectors.sector_2_time_ms, None);
+        assert_eq!(best.best_sectors.sector_3_time_ms, Some(18_000));
+    }
+
+    #[test]
+    fn event_theoretical_best_is_empty_without_eligible_laps_and_rejects_invalid_events() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("No runs", "Any", "Asphalt", "Any", None),
+        )
+        .unwrap();
+
+        let theoretical =
+            load_event_theoretical_best_from_connection(&connection, event.id).unwrap();
+        assert_eq!(theoretical.event_id, event.id);
+        assert_eq!(theoretical.total_ms, None);
+        assert_eq!(theoretical.sectors.len(), 3);
+        for (index, sector) in theoretical.sectors.iter().enumerate() {
+            assert_eq!(sector.sector, index as i32 + 1);
+            assert_eq!(sector.time_ms, None);
+            assert_eq!(sector.run_id, None);
+            assert!(!sector.has_trace);
+        }
+
+        assert!(load_event_theoretical_best_from_connection(&connection, 0).is_err());
+        assert!(load_event_theoretical_best_from_connection(&connection, 999).is_err());
+
+        connection
+            .execute(
+                "UPDATE events SET deleted_at = '2026-10-01T00:00:00Z' WHERE id = ?1",
+                params![event.id],
+            )
+            .unwrap();
+        assert!(load_event_theoretical_best_from_connection(&connection, event.id).is_err());
     }
 
     #[test]

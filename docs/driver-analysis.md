@@ -297,7 +297,7 @@ layers, the legend row, and the hover values. It shows the same `S1`, `S2`, and 
 sector ticks as the Events lap map: in a circuit drive, thirds of the first
 completed lap, also when the drive is unfinished; in a finished sprint, thirds
 of the whole drive; an unfinished sprint shows none. It needs no Events
-recording. The map supports the same zoom and pan as the Events lap map; see [Events](events.md).
+recording. The map supports the same zoom and pan as the Events lap map; see [Events](events.md). Drive maps have no sector focus controls.
 
 On top of it, each check of the drive that ended as a problem is a thick
 segment from the check's start to its end, colored by problem type: front

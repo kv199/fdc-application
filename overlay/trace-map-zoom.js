@@ -65,6 +65,26 @@
     return clampView({ x: centerX - width / 2, y: centerY - height / 2, width, height }, base, maxZoom)
   }
 
+  // Fits bounds with paddingPx screen pixels of margin on every side, where pixelsPerBaseUnit is the screen scale of the
+  // whole-lap view. A window of width w shows a unit at pixelsPerBaseUnit * base.width / w pixels, so a margin given in
+  // pixels is k * w units, with k = paddingPx / (pixelsPerBaseUnit * base.width). The width that holds the bounds and
+  // that margin is solved directly, so the padding is exact in the resulting view.
+  function fitBoundsPx(base, bounds, paddingPx, pixelsPerBaseUnit, maxZoom = MAX_ZOOM) {
+    const ratio = base.height / base.width
+    const k = Math.max(0, paddingPx) / (pixelsPerBaseUnit * base.width)
+    const boundsWidth = Math.max(0, bounds.maxX - bounds.minX)
+    const boundsHeight = Math.max(0, bounds.maxY - bounds.minY)
+    // Width w must satisfy w >= boundsWidth + 2 k w and w * ratio >= boundsHeight + 2 k w.
+    const byWidth = k < 0.5 ? boundsWidth / (1 - 2 * k) : Infinity
+    const byHeight = k < ratio / 2 ? boundsHeight / (ratio - 2 * k) : Infinity
+    const solved = Math.max(byWidth, byHeight)
+    const width = clamp(Number.isFinite(solved) ? solved : base.width, base.width / maxZoom, base.width)
+    const height = width * ratio
+    const centerX = (bounds.minX + bounds.maxX) / 2
+    const centerY = (bounds.minY + bounds.maxY) / 2
+    return clampView({ x: centerX - width / 2, y: centerY - height / 2, width, height }, base, maxZoom)
+  }
+
   function isAtBase(view, base) {
     return Math.abs(view.width - base.width) <= base.width * RELATIVE_TOLERANCE
       && Math.abs(view.x - base.x) <= base.width * RELATIVE_TOLERANCE
@@ -89,6 +109,7 @@
     zoomAt,
     panBy,
     fitBounds,
+    fitBoundsPx,
     isAtBase,
     zoomLevel,
     wheelZoomFactor

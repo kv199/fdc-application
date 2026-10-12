@@ -112,3 +112,29 @@ test('wheelZoomFactor scales deltas by delta mode: a mouse notch is about x1.2 a
   near(TraceMapZoom.wheelZoomFactor(-3, 1), Math.exp(3 * 16 * 0.0015), 'line mode counts 16 px')
   near(TraceMapZoom.wheelZoomFactor(-1, 2, 500), Math.exp(500 * 0.0015), 'page mode counts the window height')
 })
+
+test('fitBoundsPx pads the bounds by screen pixels of the resulting view', () => {
+  const bounds = { minX: 400, maxX: 600, minY: 200, maxY: 300 }
+  // Both scales give the same margin in pixels: the window width grows the margin in units.
+  for (const pixelsPerBaseUnit of [1, 2, 0.5]) {
+    const view = TraceMapZoom.fitBoundsPx(base, bounds, 24, pixelsPerBaseUnit)
+    const paddingPx = (view.width - (bounds.maxX - bounds.minX)) / 2 * (pixelsPerBaseUnit * base.width / view.width)
+    near(paddingPx, 24, `horizontal padding at ${pixelsPerBaseUnit} px per unit`)
+    near(view.width, view.height * base.width / base.height, 'base aspect ratio kept')
+    near(view.x + view.width / 2, 500, 'centred horizontally')
+  }
+})
+
+test('fitBoundsPx keeps the window inside the base and stops at the base when padding is too large', () => {
+  const edge = { minX: 0, maxX: 100, minY: 0, maxY: 60 }
+  const view = TraceMapZoom.fitBoundsPx(base, edge, 24, 1)
+  assert.ok(view.x >= base.x && view.x + view.width <= base.x + base.width)
+  assert.ok(view.y >= base.y && view.y + view.height <= base.y + base.height)
+  assert.deepEqual(TraceMapZoom.fitBoundsPx(base, edge, 2000, 1), base)
+})
+
+test('fitBoundsPx never zooms past the maximum zoom', () => {
+  const tiny = { minX: 500, maxX: 501, minY: 300, maxY: 300.5 }
+  const view = TraceMapZoom.fitBoundsPx(base, tiny, 0, 1)
+  near(view.width, base.width / TraceMapZoom.MAX_ZOOM, 'width at the maximum zoom')
+})
