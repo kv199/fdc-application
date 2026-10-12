@@ -17,6 +17,7 @@ test('normalizes compact per-pair calibration without legacy bin or reason field
     reportedRedlineRpm: 8300,
     usableCeiling: 10220.4,
     ceilingSampleCount: 3,
+    ceilingClusterCount: 3,
     currentGear: 5,
     acceptedShiftCount: 4,
     shiftSamples: [{ sourceGear: 5, destinationGear: 6, rpmBefore: 9550, powerDeltaPct: 1.2, recordedAt: 123 }],
@@ -47,6 +48,7 @@ test('normalizes compact per-pair calibration without legacy bin or reason field
     reportedRedlineRpm: 8300,
     usableCeiling: 10220,
     ceilingSampleCount: 3,
+    ceilingClusterCount: 3,
     fallbackShiftRpm: null,
     currentGear: 5,
     gears: [{
@@ -92,6 +94,7 @@ test('turns an unavailable or malformed state into a safe empty state', () => {
     reportedRedlineRpm: null,
     usableCeiling: null,
     ceilingSampleCount: 0,
+    ceilingClusterCount: 0,
     fallbackShiftRpm: null,
     currentGear: null,
     gears: [],
@@ -111,6 +114,17 @@ test('marks only learned shift points within 100 RPM of the usable ceiling as at
   assert.equal(isShiftAtLimiter('learning', 11000, 11000), false)
   assert.equal(isShiftAtLimiter('optimal', 10950, null), false)
   assert.equal(isShiftAtLimiter('optimal', null, 11000), false)
+})
+
+test('caps the displayed ceiling cluster at three and keeps up to twelve stored samples', () => {
+  const capped = normalizeShiftLightState({ ceilingSampleCount: 14, ceilingClusterCount: 9 })
+  assert.equal(capped.ceilingSampleCount, 12)
+  assert.equal(capped.ceilingClusterCount, 3)
+  const partial = normalizeShiftLightState({ ceilingSampleCount: 2, ceilingClusterCount: 2 })
+  assert.equal(partial.ceilingClusterCount, 2)
+  const invalid = normalizeShiftLightState({ ceilingClusterCount: -4 })
+  assert.equal(invalid.ceilingClusterCount, 0)
+  assert.equal(normalizeShiftLightState({}).ceilingClusterCount, 0)
 })
 
 test('renders the SHIFT AT LIMITER hint with its explanatory title in the gear table', () => {

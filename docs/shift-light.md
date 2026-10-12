@@ -48,9 +48,20 @@ purple cue; it does not mean "no guidance".
 A learned ceiling requires three stable limiter observations. An observation
 comes from a continuous same-gear full-throttle pull that rises by at least
 `100 RPM`, reaches a local peak, drops by at least `40 RPM`, and then recovers
-to within `60 RPM` of that peak. The median of three observations whose total
-spread is no more than `100 RPM` becomes the usable ceiling. A single maximum
-or flat RPM value is not sufficient limiter evidence.
+to within `60 RPM` of that peak. FDC keeps the highest 12 observations; lower
+observations are discarded. When the reported redline is known, only observations
+at or above 85% of it are considered, because the limiter is the highest RPM the
+engine holds and lower detections are false. A group is one considered
+observation together with the considered observations within `100 RPM` below it.
+Scanning from the highest considered observation down, the usable ceiling is the
+median of the first group that holds at least three observations; for an
+even-sized group the lower of the two middle values is used. If a considered
+observation lies above that group's top by no more than `400 RPM`, no ceiling is
+accepted yet, because the real limiter is probably still collecting evidence;
+a group of six or more observations is accepted regardless, so one stray high
+observation cannot block the ceiling permanently. Observations more than
+`400 RPM` above are isolated spikes and do not block it.
+A single maximum or flat RPM value is not sufficient limiter evidence.
 
 If a comparable shift produces a negative power delta, no special fallback
 learner is started. The current safe baseline simply remains the answer.
@@ -166,7 +177,7 @@ shift_light_configs
 shift_light_ceiling_samples
   id                                      primary key
   config_id                               cascading foreign key
-  rpm                                     positive; at most 3 per save
+  rpm                                     positive; at most 12 per save, in ascending RPM order
 
 shift_light_gear_targets
   config_id + source_gear
@@ -258,7 +269,12 @@ The Shift Light tab in Configuration opens with a short intro. Once a car has a
 profile, a `CURRENT CAR PROFILE` card shows the car, its class, the reported
 RPM limit, learned ceiling progress, effective target and state. Reported and
 learned RPM values use thousands separators, for example `9,360 RPM`, matching
-the in-game HUD. Below the metadata, a table lists each observed gear with its
+the in-game HUD. The LEARNED CEILING row shows `9,195 RPM · 3/3` once a ceiling
+exists, where the trailing count is the size of the accepted group, capped at
+three. Before a ceiling exists it shows `LEARNING · 2/3` while observations
+exist, where the count is the size of the group at the highest considered
+observation, capped at three (`0/3` when every observation is below 85% of the
+redline), and `NOT OBSERVED` when there are none. Below the metadata, a table lists each observed gear with its
 shift point, accepted sample count, last power comparison and state. Each cell
 keeps its second line of detail. When a potential or optimal gear's shift point
 is within `100 RPM` of the usable ceiling, its cell also shows `SHIFT AT LIMITER`

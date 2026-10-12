@@ -24,6 +24,90 @@ function upshift(learner, timestampMs, rpm, afterPower = 420) {
   learner.update(frame({ timestampMs: timestampMs + 144, gear: 2, rpm: 7200, power: afterPower }))
 }
 
+function ceilingLearner(ceilingSamples, reportedRedlineRpm = 10000) {
+  const key = getShiftLightCarKey(frame())
+  const learner = new ShiftLightLearner(key)
+  learner.importState({ modelVersion: 4, version: 4, key, reportedRedlineRpm, ceilingSamples,
+    usableCeiling: null, gearTargets: [], shiftSamples: [] })
+  return learner
+}
+
+// One clean full-throttle limiter pull on a 10,000 RPM redline: rise 100+ RPM, peak, drop 60 RPM,
+// recover near the peak, then a non-clean frame that re-arms the detector. Returns the next timestamp.
+function limiterPull(learner, startMs, peakRpm) {
+  const rpms = [6000, 7000, peakRpm, peakRpm - 60, peakRpm - 5]
+  rpms.forEach((rpm, index) => learner.update(frame({ timestampMs: startMs + index * 16, gear: 1, rpm, rpmMax: 10000 })))
+  learner.update(frame({ timestampMs: startMs + rpms.length * 16, gear: 1, rpm: peakRpm - 5, throttle: 0, rpmMax: 10000 }))
+  return startMs + (rpms.length + 1) * 16 + 200
+}
+
+function ceilingOf(learner) {
+  const snapshot = learner.snapshot(frame())
+  return { usableCeiling: snapshot.usableCeiling, sampleCount: snapshot.ceilingSampleCount, clusterCount: snapshot.ceilingClusterCount }
+}
+
+test('a false low detection does not block the Honda limiter; the next tight sample learns it', () => {
+  assert.deepEqual(ceilingOf(ceilingLearner([7106, 9196, 9195])), { usableCeiling: null, sampleCount: 3, clusterCount: 2 })
+  assert.deepEqual(ceilingOf(ceilingLearner([7106, 9196, 9195, 9190])), { usableCeiling: 9195, sampleCount: 4, clusterCount: 3 })
+})
+
+test('low false detections never matter when three tight samples sit above them', () => {
+  assert.deepEqual(ceilingOf(ceilingLearner([6200, 5900, 9100, 9105, 9102])), { usableCeiling: 9102, sampleCount: 5, clusterCount: 3 })
+})
+
+test('an isolated high spike more than 400 RPM above the cluster does not block it', () => {
+  assert.deepEqual(ceilingOf(ceilingLearner([8700, 8710, 8720, 9400])), { usableCeiling: 8710, sampleCount: 4, clusterCount: 3 })
+})
+
+test('two qualifying clusters resolve to the higher one', () => {
+  assert.deepEqual(ceilingOf(ceilingLearner([8600, 8601, 8602, 9200, 9201, 9199])), { usableCeiling: 9200, sampleCount: 6, clusterCount: 3 })
+})
+
+test('a qualifying cluster waits while a considered sample sits within 400 RPM above it', () => {
+  assert.deepEqual(ceilingOf(ceilingLearner([8300, 8310, 8320, 8600], null)), { usableCeiling: null, sampleCount: 4, clusterCount: 1 })
+  assert.deepEqual(ceilingOf(ceilingLearner([8300, 8310, 8320, 9400], null)), { usableCeiling: 8310, sampleCount: 4, clusterCount: 3 })
+})
+
+test('a cluster of six is accepted even with a stray sample within 400 RPM above it', () => {
+  // One stray high observation stays among the highest samples, so it must not block forever.
+  assert.deepEqual(ceilingOf(ceilingLearner([9100, 9105, 9110, 9112, 9115, 9450], null)), { usableCeiling: null, sampleCount: 6, clusterCount: 1 })
+  assert.deepEqual(ceilingOf(ceilingLearner([9100, 9105, 9110, 9112, 9115, 9118, 9450], null)), { usableCeiling: 9110, sampleCount: 7, clusterCount: 6 })
+})
+
+test('samples below 85% of the reported redline are stored but not considered', () => {
+  assert.deepEqual(ceilingOf(ceilingLearner([8300, 8310, 8320, 8600])), { usableCeiling: null, sampleCount: 4, clusterCount: 1 })
+  assert.deepEqual(ceilingOf(ceilingLearner([8300, 8310, 8320, 9400])), { usableCeiling: null, sampleCount: 4, clusterCount: 1 })
+  assert.deepEqual(ceilingOf(ceilingLearner([7100, 7150, 7200])), { usableCeiling: null, sampleCount: 3, clusterCount: 0 })
+})
+
+test('no cluster of three yields no ceiling and reports the size of the highest group', () => {
+  assert.deepEqual(ceilingOf(ceilingLearner([])), { usableCeiling: null, sampleCount: 0, clusterCount: 0 })
+  assert.deepEqual(ceilingOf(ceilingLearner([9000, 9050])), { usableCeiling: null, sampleCount: 2, clusterCount: 2 })
+  assert.deepEqual(ceilingOf(ceilingLearner([8600, 9000, 9500])), { usableCeiling: null, sampleCount: 3, clusterCount: 1 })
+})
+
+test('an imported window of more than twelve samples keeps the highest twelve', () => {
+  const lowerTwelve = Array.from({ length: 12 }, (_, index) => 7100 + index)
+  assert.deepEqual(ceilingOf(ceilingLearner([9900, 9901, 9902, ...lowerTwelve])), { usableCeiling: 9901, sampleCount: 12, clusterCount: 3 })
+})
+
+test('live limiter pulls keep the highest twelve observations', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  let startMs = 0
+  for (let peak = 7100; peak <= 7111; peak += 1) startMs = limiterPull(learner, startMs, peak)
+  for (const peak of [9900, 9901, 9902]) startMs = limiterPull(learner, startMs, peak)
+  assert.deepEqual(ceilingOf(learner), { usableCeiling: 9901, sampleCount: 12, clusterCount: 3 })
+})
+
+test('live limiter pulls report the Honda progress before and after a tight third sample', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  let startMs = 0
+  for (const peak of [7106, 9196, 9195]) startMs = limiterPull(learner, startMs, peak)
+  assert.deepEqual(ceilingOf(learner), { usableCeiling: null, sampleCount: 3, clusterCount: 2 })
+  startMs = limiterPull(learner, startMs, 9190)
+  assert.deepEqual(ceilingOf(learner), { usableCeiling: 9195, sampleCount: 4, clusterCount: 3 })
+})
+
 test('uses only the stable vehicle configuration fields for the learner key', () => {
   assert.equal(getShiftLightCarKey(frame()), 'fh6:3766:1:800:1:10')
   assert.equal(getShiftLightCarKey(frame({ rpmMax: 9500 })), 'fh6:3766:1:800:1:10')

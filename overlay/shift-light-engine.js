@@ -34,9 +34,12 @@ var HudShiftLight = (() => {
   var MAX_SHIFT_SAMPLES = 64;
   var MAX_CONFIRMATIONS = 3;
   var CONFIRMATION_STABILITY_RPM = 100;
-  var MAX_CEILING_SAMPLES = 3;
+  var MAX_CEILING_SAMPLES = 12;
   var MIN_TRUSTED_CEILING_SAMPLES = 3;
   var CEILING_SAMPLE_STABILITY_RPM = 100;
+  var CEILING_MIN_REDLINE_FRACTION = 0.85;
+  var CEILING_WAIT_ABOVE_RPM = 400;
+  var CEILING_WAIT_RELEASE_SAMPLES = 6;
   var MIN_LIMITER_RISE_RPM = 100;
   var MIN_LIMITER_DROP_RPM = 40;
   var LIMITER_RECOVERY_TOLERANCE_RPM = 60;
@@ -132,8 +135,11 @@ var HudShiftLight = (() => {
   function normalizeRpmList(value) {
     return Array.isArray(value) ? value.map((item) => finiteInRange(item, 0, 1e5)).filter((item) => item !== null).map(roundRpm).slice(-MAX_CONFIRMATIONS) : [];
   }
+  function keepHighestCeilingSamples(values) {
+    return [...values].sort((a, b) => b - a).slice(0, MAX_CEILING_SAMPLES).sort((a, b) => a - b);
+  }
   function normalizeCeilingSamples(value) {
-    return Array.isArray(value) ? value.map((item) => finiteInRange(item, 0, 1e5)).filter((item) => item !== null).map(roundRpm).slice(-MAX_CEILING_SAMPLES) : [];
+    return Array.isArray(value) ? keepHighestCeilingSamples(value.map((item) => finiteInRange(item, 0, 1e5)).filter((item) => item !== null).map(roundRpm)) : [];
   }
   var OptimalShiftEstimator = class _OptimalShiftEstimator {
     gears = /* @__PURE__ */ new Map();
@@ -238,9 +244,9 @@ var HudShiftLight = (() => {
       this.gears.clear();
       restored.forEach((value, gear) => this.gears.set(gear, value));
       this.shiftSamples = samples.slice(-MAX_SHIFT_SAMPLES);
+      this.reportedRedlineRpm = finiteInRange(raw.reportedRedlineRpm, 0, 1e5);
       this.ceilingSamples = normalizeCeilingSamples(raw.ceilingSamples);
       this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples);
-      this.reportedRedlineRpm = finiteInRange(raw.reportedRedlineRpm, 0, 1e5);
       return true;
     }
     mergeLearningState(state, key) {
@@ -256,9 +262,9 @@ var HudShiftLight = (() => {
       }
       const seen = new Set(this.shiftSamples.map((item) => `${item.beforeTimestampMs}:${item.afterTimestampMs}`));
       this.shiftSamples = [...this.shiftSamples, ...incoming.shiftSamples.filter((item) => !seen.has(`${item.beforeTimestampMs}:${item.afterTimestampMs}`))].slice(-MAX_SHIFT_SAMPLES);
+      this.reportedRedlineRpm = incoming.reportedRedlineRpm ?? this.reportedRedlineRpm;
       this.ceilingSamples = normalizeCeilingSamples([...this.ceilingSamples, ...incoming.ceilingSamples]);
       this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples);
-      this.reportedRedlineRpm = incoming.reportedRedlineRpm ?? this.reportedRedlineRpm;
       return true;
     }
     exportState(key) {
@@ -308,6 +314,10 @@ var HudShiftLight = (() => {
     }
     getCeilingSampleCount() {
       return this.ceilingSamples.length;
+    }
+    /** Size of the highest qualifying cluster, or the largest non-qualifying cluster while no ceiling exists. */
+    getCeilingClusterCount() {
+      return this.analyzeCeiling(this.ceilingSamples).clusterCount;
     }
     getReportedRedlineRpm() {
       return this.reportedRedlineRpm;
@@ -361,10 +371,35 @@ var HudShiftLight = (() => {
       current.lastReason = current.lastReason ?? incoming.lastReason;
     }
     deriveUsableCeiling(samples) {
-      if (samples.length < MIN_TRUSTED_CEILING_SAMPLES) return null;
-      const sorted = [...samples].sort((a, b) => a - b);
-      if (sorted[sorted.length - 1] - sorted[0] > CEILING_SAMPLE_STABILITY_RPM) return null;
-      return sorted[Math.floor(sorted.length / 2)];
+      return this.analyzeCeiling(samples).ceiling;
+    }
+    /**
+     * The limiter is the highest RPM the engine can hold, so low false detections never
+     * block it. When the reported redline is known, only samples at or above
+     * CEILING_MIN_REDLINE_FRACTION of it are considered. Scan from the highest considered
+     * sample down: the first cluster (considered samples within CEILING_SAMPLE_STABILITY_RPM
+     * at or below an anchor) that holds at least MIN_TRUSTED_CEILING_SAMPLES wins, and its
+     * lower-middle value is the ceiling. A considered sample up to CEILING_WAIT_ABOVE_RPM
+     * above that anchor means the real limiter is still collecting evidence, so no ceiling
+     * is accepted yet, unless the cluster already holds CEILING_WAIT_RELEASE_SAMPLES.
+     * Samples further above are isolated spikes and do not block.
+     */
+    analyzeCeiling(samples) {
+      const redline = this.reportedRedlineRpm;
+      const considered = redline !== null && redline > 0 ? samples.filter((sample) => sample / redline >= CEILING_MIN_REDLINE_FRACTION) : [...samples];
+      const descending = considered.sort((a, b) => b - a);
+      const clusterAt = (anchor) => descending.filter((sample) => sample <= anchor && anchor - sample <= CEILING_SAMPLE_STABILITY_RPM);
+      const progressCount = descending.length > 0 ? clusterAt(descending[0]).length : 0;
+      for (const anchor of descending) {
+        const cluster = clusterAt(anchor);
+        if (cluster.length < MIN_TRUSTED_CEILING_SAMPLES) continue;
+        if (cluster.length < CEILING_WAIT_RELEASE_SAMPLES && descending.some((sample) => sample > anchor && sample - anchor <= CEILING_WAIT_ABOVE_RPM)) {
+          return { ceiling: null, clusterCount: progressCount };
+        }
+        const ascending = [...cluster].reverse();
+        return { ceiling: ascending[Math.floor((ascending.length - 1) / 2)], clusterCount: cluster.length };
+      }
+      return { ceiling: null, clusterCount: progressCount };
     }
     observeLimiter(telemetry) {
       if (!cleanWotMotionTelemetry(telemetry)) {
@@ -399,7 +434,7 @@ var HudShiftLight = (() => {
       }
     }
     recordCeilingSample(sample) {
-      this.ceilingSamples = [...this.ceilingSamples, roundRpm(sample)].slice(-MAX_CEILING_SAMPLES);
+      this.ceilingSamples = keepHighestCeilingSamples([...this.ceilingSamples, roundRpm(sample)]);
       this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples);
     }
   };
@@ -552,6 +587,7 @@ var HudShiftLight = (() => {
         reportedRedlineRpm: this.estimator.getReportedRedlineRpm(),
         usableCeiling: this.estimator.getUsableCeiling(),
         ceilingSampleCount: this.estimator.getCeilingSampleCount(),
+        ceilingClusterCount: this.estimator.getCeilingClusterCount(),
         fallbackShiftRpm,
         carClass: identity?.carClass ?? null,
         drivetrain: identity?.drivetrain ?? null,

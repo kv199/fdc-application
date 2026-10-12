@@ -399,7 +399,7 @@ struct ShiftLightVariantResolution {
 
 const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 4;
 const HUD_SCHEMA_VERSION: i32 = 23;
-const MAX_SHIFT_LIGHT_CEILING_SAMPLES: usize = 3;
+const MAX_SHIFT_LIGHT_CEILING_SAMPLES: usize = 12;
 const MAX_SHIFT_LIGHT_GEAR_TARGETS: usize = 9;
 const MAX_SHIFT_LIGHT_SHIFT_SAMPLES: usize = 64;
 
@@ -5298,13 +5298,17 @@ fn save_shift_light_calibration_in_connection(
             )
             .map_err(|error| format!("unable to replace Shift Light calibration: {error}"))?;
     }
-    for rpm in request
+    // Requests arrive oldest first, so keep the latest observations by skipping the oldest.
+    let positive_ceiling_samples: Vec<i32> = request
         .ceiling_samples
         .iter()
         .copied()
         .filter(|rpm| *rpm > 0)
-        .take(MAX_SHIFT_LIGHT_CEILING_SAMPLES)
-    {
+        .collect();
+    let keep_from = positive_ceiling_samples
+        .len()
+        .saturating_sub(MAX_SHIFT_LIGHT_CEILING_SAMPLES);
+    for rpm in positive_ceiling_samples.into_iter().skip(keep_from) {
         transaction
             .execute(
                 "INSERT INTO shift_light_ceiling_samples (config_id, rpm)
@@ -7266,6 +7270,35 @@ mod tests {
                 "legacy table {table}"
             );
         }
+    }
+
+    #[test]
+    fn saves_the_latest_twelve_ceiling_samples_in_order() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let key = "fh6:3766:1:800:1:10:10300";
+        let config = resolve_shift_light_config_in_connection(&mut connection, key, 4).unwrap();
+        let oldest_to_latest: Vec<i32> = (9001..=9014).collect();
+        let request = ShiftLightCalibrationRequest {
+            key: key.to_string(),
+            config_id: config.variant_id,
+            reported_redline_rpm: Some(10300),
+            usable_ceiling: Some(9010),
+            ceiling_samples: oldest_to_latest.clone(),
+            gear_targets: Vec::new(),
+            shift_samples: Vec::new(),
+        };
+        save_shift_light_calibration_in_connection(&mut connection, &request).unwrap();
+        let loaded =
+            load_shift_light_calibration_from_connection(&connection, key, config.variant_id)
+                .unwrap();
+        assert_eq!(loaded.ceiling_samples, oldest_to_latest[2..].to_vec());
+        assert_eq!(
+            loaded.ceiling_samples.len(),
+            MAX_SHIFT_LIGHT_CEILING_SAMPLES
+        );
+        assert_eq!(loaded.ceiling_samples.first(), Some(&9003));
+        assert_eq!(loaded.ceiling_samples.last(), Some(&9014));
     }
 
     #[test]

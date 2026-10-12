@@ -49,6 +49,8 @@ export interface ShiftLightSnapshot {
   reportedRedlineRpm: number | null
   usableCeiling: number | null
   ceilingSampleCount: number
+  /** Size of the highest ceiling cluster (uncapped); the UI shows it out of three. */
+  ceilingClusterCount: number
   fallbackShiftRpm: number | null
   carClass: number | null
   drivetrain: number | null
@@ -171,7 +173,7 @@ export class ShiftLightLearner {
       sampleCount: current?.evidence.length ?? 0, carKey: normalizeIdentityKey(this.key), gameId: identity?.gameId ?? null,
       carOrdinal: identity?.carOrdinal ?? null, pi: identity?.pi ?? null, rpmMax: rpmMax > 0 ? rpmMax : null,
       reportedRedlineRpm: this.estimator.getReportedRedlineRpm(), usableCeiling: this.estimator.getUsableCeiling(),
-      ceilingSampleCount: this.estimator.getCeilingSampleCount(), fallbackShiftRpm,
+      ceilingSampleCount: this.estimator.getCeilingSampleCount(), ceilingClusterCount: this.estimator.getCeilingClusterCount(), fallbackShiftRpm,
       carClass: identity?.carClass ?? null, drivetrain: identity?.drivetrain ?? null, cylinders: identity?.cylinders ?? null,
       gearCount: null, observedGearCount: this.maxObservedGear, gearboxChanged: false, gearboxValidation: null, gearboxSignature: null,
       currentGear, lastKnownGear, method: current?.status === 'optimal' || current?.status === 'potential' ? 'optimal' : null,

@@ -82,9 +82,14 @@ const MAX_SHIFT_SAMPLES = 64
 const MAX_CONFIRMATIONS = 3
 const CONFIRMATION_STABILITY_RPM = 100
 const MIN_SPEED_KMH = 1
-const MAX_CEILING_SAMPLES = 3
+const MAX_CEILING_SAMPLES = 12
 const MIN_TRUSTED_CEILING_SAMPLES = 3
 const CEILING_SAMPLE_STABILITY_RPM = 100
+const CEILING_MIN_REDLINE_FRACTION = 0.85
+const CEILING_WAIT_ABOVE_RPM = 400
+// A cluster this large is accepted even with samples just above it, so one stray high
+// observation kept among the highest samples cannot block the ceiling forever.
+const CEILING_WAIT_RELEASE_SAMPLES = 6
 const MIN_LIMITER_RISE_RPM = 100
 const MIN_LIMITER_DROP_RPM = 40
 const LIMITER_RECOVERY_TOLERANCE_RPM = 60
@@ -157,9 +162,13 @@ function normalizeRpmList(value: unknown): number[] {
   return Array.isArray(value) ? value.map(item => finiteInRange(item, 0, 100_000))
     .filter((item): item is number => item !== null).map(roundRpm).slice(-MAX_CONFIRMATIONS) : []
 }
+/** Keeps the highest observations, stored in ascending RPM order for determinism. */
+function keepHighestCeilingSamples(values: number[]): number[] {
+  return [...values].sort((a, b) => b - a).slice(0, MAX_CEILING_SAMPLES).sort((a, b) => a - b)
+}
 function normalizeCeilingSamples(value: unknown): number[] {
-  return Array.isArray(value) ? value.map(item => finiteInRange(item, 0, 100_000))
-    .filter((item): item is number => item !== null).map(roundRpm).slice(-MAX_CEILING_SAMPLES) : []
+  return Array.isArray(value) ? keepHighestCeilingSamples(value.map(item => finiteInRange(item, 0, 100_000))
+    .filter((item): item is number => item !== null).map(roundRpm)) : []
 }
 
 export class OptimalShiftEstimator {
@@ -250,9 +259,9 @@ export class OptimalShiftEstimator {
     }
     this.gears.clear(); restored.forEach((value, gear) => this.gears.set(gear, value))
     this.shiftSamples = samples.slice(-MAX_SHIFT_SAMPLES)
+    this.reportedRedlineRpm = finiteInRange(raw.reportedRedlineRpm, 0, 100_000)
     this.ceilingSamples = normalizeCeilingSamples(raw.ceilingSamples)
     this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples)
-    this.reportedRedlineRpm = finiteInRange(raw.reportedRedlineRpm, 0, 100_000)
     return true
   }
 
@@ -269,9 +278,9 @@ export class OptimalShiftEstimator {
     }
     const seen = new Set(this.shiftSamples.map(item => `${item.beforeTimestampMs}:${item.afterTimestampMs}`))
     this.shiftSamples = [...this.shiftSamples, ...incoming.shiftSamples.filter(item => !seen.has(`${item.beforeTimestampMs}:${item.afterTimestampMs}`))].slice(-MAX_SHIFT_SAMPLES)
+    this.reportedRedlineRpm = incoming.reportedRedlineRpm ?? this.reportedRedlineRpm
     this.ceilingSamples = normalizeCeilingSamples([...this.ceilingSamples, ...incoming.ceilingSamples])
     this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples)
-    this.reportedRedlineRpm = incoming.reportedRedlineRpm ?? this.reportedRedlineRpm
     return true
   }
 
@@ -289,6 +298,8 @@ export class OptimalShiftEstimator {
   resetTransient(): void { this.limiterTracker = null; this.lastCleanTelemetry = null; this.limiterRearmed = true }
   getUsableCeiling(): number | null { return this.usableCeiling }
   getCeilingSampleCount(): number { return this.ceilingSamples.length }
+  /** Size of the highest qualifying cluster, or the largest non-qualifying cluster while no ceiling exists. */
+  getCeilingClusterCount(): number { return this.analyzeCeiling(this.ceilingSamples).clusterCount }
   getReportedRedlineRpm(): number | null { return this.reportedRedlineRpm }
 
   private getOrCreate(sourceGear: number, destinationGear = sourceGear + 1): GearLearningState {
@@ -331,11 +342,38 @@ export class OptimalShiftEstimator {
     current.candidateRpm = current.targetRpm ?? incoming.candidateRpm ?? current.candidateRpm
     current.lastReason = current.lastReason ?? incoming.lastReason
   }
-  private deriveUsableCeiling(samples: number[]): number | null {
-    if (samples.length < MIN_TRUSTED_CEILING_SAMPLES) return null
-    const sorted = [...samples].sort((a, b) => a - b)
-    if (sorted[sorted.length - 1]! - sorted[0]! > CEILING_SAMPLE_STABILITY_RPM) return null
-    return sorted[Math.floor(sorted.length / 2)]!
+  private deriveUsableCeiling(samples: number[]): number | null { return this.analyzeCeiling(samples).ceiling }
+  /**
+   * The limiter is the highest RPM the engine can hold, so low false detections never
+   * block it. When the reported redline is known, only samples at or above
+   * CEILING_MIN_REDLINE_FRACTION of it are considered. Scan from the highest considered
+   * sample down: the first cluster (considered samples within CEILING_SAMPLE_STABILITY_RPM
+   * at or below an anchor) that holds at least MIN_TRUSTED_CEILING_SAMPLES wins, and its
+   * lower-middle value is the ceiling. A considered sample up to CEILING_WAIT_ABOVE_RPM
+   * above that anchor means the real limiter is still collecting evidence, so no ceiling
+   * is accepted yet, unless the cluster already holds CEILING_WAIT_RELEASE_SAMPLES.
+   * Samples further above are isolated spikes and do not block.
+   */
+  private analyzeCeiling(samples: number[]): { ceiling: number | null, clusterCount: number } {
+    const redline = this.reportedRedlineRpm
+    const considered = redline !== null && redline > 0
+      ? samples.filter(sample => sample / redline >= CEILING_MIN_REDLINE_FRACTION)
+      : [...samples]
+    const descending = considered.sort((a, b) => b - a)
+    const clusterAt = (anchor: number): number[] => descending
+      .filter(sample => sample <= anchor && anchor - sample <= CEILING_SAMPLE_STABILITY_RPM)
+    const progressCount = descending.length > 0 ? clusterAt(descending[0]!).length : 0
+    for (const anchor of descending) {
+      const cluster = clusterAt(anchor)
+      if (cluster.length < MIN_TRUSTED_CEILING_SAMPLES) continue
+      if (cluster.length < CEILING_WAIT_RELEASE_SAMPLES
+        && descending.some(sample => sample > anchor && sample - anchor <= CEILING_WAIT_ABOVE_RPM)) {
+        return { ceiling: null, clusterCount: progressCount }
+      }
+      const ascending = [...cluster].reverse()
+      return { ceiling: ascending[Math.floor((ascending.length - 1) / 2)]!, clusterCount: cluster.length }
+    }
+    return { ceiling: null, clusterCount: progressCount }
   }
   private observeLimiter(telemetry: Telemetry): void {
     if (!cleanWotMotionTelemetry(telemetry)) { this.resetTransient(); return }
@@ -354,7 +392,7 @@ export class OptimalShiftEstimator {
     if (telemetry.rpm >= tracker.peakRpm - LIMITER_RECOVERY_TOLERANCE_RPM) { this.recordCeilingSample(tracker.peakRpm); this.limiterRearmed = false; this.limiterTracker = null }
   }
   private recordCeilingSample(sample: number): void {
-    this.ceilingSamples = [...this.ceilingSamples, roundRpm(sample)].slice(-MAX_CEILING_SAMPLES)
+    this.ceilingSamples = keepHighestCeilingSamples([...this.ceilingSamples, roundRpm(sample)])
     this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples)
   }
 }

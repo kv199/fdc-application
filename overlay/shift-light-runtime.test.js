@@ -103,6 +103,34 @@ test('publishes hud_shift_light only when the displayed state changes, while upd
   assert.equal(events.filter(event => event.name === 'hud_shift_light').at(-1).payload.currentGear, 2)
 })
 
+test('loads up to twelve stored ceiling samples, keeps the highest and reports the cluster count', async () => {
+  const stored = {
+    modelVersion: 4,
+    reportedRedlineRpm: 11000,
+    usableCeiling: 9901,
+    ceilingSamples: [9900, 9901, 9902, ...Array.from({ length: 12 }, (_, index) => 7100 + index)],
+    gearTargets: [],
+    shiftSamples: []
+  }
+  const keptHighest = [...Array.from({ length: 9 }, (_, index) => 7103 + index), 9900, 9901, 9902]
+  const { calls, runtime } = createRuntime({ stored })
+  runtime.update(frame({ timestampMs: 0, rpm: 9400 }))
+  await flush(); await flush(); await flush(); await flush(); await flush()
+  const state = runtime.update(frame({ timestampMs: 16, rpm: 9400 }))
+  assert.equal(state.ceilingSampleCount, 12)
+  assert.equal(state.ceilingClusterCount, 3)
+  assert.equal(state.usableCeiling, 9901)
+  const saves = calls.filter(call => call.command === 'save_shift_light_calibration')
+  assert.deepEqual(saves[saves.length - 1].args.request.ceilingSamples, keptHighest)
+})
+
+test('exposes a zero ceiling cluster count before any configuration is resolved', () => {
+  const { runtime } = createRuntime()
+  const empty = runtime.update(null)
+  assert.equal(empty.ceilingClusterCount, 0)
+  assert.equal(empty.ceilingSampleCount, 0)
+})
+
 test('passes cue timing, ceiling and last known gear through to the overlay', () => {
   const events = []
   const { runtime } = createRuntime({ events })

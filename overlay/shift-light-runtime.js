@@ -16,6 +16,7 @@
     reportedRedlineRpm: null,
     usableCeiling: null,
     ceilingSampleCount: 0,
+    ceilingClusterCount: 0,
     currentGear: null,
     lastKnownGear: false,
     method: null,
@@ -131,7 +132,7 @@
   }
 
   function compactRpmArray(value) {
-    return Array.isArray(value) ? value.map(finiteRpm).filter(value => value !== null).slice(-3) : []
+    return Array.isArray(value) ? value.map(finiteRpm).filter(value => value !== null).slice(-12) : []
   }
 
   function compactGearTarget(value) {
