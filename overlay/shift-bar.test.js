@@ -5,6 +5,7 @@ const path = require('node:path')
 
 const {
   LIMITER_RPM_FRACTION,
+  LIMITER_ESTIMATE_FRACTION,
   SEGMENT_COUNT,
   createShiftBar,
   fillFraction,
@@ -145,14 +146,17 @@ test('fillFraction returns 0 when RPM or the threshold is missing or not above i
   assert.equal(fillFraction(), 0)
 })
 
-test('limiterRpm prefers a positive usable ceiling over the game max RPM', () => {
+test('limiterRpm prefers a measured limiter and otherwise estimates 89 percent of the game max RPM', () => {
   assert.equal(limiterRpm({ usableCeiling: 7400, rpmMax: 8000 }), 7400)
-  assert.equal(limiterRpm({ usableCeiling: null, rpmMax: 8000 }), 8000)
-  assert.equal(limiterRpm({ usableCeiling: 0, rpmMax: 8000 }), 8000)
-  assert.equal(limiterRpm({ usableCeiling: -5, rpmMax: 8000 }), 8000)
-  assert.equal(limiterRpm({ usableCeiling: '', rpmMax: 8000 }), 8000)
+  assert.equal(limiterRpm({ provisionalCeiling: 7300, rpmMax: 8000 }), 7300)
+  assert.equal(limiterRpm({ usableCeiling: 7400, provisionalCeiling: 7300, rpmMax: 8000 }), 7400)
+  assert.ok(Math.abs((limiterRpm({ usableCeiling: null, rpmMax: 8000 })) - (8000 * LIMITER_ESTIMATE_FRACTION)) < 1e-6)
+  assert.ok(Math.abs((limiterRpm({ usableCeiling: 0, rpmMax: 8000 })) - (7120)) < 1e-6)
+  assert.ok(Math.abs((limiterRpm({ usableCeiling: -5, rpmMax: 8000 })) - (7120)) < 1e-6)
+  assert.ok(Math.abs((limiterRpm({ usableCeiling: '', rpmMax: 8000 })) - (7120)) < 1e-6)
   assert.equal(limiterRpm({ usableCeiling: null, rpmMax: null }), null)
   assert.equal(limiterRpm(), null)
+  assert.equal(LIMITER_ESTIMATE_FRACTION, 0.89)
 })
 
 test('the limiter fraction is 97 percent', () => {
@@ -160,23 +164,25 @@ test('the limiter fraction is 97 percent', () => {
 })
 
 test('resolveSignal is normal below the limiter flash point and shows no approach signal', () => {
-  assert.equal(resolveSignal({ rpm: 7000, rpmMax: 8000 }), 'normal')
-  // 85% of max, the old steady red point, is no longer a signal.
+  // Before any limiter hit the limiter is estimated at 89% of 8000 = 7120, so red starts at 6906.4.
+  assert.equal(resolveSignal({ rpm: 6800, rpmMax: 8000 }), 'normal')
+  // The approach phase is no signal of its own.
   assert.equal(resolveSignal({ rpm: 6800, rpmMax: 8000, shiftPhase: 'approach', shiftCueEnabled: true }), 'normal')
-  assert.equal(resolveSignal({ rpm: 7759, rpmMax: 8000 }), 'normal')
+  assert.equal(resolveSignal({ rpm: 6906, rpmMax: 8000 }), 'normal')
 })
 
 test('resolveSignal is redline from 97 percent of the limiter', () => {
-  assert.equal(resolveSignal({ rpm: 7760, rpmMax: 8000 }), 'redline')
+  assert.equal(resolveSignal({ rpm: 6907, rpmMax: 8000 }), 'redline')
+  assert.equal(resolveSignal({ rpm: 7178, rpmMax: 8000, usableCeiling: 7400 }), 'redline')
   assert.equal(resolveSignal({ rpm: 8100, rpmMax: 8000 }), 'redline')
 })
 
-test('resolveSignal measures redline against the usable ceiling, then against rpmMax', () => {
-  // 97% of 7400 = 7178: the measured ceiling wins over the game's 8000.
+test('resolveSignal measures redline against the usable ceiling, then against the estimate', () => {
+  // 97% of 7400 = 7178: the measured ceiling wins over the estimate from the game's 8000.
   assert.equal(resolveSignal({ rpm: 7178, rpmMax: 8000, usableCeiling: 7400 }), 'redline')
   assert.equal(resolveSignal({ rpm: 7177, rpmMax: 8000, usableCeiling: 7400 }), 'normal')
-  assert.equal(resolveSignal({ rpm: 7760, rpmMax: 8000, usableCeiling: null }), 'redline')
-  assert.equal(resolveSignal({ rpm: 7000, rpmMax: 8000, usableCeiling: 0 }), 'normal')
+  assert.equal(resolveSignal({ rpm: 6907, rpmMax: 8000, usableCeiling: null }), 'redline')
+  assert.equal(resolveSignal({ rpm: 6800, rpmMax: 8000, usableCeiling: 0 }), 'normal')
 })
 
 test('resolveSignal shows no redline without a limiter or RPM', () => {
@@ -207,15 +213,22 @@ test('resolveSignal gives redline priority over shift', () => {
   assert.equal(resolveSignal({ rpm: 7760, rpmMax: 8000, shiftCueEnabled: true, shiftPhase: 'shift', effectiveTargetRpm: 7000 }), 'redline')
 })
 
-test('resolveSignal keeps purple until RPM passes a shift target at the limiter', () => {
-  // Target 7950 lies above 97% (7760), so red waits for the target.
-  const atLimiter = { rpmMax: 8000, shiftCueEnabled: true, shiftPhase: 'shift', effectiveTargetRpm: 7950 }
+test('resolveSignal keeps purple until RPM passes a shift target at a measured limiter', () => {
+  // Measured limiter 8000: target 7950 lies above 97% (7760), so red waits for the target.
+  const atLimiter = { rpmMax: 8500, usableCeiling: 8000, shiftCueEnabled: true, shiftPhase: 'shift', effectiveTargetRpm: 7950 }
   assert.equal(resolveSignal({ ...atLimiter, rpm: 7800 }), 'shift')
   assert.equal(resolveSignal({ ...atLimiter, rpm: 7950 }), 'redline')
   // Red never waits past the limiter itself.
   assert.equal(resolveSignal({ ...atLimiter, effectiveTargetRpm: 8400, rpm: 8000 }), 'redline')
   // Without the cue the target is ignored.
   assert.equal(resolveSignal({ ...atLimiter, shiftCueEnabled: false, rpm: 7800 }), 'redline')
+})
+
+test('with only the estimate red does not wait for the unreached game max target', () => {
+  // Before any hit the cue target is the game's 10000; red starts at 97% of the 8900 estimate.
+  const first = { rpmMax: 10000, shiftCueEnabled: true, shiftPhase: 'normal', effectiveTargetRpm: 10000 }
+  assert.equal(resolveSignal({ ...first, rpm: 8600 }), 'normal')
+  assert.equal(resolveSignal({ ...first, rpm: 8634 }), 'redline')
 })
 
 test('resolveThresholdRpm is the Shift Light cue-on RPM while the cue is enabled', () => {
@@ -227,10 +240,17 @@ test('resolveThresholdRpm falls back to the effective target when lightOnRpm is 
   assert.equal(resolveThresholdRpm({ rpmMax: 8000, shiftCueEnabled: true, lightOnRpm: 0, effectiveTargetRpm: 6500 }), 6500)
 })
 
-test('resolveThresholdRpm is 97 percent of the limiter without the cue', () => {
-  assert.equal(resolveThresholdRpm({ rpmMax: 8000, shiftCueEnabled: false, lightOnRpm: 6400 }), 7760)
+test('resolveThresholdRpm is where red starts without the cue', () => {
+  assert.ok(Math.abs((resolveThresholdRpm({ rpmMax: 8000, shiftCueEnabled: false, lightOnRpm: 6400 })) - (8000 * 0.89 * 0.97)) < 1e-6)
   assert.equal(resolveThresholdRpm({ rpmMax: 8000, usableCeiling: 7400, shiftCueEnabled: false }), 7178)
-  assert.equal(resolveThresholdRpm({ rpmMax: 8000, shiftCueEnabled: true }), 7760)
+  assert.ok(Math.abs((resolveThresholdRpm({ rpmMax: 8000, shiftCueEnabled: true })) - (8000 * 0.89 * 0.97)) < 1e-6)
+})
+
+test('resolveThresholdRpm never fills later than red starts', () => {
+  // Before any hit the cue-on point (game max minus lead) is unreachable; the bar is full where red starts.
+  assert.ok(Math.abs((resolveThresholdRpm({ rpmMax: 10000, shiftCueEnabled: true, lightOnRpm: 9500 })) - (10000 * 0.89 * 0.97)) < 1e-6)
+  // With an earlier learned cue the bar fills to the cue.
+  assert.equal(resolveThresholdRpm({ rpmMax: 10000, usableCeiling: 9190, shiftCueEnabled: true, lightOnRpm: 8300, effectiveTargetRpm: 8500 }), 8300)
 })
 
 test('resolveThresholdRpm is null without a cue or limiter', () => {
@@ -386,9 +406,12 @@ test('render without a container or root does not throw and reports state', () =
 })
 
 test('a provisional ceiling sets red and the fill until the usable ceiling is trusted', () => {
-  // Real limiter 9195 under a reported 10000: without it the bar stopped short and red never showed.
-  assert.equal(resolveSignal({ rpm: 9195, rpmMax: 10000 }), 'normal')
-  assert.equal(resolveSignal({ rpm: 9195, rpmMax: 10000, provisionalCeiling: 9195 }), 'redline')
+  // Real limiter 9195 under a reported 10000: the 8900 estimate turns red at 8633, a first hit refines it.
+  assert.equal(resolveSignal({ rpm: 8600, rpmMax: 10000 }), 'normal')
+  assert.equal(resolveSignal({ rpm: 8900, rpmMax: 10000 }), 'redline')
+  assert.equal(resolveSignal({ rpm: 8920, rpmMax: 10000, provisionalCeiling: 9195 }), 'redline')
+  assert.equal(resolveSignal({ rpm: 8900, rpmMax: 10000, provisionalCeiling: 9195 }), 'normal')
+  assert.equal(resolveSignal({ rpm: 8920, rpmMax: 10000, provisionalCeiling: 9300 }), 'normal')
   assert.equal(resolveThresholdRpm({ rpmMax: 10000, provisionalCeiling: 9195 }), 9195 * LIMITER_RPM_FRACTION)
   // A trusted ceiling wins over the provisional one.
   assert.equal(resolveThresholdRpm({ rpmMax: 10000, usableCeiling: 9000, provisionalCeiling: 9195 }), 9000 * LIMITER_RPM_FRACTION)

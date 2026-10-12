@@ -84,12 +84,14 @@ both:
 
 - **Flashing red** from 97% of the car's limiter RPM. The limiter is the usable
   RPM ceiling that Shift Light has measured for the car; before that, the
-  highest limiter hit so far (from the first hit on); and only before any hit,
-  the game's maximum RPM. Red takes priority over purple. When
-  purple can show and the gear's Shift Light target lies above 97% of the
-  limiter, red starts only once RPM reaches that target (at most the limiter),
-  so a gear best shifted at the limiter shows purple first. There is no red
-  below 97%, and red never stays steady.
+  highest limiter hit so far (from the first hit on); and before any hit, an
+  estimate of 89% of the game's maximum RPM, because real limiters sit at
+  87–97% of it. Red therefore shows on the first pull too, usually shortly
+  before the limiter. Red takes priority over purple. When purple can show,
+  the limiter has been hit, and the gear's Shift Light target lies above 97%
+  of the limiter, red starts only once RPM reaches that target (at most the
+  limiter), so a gear best shifted at the limiter shows purple first. There is
+  no red below 97%, and red never stays steady.
 - **Flashing purple** at the Shift Light cue, the RPM where Shift Light turns on
   for the current gear, when the **FDC Shift Light** option is enabled. There
   is no purple in the last known gear, the gear the car has never been upshifted
@@ -105,8 +107,9 @@ learned is described in [Shift Light](shift-light.md).
 The **Shift Bar** widget shows the same signal as a row of 36 alternating
 triangles. Its green fill rises from idle RPM to the signal point: the Shift
 Light cue RPM when purple can show, which falls back to Shift Light's target
-RPM if the cue RPM is missing, and otherwise 97% of the limiter. Filled segments
-are whole, so the bar is full only at the signal point. While red or purple is
+RPM if the cue RPM is missing, and otherwise the point where red starts; the
+bar is never filled later than red starts. Filled segments are whole, so the
+bar is full only at the signal point. While red or purple is
 showing, every segment lights in that color and flashes in step with the Gear
 block. The bar shows no text.
 

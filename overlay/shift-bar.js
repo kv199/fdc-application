@@ -7,6 +7,10 @@
   const SEGMENT_COUNT = 36
   // The limiter flash starts at this share of the limiter RPM.
   const LIMITER_RPM_FRACTION = 0.97
+  // Before any limiter hit, the limiter is estimated at this share of the game's max RPM. Recorded
+  // limiters sit at 87-97% of it, so red then shows on the first pull for every recorded car,
+  // usually about 0.15 s before the limiter in first gear.
+  const LIMITER_ESTIMATE_FRACTION = 0.89
   const SEGMENT_VIEW_BOX = '0 0 48 32'
   const TRIANGLE_PATH = 'M19.2 6.4 Q24 0 28.8 6.4 L42 24 Q48 32 38 32 H10 Q0 32 6 24 Z'
   const ROTATED_TRIANGLE_TRANSFORM = 'rotate(180 24 16)'
@@ -30,26 +34,36 @@
     return number !== null && number > 0 ? number : null
   }
 
+  /** The measured limiter: the usable ceiling, then the provisional ceiling (the highest hit so far). */
+  function measuredLimiterRpm({ usableCeiling, provisionalCeiling } = {}) {
+    return finitePositive(usableCeiling) ?? finitePositive(provisionalCeiling)
+  }
+
   /**
-   * The limiter RPM: the measured usable ceiling when it is positive, then the
-   * provisional ceiling (the highest limiter hit so far, before three agree),
-   * otherwise the game's max RPM. Null when none is known.
+   * The limiter RPM: the measured limiter when there is one, otherwise
+   * LIMITER_ESTIMATE_FRACTION of the game's max RPM. Null when none is known.
    */
   function limiterRpm({ usableCeiling, provisionalCeiling, rpmMax } = {}) {
-    return finitePositive(usableCeiling) ?? finitePositive(provisionalCeiling) ?? finitePositive(rpmMax)
+    const measured = measuredLimiterRpm({ usableCeiling, provisionalCeiling })
+    if (measured !== null) return measured
+    const max = finitePositive(rpmMax)
+    return max === null ? null : max * LIMITER_ESTIMATE_FRACTION
   }
 
   /**
    * The RPM where red starts: LIMITER_RPM_FRACTION of the limiter. While the
-   * cue is enabled and the gear's shift target lies above that point, red waits
-   * until RPM passes the target (at most the limiter), so a gear that should be
-   * shifted at the limiter still shows purple first.
+   * cue is enabled, the limiter is measured, and the gear's shift target lies
+   * above that point, red waits until RPM passes the target (at most the
+   * limiter), so a gear that should be shifted at the limiter still shows purple
+   * first. With only the estimate, the target is the unreached game max, so red
+   * does not wait.
    */
   function redlineRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled = false, effectiveTargetRpm } = {}) {
     const limiter = limiterRpm({ usableCeiling, provisionalCeiling, rpmMax })
     if (limiter === null) return null
     const threshold = limiter * LIMITER_RPM_FRACTION
-    const target = shiftCueEnabled === true ? finitePositive(effectiveTargetRpm) : null
+    const measured = measuredLimiterRpm({ usableCeiling, provisionalCeiling }) !== null
+    const target = shiftCueEnabled === true && measured ? finitePositive(effectiveTargetRpm) : null
     return target === null ? threshold : Math.min(limiter, Math.max(threshold, target))
   }
 
@@ -68,16 +82,17 @@
 
   /**
    * The RPM where the Shift Bar is full: the Shift Light cue-on RPM while the
-   * cue is enabled (lightOnRpm, else effectiveTargetRpm), otherwise
-   * LIMITER_RPM_FRACTION of the limiter. Null when no threshold is known.
+   * cue is enabled (lightOnRpm, else effectiveTargetRpm), but never later than
+   * the point where red starts, so the bar is full by then; otherwise where red
+   * starts. Null when no threshold is known.
    */
   function resolveThresholdRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled = false, lightOnRpm, effectiveTargetRpm } = {}) {
+    const redline = redlineRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled, effectiveTargetRpm })
     if (shiftCueEnabled === true) {
       const cueRpm = finitePositive(lightOnRpm) ?? finitePositive(effectiveTargetRpm)
-      if (cueRpm !== null) return cueRpm
+      if (cueRpm !== null) return redline === null ? cueRpm : Math.min(cueRpm, redline)
     }
-    const limiter = limiterRpm({ usableCeiling, provisionalCeiling, rpmMax })
-    return limiter === null ? null : limiter * LIMITER_RPM_FRACTION
+    return redline
   }
 
   /**
@@ -192,6 +207,7 @@
 
   return {
     LIMITER_RPM_FRACTION,
+    LIMITER_ESTIMATE_FRACTION,
     SEGMENT_COUNT,
     TRIANGLE_PATH,
     createShiftBar,

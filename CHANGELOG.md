@@ -12,7 +12,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   limiter flash and the purple cue use the car's real limiter instead of the
   game's higher RPM limit, which many engines never reach. From the first time
   you hit the limiter, the HUD already uses that RPM, so red flashes and the
-  Shift Bar fills to the end without waiting for three hits. **LEARNED
+  Shift Bar fills to the end without waiting for three hits. Even before the
+  first hit, red flashes and the bar fills on the first pull, using 89% of the
+  game's RPM limit as an estimate. **LEARNED
   CEILING** shows how many matching limiter hits it has, out of three, and the
   RPM in use until then.
 - **Hotkeys**: the HUD edit and Driver Analysis hotkeys now accept Ctrl, Alt,
