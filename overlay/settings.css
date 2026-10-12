@@ -1356,6 +1356,14 @@ h1 {
   background: var(--surface-hover);
 }
 
+/* LIVE marks the run whose laps are being saved while capture is recording. */
+.events-run-live {
+  margin-left: 8px;
+  color: var(--accent-ink);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
 .events-run-table td strong[data-result] {
   font-weight: 400;
 }

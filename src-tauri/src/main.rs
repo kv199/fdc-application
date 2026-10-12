@@ -398,7 +398,7 @@ struct ShiftLightVariantResolution {
 }
 
 const SHIFT_LIGHT_LEARNING_MODEL_VERSION: i32 = 4;
-const HUD_SCHEMA_VERSION: i32 = 22;
+const HUD_SCHEMA_VERSION: i32 = 23;
 const MAX_SHIFT_LIGHT_CEILING_SAMPLES: usize = 3;
 const MAX_SHIFT_LIGHT_GEAR_TARGETS: usize = 9;
 const MAX_SHIFT_LIGHT_SHIFT_SAMPLES: usize = 64;
@@ -1466,6 +1466,35 @@ fn migrate_event_trace_telemetry_schema(connection: &mut Connection) -> Result<(
     })
 }
 
+// Sprint results saved from the last live race time before Forza cleared telemetry.
+// Existing runs keep 0 because their result time was never approximate.
+fn migrate_event_result_approximate_schema(connection: &mut Connection) -> Result<(), String> {
+    let has_column = table_has_column(connection, "event_runs", "result_time_approximate")?;
+    let transaction = connection.transaction().map_err(|error| {
+        format!("unable to start Event approximate result schema migration: {error}")
+    })?;
+    if !has_column {
+        transaction
+            .execute(
+                "ALTER TABLE event_runs ADD COLUMN result_time_approximate INTEGER NOT NULL DEFAULT 0
+                   CHECK (result_time_approximate IN (0, 1))",
+                [],
+            )
+            .map_err(|error| format!("unable to add Event approximate result data: {error}"))?;
+    }
+    transaction
+        .execute(
+            "UPDATE hud_schema_version SET version = ?1",
+            params![HUD_SCHEMA_VERSION],
+        )
+        .map_err(|error| {
+            format!("unable to update Event approximate result schema version: {error}")
+        })?;
+    transaction.commit().map_err(|error| {
+        format!("unable to commit Event approximate result schema migration: {error}")
+    })
+}
+
 fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), String> {
     connection
         .execute_batch(
@@ -1589,6 +1618,9 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
     }
     if version < 22 {
         migrate_driver_analysis_app_version(connection)?;
+    }
+    if version < 23 {
+        migrate_event_result_approximate_schema(connection)?;
     }
     Ok(())
 }
@@ -3234,6 +3266,8 @@ struct NewEventRun {
     result: String,
     result_time_ms: Option<i64>,
     #[serde(default)]
+    result_time_approximate: Option<bool>,
+    #[serde(default)]
     laps: Vec<EventRunLapInput>,
 }
 
@@ -3263,6 +3297,7 @@ struct EventRunRecord {
     run_type: String,
     result: String,
     result_time_ms: Option<i64>,
+    result_time_approximate: bool,
     created_at: String,
     laps: Vec<EventRunLap>,
 }
@@ -3437,6 +3472,148 @@ fn delete_event_in_connection(connection: &Connection, event_id: i64) -> Result<
     Ok(())
 }
 
+fn validate_event_run_lap(lap: &EventRunLapInput) -> Result<(), String> {
+    if lap.lap_number <= 0 || lap.lap_time_ms <= 0 {
+        return Err("Event run lap number and time must be positive".to_string());
+    }
+    if [
+        lap.sector_1_time_ms,
+        lap.sector_2_time_ms,
+        lap.sector_3_time_ms,
+    ]
+    .into_iter()
+    .flatten()
+    .any(|time| time <= 0)
+    {
+        return Err("Event run sector times must be positive".to_string());
+    }
+    if lap.trace_points.len() > 10_000 {
+        return Err("Event run lap trace must contain 10,000 points or fewer".to_string());
+    }
+    let mut sample_indexes = HashSet::with_capacity(lap.trace_points.len());
+    for point in &lap.trace_points {
+        if point.sample_index < 0 || point.elapsed_ms < 0 || point.distance < 0.0 {
+            return Err(
+                "Event run lap trace indexes, elapsed time, and distance must not be negative"
+                    .to_string(),
+            );
+        }
+        if ![
+            point.distance,
+            point.position_x,
+            point.position_y,
+            point.position_z,
+            point.throttle,
+            point.brake,
+        ]
+        .into_iter()
+        .all(f64::is_finite)
+        {
+            return Err("Event run lap trace values must be finite".to_string());
+        }
+        if !(0.0..=1.0).contains(&point.throttle) || !(0.0..=1.0).contains(&point.brake) {
+            return Err(
+                "Event run lap trace throttle and brake must be between 0 and 1".to_string(),
+            );
+        }
+        if let Some(speed) = point.speed_kmh {
+            if !speed.is_finite() || speed < 0.0 {
+                return Err("Event run lap trace speed must be finite and non-negative".to_string());
+            }
+        }
+        if let Some(gear) = point.gear {
+            if gear < 0 {
+                return Err("Event run lap trace gear must not be negative".to_string());
+            }
+        }
+        if let Some(rpm) = point.rpm {
+            if !rpm.is_finite() || rpm < 0.0 {
+                return Err("Event run lap trace rpm must be finite and non-negative".to_string());
+            }
+        }
+        let extended_numeric = [
+            point.steer,
+            point.acceleration_x,
+            point.acceleration_y,
+            point.acceleration_z,
+            point.yaw_rate,
+            point.slip_angle_fl,
+            point.slip_angle_fr,
+            point.slip_angle_rl,
+            point.slip_angle_rr,
+            point.slip_ratio_fl,
+            point.slip_ratio_fr,
+            point.slip_ratio_rl,
+            point.slip_ratio_rr,
+            point.combined_slip_fl,
+            point.combined_slip_fr,
+            point.combined_slip_rl,
+            point.combined_slip_rr,
+            point.tire_temp_c_fl,
+            point.tire_temp_c_fr,
+            point.tire_temp_c_rl,
+            point.tire_temp_c_rr,
+            point.suspension_fl,
+            point.suspension_fr,
+            point.suspension_rl,
+            point.suspension_rr,
+            point.puddle_fl,
+            point.puddle_fr,
+            point.puddle_rl,
+            point.puddle_rr,
+        ];
+        if extended_numeric
+            .into_iter()
+            .flatten()
+            .any(|v| !v.is_finite())
+        {
+            return Err("Event run lap trace extended values must be finite".to_string());
+        }
+        if !sample_indexes.insert(point.sample_index) {
+            return Err("Event run lap trace sample indexes must be unique".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn validate_event_run_outcome(
+    run_type: &str,
+    result: &str,
+    result_time_ms: Option<i64>,
+    result_time_approximate: bool,
+    lap_count: usize,
+) -> Result<(), String> {
+    if !["circuit", "sprint"].contains(&run_type) {
+        return Err("unknown Event run type".to_string());
+    }
+    if result_time_ms.is_some_and(|time| time <= 0) {
+        return Err("Event run result time must be positive".to_string());
+    }
+    if result_time_approximate && run_type != "sprint" {
+        return Err("Only Sprint Event run results can be approximate".to_string());
+    }
+    match run_type {
+        "circuit" => {
+            if result != "completed" {
+                return Err("Circuit Event runs must have a completed result".to_string());
+            }
+            if lap_count == 0 {
+                return Err("Circuit Event runs require at least one completed lap".to_string());
+            }
+        }
+        "sprint" => {
+            if result != "confirmed" {
+                return Err("Sprint Event runs require a confirmed result".to_string());
+            }
+            if result_time_ms.is_none() {
+                return Err("Confirmed Sprint Event runs require a result time".to_string());
+            }
+        }
+        _ => return Err("unknown Event run type".to_string()),
+    }
+    Ok(())
+}
+
 fn normalize_event_run_input(mut run: NewEventRun) -> Result<NewEventRun, String> {
     if run.event_id <= 0 {
         return Err("Event run Event ID must be positive".to_string());
@@ -3456,142 +3633,21 @@ fn normalize_event_run_input(mut run: NewEventRun) -> Result<NewEventRun, String
     }
     run.run_type = run.run_type.trim().to_ascii_lowercase();
     run.result = run.result.trim().to_ascii_lowercase();
-    if !["circuit", "sprint"].contains(&run.run_type.as_str()) {
-        return Err("unknown Event run type".to_string());
-    }
-    if run.result_time_ms.is_some_and(|time| time <= 0) {
-        return Err("Event run result time must be positive".to_string());
-    }
     let mut lap_numbers = HashSet::with_capacity(run.laps.len());
     for lap in &run.laps {
-        if lap.lap_number <= 0 || lap.lap_time_ms <= 0 {
-            return Err("Event run lap number and time must be positive".to_string());
-        }
-        if [
-            lap.sector_1_time_ms,
-            lap.sector_2_time_ms,
-            lap.sector_3_time_ms,
-        ]
-        .into_iter()
-        .flatten()
-        .any(|time| time <= 0)
-        {
-            return Err("Event run sector times must be positive".to_string());
-        }
+        validate_event_run_lap(lap)?;
         if !lap_numbers.insert(lap.lap_number) {
             return Err("Event run lap numbers must be unique".to_string());
         }
-        if lap.trace_points.len() > 10_000 {
-            return Err("Event run lap trace must contain 10,000 points or fewer".to_string());
-        }
-        let mut sample_indexes = HashSet::with_capacity(lap.trace_points.len());
-        for point in &lap.trace_points {
-            if point.sample_index < 0 || point.elapsed_ms < 0 || point.distance < 0.0 {
-                return Err(
-                    "Event run lap trace indexes, elapsed time, and distance must not be negative"
-                        .to_string(),
-                );
-            }
-            if ![
-                point.distance,
-                point.position_x,
-                point.position_y,
-                point.position_z,
-                point.throttle,
-                point.brake,
-            ]
-            .into_iter()
-            .all(f64::is_finite)
-            {
-                return Err("Event run lap trace values must be finite".to_string());
-            }
-            if !(0.0..=1.0).contains(&point.throttle) || !(0.0..=1.0).contains(&point.brake) {
-                return Err(
-                    "Event run lap trace throttle and brake must be between 0 and 1".to_string(),
-                );
-            }
-            if let Some(speed) = point.speed_kmh {
-                if !speed.is_finite() || speed < 0.0 {
-                    return Err(
-                        "Event run lap trace speed must be finite and non-negative".to_string()
-                    );
-                }
-            }
-            if let Some(gear) = point.gear {
-                if gear < 0 {
-                    return Err("Event run lap trace gear must not be negative".to_string());
-                }
-            }
-            if let Some(rpm) = point.rpm {
-                if !rpm.is_finite() || rpm < 0.0 {
-                    return Err(
-                        "Event run lap trace rpm must be finite and non-negative".to_string()
-                    );
-                }
-            }
-            let extended_numeric = [
-                point.steer,
-                point.acceleration_x,
-                point.acceleration_y,
-                point.acceleration_z,
-                point.yaw_rate,
-                point.slip_angle_fl,
-                point.slip_angle_fr,
-                point.slip_angle_rl,
-                point.slip_angle_rr,
-                point.slip_ratio_fl,
-                point.slip_ratio_fr,
-                point.slip_ratio_rl,
-                point.slip_ratio_rr,
-                point.combined_slip_fl,
-                point.combined_slip_fr,
-                point.combined_slip_rl,
-                point.combined_slip_rr,
-                point.tire_temp_c_fl,
-                point.tire_temp_c_fr,
-                point.tire_temp_c_rl,
-                point.tire_temp_c_rr,
-                point.suspension_fl,
-                point.suspension_fr,
-                point.suspension_rl,
-                point.suspension_rr,
-                point.puddle_fl,
-                point.puddle_fr,
-                point.puddle_rl,
-                point.puddle_rr,
-            ];
-            if extended_numeric
-                .into_iter()
-                .flatten()
-                .any(|v| !v.is_finite())
-            {
-                return Err("Event run lap trace extended values must be finite".to_string());
-            }
-            if !sample_indexes.insert(point.sample_index) {
-                return Err("Event run lap trace sample indexes must be unique".to_string());
-            }
-        }
     }
     run.laps.sort_by_key(|lap| lap.lap_number);
-    match run.run_type.as_str() {
-        "circuit" => {
-            if run.result != "completed" {
-                return Err("Circuit Event runs must have a completed result".to_string());
-            }
-            if run.laps.is_empty() {
-                return Err("Circuit Event runs require at least one completed lap".to_string());
-            }
-        }
-        "sprint" => {
-            if run.result != "confirmed" {
-                return Err("Sprint Event runs require a confirmed result".to_string());
-            }
-            if run.result_time_ms.is_none() {
-                return Err("Confirmed Sprint Event runs require a result time".to_string());
-            }
-        }
-        _ => unreachable!(),
-    }
+    validate_event_run_outcome(
+        &run.run_type,
+        &run.result,
+        run.result_time_ms,
+        run.result_time_approximate.unwrap_or(false),
+        run.laps.len(),
+    )?;
     Ok(run)
 }
 
@@ -3793,6 +3849,7 @@ fn event_run_values_from_row(
     String,
     Option<i64>,
     String,
+    bool,
 )> {
     Ok((
         row.get(0)?,
@@ -3807,6 +3864,7 @@ fn event_run_values_from_row(
         row.get(9)?,
         row.get(10)?,
         row.get(11)?,
+        row.get(12)?,
     ))
 }
 
@@ -3825,6 +3883,7 @@ fn event_run_from_values(
         String,
         Option<i64>,
         String,
+        bool,
     ),
     include_trace: bool,
 ) -> Result<EventRunRecord, String> {
@@ -3841,6 +3900,7 @@ fn event_run_from_values(
         result,
         result_time_ms,
         created_at,
+        result_time_approximate,
     ) = values;
     Ok(EventRunRecord {
         id,
@@ -3854,6 +3914,7 @@ fn event_run_from_values(
         run_type,
         result,
         result_time_ms,
+        result_time_approximate,
         created_at,
         laps: event_run_laps_from_connection(connection, id, include_trace)?,
     })
@@ -3862,6 +3923,16 @@ fn event_run_from_values(
 fn load_event_run_from_connection(
     connection: &Connection,
     run_id: i64,
+) -> Result<EventRunRecord, String> {
+    load_event_run_record_from_connection(connection, run_id, true)
+}
+
+// Appends and result updates return the run without trace points so each per-lap
+// save event stays small; the detail page loads traces through load_event_run.
+fn load_event_run_record_from_connection(
+    connection: &Connection,
+    run_id: i64,
+    include_trace: bool,
 ) -> Result<EventRunRecord, String> {
     if run_id <= 0 {
         return Err("Event run ID must be positive".to_string());
@@ -3872,7 +3943,8 @@ fn load_event_run_from_connection(
                     garage_cars.display_name,
                     event_runs.car_class, event_runs.car_pi, event_runs.drivetrain,
                     event_runs.started_at, event_runs.run_type, event_runs.result,
-                    event_runs.result_time_ms, event_runs.created_at
+                    event_runs.result_time_ms, event_runs.created_at,
+                    event_runs.result_time_approximate
              FROM event_runs
              LEFT JOIN garage_cars
                ON garage_cars.game_id = 'fh6'
@@ -3887,7 +3959,7 @@ fn load_event_run_from_connection(
             other => format!("unable to load Event run {run_id}: {other}"),
         })?;
     drop(statement);
-    event_run_from_values(connection, values, true)
+    event_run_from_values(connection, values, include_trace)
 }
 
 fn load_event_runs_from_connection(
@@ -3903,7 +3975,8 @@ fn load_event_runs_from_connection(
                     garage_cars.display_name,
                     event_runs.car_class, event_runs.car_pi, event_runs.drivetrain,
                     event_runs.started_at, event_runs.run_type, event_runs.result,
-                    event_runs.result_time_ms, event_runs.created_at
+                    event_runs.result_time_ms, event_runs.created_at,
+                    event_runs.result_time_approximate
              FROM event_runs
              LEFT JOIN garage_cars
                ON garage_cars.game_id = 'fh6'
@@ -4093,6 +4166,103 @@ fn load_event_best_sectors_from_connection(
         .map_err(|error| format!("unable to load Event best sectors: {error}"))
 }
 
+fn insert_event_run_lap(
+    transaction: &Transaction<'_>,
+    run_id: i64,
+    lap: EventRunLapInput,
+) -> Result<(), String> {
+    let lap_number = lap.lap_number;
+    transaction
+        .execute(
+            "INSERT INTO event_run_laps
+               (run_id, lap_number, lap_time_ms,
+                sector_1_time_ms, sector_2_time_ms, sector_3_time_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                run_id,
+                lap_number,
+                lap.lap_time_ms,
+                lap.sector_1_time_ms,
+                lap.sector_2_time_ms,
+                lap.sector_3_time_ms,
+            ],
+        )
+        .map_err(|error| format!("unable to record Event run lap: {error}"))?;
+    for point in lap.trace_points {
+        transaction
+            .execute(
+                "INSERT INTO event_run_lap_trace_points
+                   (run_id, lap_number, sample_index, elapsed_ms, distance,
+                    position_x, position_y, position_z, throttle, brake,
+                    speed_kmh, gear, rpm, steer,
+                    acceleration_x, acceleration_y, acceleration_z, yaw_rate,
+                    slip_angle_fl, slip_angle_fr, slip_angle_rl, slip_angle_rr,
+                    slip_ratio_fl, slip_ratio_fr, slip_ratio_rl, slip_ratio_rr,
+                    combined_slip_fl, combined_slip_fr, combined_slip_rl, combined_slip_rr,
+                    tire_temp_c_fl, tire_temp_c_fr, tire_temp_c_rl, tire_temp_c_rr,
+                    suspension_fl, suspension_fr, suspension_rl, suspension_rr,
+                    puddle_fl, puddle_fr, puddle_rl, puddle_rr,
+                    rumble_fl, rumble_fr, rumble_rl, rumble_rr)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                         ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
+                         ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
+                         ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34,
+                         ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42,
+                         ?43, ?44, ?45, ?46)",
+                params![
+                    run_id,
+                    lap_number,
+                    point.sample_index,
+                    point.elapsed_ms,
+                    point.distance,
+                    point.position_x,
+                    point.position_y,
+                    point.position_z,
+                    point.throttle,
+                    point.brake,
+                    point.speed_kmh,
+                    point.gear,
+                    point.rpm,
+                    point.steer,
+                    point.acceleration_x,
+                    point.acceleration_y,
+                    point.acceleration_z,
+                    point.yaw_rate,
+                    point.slip_angle_fl,
+                    point.slip_angle_fr,
+                    point.slip_angle_rl,
+                    point.slip_angle_rr,
+                    point.slip_ratio_fl,
+                    point.slip_ratio_fr,
+                    point.slip_ratio_rl,
+                    point.slip_ratio_rr,
+                    point.combined_slip_fl,
+                    point.combined_slip_fr,
+                    point.combined_slip_rl,
+                    point.combined_slip_rr,
+                    point.tire_temp_c_fl,
+                    point.tire_temp_c_fr,
+                    point.tire_temp_c_rl,
+                    point.tire_temp_c_rr,
+                    point.suspension_fl,
+                    point.suspension_fr,
+                    point.suspension_rl,
+                    point.suspension_rr,
+                    point.puddle_fl,
+                    point.puddle_fr,
+                    point.puddle_rl,
+                    point.puddle_rr,
+                    point.rumble_fl.map(|v| if v { 1 } else { 0 }),
+                    point.rumble_fr.map(|v| if v { 1 } else { 0 }),
+                    point.rumble_rl.map(|v| if v { 1 } else { 0 }),
+                    point.rumble_rr.map(|v| if v { 1 } else { 0 }),
+                ],
+            )
+            .map_err(|error| format!("unable to record Event run trace point: {error}"))?;
+    }
+    Ok(())
+}
+
 fn record_event_run_in_connection(
     connection: &mut Connection,
     run: NewEventRun,
@@ -4118,8 +4288,8 @@ fn record_event_run_in_connection(
         .execute(
             "INSERT INTO event_runs
                (event_id, car_ordinal, car_name, car_class, car_pi, drivetrain,
-                started_at, run_type, result, result_time_ms)
-             VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                started_at, run_type, result, result_time_ms, result_time_approximate)
+             VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 run.event_id,
                 run.car_ordinal,
@@ -4130,100 +4300,13 @@ fn record_event_run_in_connection(
                 run.run_type,
                 run.result,
                 run.result_time_ms,
+                run.result_time_approximate.unwrap_or(false),
             ],
         )
         .map_err(|error| format!("unable to record Event run: {error}"))?;
     let run_id = transaction.last_insert_rowid();
     for lap in run.laps {
-        let lap_number = lap.lap_number;
-        transaction
-            .execute(
-                "INSERT INTO event_run_laps
-                   (run_id, lap_number, lap_time_ms,
-                    sector_1_time_ms, sector_2_time_ms, sector_3_time_ms)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![
-                    run_id,
-                    lap_number,
-                    lap.lap_time_ms,
-                    lap.sector_1_time_ms,
-                    lap.sector_2_time_ms,
-                    lap.sector_3_time_ms,
-                ],
-            )
-            .map_err(|error| format!("unable to record Event run lap: {error}"))?;
-        for point in lap.trace_points {
-            transaction
-                .execute(
-                    "INSERT INTO event_run_lap_trace_points
-                       (run_id, lap_number, sample_index, elapsed_ms, distance,
-                        position_x, position_y, position_z, throttle, brake,
-                        speed_kmh, gear, rpm, steer,
-                        acceleration_x, acceleration_y, acceleration_z, yaw_rate,
-                        slip_angle_fl, slip_angle_fr, slip_angle_rl, slip_angle_rr,
-                        slip_ratio_fl, slip_ratio_fr, slip_ratio_rl, slip_ratio_rr,
-                        combined_slip_fl, combined_slip_fr, combined_slip_rl, combined_slip_rr,
-                        tire_temp_c_fl, tire_temp_c_fr, tire_temp_c_rl, tire_temp_c_rr,
-                        suspension_fl, suspension_fr, suspension_rl, suspension_rr,
-                        puddle_fl, puddle_fr, puddle_rl, puddle_rr,
-                        rumble_fl, rumble_fr, rumble_rl, rumble_rr)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
-                             ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
-                             ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
-                             ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34,
-                             ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42,
-                             ?43, ?44, ?45, ?46)",
-                    params![
-                        run_id,
-                        lap_number,
-                        point.sample_index,
-                        point.elapsed_ms,
-                        point.distance,
-                        point.position_x,
-                        point.position_y,
-                        point.position_z,
-                        point.throttle,
-                        point.brake,
-                        point.speed_kmh,
-                        point.gear,
-                        point.rpm,
-                        point.steer,
-                        point.acceleration_x,
-                        point.acceleration_y,
-                        point.acceleration_z,
-                        point.yaw_rate,
-                        point.slip_angle_fl,
-                        point.slip_angle_fr,
-                        point.slip_angle_rl,
-                        point.slip_angle_rr,
-                        point.slip_ratio_fl,
-                        point.slip_ratio_fr,
-                        point.slip_ratio_rl,
-                        point.slip_ratio_rr,
-                        point.combined_slip_fl,
-                        point.combined_slip_fr,
-                        point.combined_slip_rl,
-                        point.combined_slip_rr,
-                        point.tire_temp_c_fl,
-                        point.tire_temp_c_fr,
-                        point.tire_temp_c_rl,
-                        point.tire_temp_c_rr,
-                        point.suspension_fl,
-                        point.suspension_fr,
-                        point.suspension_rl,
-                        point.suspension_rr,
-                        point.puddle_fl,
-                        point.puddle_fr,
-                        point.puddle_rl,
-                        point.puddle_rr,
-                        point.rumble_fl.map(|v| if v { 1 } else { 0 }),
-                        point.rumble_fr.map(|v| if v { 1 } else { 0 }),
-                        point.rumble_rl.map(|v| if v { 1 } else { 0 }),
-                        point.rumble_rr.map(|v| if v { 1 } else { 0 }),
-                    ],
-                )
-                .map_err(|error| format!("unable to record Event run trace point: {error}"))?;
-        }
+        insert_event_run_lap(&transaction, run_id, lap)?;
     }
     transaction
         .commit()
@@ -4231,10 +4314,144 @@ fn record_event_run_in_connection(
     load_event_run_from_connection(connection, run_id)
 }
 
+fn append_event_run_lap_in_connection(
+    connection: &mut Connection,
+    run_id: i64,
+    lap: EventRunLapInput,
+) -> Result<EventRunRecord, String> {
+    if run_id <= 0 {
+        return Err("Event run ID must be positive".to_string());
+    }
+    validate_event_run_lap(&lap)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Event run lap record: {error}"))?;
+    let run_type: String = transaction
+        .query_row(
+            "SELECT event_runs.run_type
+             FROM event_runs
+             JOIN events ON events.id = event_runs.event_id
+             WHERE event_runs.id = ?1 AND events.deleted_at IS NULL",
+            params![run_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| match error {
+            SqliteError::QueryReturnedNoRows => format!("Event run {run_id} does not exist"),
+            other => format!("unable to verify Event run {run_id}: {other}"),
+        })?;
+    if run_type != "circuit" {
+        return Err("Only circuit Event runs accept completed laps".to_string());
+    }
+    let lap_exists: bool = transaction
+        .query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM event_run_laps
+               WHERE run_id = ?1 AND lap_number = ?2
+             )",
+            params![run_id, lap.lap_number],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("unable to verify Event run lap: {error}"))?;
+    if lap_exists {
+        return Err(format!("Event run lap {} is already saved", lap.lap_number));
+    }
+    insert_event_run_lap(&transaction, run_id, lap)?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Event run lap record: {error}"))?;
+    load_event_run_record_from_connection(connection, run_id, false)
+}
+
+fn update_event_run_result_in_connection(
+    connection: &mut Connection,
+    run_id: i64,
+    run_type: &str,
+    result: &str,
+    result_time_ms: Option<i64>,
+    result_time_approximate: bool,
+) -> Result<EventRunRecord, String> {
+    if run_id <= 0 {
+        return Err("Event run ID must be positive".to_string());
+    }
+    let run_type = run_type.trim().to_ascii_lowercase();
+    let result = result.trim().to_ascii_lowercase();
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Event run result update: {error}"))?;
+    let lap_count: i64 = transaction
+        .query_row(
+            "SELECT (SELECT COUNT(*) FROM event_run_laps WHERE run_id = event_runs.id)
+             FROM event_runs
+             JOIN events ON events.id = event_runs.event_id
+             WHERE event_runs.id = ?1 AND events.deleted_at IS NULL",
+            params![run_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| match error {
+            SqliteError::QueryReturnedNoRows => format!("Event run {run_id} does not exist"),
+            other => format!("unable to verify Event run {run_id}: {other}"),
+        })?;
+    validate_event_run_outcome(
+        &run_type,
+        &result,
+        result_time_ms,
+        result_time_approximate,
+        usize::try_from(lap_count).unwrap_or(0),
+    )?;
+    transaction
+        .execute(
+            "UPDATE event_runs
+             SET run_type = ?2, result = ?3, result_time_ms = ?4, result_time_approximate = ?5
+             WHERE id = ?1",
+            params![
+                run_id,
+                run_type,
+                result,
+                result_time_ms,
+                result_time_approximate,
+            ],
+        )
+        .map_err(|error| format!("unable to update Event run result: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Event run result update: {error}"))?;
+    load_event_run_record_from_connection(connection, run_id, false)
+}
+
 #[tauri::command]
 fn record_event_run(app: AppHandle, run: NewEventRun) -> Result<EventRunRecord, String> {
     let mut connection = open_shift_light_db(&app)?;
     record_event_run_in_connection(&mut connection, run)
+}
+
+#[tauri::command]
+fn append_event_run_lap(
+    app: AppHandle,
+    run_id: i64,
+    lap: EventRunLapInput,
+) -> Result<EventRunRecord, String> {
+    let mut connection = open_shift_light_db(&app)?;
+    append_event_run_lap_in_connection(&mut connection, run_id, lap)
+}
+
+#[tauri::command]
+fn update_event_run_result(
+    app: AppHandle,
+    run_id: i64,
+    run_type: String,
+    result: String,
+    result_time_ms: Option<i64>,
+    result_time_approximate: bool,
+) -> Result<EventRunRecord, String> {
+    let mut connection = open_shift_light_db(&app)?;
+    update_event_run_result_in_connection(
+        &mut connection,
+        run_id,
+        &run_type,
+        &result,
+        result_time_ms,
+        result_time_approximate,
+    )
 }
 
 #[tauri::command]
@@ -6389,6 +6606,8 @@ fn main() {
             rename_event,
             delete_event,
             record_event_run,
+            append_event_run_lap,
+            update_event_run_result,
             load_event_runs,
             load_event_run,
             load_event_absolute_best,
@@ -7011,6 +7230,7 @@ mod tests {
             run_type: run_type.to_string(),
             result: result.to_string(),
             result_time_ms,
+            result_time_approximate: None,
             laps,
         }
     }
@@ -10585,6 +10805,269 @@ mod tests {
                     .get::<_, i32>(0))
                 .unwrap(),
             HUD_SCHEMA_VERSION
+        );
+    }
+
+    #[test]
+    fn event_run_approximate_migration_from_v22_keeps_existing_runs() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Migrated run", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let existing = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(event.id, "sprint", "confirmed", Some(74_000), Vec::new()),
+        )
+        .unwrap();
+        // A released schema version 22 database has no approximate result column.
+        connection
+            .execute_batch(
+                "ALTER TABLE event_runs DROP COLUMN result_time_approximate;
+                 UPDATE hud_schema_version SET version = 22;",
+            )
+            .unwrap();
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        assert!(table_has_column(&connection, "event_runs", "result_time_approximate").unwrap());
+        assert_eq!(
+            connection
+                .query_row("SELECT version FROM hud_schema_version", [], |row| row
+                    .get::<_, i32>(0))
+                .unwrap(),
+            HUD_SCHEMA_VERSION
+        );
+        let migrated = load_event_run_from_connection(&connection, existing.id).unwrap();
+        assert_eq!(migrated.result_time_ms, Some(74_000));
+        assert!(!migrated.result_time_approximate);
+    }
+
+    #[test]
+    fn event_run_append_keeps_lap_order_and_traces_and_feeds_absolute_best() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Append run", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let lap = |lap_number: i32, lap_time_ms: i64| EventRunLapInput {
+            lap_number,
+            lap_time_ms,
+            sector_1_time_ms: Some(10_000),
+            sector_2_time_ms: Some(10_000),
+            sector_3_time_ms: Some(lap_time_ms - 20_000),
+            trace_points: vec![
+                test_event_trace_point(0, 0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0),
+                test_event_trace_point(1, 50_000, 1_000.0, 1_000.0, 0.0, 0.0, 0.5, 0.0),
+            ],
+        };
+        let saved = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(event.id, "circuit", "completed", None, vec![lap(1, 90_000)]),
+        )
+        .unwrap();
+
+        let appended =
+            append_event_run_lap_in_connection(&mut connection, saved.id, lap(3, 88_000)).unwrap();
+        assert_eq!(
+            appended
+                .laps
+                .iter()
+                .map(|lap| lap.lap_number)
+                .collect::<Vec<_>>(),
+            vec![1, 3]
+        );
+        assert!(appended.laps.iter().all(|lap| lap.trace_points.is_empty()));
+        let appended =
+            append_event_run_lap_in_connection(&mut connection, saved.id, lap(2, 89_000)).unwrap();
+        assert_eq!(
+            appended
+                .laps
+                .iter()
+                .map(|lap| lap.lap_number)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+
+        let loaded = load_event_run_from_connection(&connection, saved.id).unwrap();
+        assert_eq!(
+            loaded
+                .laps
+                .iter()
+                .map(|lap| lap.lap_number)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+        assert!(loaded.laps.iter().all(|lap| lap.trace_points.len() == 2));
+        let best = load_event_absolute_best_from_connection(&connection, event.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(best.time_ms, 88_000);
+        assert_eq!(best.lap_number, Some(3));
+        assert_eq!(best.trace_points.len(), 2);
+        assert_eq!(best.best_sectors.sector_1_time_ms, Some(10_000));
+    }
+
+    #[test]
+    fn event_run_append_rejects_duplicates_sprints_and_unknown_runs() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Guarded run", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let lap = |lap_number: i32, lap_time_ms: i64| EventRunLapInput {
+            lap_number,
+            lap_time_ms,
+            sector_1_time_ms: None,
+            sector_2_time_ms: None,
+            sector_3_time_ms: None,
+            trace_points: Vec::new(),
+        };
+        let circuit = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(event.id, "circuit", "completed", None, vec![lap(1, 90_000)]),
+        )
+        .unwrap();
+        let sprint = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(event.id, "sprint", "confirmed", Some(74_000), Vec::new()),
+        )
+        .unwrap();
+
+        let duplicate =
+            append_event_run_lap_in_connection(&mut connection, circuit.id, lap(1, 89_000))
+                .err()
+                .expect("expected an error");
+        assert!(duplicate.contains("already saved"), "{duplicate}");
+        let sprint_error =
+            append_event_run_lap_in_connection(&mut connection, sprint.id, lap(1, 74_000))
+                .err()
+                .expect("expected an error");
+        assert!(sprint_error.contains("circuit"), "{sprint_error}");
+        let unknown = append_event_run_lap_in_connection(&mut connection, 9_999, lap(2, 89_000))
+            .err()
+            .expect("expected an error");
+        assert!(unknown.contains("does not exist"), "{unknown}");
+        let invalid = append_event_run_lap_in_connection(&mut connection, circuit.id, lap(2, 0))
+            .err()
+            .expect("expected an error");
+        assert!(invalid.contains("must be positive"), "{invalid}");
+
+        let runs = load_event_runs_from_connection(&connection, Some(event.id)).unwrap();
+        let stored = runs.iter().find(|run| run.id == circuit.id).unwrap();
+        assert_eq!(
+            stored
+                .laps
+                .iter()
+                .map(|lap| lap.lap_number)
+                .collect::<Vec<_>>(),
+            vec![1]
+        );
+    }
+
+    #[test]
+    fn event_run_result_update_round_trips_the_approximate_flag() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let event = create_event_in_connection(
+            &mut connection,
+            test_event("Result run", "A", "Asphalt", "Rivals", None),
+        )
+        .unwrap();
+        let mut approximate =
+            test_event_run(event.id, "sprint", "confirmed", Some(68_953), Vec::new());
+        approximate.result_time_approximate = Some(true);
+        let approximate = record_event_run_in_connection(&mut connection, approximate).unwrap();
+        assert!(approximate.result_time_approximate);
+        let exact = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(event.id, "sprint", "confirmed", Some(74_000), Vec::new()),
+        )
+        .unwrap();
+        assert!(!exact.result_time_approximate);
+
+        let updated = update_event_run_result_in_connection(
+            &mut connection,
+            exact.id,
+            " Sprint ",
+            "CONFIRMED",
+            Some(73_500),
+            true,
+        )
+        .unwrap();
+        assert_eq!(updated.result_time_ms, Some(73_500));
+        assert!(updated.result_time_approximate);
+        assert!(updated.laps.is_empty());
+        let reloaded = load_event_run_from_connection(&connection, exact.id).unwrap();
+        assert!(reloaded.result_time_approximate);
+
+        let circuit = record_event_run_in_connection(
+            &mut connection,
+            test_event_run(
+                event.id,
+                "circuit",
+                "completed",
+                None,
+                vec![EventRunLapInput {
+                    lap_number: 1,
+                    lap_time_ms: 90_000,
+                    sector_1_time_ms: None,
+                    sector_2_time_ms: None,
+                    sector_3_time_ms: None,
+                    trace_points: Vec::new(),
+                }],
+            ),
+        )
+        .unwrap();
+        assert!(
+            update_event_run_result_in_connection(
+                &mut connection,
+                circuit.id,
+                "circuit",
+                "completed",
+                None,
+                true
+            )
+            .is_err()
+        );
+        assert!(
+            update_event_run_result_in_connection(
+                &mut connection,
+                exact.id,
+                "sprint",
+                "completed",
+                Some(73_500),
+                false
+            )
+            .is_err()
+        );
+        assert!(
+            update_event_run_result_in_connection(
+                &mut connection,
+                exact.id,
+                "sprint",
+                "confirmed",
+                None,
+                false
+            )
+            .is_err()
+        );
+        assert!(
+            update_event_run_result_in_connection(
+                &mut connection,
+                9_999,
+                "sprint",
+                "confirmed",
+                Some(73_500),
+                false
+            )
+            .is_err()
         );
     }
 

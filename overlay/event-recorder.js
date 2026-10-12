@@ -6,8 +6,10 @@
   const FdcVehicle = globalThis.FdcVehicle || require('./vehicle.js')
   const START_MAX_MS = 2000
   const START_MAX_DISTANCE_M = 25
-  const POST_FINISH_PACKET_WINDOW = 48
-  const POST_FINISH_WAIT_MS = 1000
+  const POST_FINISH_PACKET_WINDOW = 300
+  const POST_FINISH_WAIT_MS = 5000
+  // Sprint results that fall back to the last live race time are persisted as approximate.
+  const APPROXIMATE_RESULT_SOURCE = 'forza_live_race_time'
   const TRACE_SAMPLE_INTERVAL_MS = 100
   const TRACE_MAX_POINTS = 10000
   const WHEELS = ['Fl', 'Fr', 'Rl', 'Rr']
@@ -285,6 +287,69 @@
     return sample
   }
 
+  // Shared between a run and the shallow copy that finishRun persists, so every
+  // save of the same attempt sees which laps and result the database already holds.
+  function createPersistenceStore() {
+    return {
+      dbRunId: null,
+      savedLapNumbers: new Set(),
+      savedRunType: null,
+      savedResult: null,
+      savedResultTimeMs: null,
+      savedApproximate: false,
+      savedRecord: null
+    }
+  }
+
+  function payloadLap(lap) {
+    const payloadLapValue = { lapNumber: lap.lapNumber, lapTimeMs: lap.timeMs }
+    for (const key of ['sector1TimeMs', 'sector2TimeMs', 'sector3TimeMs']) {
+      const value = finite(lap[key])
+      if (value !== null && value > 0) payloadLapValue[key] = Math.round(value)
+    }
+    if (Array.isArray(lap.tracePoints) && lap.tracePoints.length > 0) {
+      payloadLapValue.tracePoints = lap.tracePoints.map(point => ({ ...point }))
+    }
+    return payloadLapValue
+  }
+
+  function resultFields(run) {
+    return {
+      runType: run.runType,
+      result: run.result,
+      resultTimeMs: finite(run.finalTimeMs),
+      resultTimeApproximate: run.finalTimeSource === APPROXIMATE_RESULT_SOURCE
+    }
+  }
+
+  function resultChanged(store, fields) {
+    return fields.runType !== store.savedRunType
+      || fields.result !== store.savedResult
+      || fields.resultTimeMs !== store.savedResultTimeMs
+      || fields.resultTimeApproximate !== store.savedApproximate
+  }
+
+  function eventRunPayload(run, laps, fields) {
+    return {
+      eventId: Number.isFinite(Number(run.eventId)) ? Math.round(Number(run.eventId)) : run.eventId,
+      carOrdinal: run.car.ordinal,
+      carClass: run.car.class,
+      carPi: run.car.pi,
+      drivetrain: run.car.drivetrain,
+      startedAt: run.startedAt,
+      runType: fields.runType,
+      result: fields.result,
+      resultTimeMs: fields.resultTimeMs,
+      resultTimeApproximate: fields.resultTimeApproximate,
+      laps: laps.map(payloadLap)
+    }
+  }
+
+  function savedRecordId(record) {
+    const id = Number(record?.id)
+    return Number.isFinite(id) && id > 0 ? Math.round(id) : null
+  }
+
   function createRun(eventId, telemetry, timestamp) {
     const safeTimestamp = Number.isFinite(Number(timestamp)) ? Number(timestamp) : Date.now()
     return {
@@ -304,7 +369,8 @@
       startDistanceM: null,
       lastLiveDistanceM: null,
       sawZeroedRaceExit: false,
-      car: carSnapshot(telemetry)
+      car: carSnapshot(telemetry),
+      store: createPersistenceStore()
     }
   }
 
@@ -335,6 +401,7 @@
     let lastPersistence = null
     let lastStatusSignature = null
     let pendingPostFinishStop = null
+    let offlineRunId = 0
 
     function status(extra = {}, force = false) {
       const run = state.run
@@ -344,6 +411,7 @@
         recording: state.armed && !state.finalizing,
         state: state.finalizing ? 'finalizing' : state.armed ? (run ? 'recording' : 'armed') : 'stopped',
         runId: run?.runId ?? null,
+        savedRunId: run?.store?.dbRunId ?? null,
         lapCount: run?.laps.length ?? 0,
         laps: run?.laps.map(lap => ({ ...lap })) ?? [],
         ...extra
@@ -353,6 +421,7 @@
         payload.recording,
         payload.state,
         payload.runId,
+        payload.savedRunId,
         payload.lapCount,
         run?.finalTimeMs ?? null,
         payload.restart,
@@ -540,6 +609,105 @@
       return covered < reference * SPRINT_MIN_REFERENCE_DISTANCE_RATIO
     }
 
+    // Without an invoke bridge (tests and the browser preview) the save is simulated
+    // with an incrementing run ID, so callers still see a saved record.
+    function persistenceCall(command, args) {
+      return Promise.resolve().then(() => {
+        if (invoke) return invoke(command, args)
+        if (command === 'record_event_run') {
+          offlineRunId += 1
+          return { ...args.run, id: offlineRunId }
+        }
+        if (command === 'append_event_run_lap') return { id: args.runId }
+        return {
+          id: args.runId,
+          runType: args.runType,
+          result: args.result,
+          resultTimeMs: args.resultTimeMs,
+          resultTimeApproximate: args.resultTimeApproximate
+        }
+      })
+    }
+
+    function enqueuePersistence(task) {
+      const queued = persistQueue.catch(() => undefined).then(task)
+      persistQueue = queued.catch(() => undefined)
+      return queued
+    }
+
+    function failureMessage(error, subject = 'run') {
+      const detail = text(error?.message ?? error)
+      return detail ? `Unable to save ${subject}: ${detail}` : `Unable to save ${subject}.`
+    }
+
+    function rememberResult(store, fields) {
+      store.savedRunType = fields.runType
+      store.savedResult = fields.result
+      store.savedResultTimeMs = fields.resultTimeMs
+      store.savedApproximate = fields.resultTimeApproximate
+    }
+
+    async function insertRecord(run, laps, fields) {
+      const record = await persistenceCall('record_event_run', { run: eventRunPayload(run, laps, fields) })
+      const id = savedRecordId(record)
+      if (id === null) throw new Error('the saved run has no ID')
+      const store = run.store
+      store.dbRunId = id
+      for (const lap of laps) store.savedLapNumbers.add(lap.lapNumber)
+      rememberResult(store, fields)
+      store.savedRecord = record
+      try { onSaved(record) } catch (_) {}
+      return record
+    }
+
+    async function appendRecordLap(run, lap) {
+      const store = run.store
+      const record = await persistenceCall('append_event_run_lap', {
+        runId: store.dbRunId,
+        lap: payloadLap(lap)
+      })
+      store.savedLapNumbers.add(lap.lapNumber)
+      store.savedRecord = record
+      try { onSaved(record) } catch (_) {}
+      return record
+    }
+
+    async function updateRecordResult(run, fields) {
+      const store = run.store
+      const record = await persistenceCall('update_event_run_result', {
+        runId: store.dbRunId,
+        runType: fields.runType,
+        result: fields.result,
+        resultTimeMs: fields.resultTimeMs,
+        resultTimeApproximate: fields.resultTimeApproximate
+      })
+      rememberResult(store, fields)
+      store.savedRecord = record
+      try { onSaved(record) } catch (_) {}
+      return record
+    }
+
+    // Each completed circuit lap is written as soon as it completes. The first
+    // lap creates the run; later laps are appended to it. A failure leaves the
+    // lap unsaved so the finish-time save retries it.
+    function saveCompletedLap(run) {
+      return enqueuePersistence(async () => {
+        const store = run.store
+        const unsaved = run.laps.filter(lap => !store.savedLapNumbers.has(lap.lapNumber))
+        if (unsaved.length === 0) return
+        try {
+          if (store.dbRunId === null) {
+            await insertRecord(run, unsaved, resultFields(run))
+          } else {
+            for (const lap of unsaved) await appendRecordLap(run, lap)
+          }
+          status()
+        } catch (error) {
+          status({ error: failureMessage(error, 'lap') })
+        }
+      })
+    }
+
     function persist(run, reason) {
       if (!run) return Promise.resolve(result(null, 'discarded', 'There is no active run to save.'))
       if (run.shortSprint) {
@@ -548,51 +716,25 @@
       if (!hasPersistableResult(run)) {
         return Promise.resolve(result(run, 'discarded', 'The run has no completed laps or confirmed result.'))
       }
-      const laps = run.laps.map(lap => {
-        const payloadLap = { lapNumber: lap.lapNumber, lapTimeMs: lap.timeMs }
-        for (const key of ['sector1TimeMs', 'sector2TimeMs', 'sector3TimeMs']) {
-          const value = finite(lap[key])
-          if (value !== null && value > 0) payloadLap[key] = Math.round(value)
+      return enqueuePersistence(async () => {
+        const store = run.store
+        try {
+          if (store.dbRunId === null) {
+            const fields = resultFields(run)
+            const record = await insertRecord(run, run.laps, fields)
+            return result(run, 'saved', `Run saved (${reason}).`, { run: record })
+          }
+          // A circuit run with saved laps only needs its unsaved laps and any changed result.
+          const unsaved = run.laps.filter(lap => !store.savedLapNumbers.has(lap.lapNumber))
+          for (const lap of unsaved) await appendRecordLap(run, lap)
+          const fields = resultFields(run)
+          if (resultChanged(store, fields)) await updateRecordResult(run, fields)
+          return result(run, 'saved', `Run saved (${reason}).`, { run: store.savedRecord })
+        } catch (error) {
+          const message = failureMessage(error)
+          return result(run, 'failed', message, { error: message })
         }
-        if (Array.isArray(lap.tracePoints) && lap.tracePoints.length > 0) {
-          payloadLap.tracePoints = lap.tracePoints.map(point => ({ ...point }))
-        }
-        return payloadLap
       })
-      const payload = {
-        run: {
-          eventId: Number.isFinite(Number(run.eventId)) ? Math.round(Number(run.eventId)) : run.eventId,
-          carOrdinal: run.car.ordinal,
-          carClass: run.car.class,
-          carPi: run.car.pi,
-          drivetrain: run.car.drivetrain,
-          startedAt: run.startedAt,
-          runType: run.runType,
-          result: run.result,
-          resultTimeMs: run.finalTimeMs,
-          laps
-        }
-      }
-      const queued = persistQueue.catch(() => undefined).then(() => {
-        if (!invoke) {
-          try { onSaved(payload) } catch (_) {}
-          return result(run, 'saved', `Run saved (${reason}).`, { run: payload.run })
-        }
-        return Promise.resolve()
-          .then(() => invoke('record_event_run', payload))
-          .then(saved => {
-            const savedRun = saved?.run || saved || payload.run
-            try { onSaved(savedRun) } catch (_) {}
-            return result(run, 'saved', `Run saved (${reason}).`, { run: savedRun })
-          })
-          .catch(error => {
-            const detail = text(error?.message ?? error)
-            const message = detail ? `Unable to save run: ${detail}` : 'Unable to save run.'
-            return result(run, 'failed', message, { error: message })
-          })
-      })
-      persistQueue = queued.catch(() => undefined)
-      return queued
     }
 
     function finishRun(reason, finalTimeMs = null, finalTimeSource = null) {
@@ -676,6 +818,13 @@
 
     function update(telemetry) {
       if (!state.armed || !telemetry || typeof telemetry !== 'object') return status()
+      // A new attempt that starts while STOP is waiting for the game-reported
+      // result settles the previous attempt with the best available result. It
+      // disarms without attaching the new attempt to any run.
+      if (pendingPostFinishStop && isCleanStart(telemetry)) {
+        finishPostFinishStop()
+        return status()
+      }
       const previousTiming = state.timingState || timingApi?.createState?.() || null
       const autoSprintRestart = Boolean(
         state.run
@@ -719,6 +868,7 @@
             const lapNumber = Math.round(Number(telemetry.lap.number))
             const lap = state.run.laps.find(candidate => candidate.lapNumber === lapNumber)
             notifyReferenceCandidate(state.run, lap)
+            saveCompletedLap(state.run)
           }
         }
         if (state.run && nextTiming?.phase === 'sprint_complete' && finite(nextTiming.finalTimeMs) !== null) {

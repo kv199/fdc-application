@@ -61,6 +61,12 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   green when faster, yellow when slower, and purple for the Event's best time
   in that sector. A finished lap's results stay on screen until the first
   sector of the next lap is done.
+- **Events**: circuit laps are saved as soon as each one is completed, so
+  closing FDC no longer loses a session, and **STOP** only ends the
+  recording. The Event page updates during the session, and the run being
+  recorded is marked **LIVE**. After a Sprint finish, **STOP** waits up to
+  five seconds for the game's result. A result taken from the last live race
+  time is shown with `~`, because it can be a few milliseconds short.
 
 ### Improved
 

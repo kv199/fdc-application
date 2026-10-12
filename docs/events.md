@@ -38,7 +38,7 @@ The tab opens with a short intro and contains:
   confirmed Sprint result across that Event. When the Event has saved traces,
   only results whose trace covers at least 97% of the Event's longest traced
   distance are eligible. During a recording, Absolute Best updates immediately
-  when Delta accepts a faster result, before the run is saved. The header shows
+  when Delta accepts a faster result, before the lap is saved. The header shows
   a back link `← EVENTS` and Escape both return to the Events list.
 - Selecting the event title starts inline renaming. Enter or leaving the input
   saves a non-empty name; Escape cancels that rename without leaving the page.
@@ -55,11 +55,18 @@ The tab opens with a short intro and contains:
   instruction.
 - One saved run ID represents one driving attempt, including every completed
   circuit lap in that attempt. Completing another lap never creates another
-  run ID. A circuit result stores each completed lap and shows the best lap and
-  its lap number in the event page; a sprint shows its confirmed finish time.
+  run ID. Each completed circuit lap is saved as soon as it completes: the
+  first lap creates the run and every later lap is appended to that run, so a
+  closed or crashed FDC keeps the laps already completed. The event page shows
+  the best lap and its lap number; a sprint shows its confirmed finish time.
   A confirmed sprint is saved immediately and leaves capture armed for the
-  next attempt. Circuit laps remain in their current run until **STOP** or a
-  confirmed restart.
+  next attempt. For a circuit, **STOP** only ends capture; an unfinished lap in
+  progress is discarded.
+- While capture is recording, the saved run that receives laps shows a lime
+  **LIVE** tag beside its ID. Each lap save updates that run's **BEST** and
+  **LAPS** values and the Event's Absolute Best during the session. An open run
+  detail page for that run reloads its laps after each save; its expanded lap
+  stays open while that lap still exists.
 - Saved runs are a table with `ID`, `CAR`, `CLASS / PI / DRIVE`, `BEST`, `LAPS`,
   and `DATE` columns. `BEST` shows the run's best time, and `DATE` shows the
   local run start as `YYYY.MM.DD HH:MM:SS`.
@@ -125,14 +132,15 @@ The tab opens with a short intro and contains:
 - A circuit attempt with no completed lap, or a sprint without a confirmed
   result, is discarded rather than added to the saved-run list. If a started
   sprint reaches a zeroed non-live result packet before its final packet is
-  observed, **STOP** checks up to 48 additional packets (for at most one
-  second) for the game-reported final result. It uses that result when
+  observed, **STOP** checks up to 300 additional packets (for at most five
+  seconds) for the game-reported final result. It uses that result when
   available; otherwise it uses the last live race time as the manually
   confirmed result.
   Selecting **STOP** explicitly reports whether the attempt was saved,
   discarded, or could not be stored. A saved circuit reports its latest stored
   completed lap as **LAST**; a saved Sprint reports its stored final result as
-  **RESULT**. The feedback never uses the live clock after the game resets it.
+  **RESULT**, prefixed with `~` when that result is approximate. The feedback
+  never uses the live clock after the game resets it.
 - **DELETE** asks `ARE YOU SURE?` with **YES** and **NO**. **NO** is selected,
   and Escape or a click outside the question also answers **NO**. **YES** hides
   the event from the active list while retaining its row and saved runs in
@@ -154,8 +162,9 @@ less than 97% of the active reference distance never replaces it, and a trace
 that covers noticeably more distance replaces a partial reference regardless
 of time. When Delta accepts a faster reference, the Event page's purple
 **Absolute Best** time updates immediately and silently (no badge or message)
-before the run is saved. Circuit rows remain part of the active unsaved run
-until **STOP** or a confirmed restart. The same load also returns the Event's
+before the lap is saved. Each completed circuit lap is saved as it completes,
+and **STOP** or a confirmed restart only ends that attempt. The same load also
+returns the Event's
 best Sector 1, Sector 2 and Sector 3 times, each the quickest saved value across
 the Event's completed circuit laps and confirmed Sprint laps that pass the same
 97% distance rule as Absolute Best, regardless of car; the HUD uses them for
@@ -220,8 +229,8 @@ laps recorded before extended telemetry keep their pedal-only traces.
   that completed lap in the current run. If `LastLap` arrives one packet late,
   FDC retains the pending boundary until that value arrives. The stored circuit
   time is the `LastLap` value, not a sampled current clock. A faster completed
-  lap becomes Delta's in-memory reference immediately, while persistence still
-  occurs for the complete run at **STOP** or a confirmed restart.
+  lap becomes Delta's in-memory reference immediately, and the lap is saved as
+  it completes.
 - In a sprint, a non-live positive `LastLap` that is new and compatible with
   the live attempt confirms the finish immediately. A non-live advancing
   `CurrentLap` can also confirm the finish after the same value is observed in
@@ -246,8 +255,9 @@ Some sprint result transitions clear `IsRaceOn`, `CurrentLap`,
 available to FDC. The next clean live start automatically saves the preceding
 attempt using the last live `CurrentRaceTime` and begins a new attempt. If
 **STOP** is selected instead, FDC enters the temporary **FINALIZING** state and
-continues processing up to 48 subsequent Direct Data Out samples for at most
-one second.
+continues processing up to 300 subsequent Direct Data Out samples for at most
+five seconds. A new clean live start during FINALIZING settles the previous
+attempt the same way at once and disarms, so the new attempt is not recorded.
 
 If those samples contain a confirmed final `LastLap` or Current Lap result,
 that game-reported telemetry value is saved. If not, FDC saves the last live
@@ -256,6 +266,14 @@ lost. That fallback is the last time received before the game cleared its
 telemetry and can differ by a few milliseconds from the time displayed by
 Forza on its result screen. FDC cannot reconstruct a more precise result when
 the corresponding value is absent from Direct Data Out.
+
+A sprint result saved from the last live race time is stored as approximate.
+The run list BEST value, the run detail time, and the STOP feedback then show a
+`~` prefix, for example `~01:08.953`, and the run list and run detail show the
+tooltip "Approximate: last live race time before Forza cleared telemetry". This
+marking applies both to a STOP fallback and to the fallback saved when the next
+clean start finishes the previous attempt. A game-reported result is never
+marked.
 
 ## Mode colors
 
@@ -298,6 +316,9 @@ deletion; deleted rows and their numeric IDs remain stored and are excluded
 from the active library. Schema version 20 adds nullable extended telemetry
 columns to `event_run_lap_trace_points`; existing trace rows keep them empty.
 The Absolute Best reference used by Delta loads only the base trace columns.
+Schema version 23 adds `event_runs.result_time_approximate`, an integer flag
+(`0` or `1`, default `0`) that marks a Sprint result saved from the last live
+race time. Existing runs keep `0`.
 
 Deleting an Event hides it from the active library while retaining its row and
 runs in SQLite so its numeric ID is not reused. FDC trims names and
@@ -311,6 +332,8 @@ notes before storing them; empty notes are stored as absent.
 - `rename_event`
 - `delete_event`
 - `record_event_run`
+- `append_event_run_lap`
+- `update_event_run_result`
 - `load_event_runs`
 - `load_event_run`
 - `load_event_absolute_best`

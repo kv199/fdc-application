@@ -187,7 +187,7 @@
   let appVersionNumber = null
   let appVersionFeedbackTimer = null
   let currentEventRun = null
-  let recorderState = { eventId: null, recording: false, state: 'stopped', lapCount: 0 }
+  let recorderState = { eventId: null, recording: false, state: 'stopped', lapCount: 0, savedRunId: null }
   let eventsView = 'library'
   let currentEventId = null
   let eventsCreateOpen = false
@@ -195,6 +195,8 @@
   let eventRunsSort = { key: 'date', direction: 'desc' }
   let eventRunLapSortDirection = 'desc'
   let expandedEventRunLap = null
+  // Live reloads of the open run can finish out of order; only the newest one may render.
+  let openEventRunRefreshSequence = 0
   // Selected trace map layers shared by every lap until the window reloads; null shows all layers.
   let traceMapLayerSelection = null
   // Driver Analysis drive maps open with the errors and clean checks; ALL shows every layer.
@@ -676,7 +678,8 @@
         eventId: eventKey(payload.eventId),
         recording: payload.recording === true,
         state: payload.state || (payload.recording ? 'recording' : 'stopped'),
-        lapCount: Number(payload.lapCount) || 0
+        lapCount: Number(payload.lapCount) || 0,
+        savedRunId: runId(payload.savedRunId)
       }
       renderEventRecorder()
     })
@@ -687,6 +690,7 @@
       if (updateEventLastRecordedAt(run)) renderEventsLibrary()
       renderEventRuns()
       void loadEventAbsoluteBest()
+      if (currentEventRun?.id === run.id && eventsView === 'run') void refreshOpenEventRun(run.id)
     })
     await eventApi.listen('event_recorder_result', event => {
       const payload = event?.payload
@@ -1261,6 +1265,7 @@
       startedAt: source.startedAt ?? source.started_at ?? source.createdAt ?? source.created_at ?? null,
       recordedAt: source.createdAt ?? source.created_at ?? source.recordedAt ?? source.recorded_at ?? source.startedAt ?? source.started_at ?? null,
       finalTimeMs,
+      resultTimeApproximate: source.resultTimeApproximate === true || source.result_time_approximate === true,
       runType,
       result: eventText(source.result).toLowerCase() || 'completed',
       laps: normalizedLaps,
@@ -1291,6 +1296,23 @@
     return `${minutes}:${seconds}`
   }
 
+  function approximateRunResultTitle() {
+    return 'Approximate: last live race time before Forza cleared telemetry'
+  }
+
+  // Only a sprint result saved from the last live race time is approximate; game-reported results are never marked.
+  function isApproximateRunResult(run, timeMs) {
+    return run?.runType === 'sprint'
+      && run.resultTimeApproximate === true
+      && Number.isFinite(timeMs)
+      && timeMs === run.finalTimeMs
+  }
+
+  function formatRunResultTime(run, timeMs) {
+    const formatted = formatRunTime(timeMs)
+    return isApproximateRunResult(run, timeMs) ? `~${formatted}` : formatted
+  }
+
   function latestPersistedLap(run) {
     return (run?.laps || []).reduce((latest, lap) => {
       const lapNumber = Number(lap?.lapNumber)
@@ -1301,7 +1323,7 @@
 
   function savedRunTimeLabel(run) {
     if (run?.runType === 'sprint') {
-      return Number.isFinite(run.finalTimeMs) ? `RESULT ${formatRunTime(run.finalTimeMs)}` : null
+      return Number.isFinite(run.finalTimeMs) ? `RESULT ${formatRunResultTime(run, run.finalTimeMs)}` : null
     }
     const lap = latestPersistedLap(run)
     return Number.isFinite(lap?.timeMs) ? `LAST ${formatRunTime(lap.timeMs)}` : null
@@ -1476,6 +1498,12 @@
       const idCell = document.createElement('th')
       idCell.scope = 'row'
       idCell.textContent = String(run.id)
+      if (recorderState.recording === true && recorderState.savedRunId === run.id) {
+        const live = document.createElement('span')
+        live.className = 'events-run-live'
+        live.textContent = 'LIVE'
+        idCell.append(live)
+      }
       row.append(idCell)
       const carCell = document.createElement('td')
       carCell.textContent = runCarName(run)
@@ -1487,7 +1515,12 @@
       const bestCell = document.createElement('td')
       const bestTime = document.createElement('span')
       bestTime.className = 'events-run-table__time'
-      bestTime.textContent = formatRunTime(runBestTimeMs(run))
+      const bestTimeMs = runBestTimeMs(run)
+      bestTime.textContent = formatRunResultTime(run, bestTimeMs)
+      if (isApproximateRunResult(run, bestTimeMs)) {
+        bestTime.title = approximateRunResultTitle()
+        bestTime.setAttribute('aria-label', approximateRunResultTitle())
+      }
       bestCell.append(bestTime)
       row.append(bestCell)
       const lapsCell = document.createElement('td')
@@ -1502,13 +1535,18 @@
     }
   }
 
-  function renderRunTimeCell(timeMs, ranks) {
+  function renderRunTimeCell(timeMs, ranks, approximate = false) {
     const value = document.createElement('span')
     value.className = 'events-run-table__time'
     if (!Number.isFinite(timeMs)) value.classList.add('is-missing')
     const tone = timeTone(timeMs, ranks)
     if (tone) value.dataset.tone = tone
-    value.textContent = formatRunTime(timeMs)
+    const marked = approximate && Number.isFinite(timeMs)
+    value.textContent = marked ? `~${formatRunTime(timeMs)}` : formatRunTime(timeMs)
+    if (marked) {
+      value.title = approximateRunResultTitle()
+      value.setAttribute('aria-label', approximateRunResultTitle())
+    }
     return value
   }
 
@@ -2079,7 +2117,7 @@
         lapNumber.scope = 'row'
         lapNumber.textContent = Number.isFinite(lap.lapNumber) ? String(Math.round(lap.lapNumber)) : '—'
         const lapTime = document.createElement('td')
-        lapTime.append(renderRunTimeCell(lap.timeMs, lapRanks))
+        lapTime.append(renderRunTimeCell(lap.timeMs, lapRanks, isApproximateRunResult(run, lap.timeMs)))
         row.append(lapNumber, lapTime)
         for (let index = 0; index < 3; index += 1) {
           const sector = document.createElement('td')
@@ -2127,6 +2165,27 @@
       // The list payload remains usable; trace details simply stay unavailable.
     }
     return true
+  }
+
+  // Reloads the open run after one of its laps is saved. The expanded lap, sort, and focus stay as they are.
+  async function refreshOpenEventRun(id) {
+    const key = runId(id)
+    if (!key || currentEventRun?.id !== key || eventsView !== 'run') return
+    const sequence = ++openEventRunRefreshSequence
+    try {
+      const nativeRunId = Number.isFinite(Number(key)) ? Math.round(Number(key)) : key
+      const loaded = normalizeEventRun(await call('load_event_run', { runId: nativeRunId }))
+      if (sequence !== openEventRunRefreshSequence) return
+      if (!loaded || loaded.id !== key || eventsView !== 'run' || currentEventRun?.id !== key) return
+      currentEventRuns = currentEventRuns.map(candidate => candidate.id === key ? loaded : candidate)
+      currentEventRun = loaded
+      if (expandedEventRunLap !== null && !loaded.laps.some(lap => lap.lapNumber === expandedEventRunLap)) {
+        expandedEventRunLap = null
+      }
+      renderEventRunDetail(loaded)
+    } catch {
+      // The open run keeps the laps it already shows.
+    }
   }
 
   function closeEventRun() {
