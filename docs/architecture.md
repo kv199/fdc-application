@@ -117,6 +117,17 @@ widgets, alignment grid, layout, HUD preference, Tauri event, Garage, Shift
 Light, and overlay modules in dependency order. The Tauri configuration uses
 `overlay/` as the frontend distribution.
 
+`overlay/settings.html` is the Configuration window entry point. Each tab's
+code is its own module with a `create(ctx)` factory: `settings-hud.js`,
+`settings-garage.js`, `settings-shift-light.js`, `settings-driver-analysis.js`,
+and `settings-events.js`, with `trace-map-view.js` drawing the trace map that
+Events and Driver Analysis share. `settings.js` loads last and holds the window
+shell: tab switching, the header and status line, the connection guide, the
+help menu, the theme, display preferences, the quit and delete questions, and
+startup. It creates the tab modules in that order and passes each one the shell
+functions it calls and getters and setters for the state it shares with other
+tabs.
+
 Both windows are declared in the Tauri configuration with `create: false` and
 built at startup from that configuration, because WebView2 fixes its browser
 arguments when it starts. With the **HUD RENDERING** setting on `CPU`, both
