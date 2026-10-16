@@ -4235,19 +4235,6 @@
     }
   }
 
-  async function listenHudEditHotkeyEvents() {
-    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
-    if (!eventApi || typeof eventApi.listen !== 'function') return
-    await eventApi.listen('driver_analysis_controller_captured', async event => {
-      if (!hudEditHotkeyCapture) return
-      const binding = event?.payload?.binding
-      const deviceName = event?.payload?.deviceName || ''
-      if (!binding) return
-      await setHudEditHotkeyCapture(false)
-      await setHudEditHotkey(binding, true, deviceName)
-    })
-  }
-
   async function listenDriverAnalysisEvents() {
     const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
     if (!eventApi || typeof eventApi.listen !== 'function') return
@@ -4262,15 +4249,26 @@
           : 'ANALYSIS SAVED · MORE EVIDENCE NEEDED')
       void loadDriverAnalysisHistory()
     })
+    await eventApi.emit('driver_analysis_status_request')
+  }
+
+  // One listener serves both hotkey captures; starting one capture always ends the other.
+  async function listenControllerHotkeyCapture() {
+    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
+    if (!eventApi || typeof eventApi.listen !== 'function') return
     await eventApi.listen('driver_analysis_controller_captured', async event => {
-      if (!driverAnalysisHotkeyCapture) return
+      if (!driverAnalysisHotkeyCapture && !hudEditHotkeyCapture) return
       const binding = event?.payload?.binding
       const deviceName = event?.payload?.deviceName || ''
       if (!binding) return
-      await setDriverAnalysisHotkeyCapture(false)
-      await setDriverAnalysisHotkey(binding, true, deviceName)
+      if (driverAnalysisHotkeyCapture) {
+        await setDriverAnalysisHotkeyCapture(false)
+        await setDriverAnalysisHotkey(binding, true, deviceName)
+      } else {
+        await setHudEditHotkeyCapture(false)
+        await setHudEditHotkey(binding, true, deviceName)
+      }
     })
-    await eventApi.emit('driver_analysis_status_request')
   }
 
   async function loadAppVersion() {
@@ -5359,7 +5357,7 @@
   void listenGarageEvents()
   void listenEventRecorderEvents()
   void listenDriverAnalysisEvents()
-  void listenHudEditHotkeyEvents()
+  void listenControllerHotkeyCapture()
   globalScope.SettingsController = {
     cancelEdit,
     setLayoutEditingState,

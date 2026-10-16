@@ -6167,54 +6167,70 @@ fn ensure_distinct_hotkey(candidate: &str, other: &str, other_label: &str) -> Re
     Ok(())
 }
 
+fn keyboard_hotkey_matches(stored: &str, pressed: &tauri_plugin_global_shortcut::Shortcut) -> bool {
+    if stored.is_empty() {
+        return false;
+    }
+    let Ok(HotkeyBinding::Keyboard(keyboard)) = classify_hotkey_binding(stored) else {
+        return false;
+    };
+    keyboard
+        .parse::<tauri_plugin_global_shortcut::Shortcut>()
+        .is_ok_and(|parsed| parsed.id() == pressed.id())
+}
+
+fn read_hotkey_state(state: &Mutex<String>) -> String {
+    match state.lock() {
+        Ok(guard) => guard.clone(),
+        Err(_) => String::new(),
+    }
+}
+
 fn handle_global_shortcut<R: Runtime>(
     app: &AppHandle<R>,
     pressed_shortcut: &tauri_plugin_global_shortcut::Shortcut,
 ) {
-    let hud_edit_state = match app.state::<HudEditHotkeyState>().current.lock() {
-        Ok(guard) => guard.clone(),
-        Err(_) => String::new(),
-    };
-
-    if !hud_edit_state.is_empty() {
-        if let Ok(HotkeyBinding::Keyboard(k)) = classify_hotkey_binding(&hud_edit_state) {
-            if let Ok(parsed) = k.parse::<tauri_plugin_global_shortcut::Shortcut>() {
-                if parsed.id() == pressed_shortcut.id() {
-                    trigger_hud_edit_hotkey(app);
-                    return;
-                }
-            }
-        }
+    // HUD edit is checked first, so it keeps precedence if both stored hotkeys ever match.
+    let hud_edit_state = read_hotkey_state(&app.state::<HudEditHotkeyState>().current);
+    if keyboard_hotkey_matches(&hud_edit_state, pressed_shortcut) {
+        trigger_hud_edit_hotkey(app);
+        return;
     }
 
-    let _ = app.emit(DRIVER_ANALYSIS_HOTKEY_EVENT, ());
+    let driver_analysis_state =
+        read_hotkey_state(&app.state::<DriverAnalysisHotkeyState>().current);
+    if keyboard_hotkey_matches(&driver_analysis_state, pressed_shortcut) {
+        let _ = app.emit(DRIVER_ANALYSIS_HOTKEY_EVENT, ());
+    }
 }
 
-#[tauri::command]
-fn set_driver_analysis_hotkey(
-    app: AppHandle,
-    state: State<DriverAnalysisHotkeyState>,
-    hud_edit: State<HudEditHotkeyState>,
-    hotkey: String,
+// Shared by the Driver Analysis and HUD edit commands; `label` names the hotkey being
+// changed and `other_label` names the other one, as they appear in user-facing errors.
+fn set_hotkey_binding<R: Runtime>(
+    app: &AppHandle<R>,
+    action: controller_input::HotkeyAction,
+    label: &str,
+    state: &Mutex<String>,
+    other_state: &Mutex<String>,
+    other_label: &str,
+    hotkey: &str,
 ) -> Result<String, String> {
-    let new_binding = classify_hotkey_binding(&hotkey)?;
+    let new_binding = classify_hotkey_binding(hotkey)?;
 
     let new_string = match &new_binding {
         HotkeyBinding::Keyboard(k) => k.clone(),
         HotkeyBinding::Controller(c) => c.format(),
     };
 
-    let hud_edit_value = hud_edit
-        .current
+    let other_value = other_state
         .lock()
-        .map_err(|_| "HUD edit hotkey state is unavailable".to_string())?
+        .map_err(|_| format!("{other_label} hotkey state is unavailable"))?
         .clone();
-    ensure_distinct_hotkey(&new_string, &hud_edit_value, "HUD edit")?;
+    ensure_distinct_hotkey(&new_string, &other_value, other_label)?;
 
     let mut current = state
-        .current
         .lock()
-        .map_err(|_| "Driver Analysis hotkey state is unavailable".to_string())?;
+        .map_err(|_| format!("{label} hotkey state is unavailable"))?;
 
     if *current == new_string {
         return Ok(new_string);
@@ -6227,13 +6243,11 @@ fn set_driver_analysis_hotkey(
     if let Some(HotkeyBinding::Keyboard(prev_kbd)) = &previous_binding {
         app.global_shortcut()
             .unregister(prev_kbd.as_str())
-            .map_err(|error| {
-                format!("unable to release the previous Driver Analysis hotkey: {error}")
-            })?;
+            .map_err(|error| format!("unable to release the previous {label} hotkey: {error}"))?;
     }
 
-    match (&previous_binding, &new_binding) {
-        (_, HotkeyBinding::Keyboard(new_kbd)) => {
+    match &new_binding {
+        HotkeyBinding::Keyboard(new_kbd) => {
             // Register new keyboard binding
             if let Err(error) = app.global_shortcut().register(new_kbd.as_str()) {
                 // Rollback to previous
@@ -6244,16 +6258,10 @@ fn set_driver_analysis_hotkey(
                     "unable to register {new_kbd}; choose another hotkey: {error}"
                 ));
             }
-            controller_input::set_active_binding(
-                controller_input::HotkeyAction::DriverAnalysis,
-                None,
-            )?;
+            controller_input::set_active_binding(action, None)?;
         }
-        (_, HotkeyBinding::Controller(new_ctrl)) => {
-            controller_input::set_active_binding(
-                controller_input::HotkeyAction::DriverAnalysis,
-                Some(*new_ctrl),
-            )?;
+        HotkeyBinding::Controller(new_ctrl) => {
+            controller_input::set_active_binding(action, Some(*new_ctrl))?;
         }
     }
 
@@ -6261,15 +6269,15 @@ fn set_driver_analysis_hotkey(
     Ok(new_string)
 }
 
-#[tauri::command]
-fn clear_driver_analysis_hotkey(
-    app: AppHandle,
-    state: State<DriverAnalysisHotkeyState>,
+fn clear_hotkey_binding<R: Runtime>(
+    app: &AppHandle<R>,
+    action: controller_input::HotkeyAction,
+    label: &str,
+    state: &Mutex<String>,
 ) -> Result<(), String> {
     let mut current = state
-        .current
         .lock()
-        .map_err(|_| "Driver Analysis hotkey state is unavailable".to_string())?;
+        .map_err(|_| format!("{label} hotkey state is unavailable"))?;
 
     if current.is_empty() {
         return Ok(());
@@ -6278,12 +6286,43 @@ fn clear_driver_analysis_hotkey(
     if let Ok(HotkeyBinding::Keyboard(keyboard)) = classify_hotkey_binding(&current) {
         app.global_shortcut()
             .unregister(keyboard.as_str())
-            .map_err(|error| format!("unable to release the Driver Analysis hotkey: {error}"))?;
+            .map_err(|error| format!("unable to release the {label} hotkey: {error}"))?;
     }
 
-    controller_input::set_active_binding(controller_input::HotkeyAction::DriverAnalysis, None)?;
+    controller_input::set_active_binding(action, None)?;
     *current = String::new();
     Ok(())
+}
+
+#[tauri::command]
+fn set_driver_analysis_hotkey(
+    app: AppHandle,
+    state: State<DriverAnalysisHotkeyState>,
+    hud_edit: State<HudEditHotkeyState>,
+    hotkey: String,
+) -> Result<String, String> {
+    set_hotkey_binding(
+        &app,
+        controller_input::HotkeyAction::DriverAnalysis,
+        "Driver Analysis",
+        &state.current,
+        &hud_edit.current,
+        "HUD edit",
+        &hotkey,
+    )
+}
+
+#[tauri::command]
+fn clear_driver_analysis_hotkey(
+    app: AppHandle,
+    state: State<DriverAnalysisHotkeyState>,
+) -> Result<(), String> {
+    clear_hotkey_binding(
+        &app,
+        controller_input::HotkeyAction::DriverAnalysis,
+        "Driver Analysis",
+        &state.current,
+    )
 }
 
 fn eval_main<R: Runtime>(app: &AppHandle<R>, script: &str) -> Result<(), String> {
@@ -6305,85 +6344,25 @@ fn set_hud_edit_hotkey(
     driver_analysis: State<DriverAnalysisHotkeyState>,
     hotkey: String,
 ) -> Result<String, String> {
-    let new_binding = classify_hotkey_binding(&hotkey)?;
-
-    let new_string = match &new_binding {
-        HotkeyBinding::Keyboard(k) => k.clone(),
-        HotkeyBinding::Controller(c) => c.format(),
-    };
-
-    let da_value = driver_analysis
-        .current
-        .lock()
-        .map_err(|_| "Driver Analysis hotkey state is unavailable".to_string())?
-        .clone();
-    ensure_distinct_hotkey(&new_string, &da_value, "Driver Analysis")?;
-
-    let mut current = state
-        .current
-        .lock()
-        .map_err(|_| "HUD edit hotkey state is unavailable".to_string())?;
-
-    if *current == new_string {
-        return Ok(new_string);
-    }
-
-    let previous = current.clone();
-    let previous_binding = classify_hotkey_binding(&previous).ok();
-
-    // Unregister previous keyboard binding if it was keyboard
-    if let Some(HotkeyBinding::Keyboard(prev_kbd)) = &previous_binding {
-        app.global_shortcut()
-            .unregister(prev_kbd.as_str())
-            .map_err(|error| format!("unable to release the previous HUD edit hotkey: {error}"))?;
-    }
-
-    match (&previous_binding, &new_binding) {
-        (_, HotkeyBinding::Keyboard(new_kbd)) => {
-            // Register new keyboard binding
-            if let Err(error) = app.global_shortcut().register(new_kbd.as_str()) {
-                // Rollback to previous
-                if let Some(HotkeyBinding::Keyboard(prev_kbd)) = &previous_binding {
-                    let _ = app.global_shortcut().register(prev_kbd.as_str());
-                }
-                return Err(format!(
-                    "unable to register {new_kbd}; choose another hotkey: {error}"
-                ));
-            }
-            controller_input::set_active_binding(controller_input::HotkeyAction::HudEdit, None)?;
-        }
-        (_, HotkeyBinding::Controller(new_ctrl)) => {
-            controller_input::set_active_binding(
-                controller_input::HotkeyAction::HudEdit,
-                Some(*new_ctrl),
-            )?;
-        }
-    }
-
-    *current = new_string.clone();
-    Ok(new_string)
+    set_hotkey_binding(
+        &app,
+        controller_input::HotkeyAction::HudEdit,
+        "HUD edit",
+        &state.current,
+        &driver_analysis.current,
+        "Driver Analysis",
+        &hotkey,
+    )
 }
 
 #[tauri::command]
 fn clear_hud_edit_hotkey(app: AppHandle, state: State<HudEditHotkeyState>) -> Result<(), String> {
-    let mut current = state
-        .current
-        .lock()
-        .map_err(|_| "HUD edit hotkey state is unavailable".to_string())?;
-
-    if current.is_empty() {
-        return Ok(());
-    }
-
-    if let Ok(HotkeyBinding::Keyboard(keyboard)) = classify_hotkey_binding(&current) {
-        app.global_shortcut()
-            .unregister(keyboard.as_str())
-            .map_err(|error| format!("unable to release the HUD edit hotkey: {error}"))?;
-    }
-
-    controller_input::set_active_binding(controller_input::HotkeyAction::HudEdit, None)?;
-    *current = String::new();
-    Ok(())
+    clear_hotkey_binding(
+        &app,
+        controller_input::HotkeyAction::HudEdit,
+        "HUD edit",
+        &state.current,
+    )
 }
 
 #[tauri::command]
@@ -7044,6 +7023,20 @@ mod tests {
             ensure_distinct_hotkey("Ctrl+Shift+F9", "Ctrl+Shift+F10", "Driver Analysis").is_ok()
         );
         assert!(ensure_distinct_hotkey("Ctrl+Shift+F9", "", "Driver Analysis").is_ok());
+    }
+
+    #[test]
+    fn keyboard_hotkey_matches_only_the_stored_keyboard_binding() {
+        let pressed = "Ctrl+Shift+F9"
+            .parse::<tauri_plugin_global_shortcut::Shortcut>()
+            .unwrap();
+        assert!(keyboard_hotkey_matches("Ctrl+Shift+F9", &pressed));
+        assert!(!keyboard_hotkey_matches("Ctrl+Shift+F10", &pressed));
+        assert!(!keyboard_hotkey_matches("", &pressed));
+        assert!(!keyboard_hotkey_matches(
+            "Controller:346E:0006:116",
+            &pressed
+        ));
     }
 
     #[test]
