@@ -8,7 +8,7 @@
   // Selected trace map layers shared by every lap until the window reloads; null shows all layers.
   let traceMapLayerSelection = null
 
-  // These mirror the settings.js helpers of the same names until the Events code moves into a module.
+  // These mirror the settings-events.js helpers of the same names.
   function finiteNumber(value) {
     const number = Number(value)
     return Number.isFinite(number) ? number : null

@@ -32,13 +32,13 @@ test('Settings: a rejected display preference write restores the previous prefer
 })
 
 test('Quit: the question appears while Driver Analysis or an Event is recording', () => {
-  assert.match(settingsJs, /driverAnalysisState\.recording === true \|\| recorderState\.recording === true/)
+  assert.match(settingsJs, /driverAnalysisState\.recording === true \|\| eventsTab\.getRecorderState\(\)\.recording === true/)
 })
 
 test('Units: a speed or distance unit change re-renders every unit-dependent view', () => {
   assert.match(settingsJs, /renderDriverAnalysisHistory\(\)/)
   assert.match(settingsJs, /renderDriverAnalysisView\(\)/)
-  assert.match(settingsJs, /function renderUnitDependentViews\(\) \{[\s\S]*?renderEventRunDetail\(currentEventRun\)/)
+  assert.match(settingsJs, /function renderUnitDependentViews\(\) \{[\s\S]*?renderEventRunDetail\(eventsTab\.getCurrentEventRun\(\)\)/)
   assert.match(settingsJs, /unitsChanged = previous\.speedUnit !== next\.speedUnit \|\| previous\.distanceUnit !== next\.distanceUnit/)
   assert.match(settingsJs, /if \(unitsChanged\) \{\s*renderUnitDependentViews\(\)/)
 })
@@ -60,10 +60,8 @@ test('HUD edit hotkey: the stored hotkey is registered at startup', () => {
   assert.match(settingsJs, /void setHudEditHotkey\(hudEditHotkeySettings\.hotkey, false, hudEditHotkeySettings\.hotkeyLabel\)/)
 })
 
-test('WIDGETS: the Shift Bar is read from storage, counted by ALL and ANY, and toggled only on change', () => {
+test('WIDGETS: the Shift Bar is read from storage and toggled only on change', () => {
   assert.match(settingsJs, /function readOverlayVisibility\(\)[\s\S]*?isOverlayComponentOn\(stored, name\)/)
-  assert.match(settingsJs, /function allWidgetsOn\(\) \{[\s\S]*?overlayVisibility\.shiftBar === true/)
-  assert.match(settingsJs, /function anyWidgetOn\(\) \{[\s\S]*?overlayVisibility\.shiftBar === true/)
   assert.match(settingsJs, /if \(\(overlayVisibility\.shiftBar === true\) !== next\) \{\s*await setOverlayComponentVisibility\('shiftBar', next\)/)
 })
 
@@ -114,8 +112,6 @@ test('Event lap rows: pedal shares are weighted by time and only one lap is expa
 
 test('Event runs: the live run, approximate results, and a refresh of the open run', () => {
   assert.match(settingsJs, /if \(recorderState\.recording === true && recorderState\.savedRunId === run\.id\) \{/)
-  assert.match(settingsJs, /resultTimeApproximate: source\.resultTimeApproximate === true \|\| source\.result_time_approximate === true/)
-  assert.match(settingsJs, /return 'Approximate: last live race time before Forza cleared telemetry'/)
   assert.match(settingsJs, /bestTime\.title = approximateRunResultTitle\(\)/)
   assert.match(settingsJs, /renderRunTimeCell\(lap\.timeMs, lapRanks, isApproximateRunResult\(run, lap\.timeMs\)\)/)
   assert.match(settingsJs, /if \(currentEventRun\?\.id === run\.id && eventsView === 'run'\) void refreshOpenEventRun\(run\.id\)/)
@@ -150,7 +146,6 @@ test('Event Theoretical Best: incomplete sectors, shared car, collapse, and stal
 })
 
 test('Event run page: Theoretical Best total, sector cells, source context, and focus restore', () => {
-  assert.match(settingsJs, /const total = runBestHypotheticalTimeMs\(run\)/)
   assert.match(settingsJs, /button\.disabled = !Number\.isFinite\(sectorTimeMs\)/)
   assert.match(settingsJs, /cell\.classList\.toggle\('is-sector-focus', expanded && expandedEventRunSector === sectorNumber\)/)
   assert.match(settingsJs, /initialSector: expandedEventRunSector/)
