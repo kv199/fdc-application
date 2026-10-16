@@ -222,7 +222,9 @@ Driver Analysis uses its own Tauri commands: `create_driver_analysis_session`,
 `append_driver_analysis_samples`, `finalize_driver_analysis_session`,
 `load_driver_analysis_samples`, `reanalyze_driver_analysis_session`,
 `save_driver_analysis_stats`, `load_driver_analysis_sessions`,
-and `delete_driver_analysis_session`.
+`load_driver_analysis_checks`, `create_driver_analysis_recording`,
+`delete_driver_analysis_recording`, `discard_driver_analysis_session`,
+`discard_driver_analysis_recording`, and `export_driver_analysis_recording`.
 Each recording also stores versioned descriptive statistics of the collected
 telemetry next to its result.
 

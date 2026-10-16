@@ -120,8 +120,10 @@ comparison.
 
 ## Configuration UI conventions
 
-Each Configuration tab starts with a heading block and one
-`settings-section__intro` paragraph. Every empty state uses `.settings-empty`
+Each Configuration tab starts with a `settings-page-title` heading. Its
+one-paragraph introduction lives in the window header: `.settings-header__intro`
+holds one `<p data-settings-intro="<tab>">` per tab, and only the active tab's
+paragraph is shown. Every empty state uses `.settings-empty`
 (framed box with border and dark background), or
 `.settings-empty settings-empty--inline` when it sits inside an existing card.
 Toggle empty states with the `hidden` attribute; do not add feature-specific
