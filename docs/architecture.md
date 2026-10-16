@@ -63,6 +63,16 @@ in Configuration and into the HUD connection state.
 The Rust/Tauri process in `src-tauri/` is responsible for application windows,
 the tray menu, Direct Data Out, and native persistence commands.
 
+`src-tauri/src/main.rs` only wires the application: it declares the modules,
+builds the windows and the tray, and registers the commands. Each area is its
+own module: `telemetry.rs` (the Direct Data Out receiver), `db.rs` (the
+`fdc.sqlite` schema, migrations, and connections), `events.rs`, `garage.rs`,
+`shift_light.rs`, `driver_analysis.rs` with `driver_analysis_export.rs`,
+`windows.rs` (Configuration and HUD window state, monitors, and rendering),
+`hotkeys.rs` with `controller_input.rs`, and `hud_commands.rs` (commands that
+drive the HUD page). Each module keeps its unit tests; fixtures that several
+modules share live in `test_support.rs`.
+
 - `start_direct_source` binds `127.0.0.1:5301` and runs the UDP receive loop.
 - Only the expected 324-byte FH6 packet is decoded. The decoder converts the
   packet into the normalized camel-case payload used by the browser, including
