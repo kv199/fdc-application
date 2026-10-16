@@ -30,23 +30,8 @@
   const settingsHelpMenu = document.getElementById('settings-help-menu')
   const settingsTitle = document.getElementById('settings-title')
   const driverAnalysisApi = globalScope.DriverAnalysis
-  const driverAnalysisEnabled = document.getElementById('driver-analysis-enabled')
-  const driverAnalysisRecord = document.getElementById('driver-analysis-record')
-  const driverAnalysisRecordingStatus = document.getElementById('driver-analysis-recording-status')
-  const driverAnalysisRecorderHint = document.getElementById('driver-analysis-recorder-hint')
-  const driverAnalysisHotkeyValue = document.getElementById('driver-analysis-hotkey-value')
-  const driverAnalysisHotkeyChange = document.getElementById('driver-analysis-hotkey-change')
   const hudEditHotkeyValue = document.getElementById('hud-edit-hotkey-value')
   const hudEditHotkeyChange = document.getElementById('hud-edit-hotkey-change')
-  const driverAnalysisHistoryView = document.getElementById('driver-analysis-history-view')
-  const driverAnalysisDetailView = document.getElementById('driver-analysis-detail-view')
-  const driverAnalysisDetailBack = document.getElementById('driver-analysis-detail-back')
-  const driverAnalysisDetailTitle = document.getElementById('driver-analysis-detail-title')
-  const driverAnalysisDetailSummary = document.getElementById('driver-analysis-detail-summary')
-  const driverAnalysisDetailBody = document.getElementById('driver-analysis-detail-body')
-  const driverAnalysisHistoryList = document.getElementById('driver-analysis-history-list')
-  const driverAnalysisHistoryEmpty = document.getElementById('driver-analysis-history-empty')
-  const driverAnalysisHistoryCount = document.getElementById('driver-analysis-history-count')
   const status = document.getElementById('settings-status')
   const telemetryStatus = document.getElementById('telemetry-status')
   const telemetryStatusLabel = document.getElementById('telemetry-status-label')
@@ -58,18 +43,6 @@
   const connectGuideRetry = document.getElementById('connect-guide-retry')
   const connectGuideSkip = document.getElementById('connect-guide-skip')
   const connectGuideDone = document.getElementById('connect-guide-done')
-  const shiftLightEmpty = document.getElementById('shift-light-empty')
-  const shiftLightProfile = document.getElementById('shift-light-profile')
-  const shiftLightCarKey = document.getElementById('shift-light-car-key')
-  const shiftLightCarPi = document.getElementById('shift-light-car-pi')
-  const shiftLightCarRpmMax = document.getElementById('shift-light-car-rpm-max')
-  const shiftLightUsableCeiling = document.getElementById('shift-light-usable-ceiling')
-  const shiftLightCurrentTarget = document.getElementById('shift-light-current-target')
-  const shiftLightState = document.getElementById('shift-light-state')
-  const shiftLightGearRows = document.getElementById('shift-light-gear-rows')
-  const shiftLightReset = document.getElementById('shift-light-reset')
-  const shiftLightHelp = document.getElementById('shift-light-help')
-  const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
   const displayPreferencesApi = globalScope.DisplayPreferences
   const quitConfirmationApi = globalScope.QuitConfirmation
   const connectionGuideApi = globalScope.ConnectionGuide
@@ -115,24 +88,10 @@
   const hudOpacityReset = document.getElementById('hud-opacity-reset')
   const layoutModeInputs = [...document.querySelectorAll('[data-layout-mode]')]
   const displayPreferenceRows = [...document.querySelectorAll('[data-display-preference]')]
-  const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
-  const isShiftAtLimiter = globalScope.ShiftLightSettings?.isShiftAtLimiter
   const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
   const settingsPanels = [...document.querySelectorAll('[data-settings-panel]')]
   const garageApi = globalScope.HudGarageRuntime
   const FdcVehicle = globalScope.FdcVehicle
-  const garageGrid = document.getElementById('garage-grid')
-  const garageGridEmpty = document.getElementById('garage-grid-empty')
-  const garageCurrentCar = document.getElementById('garage-current-car')
-  const garageCurrentVariants = document.getElementById('garage-current-variants')
-  const garageVariantList = document.getElementById('garage-variant-list')
-  const garageCurrentVariantsToggle = document.getElementById('garage-current-variants-toggle')
-  const garageCurrentEmpty = document.getElementById('garage-current-empty')
-  const garageCarsCount = document.getElementById('garage-cars-count')
-  const garageVehicles = new Map()
-  let garageLatestOrdinal = null
-  let garageVariantsOpen = false
-  let garageVariantsOrdinal = null
   const eventsLibraryView = document.getElementById('events-library-view')
   const eventsDetailView = document.getElementById('events-detail-view')
   const eventsGrid = document.getElementById('events-grid')
@@ -222,13 +181,10 @@
   let eventRunLapMap = null
   // Live reloads of the open run can finish out of order; only the newest one may render.
   let openEventRunRefreshSequence = 0
-  // Driver Analysis drive maps open with the errors and clean checks; ALL shows every layer.
-  let driveMapLayerSelection = [...(globalScope.DriverAnalysisMap?.ERROR_TYPES || []), 'clean']
   let eventsSortValue = 'id-desc'
   let editingTarget = null
   let hudDisplayCount = 0
   let layoutMode = 'grouped'
-  let shiftLightResetPending = false
   let displayPreferencesPending = false
   let displayPreferences = displayPreferencesApi?.read?.() || {
     speedUnit: 'kmh',
@@ -278,378 +234,81 @@
   let routeStatusReceived = false
   let driverAnalysisSettings = driverAnalysisApi?.readSettings?.() || { enabled: false, hotkey: 'Ctrl+Shift+F9' }
   let driverAnalysisState = { enabled: driverAnalysisSettings.enabled, recording: false, startedAt: null, sampleCount: 0, hotkey: driverAnalysisSettings.hotkey }
-  let driverAnalysisHotkeyCapture = false
   let hudEditHotkeySettings = readHudEditHotkeySettings()
   let hudEditHotkeyCapture = false
   let driverAnalysisHistory = []
-  let driverAnalysisHistoryPending = false
-  let driverAnalysisExportPending = false
-  let driverAnalysisExportingId = null
-  let driverAnalysisActionPending = false
 
-  function garageDisplayName(vehicle) {
-    return FdcVehicle.displayName(vehicle?.name, vehicle?.carOrdinal)
-  }
-
-  function garagePerformanceClass(classLabel) {
-    return String(classLabel || 'unknown').trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, '-') || 'unknown'
-  }
-
-  function garageDrivetrainLabel(vehicle) {
-    return FdcVehicle.drivetrainLabel(vehicle?.drivetrain)
-  }
-
-  function appendGaragePerformance(container, vehicle) {
-    const classLabel = vehicle?.classLabel
-      || (vehicle?.class !== null && vehicle?.class !== undefined
-        ? garageApi?.classLabel?.(vehicle.class)
-        : null)
-    const pi = vehicle?.pi === null || vehicle?.pi === undefined ? null : vehicle.pi
-    if (!classLabel && pi === null) return
-    const performance = document.createElement('div')
-    performance.className = `garage-performance garage-performance--${garagePerformanceClass(classLabel)}`
-    if (classLabel) {
-      const classBadge = document.createElement('span')
-      classBadge.className = 'garage-performance__class'
-      classBadge.textContent = classLabel
-      performance.append(classBadge)
-    }
-    if (pi !== null) {
-      const piBadge = document.createElement('span')
-      piBadge.className = 'garage-performance__pi'
-      piBadge.textContent = String(pi)
-      performance.append(piBadge)
-    }
-    container.append(performance)
-  }
-
-  function garageVariantFallback(vehicle) {
-    return {
-      class: vehicle?.class,
-      classLabel: vehicle?.classLabel,
-      pi: vehicle?.pi,
-      drivetrain: vehicle?.drivetrain,
-      drivetrainLabel: vehicle?.drivetrainLabel
-    }
-  }
-
-  function garageVariantsFor(vehicle) {
-    if (!vehicle) return []
-    if (Array.isArray(vehicle.variants) && vehicle.variants.length > 0) return vehicle.variants
-    const fallback = garageVariantFallback(vehicle)
-    const hasClass = Boolean(fallback.classLabel) || fallback.class !== null && fallback.class !== undefined
-    const hasPi = fallback.pi !== null && fallback.pi !== undefined
-    return hasClass || hasPi
-      ? [fallback]
-      : []
-  }
-
-  function garageVariantCylinders(variant, vehicle) {
-    const cylinders = variant?.cylinders
-      ?? variant?.numCylinders
-      ?? variant?.num_cylinders
-      ?? vehicle?.cylinders
-    return cylinders === null || cylinders === undefined ? null : cylinders
-  }
-
-  function renderGarageVariants(vehicle) {
-    if (!garageCurrentVariants || !garageCurrentVariantsToggle || !garageVariantList) return
-    const isCurrentVehicle = garageVariantsOrdinal === vehicle?.carOrdinal
-    const open = Boolean(vehicle && isCurrentVehicle && garageVariantsOpen)
-    garageVariantList.replaceChildren()
-    garageCurrentVariants.hidden = !open
-    garageCurrentVariantsToggle.hidden = !vehicle
-    garageCurrentVariantsToggle.textContent = open ? 'HIDE VARIANTS' : 'VIEW VARIANTS'
-    garageCurrentVariantsToggle.setAttribute('aria-expanded', String(open))
-    if (!open || !vehicle) return
-
-    for (const variant of garageVariantsFor(vehicle)) {
-      const classLabel = variant?.classLabel
-        || (variant?.class !== null && variant?.class !== undefined
-          ? garageApi?.classLabel?.(variant.class)
-          : null)
-      const row = document.createElement('div')
-      row.className = `garage-variant-row garage-variant-row--${garagePerformanceClass(classLabel)}`
-      row.dataset.carClass = classLabel || 'unknown'
-      appendGaragePerformance(row, { ...variant, classLabel })
-      const drivetrain = garageDrivetrainLabel(variant) || garageDrivetrainLabel(vehicle)
-      if (drivetrain) {
-        const drivetrainValue = document.createElement('span')
-        drivetrainValue.className = 'garage-variant-row__drivetrain'
-        drivetrainValue.textContent = drivetrain
-        row.append(drivetrainValue)
+  // View modules are created here, after the shared state above. Each one returns the
+  // functions this file still calls, under their old names.
+  // -- Garage and Shift Light views --
+  const garageView = globalScope.SettingsGarage.create({
+    call,
+    setStatus,
+    getLatestShiftLightState: () => latestShiftLightState,
+    renderShiftLightState: value => renderShiftLightState(value),
+    openConnectionGuideIfNeverConnected,
+    getCurrentEventRuns: () => currentEventRuns,
+    setCurrentEventRuns: value => { currentEventRuns = value },
+    getCurrentEventRun: () => currentEventRun,
+    setCurrentEventRun: value => { currentEventRun = value },
+    getDriverAnalysisHistory: () => driverAnalysisHistory,
+    setDriverAnalysisHistory: value => { driverAnalysisHistory = value },
+    onGarageNamesChanged: ({ runsChanged, historyChanged }) => {
+      if (runsChanged) {
+        renderEventRuns()
+        if (currentEventRun) renderEventRunDetail(currentEventRun)
       }
-      const cylinders = garageVariantCylinders(variant, vehicle)
-      if (cylinders !== null) {
-        const cylindersValue = document.createElement('span')
-        cylindersValue.className = 'garage-variant-row__cylinders'
-        cylindersValue.textContent = `${cylinders} CYL`
-        row.append(cylindersValue)
-      }
-      // Every listed variant was observed in telemetry, so each row is marked OBSERVED.
-      const state = document.createElement('span')
-      state.className = 'garage-variant-row__state'
-      state.textContent = 'OBSERVED'
-      row.append(state)
-      garageVariantList.append(row)
-    }
-  }
-
-  function mergeGarageVehicle(value) {
-    const vehicle = garageApi?.normalizeVehicle?.(value)
-    if (!vehicle) return null
-    const previous = garageVehicles.get(vehicle.carOrdinal)
-    const merged = {
-      ...previous,
-      ...vehicle,
-      name: vehicle.name || previous?.name || null,
-      classLabel: vehicle.classLabel || previous?.classLabel || null,
-      class: vehicle.class ?? previous?.class ?? null,
-      pi: vehicle.pi ?? previous?.pi ?? null
-    }
-    garageVehicles.set(merged.carOrdinal, merged)
-    if (merged.latestUsed) {
-      for (const saved of garageVehicles.values()) saved.latestUsed = saved.carOrdinal === merged.carOrdinal
-      garageLatestOrdinal = merged.carOrdinal
-    }
-    return merged
-  }
-
-  function renderGarageCurrent() {
-    if (!garageCurrentCar || !garageCurrentEmpty) return
-    const vehicle = garageLatestOrdinal === null ? null : garageVehicles.get(garageLatestOrdinal)
-    if (vehicle && garageVariantsOrdinal !== vehicle.carOrdinal) {
-      garageVariantsOrdinal = vehicle.carOrdinal
-      garageVariantsOpen = false
-    }
-    garageCurrentCar.replaceChildren()
-    garageCurrentCar.hidden = !vehicle
-    garageCurrentEmpty.hidden = Boolean(vehicle)
-    if (!vehicle) {
-      garageVariantsOrdinal = null
-      garageVariantsOpen = false
-      renderGarageVariants(null)
-      return
-    }
-    const content = document.createElement('div')
-    content.className = 'garage-current-car__content'
-    const name = document.createElement('button')
-    name.type = 'button'
-    name.className = 'garage-current-car__name'
-    name.textContent = garageDisplayName(vehicle)
-    const details = document.createElement('div')
-    details.className = 'garage-current-car__details'
-    appendGaragePerformance(details, vehicle)
-    const drivetrain = garageDrivetrainLabel(vehicle)
-    if (drivetrain) {
-      const drivetrainValue = document.createElement('span')
-      drivetrainValue.className = 'garage-current-car__drivetrain'
-      drivetrainValue.textContent = drivetrain
-      details.append(drivetrainValue)
-    }
-    if (vehicle.cylinders !== null && vehicle.cylinders !== undefined) {
-      const cylinders = document.createElement('span')
-      cylinders.className = 'garage-current-car__cylinders'
-      cylinders.textContent = `${vehicle.cylinders} CYL`
-      details.append(cylinders)
-    }
-    details.append(garageCurrentVariantsToggle)
-    const carGroup = vehicle.carGroup === null || vehicle.carGroup === undefined
-      ? null
-      : Number(vehicle.carGroup)
-    const group = Number.isFinite(carGroup) && carGroup > 0
-      ? document.createElement('span')
-      : null
-    if (group) {
-      group.className = 'garage-current-car__group'
-      group.textContent = `GROUP ${Math.round(carGroup)}`
-    }
-    name.addEventListener('click', () => {
-      const input = document.createElement('input')
-      input.className = 'garage-current-car__input'
-      input.type = 'text'
-      input.maxLength = 80
-      input.value = vehicle.name || ''
-      input.placeholder = String(vehicle.carOrdinal)
-      input.setAttribute('aria-label', `Name for ${vehicle.carOrdinal}`)
-      name.replaceWith(input)
-      input.focus()
-      let cancelled = false
-      const finish = () => {
-        if (cancelled) return
-        const nextName = input.value.trim()
-        input.replaceWith(name)
-        if (nextName !== (vehicle.name || '')) void renameGarageCar(vehicle.carOrdinal, nextName)
-      }
-      input.addEventListener('keydown', event => {
-        if (event.key === 'Enter') finish()
-        if (event.key === 'Escape') {
-          cancelled = true
-          input.replaceWith(name)
-        }
-      })
-      input.addEventListener('blur', finish, { once: true })
-    })
-    content.append(name, ...(group ? [group] : []), details)
-    garageCurrentCar.append(content)
-    renderGarageVariants(vehicle)
-  }
-
-  function renderGarage() {
-    if (latestShiftLightState) renderShiftLightState(latestShiftLightState)
-    if (!garageGrid) return
-    garageGrid.replaceChildren()
-    const vehicles = [...garageVehicles.values()].sort((left, right) => {
-      if (left.latestUsed !== right.latestUsed) return left.latestUsed ? -1 : 1
-      return left.carOrdinal - right.carOrdinal
-    })
-    if (garageGridEmpty) garageGridEmpty.hidden = vehicles.length > 0
-    if (garageCarsCount) {
-      garageCarsCount.textContent = `${vehicles.length} ${vehicles.length === 1 ? 'CAR' : 'CARS'}`
-    }
-    for (const vehicle of vehicles) {
-      const card = document.createElement('article')
-      card.className = 'garage-card'
-      card.dataset.carOrdinal = String(vehicle.carOrdinal)
-      card.dataset.carClass = vehicle.classLabel || 'unknown'
-
-      const content = document.createElement('div')
-      content.className = 'garage-card__content'
-      const name = document.createElement('h4')
-      name.className = 'garage-card__name'
-      name.textContent = garageDisplayName(vehicle)
-
-      const meta = document.createElement('div')
-      appendGaragePerformance(meta, vehicle)
-      content.append(name, meta)
-      card.append(content)
-      if (vehicle.carOrdinal === garageLatestOrdinal) {
-        card.classList.add('garage-card--latest')
-        const latest = document.createElement('span')
-        latest.className = 'garage-card__latest'
-        latest.textContent = 'LAST USED'
-        card.append(latest)
-      }
-      garageGrid.append(card)
-    }
-    renderGarageCurrent()
-  }
-
-  function closeGarageVariants() {
-    if (!garageVariantsOpen) return
-    garageVariantsOpen = false
-    const vehicle = garageVariantsOrdinal === null ? null : garageVehicles.get(garageVariantsOrdinal)
-    renderGarageVariants(vehicle)
-  }
-
-  function toggleGarageVariants() {
-    const vehicle = garageLatestOrdinal === null ? null : garageVehicles.get(garageLatestOrdinal)
-    if (!vehicle) return
-    garageVariantsOrdinal = vehicle.carOrdinal
-    garageVariantsOpen = !garageVariantsOpen
-    renderGarageVariants(vehicle)
-  }
-
-  async function renameGarageCar(carOrdinal, name) {
-    const ordinal = Number(carOrdinal)
-    if (!Number.isFinite(ordinal) || ordinal <= 0) return false
-    const normalizedName = typeof name === 'string' ? name.trim() : ''
-    const vehicle = mergeGarageVehicle({ carOrdinal: ordinal, name: normalizedName || null })
-    if (vehicle) {
-      vehicle.name = normalizedName || null
-      garageVehicles.set(vehicle.carOrdinal, vehicle)
-    }
-    renderGarage()
-    propagateGarageNames([Math.round(ordinal)])
-    try {
-      const result = await call('rename_garage_car', { carOrdinal: Math.round(ordinal), name: normalizedName })
-      const returned = garageApi?.normalizeGaragePayload?.(result)?.[0]
-      if (returned) {
-        const saved = mergeGarageVehicle(returned)
-        if (saved) {
-          saved.name = normalizedName || null
-          garageVehicles.set(saved.carOrdinal, saved)
-        }
-      }
-      renderGarage()
-      propagateGarageNames([Math.round(ordinal)])
-      const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
-      if (eventApi?.emit) await eventApi.emit('hud_garage', returned || vehicle)
-      setStatus('GARAGE NAME SAVED')
-      return true
-    } catch (error) {
-      setStatus(error.message || 'Unable to rename garage car', true)
-      return false
-    }
-  }
-
-  function propagateGarageNames(ordinals) {
-    let runsChanged = false
-    currentEventRuns = currentEventRuns.map(run => {
-      const ordinal = Number(run?.car?.ordinal)
-      if (!Number.isFinite(ordinal) || ordinal <= 0 || !ordinals.includes(Math.round(ordinal))) return run
-      const garageName = garageVehicles.get(Math.round(ordinal))?.name
-      const newName = garageName || null
-      if (run.car.name === newName) return run
-      runsChanged = true
-      return { ...run, car: { ...run.car, name: newName } }
-    })
-    let historyChanged = false
-    driverAnalysisHistory = driverAnalysisHistory.map(session => {
-      const ordinal = Number(session?.vehicleIdentity?.ordinal)
-      if (!Number.isFinite(ordinal) || ordinal <= 0 || !ordinals.includes(Math.round(ordinal))) return session
-      const garageName = garageVehicles.get(Math.round(ordinal))?.name
-      const newName = garageName || null
-      if (session.vehicleName === newName) return session
-      historyChanged = true
-      return { ...session, vehicleName: newName }
-    })
-    const openRunOrdinal = Math.round(Number(currentEventRun?.car?.ordinal))
-    if (currentEventRun && ordinals.includes(openRunOrdinal)) {
-      const newName = garageVehicles.get(openRunOrdinal)?.name || null
-      if (currentEventRun.car.name !== newName) {
-        currentEventRun = { ...currentEventRun, car: { ...currentEventRun.car, name: newName } }
-        runsChanged = true
+      if (historyChanged) {
+        renderDriverAnalysisHistory()
+        renderDriverAnalysisView()
       }
     }
-    if (runsChanged) {
-      renderEventRuns()
-      if (currentEventRun) renderEventRunDetail(currentEventRun)
-    }
-    if (historyChanged) {
-      renderDriverAnalysisHistory()
-      renderDriverAnalysisView()
-    }
-  }
-
-  function applyGaragePayload(payload) {
-    const vehicles = garageApi?.normalizeGaragePayload?.(payload) || []
-    const ordinals = []
-    for (const vehicle of vehicles) {
-      mergeGarageVehicle(vehicle)
-      ordinals.push(vehicle.carOrdinal)
-    }
-    renderGarage()
-    propagateGarageNames(ordinals)
-  }
-
-  async function listenGarageEvents() {
-    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
-    if (!eventApi || typeof eventApi.listen !== 'function') return
-    await eventApi.listen('hud_garage', event => applyGaragePayload(event?.payload))
-    try {
-      applyGaragePayload(await call('load_garage_snapshot'))
-    } catch {
-      renderGarage()
-    }
-    openConnectionGuideIfNeverConnected()
-  }
+  })
+  const { renderGarage, closeGarageVariants, listenGarageEvents } = garageView
+  const shiftLightView = globalScope.SettingsShiftLight.create({
+    call,
+    setStatus,
+    confirmDestructive,
+    getLatestShiftLightState: () => latestShiftLightState,
+    setLatestShiftLightState: value => { latestShiftLightState = value },
+    getGarageVehicles: garageView.getGarageVehicles,
+    appendGaragePerformance: garageView.appendGaragePerformance,
+    garageVariantsFor: garageView.garageVariantsFor
+  })
+  const { renderShiftLightState, requestShiftLightReset, listenShiftLightEvents } = shiftLightView
+  // -- Driver Analysis view --
+  const driverAnalysisTab = globalScope.SettingsDriverAnalysis.create({
+    call,
+    setStatus,
+    confirmDestructive,
+    renderTraceMap,
+    updateOverlayToggle,
+    setHudEditHotkeyCapture,
+    isHudEditHotkeyCapturing: () => hudEditHotkeyCapture,
+    getHudEditHotkeySettings: () => hudEditHotkeySettings,
+    getDriverAnalysisSettings: () => driverAnalysisSettings,
+    setDriverAnalysisSettings: value => { driverAnalysisSettings = value },
+    getDriverAnalysisState: () => driverAnalysisState,
+    setDriverAnalysisState: value => { driverAnalysisState = value },
+    getDriverAnalysisHistory: () => driverAnalysisHistory,
+    setDriverAnalysisHistory: value => { driverAnalysisHistory = value }
+  })
+  const {
+    renderDriverAnalysisView,
+    renderDriverAnalysisHistory,
+    renderDriverAnalysisState,
+    loadDriverAnalysisHistory,
+    setDriverAnalysisHotkey,
+    setDriverAnalysisHotkeyCapture,
+    closeDriverAnalysisLevel,
+    listenDriverAnalysisEvents
+  } = driverAnalysisTab
 
   // Until Forza has sent Data Out once, Configuration opens on a setup guide.
   function openConnectionGuideIfNeverConnected() {
     if (!connectionGuideApi || connectionGuideChecked) return
     connectionGuideChecked = true
-    connectionGuideOpen = connectionGuideApi.shouldShow(connectionGuideApi.read(), garageVehicles.size > 0)
+    connectionGuideOpen = connectionGuideApi.shouldShow(connectionGuideApi.read(), garageView.getGarageVehicles().size > 0)
     renderConnectionGuide()
   }
 
@@ -2322,912 +1981,6 @@
     return invoke(command, args)
   }
 
-  function formatDriverAnalysisDuration(durationMs) {
-    const seconds = Math.max(0, Math.round((Number(durationMs) || 0) / 1000))
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = seconds % 60
-    return minutes > 0 ? `${minutes}m ${String(remainingSeconds).padStart(2, '0')}s` : `${remainingSeconds}s`
-  }
-
-  function formatDriverAnalysisDate(value) {
-    const date = new Date(value)
-    if (!Number.isFinite(date.getTime())) return 'UNKNOWN TIME'
-    return `${date.toLocaleDateString()} · ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-  }
-
-  function formatDriverAnalysisSize(value) {
-    const bytes = Math.max(0, Number(value) || 0)
-    if (bytes < 1024) return `${Math.round(bytes)} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`
-  }
-
-  function driverAnalysisResultCopy(entry) {
-    if (entry?.status === 'recording') {
-      return {
-        label: 'RECORDING IN PROGRESS',
-        instruction: 'Press STOP to finish. The analysis and statistics appear here when the recording is saved.'
-      }
-    }
-    if (entry?.result === 'issue' && entry.label) {
-      return {
-        label: entry.label,
-        instruction: entry.instruction || 'Repeat the session before changing another part of your technique.'
-      }
-    }
-    if (entry?.result === 'ambiguous') {
-      return {
-        label: 'NO DRIVER-DOMINANT PATTERN DETECTED',
-        instruction: 'The recording could not separate driver input from vehicle behaviour.'
-      }
-    }
-    if (entry?.result === 'no_recurring_problem') {
-      return {
-        label: 'NO RECURRING PROBLEM DETECTED',
-        instruction: 'No single technique problem repeated often enough in this recording.'
-      }
-    }
-    if (entry?.result === 'interrupted' || entry?.status === 'interrupted') {
-      return {
-        label: 'RECORDING INTERRUPTED',
-        instruction: 'Only completed maneuvers were kept. Record another asphalt session for a reliable result.'
-      }
-    }
-    return {
-      label: 'NOT ENOUGH ELIGIBLE MANEUVERS',
-      instruction: 'Record a longer asphalt session before changing technique.'
-    }
-  }
-
-  function driverAnalysisHeadline(session) {
-    const isIssue = session?.result === 'issue' && session?.label
-    const patternSummary = isIssue ? null : globalScope.DriverAnalysisStats?.formatPatternSummary?.(session.stats)
-    let label, instruction, result
-    if (isIssue) {
-      label = session.label
-      instruction = session.instruction || 'Repeat the session before changing another part of your technique.'
-      result = 'issue'
-    } else if (patternSummary) {
-      label = globalScope.DriverAnalysisStats?.formatPatternHeadline?.(patternSummary) || 'MOST FREQUENT'
-      instruction = patternSummary.text
-      result = 'most_frequent'
-    } else {
-      const copy = driverAnalysisResultCopy(session)
-      label = copy.label
-      instruction = copy.instruction
-      result = session?.status === 'recording' ? 'recording' : session?.result || 'unknown'
-    }
-    return { label, instruction, result }
-  }
-
-  // Summary tiles of the recording and car pages: a label above a large value.
-  function driverAnalysisSummaryTiles(metrics) {
-    const summary = document.createElement('div')
-    summary.className = 'driver-analysis-detail-view__summary'
-    for (const metric of metrics) {
-      const tile = document.createElement('div')
-      tile.className = 'driver-analysis-detail-view__summary-metric'
-      const label = document.createElement('span')
-      label.className = 'driver-analysis-detail-view__summary-label'
-      label.textContent = metric.label
-      const value = document.createElement('strong')
-      value.className = 'driver-analysis-detail-view__summary-value'
-      value.textContent = metric.value
-      tile.append(label, value)
-      summary.append(tile)
-    }
-    return summary
-  }
-
-  let driverAnalysisView = { level: 'history', recordingId: null, sessionId: null, driveId: null }
-  const expandedDriverAnalysisStats = new Set()
-  const driverAnalysisDriveMaps = new Map()
-
-  const DRIVER_ANALYSIS_BACK_LABELS = {
-    history: { text: '← HISTORY', ariaLabel: 'Back to history' },
-    recording: { text: '← RECORDING', ariaLabel: 'Back to the recording' },
-    car: { text: '← CAR', ariaLabel: 'Back to the car' }
-  }
-
-  function setDriverAnalysisView(next) {
-    driverAnalysisView = next
-    if (driverAnalysisHistoryView) driverAnalysisHistoryView.hidden = next.level !== 'history'
-    if (driverAnalysisDetailView) driverAnalysisDetailView.hidden = next.level === 'history'
-    // The header path names the page from this level (RECORDING, CAR, DRIVE).
-    if (driverAnalysisDetailView) driverAnalysisDetailView.dataset.level = next.level
-    if (driverAnalysisDetailBack && next.level !== 'history') {
-      const label = DRIVER_ANALYSIS_BACK_LABELS[driverAnalysisParentLevel(next)]
-      driverAnalysisDetailBack.textContent = label.text
-      driverAnalysisDetailBack.setAttribute('aria-label', label.ariaLabel)
-    }
-    renderDriverAnalysisView()
-    if (next.level !== 'history' && driverAnalysisDetailBack) driverAnalysisDetailBack.focus()
-  }
-
-  // The level BACK leads to. The back label and closeDriverAnalysisLevel both
-  // use it, so they cannot disagree. A recording with one car opens its car
-  // page directly, so that car page leads back to the history.
-  function driverAnalysisParentLevel(view) {
-    if (view.level === 'drive') return 'car'
-    if (view.level === 'car') {
-      const recordings = globalScope.DriverAnalysisHistory?.groupRecordings?.(driverAnalysisHistory) || []
-      const recording = recordings.find(r => String(r.recordingId) === view.recordingId)
-      return recording && recording.sessions.length > 1 ? 'recording' : 'history'
-    }
-    return 'history'
-  }
-
-  function closeDriverAnalysisLevel() {
-    const { level, recordingId, sessionId } = driverAnalysisView
-    if (level === 'history') return
-    const parentLevel = driverAnalysisParentLevel(driverAnalysisView)
-    if (parentLevel === 'car') {
-      setDriverAnalysisView({ level: 'car', recordingId, sessionId, driveId: null })
-    } else if (parentLevel === 'recording') {
-      setDriverAnalysisView({ level: 'recording', recordingId, sessionId: null, driveId: null })
-    } else {
-      setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
-    }
-  }
-
-  function renderDriverAnalysisView() {
-    if (driverAnalysisView.level === 'history') return
-    const recordingId = String(driverAnalysisView.recordingId)
-    const sessionId = String(driverAnalysisView.sessionId)
-    const driveId = String(driverAnalysisView.driveId)
-    const recordings = globalScope.DriverAnalysisHistory?.groupRecordings?.(driverAnalysisHistory) || []
-    const recording = recordings.find(r => String(r.recordingId) === recordingId)
-    if (!recording) {
-      setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
-      return
-    }
-    const session = recording.sessions.find(s => String(s?.id) === sessionId)
-    if (driverAnalysisView.level !== 'recording' && !session) {
-      setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
-      return
-    }
-    if (driverAnalysisDetailBody) driverAnalysisDetailBody.replaceChildren()
-    if (driverAnalysisDetailSummary) driverAnalysisDetailSummary.replaceChildren()
-    if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = 'RECORDING'
-    if (driverAnalysisView.level === 'recording') {
-      const firstSession = recording.sessions[0]
-      if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = formatDriverAnalysisDate(firstSession?.recordedAt)
-      const totalDurationMs = globalScope.DriverAnalysisHistory?.recordingDurationMs?.(recording.sessions) ?? 0
-      const totalDrives = recording.sessions.reduce((sum, s) => sum + (Array.isArray(s?.drives) ? s.drives.length : 0), 0)
-      const totalStorageBytes = recording.sessions.reduce((sum, s) => sum + (Number(s?.storageBytes) || 0), 0)
-      driverAnalysisDetailBody?.append(driverAnalysisSummaryTiles([
-        { label: 'DURATION', value: formatDriverAnalysisDuration(totalDurationMs) },
-        { label: 'CARS', value: String(recording.sessions.length) },
-        { label: 'DRIVES', value: String(totalDrives) },
-        { label: 'STORAGE', value: formatDriverAnalysisSize(totalStorageBytes) }
-      ]))
-      const section = document.createElement('section')
-      section.className = 'events-run-table-section'
-      const heading = document.createElement('div')
-      heading.className = 'events-run-table-section__heading'
-      const headingH3 = document.createElement('h3')
-      headingH3.textContent = 'CARS'
-      const headingSpan = document.createElement('span')
-      headingSpan.textContent = 'SELECT A CAR'
-      heading.append(headingH3, headingSpan)
-      section.append(heading)
-      const tableWrap = document.createElement('div')
-      tableWrap.className = 'events-run-table-wrap'
-      const table = document.createElement('table')
-      table.className = 'events-run-table'
-      const caption = document.createElement('caption')
-      caption.className = 'events-run-table__caption'
-      caption.textContent = 'Select a car row to open its drives and statistics.'
-      table.append(caption)
-      const thead = document.createElement('thead')
-      const headerRow = document.createElement('tr')
-      for (const header of ['CAR', 'PI', 'DRIVETRAIN', 'DRIVES', 'DURATION', 'RESULT']) {
-        const th = document.createElement('th')
-        th.scope = 'col'
-        th.textContent = header
-        if (['DRIVES', 'DURATION'].includes(header)) th.className = 'events-run-table__end'
-        headerRow.append(th)
-      }
-      thead.append(headerRow)
-      table.append(thead)
-      const tbody = document.createElement('tbody')
-      for (const s of recording.sessions) {
-        const row = document.createElement('tr')
-        row.className = 'events-run-table__lap-row'
-        row.tabIndex = 0
-        const carLabel = FdcVehicle.displayName(s?.vehicleName, s?.vehicleIdentity?.ordinal)
-        row.setAttribute('aria-label', `Open ${carLabel}`)
-        row.addEventListener('click', () => {
-          setDriverAnalysisView({ level: 'car', recordingId: String(recording.recordingId), sessionId: String(s?.id), driveId: null })
-        })
-        row.addEventListener('keydown', event => {
-          if (event.key !== 'Enter' && event.key !== ' ') return
-          event.preventDefault()
-          setDriverAnalysisView({ level: 'car', recordingId: String(recording.recordingId), sessionId: String(s?.id), driveId: null })
-        })
-        const carCell = document.createElement('th')
-        carCell.scope = 'row'
-        carCell.textContent = carLabel
-        row.append(carCell)
-        const pi = Number(s?.vehicleIdentity?.pi)
-        const piCell = document.createElement('td')
-        piCell.textContent = Number.isFinite(pi) ? String(pi) : '—'
-        row.append(piCell)
-        const drivetrain = globalScope.DriverAnalysisHistory?.drivetrainLabel?.(s?.vehicleIdentity?.drivetrain) || '—'
-        const drivetrainCell = document.createElement('td')
-        drivetrainCell.textContent = drivetrain
-        row.append(drivetrainCell)
-        const drivesCount = Array.isArray(s?.drives) ? s.drives.length : 0
-        const drivesCell = document.createElement('td')
-        drivesCell.className = 'events-run-table__end'
-        drivesCell.textContent = String(drivesCount)
-        row.append(drivesCell)
-        const durationMs = Number(s?.durationMs) || 0
-        const durationCell = document.createElement('td')
-        durationCell.className = 'events-run-table__end'
-        const durationTime = document.createElement('span')
-        durationTime.className = 'events-run-table__time'
-        durationTime.textContent = formatDriverAnalysisDuration(durationMs)
-        durationCell.append(durationTime)
-        row.append(durationCell)
-        const resultCell = document.createElement('td')
-        const headline = document.createElement('strong')
-        const hd = driverAnalysisHeadline(s)
-        headline.textContent = hd.label
-        headline.dataset.result = hd.result
-        resultCell.append(headline)
-        row.append(resultCell)
-        tbody.append(row)
-      }
-      table.append(tbody)
-      tableWrap.append(table)
-      section.append(tableWrap)
-      driverAnalysisDetailBody?.append(section)
-    } else if (driverAnalysisView.level === 'car') {
-      const carLabel = FdcVehicle.displayName(session?.vehicleName, session?.vehicleIdentity?.ordinal)
-      const pi = Number(session?.vehicleIdentity?.pi)
-      const drivetrain = globalScope.DriverAnalysisHistory?.drivetrainLabel?.(session?.vehicleIdentity?.drivetrain) || ''
-      if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = carLabel
-      const badges = []
-      if (Number.isFinite(pi)) {
-        const piBadge = document.createElement('span')
-        piBadge.className = 'events-detail-view__badge'
-        piBadge.textContent = `PI ${pi}`
-        badges.push(piBadge)
-      }
-      if (drivetrain) {
-        const drivetrainBadge = document.createElement('span')
-        drivetrainBadge.className = 'events-detail-view__badge'
-        drivetrainBadge.textContent = drivetrain
-        badges.push(drivetrainBadge)
-      }
-      const drivesCount = Array.isArray(session?.drives) ? session.drives.length : 0
-      const drivesBadge = document.createElement('span')
-      drivesBadge.className = 'events-detail-view__badge'
-      drivesBadge.textContent = `${drivesCount} ${drivesCount === 1 ? 'DRIVE' : 'DRIVES'}`
-      badges.push(drivesBadge)
-      const durationMs = Number(session?.durationMs) || 0
-      const durationBadge = document.createElement('span')
-      durationBadge.className = 'events-detail-view__badge'
-      durationBadge.textContent = session?.status === 'recording' ? 'LIVE' : formatDriverAnalysisDuration(durationMs)
-      badges.push(durationBadge)
-      const recordedDate = new Date(session?.recordedAt)
-      if (Number.isFinite(recordedDate.getTime())) {
-        const dateBadge = document.createElement('span')
-        dateBadge.className = 'events-detail-view__badge'
-        dateBadge.textContent = recordedDate.toLocaleDateString()
-        badges.push(dateBadge)
-      }
-      if (driverAnalysisDetailSummary) driverAnalysisDetailSummary.append(...badges)
-      const hd = driverAnalysisHeadline(session)
-      const resultSection = document.createElement('section')
-      resultSection.className = 'driver-analysis-detail-view__result'
-      const resultLabel = document.createElement('span')
-      resultLabel.className = 'driver-analysis-detail-view__result-label'
-      resultLabel.textContent = 'RESULT'
-      const resultHeadline = document.createElement('strong')
-      resultHeadline.className = 'driver-analysis-detail-view__result-headline'
-      resultHeadline.textContent = hd.label
-      resultHeadline.dataset.result = hd.result
-      resultSection.append(resultLabel, resultHeadline)
-      if (hd.instruction) {
-        const resultText = document.createElement('p')
-        resultText.className = 'driver-analysis-detail-view__result-text'
-        resultText.textContent = hd.instruction
-        resultSection.append(resultText)
-      }
-      driverAnalysisDetailBody?.append(resultSection)
-      const summaryMetrics = globalScope.DriverAnalysisStats?.formatSummaryMetrics?.(session.stats) || []
-      if (summaryMetrics.length > 0) driverAnalysisDetailBody?.append(driverAnalysisSummaryTiles(summaryMetrics))
-      const statsRows = globalScope.DriverAnalysisStats?.formatStatsRows?.(session.stats) || []
-      if (statsRows.length > 0) {
-        const statsToggleButton = document.createElement('button')
-        statsToggleButton.type = 'button'
-        statsToggleButton.className = 'settings-button driver-analysis-detail-view__stats-toggle'
-        const statsExpanded = expandedDriverAnalysisStats.has(sessionId)
-        statsToggleButton.textContent = statsExpanded ? 'HIDE' : 'STATS'
-        statsToggleButton.setAttribute('aria-expanded', String(statsExpanded))
-        driverAnalysisDetailBody?.append(statsToggleButton)
-        const statsPanel = document.createElement('div')
-        statsPanel.className = 'driver-analysis-detail-view__stats'
-        statsPanel.hidden = !statsExpanded
-        for (const statsRow of statsRows) {
-          const section = document.createElement('section')
-          section.className = 'events-run-table-section'
-          const sectionHeading = document.createElement('div')
-          sectionHeading.className = 'events-run-table-section__heading'
-          const sectionH3 = document.createElement('h3')
-          sectionH3.textContent = statsRow.count !== null && Number.isFinite(statsRow.count)
-            ? `${statsRow.label} (${statsRow.count})`
-            : statsRow.label
-          if (statsRow.title) section.title = statsRow.title
-          sectionHeading.append(sectionH3)
-          section.append(sectionHeading)
-          if (Array.isArray(statsRow.items) && statsRow.items.length > 0) {
-            const tableWrap = document.createElement('div')
-            tableWrap.className = 'events-run-table-wrap'
-            const table = document.createElement('table')
-            table.className = 'events-run-table'
-            const tbody = document.createElement('tbody')
-            for (const item of statsRow.items) {
-              const itemRow = document.createElement('tr')
-              const nameCell = document.createElement('th')
-              nameCell.scope = 'row'
-              nameCell.textContent = item.name
-              itemRow.append(nameCell)
-              const valueCell = document.createElement('td')
-              const valueSpan = document.createElement('span')
-              valueSpan.className = 'events-run-table__time'
-              valueSpan.textContent = item.value
-              valueCell.append(valueSpan)
-              itemRow.append(valueCell)
-              tbody.append(itemRow)
-            }
-            table.append(tbody)
-            tableWrap.append(table)
-            section.append(tableWrap)
-          }
-          statsPanel.append(section)
-        }
-        statsToggleButton.addEventListener('click', () => {
-          const isExpanded = statsToggleButton.getAttribute('aria-expanded') === 'true'
-          statsToggleButton.setAttribute('aria-expanded', String(!isExpanded))
-          statsToggleButton.textContent = isExpanded ? 'STATS' : 'HIDE'
-          statsPanel.hidden = isExpanded
-          if (isExpanded) expandedDriverAnalysisStats.delete(sessionId)
-          else expandedDriverAnalysisStats.add(sessionId)
-        })
-        driverAnalysisDetailBody?.append(statsPanel)
-      }
-      const drivesRecorded = session?.drivesRecorded !== false
-      if (drivesRecorded && Array.isArray(session?.drives) && session.drives.length > 0) {
-        const drivesSection = document.createElement('section')
-        drivesSection.className = 'events-run-table-section'
-        const drivesHeading = document.createElement('div')
-        drivesHeading.className = 'events-run-table-section__heading'
-        const drivesH3 = document.createElement('h3')
-        drivesH3.textContent = 'DRIVES'
-        const drivesSpan = document.createElement('span')
-        drivesSpan.textContent = 'SELECT A DRIVE TO OPEN ITS MAP'
-        drivesHeading.append(drivesH3, drivesSpan)
-        drivesSection.append(drivesHeading)
-        const tableWrap = document.createElement('div')
-        tableWrap.className = 'events-run-table-wrap'
-        const drivesTable = document.createElement('table')
-        drivesTable.className = 'events-run-table'
-        const caption = document.createElement('caption')
-        caption.className = 'events-run-table__caption'
-        caption.textContent = 'Select a drive row to open its map.'
-        drivesTable.append(caption)
-        const thead = document.createElement('thead')
-        const headerRow = document.createElement('tr')
-        for (const colHeader of ['ID', 'TYPE', 'DURATION', 'START', 'ERRORS']) {
-          const th = document.createElement('th')
-          th.scope = 'col'
-          th.textContent = colHeader
-          if (colHeader === 'START') th.className = 'events-run-table__end'
-          headerRow.append(th)
-        }
-        thead.append(headerRow)
-        drivesTable.append(thead)
-        const tbody = document.createElement('tbody')
-        for (const drive of session.drives) {
-          const driveRow = document.createElement('tr')
-          const driveKey = String(drive?.id)
-          driveRow.className = 'events-run-table__lap-row'
-          driveRow.tabIndex = 0
-          driveRow.setAttribute('aria-label', `Open drive ${driveKey} map`)
-          driveRow.addEventListener('click', () => {
-            setDriverAnalysisView({ level: 'drive', recordingId, sessionId, driveId: driveKey })
-          })
-          driveRow.addEventListener('keydown', event => {
-            if (event.key !== 'Enter' && event.key !== ' ') return
-            event.preventDefault()
-            setDriverAnalysisView({ level: 'drive', recordingId, sessionId, driveId: driveKey })
-          })
-          const idCell = document.createElement('th')
-          idCell.scope = 'row'
-          idCell.textContent = String(drive?.id || '')
-          driveRow.append(idCell)
-          const typeCell = document.createElement('td')
-          typeCell.textContent = globalScope.DriverAnalysisHistory?.driveTypeLabel?.(drive) || 'UNKNOWN'
-          driveRow.append(typeCell)
-          const durationCell = document.createElement('td')
-          const durationSpan = document.createElement('span')
-          durationSpan.className = 'events-run-table__time'
-          durationSpan.textContent = globalScope.DriverAnalysisHistory?.formatDriveDuration?.(drive?.durationMs) || '00:00'
-          durationCell.append(durationSpan)
-          driveRow.append(durationCell)
-          const startCell = document.createElement('td')
-          startCell.className = 'events-run-table__end'
-          const startTime = new Date(drive?.startedWallMs)
-          startCell.textContent = Number.isFinite(startTime.getTime())
-            ? startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : '—'
-          driveRow.append(startCell)
-          const errorsCell = document.createElement('td')
-          const errorCount = globalScope.DriverAnalysisHistory?.driveErrorCount?.(drive) || 0
-          errorsCell.textContent = errorCount > 0 ? String(errorCount) : '—'
-          driveRow.append(errorsCell)
-          tbody.append(driveRow)
-        }
-        drivesTable.append(tbody)
-        tableWrap.append(drivesTable)
-        drivesSection.append(tableWrap)
-        driverAnalysisDetailBody?.append(drivesSection)
-      } else if (!drivesRecorded) {
-        const noRecordMsg = document.createElement('div')
-        noRecordMsg.className = 'settings-empty'
-        noRecordMsg.textContent = 'RECORDED BEFORE DRIVES'
-        driverAnalysisDetailBody?.append(noRecordMsg)
-      } else if (Array.isArray(session?.drives) && session.drives.length === 0 && drivesRecorded) {
-        const noRacesMsg = document.createElement('div')
-        noRacesMsg.className = 'settings-empty'
-        noRacesMsg.textContent = 'NO RACES IN THIS RECORDING'
-        driverAnalysisDetailBody?.append(noRacesMsg)
-      }
-    } else if (driverAnalysisView.level === 'drive') {
-      const drive = session.drives.find(d => String(d?.id) === driveId)
-      if (!drive) {
-        setDriverAnalysisView({ level: 'car', recordingId, sessionId, driveId: null })
-        return
-      }
-      const carLabel = FdcVehicle.displayName(session?.vehicleName, session?.vehicleIdentity?.ordinal)
-      if (driverAnalysisDetailTitle) driverAnalysisDetailTitle.textContent = `DRIVE ${drive?.id || ''}`
-      const badges = []
-      const carBadge = document.createElement('span')
-      carBadge.className = 'events-detail-view__badge'
-      carBadge.textContent = carLabel
-      badges.push(carBadge)
-      const driveTypeBadge = document.createElement('span')
-      driveTypeBadge.className = 'events-detail-view__badge'
-      driveTypeBadge.textContent = globalScope.DriverAnalysisHistory?.driveTypeLabel?.(drive) || 'UNKNOWN'
-      badges.push(driveTypeBadge)
-      const startTime = new Date(drive?.startedWallMs)
-      const timeBadge = document.createElement('span')
-      timeBadge.className = 'events-detail-view__badge'
-      timeBadge.textContent = Number.isFinite(startTime.getTime())
-        ? startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : '—'
-      badges.push(timeBadge)
-      const errorCount = globalScope.DriverAnalysisHistory?.driveErrorCount?.(drive) || 0
-      if (driverAnalysisDetailSummary) driverAnalysisDetailSummary.append(...badges)
-      const meta = document.createElement('div')
-      meta.className = 'events-run-view__meta'
-      const durationMetric = document.createElement('div')
-      durationMetric.className = 'events-run-view__metric'
-      const durationLabel = document.createElement('div')
-      durationLabel.className = 'events-run-view__metric-label'
-      durationLabel.textContent = 'DURATION'
-      const durationValue = document.createElement('div')
-      durationValue.className = 'events-run-view__metric-value'
-      durationValue.textContent = globalScope.DriverAnalysisHistory?.formatDriveDuration?.(drive?.durationMs) || '00:00'
-      durationMetric.append(durationLabel, durationValue)
-      const errorsMetric = document.createElement('div')
-      errorsMetric.className = 'events-run-view__metric events-run-view__metric--run'
-      const errorsLabel = document.createElement('div')
-      errorsLabel.className = 'events-run-view__metric-label'
-      errorsLabel.textContent = 'ERRORS'
-      const errorsValue = document.createElement('div')
-      errorsValue.className = 'events-run-view__metric-value'
-      errorsValue.textContent = String(errorCount)
-      errorsMetric.append(errorsLabel, errorsValue)
-      meta.append(durationMetric, errorsMetric)
-      driverAnalysisDetailBody?.append(meta)
-      const mapWrap = document.createElement('div')
-      mapWrap.className = 'events-run-table-wrap'
-      const mapDetail = document.createElement('div')
-      mapDetail.className = 'events-lap-detail'
-      mapDetail.append(driverAnalysisDriveMap(session, drive))
-      mapWrap.append(mapDetail)
-      driverAnalysisDetailBody?.append(mapWrap)
-    }
-  }
-
-  async function deleteDriverAnalysisRecording(recording) {
-    if (!recording || !Array.isArray(recording.sessions) || recording.sessions.length === 0) return false
-    if (driverAnalysisHistoryPending || driverAnalysisExportPending) return false
-    if (!(await confirmDestructive('Delete this Driver Analysis recording, all its cars, and saved telemetry?'))) return false
-    if (driverAnalysisHistoryPending || driverAnalysisExportPending) return false
-    driverAnalysisHistoryPending = true
-    renderDriverAnalysisHistory()
-    const sessionIds = recording.sessions.map(s => Number(s?.id)).filter(id => Number.isSafeInteger(id) && id > 0)
-    try {
-      await call('delete_driver_analysis_recording', { recordingId: Number(recording.recordingId) })
-      driverAnalysisHistory = driverAnalysisHistory.filter(session => !sessionIds.includes(Number(session?.id)))
-      const recordingId = String(recording.recordingId)
-      if (driverAnalysisView.recordingId === recordingId) {
-        setDriverAnalysisView({ level: 'history', recordingId: null, sessionId: null, driveId: null })
-      }
-      renderDriverAnalysisHistory()
-      setStatus('DRIVER ANALYSIS RECORDING DELETED')
-      return true
-    } catch (error) {
-      setStatus(error.message || 'Unable to delete Driver Analysis recording', true)
-      return false
-    } finally {
-      driverAnalysisHistoryPending = false
-      renderDriverAnalysisHistory()
-    }
-  }
-
-  async function exportDriverAnalysisRecording(recording) {
-    if (!recording || !Array.isArray(recording.sessions) || recording.sessions.length === 0) return false
-    if (driverAnalysisHistoryPending || driverAnalysisExportPending) return false
-    driverAnalysisExportPending = true
-    driverAnalysisExportingId = Number(recording.recordingId)
-    renderDriverAnalysisHistory()
-    try {
-      const fileName = globalScope.DriverAnalysisHistory.exportFileName(recording.sessions[0]?.recordedAt)
-      const outcome = await call('export_driver_analysis_recording', { recordingId: Number(recording.recordingId), fileName })
-      if (outcome?.cancelled) return false
-      const size = formatDriverAnalysisSize(outcome?.bytes)
-      setStatus(`DRIVER ANALYSIS RECORDING EXPORTED · ${size}`)
-      return true
-    } catch (error) {
-      setStatus(error?.message || (typeof error === 'string' && error) || 'Unable to export Driver Analysis recording', true)
-      return false
-    } finally {
-      driverAnalysisExportPending = false
-      driverAnalysisExportingId = null
-      renderDriverAnalysisHistory()
-    }
-  }
-
-  function renderDriverAnalysisHistory(history = driverAnalysisHistory) {
-    if (!driverAnalysisHistoryList) return
-    const entries = Array.isArray(history) ? history : []
-    driverAnalysisHistory = entries
-    driverAnalysisHistoryList.replaceChildren()
-    if (driverAnalysisHistoryEmpty) driverAnalysisHistoryEmpty.hidden = entries.length > 0
-
-    const recordings = globalScope.DriverAnalysisHistory?.groupRecordings?.(entries) || []
-    if (driverAnalysisHistoryCount) {
-      driverAnalysisHistoryCount.textContent = `${recordings.length} ${recordings.length === 1 ? 'RECORDING' : 'RECORDINGS'}`
-    }
-
-    for (const recording of recordings) {
-      const recordingId = String(recording.recordingId)
-      const firstSession = recording.sessions[0]
-      const hasUnfinishedSessions = recording.sessions.some(s => s?.status === 'recording')
-
-      const row = document.createElement('article')
-      row.className = 'driver-analysis-history-row'
-      row.dataset.recordingId = recordingId
-
-      const meta = document.createElement('div')
-      meta.className = 'driver-analysis-history-row__meta'
-      const date = document.createElement('time')
-      const recordedDate = new Date(firstSession?.recordedAt)
-      date.dateTime = Number.isFinite(recordedDate.getTime()) ? recordedDate.toISOString() : ''
-      date.textContent = formatDriverAnalysisDate(firstSession?.recordedAt)
-
-      const totalDurationMs = globalScope.DriverAnalysisHistory?.recordingDurationMs?.(recording.sessions) ?? 0
-      const duration = document.createElement('span')
-      duration.textContent = hasUnfinishedSessions ? 'LIVE' : formatDriverAnalysisDuration(totalDurationMs)
-
-      const totalStorageBytes = recording.sessions.reduce((sum, s) => sum + (Number(s?.storageBytes) || 0), 0)
-      const storage = document.createElement('span')
-      storage.textContent = formatDriverAnalysisSize(totalStorageBytes)
-
-      const totalDrives = recording.sessions.reduce((sum, s) => sum + (Array.isArray(s?.drives) ? s.drives.length : 0), 0)
-      const carsDrivesLabel = document.createElement('span')
-      carsDrivesLabel.className = 'driver-analysis-history-row__cars-drives'
-      const carCount = recording.sessions.length
-      const driveText = totalDrives === 1 ? '1 DRIVE' : (totalDrives > 0 ? `${totalDrives} DRIVES` : '')
-      carsDrivesLabel.textContent = `${carCount} ${carCount === 1 ? 'CAR' : 'CARS'}${driveText ? ' · ' + driveText : ''}`
-
-      meta.append(date, duration, storage, carsDrivesLabel)
-
-      const finding = document.createElement('div')
-      finding.className = 'driver-analysis-history-row__finding'
-
-      for (const session of recording.sessions) {
-        const sessionLine = document.createElement('div')
-        sessionLine.className = 'driver-analysis-history-row__session-line'
-
-        const carName = FdcVehicle.displayName(session?.vehicleName, session?.vehicleIdentity?.ordinal)
-        const sessionCarLabel = document.createElement('span')
-        sessionCarLabel.className = 'driver-analysis-history-row__session-car'
-        sessionCarLabel.textContent = carName
-
-        const headline = document.createElement('strong')
-        const hd = driverAnalysisHeadline(session)
-        headline.textContent = hd.label
-        headline.dataset.result = hd.result
-
-        sessionLine.append(sessionCarLabel, document.createTextNode(' — '), headline)
-        finding.append(sessionLine)
-      }
-
-      // Totals across different cars say little, so only a single-car card shows them.
-      const summaryText = recording.sessions.length === 1
-        ? globalScope.DriverAnalysisHistory?.recordingSummary?.(recording.sessions) || ''
-        : ''
-      if (summaryText) {
-        const summary = document.createElement('div')
-        summary.className = 'driver-analysis-history-row__summary'
-        summary.textContent = summaryText
-        finding.append(summary)
-      }
-
-      row.append(meta, finding)
-
-      const actions = document.createElement('div')
-      actions.className = 'driver-analysis-history-row__actions'
-      if (recording.sessions.length > 0 && !hasUnfinishedSessions) {
-        const detailsButton = document.createElement('button')
-        detailsButton.type = 'button'
-        detailsButton.className = 'settings-button settings-button--ready driver-analysis-history-row__details-toggle'
-        detailsButton.textContent = 'DETAILS'
-        detailsButton.addEventListener('click', () => {
-          if (recording.sessions.length === 1) {
-            setDriverAnalysisView({ level: 'car', recordingId, sessionId: String(recording.sessions[0]?.id), driveId: null })
-          } else {
-            setDriverAnalysisView({ level: 'recording', recordingId, sessionId: null, driveId: null })
-          }
-        })
-        actions.append(detailsButton)
-      }
-
-      const actionsBlocked = driverAnalysisHistoryPending || driverAnalysisExportPending || hasUnfinishedSessions || driverAnalysisState.recording === true
-      const firstDate = formatDriverAnalysisDate(firstSession?.recordedAt)
-      const exportButton = document.createElement('button')
-      exportButton.className = 'settings-button driver-analysis-history-row__export'
-      exportButton.type = 'button'
-      const isExporting = driverAnalysisExportPending && driverAnalysisExportingId === Number(recording.recordingId)
-      if (isExporting) {
-        exportButton.textContent = 'EXPORTING…'
-        exportButton.classList.add('is-exporting')
-        exportButton.setAttribute('aria-busy', 'true')
-      } else {
-        exportButton.textContent = 'EXPORT'
-      }
-      exportButton.disabled = actionsBlocked
-      exportButton.setAttribute('aria-label', `Export Driver Analysis recording from ${firstDate}`)
-      exportButton.addEventListener('click', () => void exportDriverAnalysisRecording(recording))
-      const remove = document.createElement('button')
-      remove.className = 'settings-button settings-button--danger driver-analysis-history-row__delete'
-      remove.type = 'button'
-      remove.textContent = 'DELETE'
-      remove.disabled = actionsBlocked
-      remove.setAttribute('aria-label', `Delete Driver Analysis recording from ${firstDate}`)
-      remove.addEventListener('click', () => void deleteDriverAnalysisRecording(recording))
-      actions.append(exportButton, remove)
-
-      row.append(actions)
-      driverAnalysisHistoryList.append(row)
-    }
-  }
-
-  // A drive map is built once from the stored samples and checks of that drive and kept while Configuration is open.
-  function driverAnalysisDriveMap(session, drive) {
-    const key = String(drive?.id)
-    const cached = driverAnalysisDriveMaps.get(key)
-    if (cached?.element) return cached.element
-    const holder = document.createElement('div')
-    holder.className = 'driver-analysis-history-row__drive-map'
-    const status = document.createElement('p')
-    status.className = 'events-lap-detail__empty'
-    status.textContent = cached?.error ? 'THE DRIVE MAP COULD NOT BE LOADED' : 'LOADING DRIVE MAP…'
-    holder.append(status)
-    if (!cached) {
-      driverAnalysisDriveMaps.set(key, { loading: true })
-      void loadDriverAnalysisDriveMap(session, drive).then(element => {
-        driverAnalysisDriveMaps.set(key, { element })
-        renderDriverAnalysisView()
-      }).catch(() => {
-        driverAnalysisDriveMaps.set(key, { error: true })
-        renderDriverAnalysisView()
-      })
-    }
-    return holder
-  }
-
-  async function loadDriverAnalysisDriveMap(session, drive) {
-    const sessionId = Number(session?.id)
-    const lastSequence = Number(drive?.lastSequence)
-    const samples = []
-    let afterSequence = Number(drive?.firstSequence) - 1
-    while (afterSequence < lastSequence) {
-      const page = await call('load_driver_analysis_samples', { sessionId, afterSequence, limit: 5000 })
-      if (!Array.isArray(page) || page.length === 0) break
-      samples.push(...page.filter(sample => Number(sample?.sequence) <= lastSequence))
-      afterSequence = Number(page.at(-1)?.sequence)
-      if (page.length < 5000) break
-    }
-    const checks = await call('load_driver_analysis_checks', {
-      sessionId,
-      startedAtMs: Number(drive?.startedAtMs),
-      finishedAtMs: Number(drive?.finishedAtMs)
-    })
-    const mapApi = globalScope.DriverAnalysisMap
-    const points = mapApi?.tracePointsFromSamples(samples) || []
-    return renderTraceMap(points, Number(drive?.durationMs), {
-      marks: mapApi?.checkMarks(Array.isArray(checks) ? checks : [], points) || { errors: [], clean: [] },
-      // Sector ticks need a finish for a sprint; a circuit shows its first completed lap even when unfinished.
-      requireFinish: drive?.finished !== true,
-      emptyText: 'NO POSITION DATA WAS SAVED FOR THIS DRIVE',
-      selection: {
-        get: () => driveMapLayerSelection,
-        set: value => { driveMapLayerSelection = value }
-      }
-    })
-  }
-
-  async function loadDriverAnalysisHistory() {
-    try {
-      const history = await call('load_driver_analysis_sessions')
-      renderDriverAnalysisHistory(Array.isArray(history) ? history : [])
-      // A reload rebuilds the open page from the new history, or returns to it when that recording is gone.
-      renderDriverAnalysisView()
-      return driverAnalysisHistory
-    } catch (error) {
-      renderDriverAnalysisHistory([])
-      setStatus(error.message || 'Unable to load Driver Analysis history', true)
-      return []
-    }
-  }
-
-  function renderDriverAnalysisState(value = driverAnalysisState) {
-    driverAnalysisState = {
-      ...driverAnalysisState,
-      ...(value && typeof value === 'object' ? value : {}),
-      enabled: value?.enabled === true,
-      recording: value?.recording === true,
-      phase: typeof value?.phase === 'string' ? value.phase : value?.recording === true ? 'recording' : value?.enabled === true ? 'ready' : 'off',
-      hotkey: driverAnalysisApi?.normalizeHotkey?.(value?.hotkey) || driverAnalysisSettings.hotkey
-    }
-    const { enabled, recording, hotkey, phase } = driverAnalysisState
-    const busy = driverAnalysisActionPending || phase === 'finalizing'
-    const waiting = phase === 'waiting'
-    const failed = phase === 'error'
-    updateOverlayToggle(driverAnalysisEnabled, enabled)
-    driverAnalysisEnabled.disabled = recording || busy
-    driverAnalysisRecord.disabled = !enabled || busy
-    driverAnalysisRecord.textContent = recording || waiting ? 'STOP' : busy ? 'SAVING' : 'RECORD'
-    driverAnalysisRecord.setAttribute('aria-pressed', String(recording))
-    driverAnalysisRecord.classList.toggle('settings-button--danger', recording || waiting)
-    driverAnalysisRecord.classList.toggle('driver-analysis-record--ready', enabled && !recording && !waiting && !busy)
-    driverAnalysisHotkeyChange.disabled = !enabled || recording || waiting || busy
-    driverAnalysisHotkeyValue.textContent = driverAnalysisHotkeyCapture
-      ? 'PRESS KEYS OR A BUTTON'
-      : driverAnalysisApi?.formatHotkey?.(hotkey, driverAnalysisSettings.hotkeyLabel) || hotkey
-    driverAnalysisRecordingStatus.dataset.state = phase
-    driverAnalysisRecordingStatus.textContent = phase.toUpperCase()
-    driverAnalysisRecorderHint.textContent = busy
-      ? 'Saving telemetry and completing the analysis.'
-      : waiting
-        ? 'Waiting for valid Forza telemetry. Recording starts automatically when data arrives.'
-        : recording
-          ? 'Drive the asphalt session, then press Stop or use the global hotkey.'
-          : failed
-            ? 'The last recording could not be saved. Start a new session when ready.'
-            : enabled
-              ? 'Record one asphalt session. FDC will save one recurring problem.'
-              : 'Enable Driver Analysis to start recording.'
-    renderDriverAnalysisHistory()
-  }
-
-  function emitDriverAnalysisConfig(payload) {
-    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
-    if (!eventApi || typeof eventApi.emit !== 'function') {
-      return Promise.reject(new Error('Driver Analysis event bridge is unavailable'))
-    }
-    return eventApi.emit('driver_analysis_config', payload)
-  }
-
-  async function setDriverAnalysisEnabled(enabled) {
-    if (driverAnalysisState.recording) return
-    driverAnalysisSettings = driverAnalysisApi.writeSettings({ ...driverAnalysisSettings, enabled })
-    renderDriverAnalysisState({ ...driverAnalysisState, enabled })
-    try {
-      await emitDriverAnalysisConfig({ enabled, hotkey: driverAnalysisSettings.hotkey })
-      const hotkeyReady = enabled
-        ? await setDriverAnalysisHotkey(driverAnalysisSettings.hotkey, false, driverAnalysisSettings.hotkeyLabel)
-        : await call('clear_driver_analysis_hotkey').then(() => true, error => {
-          setStatus(error.message || 'Unable to clear Driver Analysis hotkey', true)
-          return false
-        })
-      if (hotkeyReady) setStatus(`DRIVER ANALYSIS ${enabled ? 'ENABLED' : 'DISABLED'}`)
-    } catch (error) {
-      driverAnalysisSettings = driverAnalysisApi.writeSettings({ ...driverAnalysisSettings, enabled: !enabled })
-      renderDriverAnalysisState({ ...driverAnalysisState, enabled: !enabled })
-      setStatus(error.message || 'Unable to update Driver Analysis', true)
-    }
-  }
-
-  async function setDriverAnalysisHotkey(hotkey, announce = true, hotkeyLabel = '') {
-    const normalized = driverAnalysisApi?.normalizeHotkey?.(hotkey)
-    if (!normalized) {
-      if (announce) setStatus('USE CTRL, ALT OR SHIFT WITH ONE KEY. WINDOWS KEY IS NOT ALLOWED.', true)
-      return false
-    }
-    if (normalized === hudEditHotkeySettings.hotkey) {
-      if (announce) setStatus('THAT HOTKEY IS ALREADY USED BY HUD EDIT', true)
-      return false
-    }
-    if (!driverAnalysisSettings.enabled) {
-      driverAnalysisSettings = driverAnalysisApi.writeSettings({ ...driverAnalysisSettings, hotkey: normalized, hotkeyLabel })
-      return true
-    }
-    try {
-      const registered = await call('set_driver_analysis_hotkey', { hotkey: normalized })
-      driverAnalysisSettings = driverAnalysisApi.writeSettings({ ...driverAnalysisSettings, hotkey: registered, hotkeyLabel })
-      driverAnalysisState.hotkey = registered
-      await emitDriverAnalysisConfig({ enabled: driverAnalysisSettings.enabled, hotkey: registered })
-      renderDriverAnalysisState(driverAnalysisState)
-      if (announce) {
-        const formatted = driverAnalysisApi.formatHotkey(registered, driverAnalysisSettings.hotkeyLabel).toUpperCase()
-        setStatus(`DRIVER ANALYSIS HOTKEY SET TO ${formatted}`)
-      }
-      return true
-    } catch (error) {
-      renderDriverAnalysisState(driverAnalysisState)
-      setStatus(error.message || 'Unable to register Driver Analysis hotkey', true)
-      return false
-    }
-  }
-
-  async function sendDriverAnalysisAction(action) {
-    if (driverAnalysisActionPending) return
-    driverAnalysisActionPending = true
-    renderDriverAnalysisState(driverAnalysisState)
-    try {
-      await emitDriverAnalysisConfig({
-        action,
-        enabled: driverAnalysisSettings.enabled,
-        hotkey: driverAnalysisSettings.hotkey
-      })
-    } catch (error) {
-      setStatus(error.message || 'Unable to update Driver Analysis recording', true)
-    } finally {
-      driverAnalysisActionPending = false
-      renderDriverAnalysisState(driverAnalysisState)
-    }
-  }
-
-  async function setDriverAnalysisHotkeyCapture(active) {
-    const wasActive = driverAnalysisHotkeyCapture
-    driverAnalysisHotkeyCapture = active === true
-    if (driverAnalysisHotkeyCapture && hudEditHotkeyCapture) await setHudEditHotkeyCapture(false)
-    driverAnalysisHotkeyChange.textContent = driverAnalysisHotkeyCapture ? 'CANCEL' : 'CHANGE'
-    renderDriverAnalysisState(driverAnalysisState)
-    if (driverAnalysisHotkeyCapture) {
-      setStatus('PRESS A KEY COMBINATION OR A CONTROLLER BUTTON')
-      try {
-        await call('start_controller_capture')
-      } catch {
-        setStatus('CONTROLLER CAPTURE UNAVAILABLE. PRESS A KEY COMBINATION.', true)
-      }
-    } else if (wasActive) {
-      try {
-        await call('stop_controller_capture')
-      } catch {
-      }
-    }
-  }
-
   // The HUD edit hotkey is always registered: pressing it in Forza starts a layout edit
   // over the running game, and pressing it again saves.
   function readHudEditHotkeySettings() {
@@ -3283,7 +2036,7 @@
   async function setHudEditHotkeyCapture(active) {
     const wasActive = hudEditHotkeyCapture
     hudEditHotkeyCapture = active === true
-    if (hudEditHotkeyCapture && driverAnalysisHotkeyCapture) await setDriverAnalysisHotkeyCapture(false)
+    if (hudEditHotkeyCapture && driverAnalysisTab.isHotkeyCapturing()) await setDriverAnalysisHotkeyCapture(false)
     renderHudEditHotkey()
     if (hudEditHotkeyCapture) {
       setStatus('PRESS A KEY COMBINATION OR A CONTROLLER BUTTON')
@@ -3300,33 +2053,16 @@
     }
   }
 
-  async function listenDriverAnalysisEvents() {
-    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
-    if (!eventApi || typeof eventApi.listen !== 'function') return
-    await eventApi.listen('driver_analysis_status', event => renderDriverAnalysisState(event?.payload || {}))
-    await eventApi.listen('driver_analysis_history', () => void loadDriverAnalysisHistory())
-    await eventApi.listen('driver_analysis_result', event => {
-      const entry = event?.payload
-      setStatus(entry?.result === 'issue'
-        ? `ANALYSIS SAVED · ${entry.label}`
-        : entry?.result === 'no_recurring_problem'
-          ? 'ANALYSIS SAVED · NO RECURRING PROBLEM'
-          : 'ANALYSIS SAVED · MORE EVIDENCE NEEDED')
-      void loadDriverAnalysisHistory()
-    })
-    await eventApi.emit('driver_analysis_status_request')
-  }
-
   // One listener serves both hotkey captures; starting one capture always ends the other.
   async function listenControllerHotkeyCapture() {
     const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
     if (!eventApi || typeof eventApi.listen !== 'function') return
     await eventApi.listen('driver_analysis_controller_captured', async event => {
-      if (!driverAnalysisHotkeyCapture && !hudEditHotkeyCapture) return
+      if (!driverAnalysisTab.isHotkeyCapturing() && !hudEditHotkeyCapture) return
       const binding = event?.payload?.binding
       const deviceName = event?.payload?.deviceName || ''
       if (!binding) return
-      if (driverAnalysisHotkeyCapture) {
+      if (driverAnalysisTab.isHotkeyCapturing()) {
         await setDriverAnalysisHotkeyCapture(false)
         await setDriverAnalysisHotkey(binding, true, deviceName)
       } else {
@@ -3569,210 +2305,6 @@
     } catch (error) {
       setStatus(error.message || 'Unable to retry Direct Data Out', true)
     }
-  }
-
-  // Matches the in-game HUD number format (for example 8,200 RPM).
-  const SHIFT_LIGHT_RPM_FORMAT = new Intl.NumberFormat('en-US')
-
-  function formatRpm(value) {
-    return Number.isFinite(value) ? `${SHIFT_LIGHT_RPM_FORMAT.format(Math.round(value))} RPM` : '—'
-  }
-
-  function formatDelta(value) {
-    return Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${value.toFixed(1)}%` : '—'
-  }
-
-  function appendCellText(cell, primary, secondary = '') {
-    cell.textContent = primary
-    if (secondary) {
-      const detail = document.createElement('span')
-      detail.className = 'calibration-cell__sub'
-      detail.textContent = secondary
-      cell.append(detail)
-    }
-  }
-
-  // The Shift Light car key is fh6:<ordinal>:<class>:<pi>:..., so the class
-  // is read from it and falls back to the Garage variant with the same PI.
-  function renderShiftLightCarClass(state, vehicle) {
-    shiftLightCarPi.replaceChildren()
-    const pi = state.pi
-    const keyClass = typeof state.carKey === 'string' ? state.carKey.split(':')[2] : ''
-    const variant = garageVariantsFor(vehicle).find(candidate => candidate?.pi === pi)
-    const classLabel = (/^\d+$/.test(keyClass) ? garageApi?.classLabel?.(Number(keyClass)) : null)
-      || variant?.classLabel
-      || (variant?.class !== null && variant?.class !== undefined ? garageApi?.classLabel?.(variant.class) : null)
-    if (!classLabel && !pi) {
-      shiftLightCarPi.textContent = '—'
-      return
-    }
-    appendGaragePerformance(shiftLightCarPi, { classLabel, pi })
-  }
-
-  function renderShiftLightState(value) {
-    const state = typeof normalizeShiftLightState === 'function'
-      ? normalizeShiftLightState(value)
-      : value
-    latestShiftLightState = state
-    const hasProfile = Boolean(state?.carKey && state?.carOrdinal)
-    shiftLightEmpty.hidden = hasProfile
-    shiftLightProfile.hidden = !hasProfile
-    shiftLightReset.hidden = !hasProfile
-    shiftLightReset.disabled = !hasProfile || shiftLightResetPending
-    if (!hasProfile) return
-
-    const garageVehicle = state.gameId === 'fh6' && state.carOrdinal ? garageVehicles.get(state.carOrdinal) : null
-    shiftLightCarKey.textContent = FdcVehicle.displayName(garageVehicle?.name, state.carOrdinal)
-    renderShiftLightCarClass(state, garageVehicle)
-    shiftLightCarRpmMax.textContent = state.rpmMax ? formatRpm(state.rpmMax) : '—'
-    shiftLightUsableCeiling.textContent = state.usableCeiling
-      ? `${formatRpm(state.usableCeiling)} · ${state.ceilingClusterCount}/3`
-      : state.provisionalCeiling
-        ? `LEARNING · ${state.ceilingClusterCount}/3 · ~${formatRpm(state.provisionalCeiling)}`
-        : state.ceilingSampleCount > 0 ? `LEARNING · ${state.ceilingClusterCount}/3` : 'NOT OBSERVED'
-    const activeGear = state.gears.find(gear => gear.gear === state.currentGear)
-    const activeStatus = activeGear?.status || 'learning'
-    const fallbackTarget = state.usableCeiling || state.fallbackShiftRpm || state.reportedRedlineRpm || state.rpmMax
-    const activeTarget = activeStatus === 'learning'
-      ? fallbackTarget
-      : activeGear?.shiftRpm ?? state.shiftRpm
-    shiftLightCurrentTarget.textContent = activeTarget
-      ? `${activeStatus === 'optimal' ? 'OPTIMAL' : activeStatus === 'potential' ? 'POTENTIAL' : 'LEARNING'} · ${formatRpm(activeTarget)}`
-      : fallbackTarget
-        ? `LEARNING · ${formatRpm(fallbackTarget)}`
-        : 'WAITING FOR RPM LIMIT'
-    const activeState = activeStatus === 'potential'
-      ? `POTENTIAL ${Math.max(1, activeGear?.confirmationCount || 1)}/3`
-      : activeStatus.toUpperCase()
-    shiftLightState.textContent = `${activeState}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
-    shiftLightGearRows.replaceChildren()
-
-    const diagnosticsByGear = new Map((state.diagnostics || []).map(diagnostic => [diagnostic.gear, diagnostic]))
-
-    for (const gear of state.gears) {
-      const diagnostic = diagnosticsByGear.get(gear.gear)
-      const diagnosticStatus = diagnostic?.status || gear.status
-      const row = document.createElement('tr')
-      row.dataset.state = diagnosticStatus
-
-      const gearCell = document.createElement('th')
-      gearCell.scope = 'row'
-      gearCell.textContent = `G${gear.gear}`
-      row.append(gearCell)
-
-      const targetCell = document.createElement('td')
-      const gearTargetRpm = diagnostic?.targetRpm ?? gear.shiftRpm
-      appendCellText(
-        targetCell,
-        formatRpm(gearTargetRpm ?? (gear.status === 'learning' ? fallbackTarget : null)),
-        gear.status === 'potential'
-          ? `POTENTIAL · ${Math.max(1, diagnostic?.confirmationCount ?? gear.confirmationCount)}/3`
-          : gear.status === 'optimal'
-            ? 'PURPLE CUE ACTIVE'
-            : 'REDLINE FALLBACK'
-      )
-      if (typeof isShiftAtLimiter === 'function' && isShiftAtLimiter(diagnosticStatus, gearTargetRpm, state.usableCeiling)) {
-        const limiterHint = document.createElement('span')
-        limiterHint.className = 'calibration-cell__sub'
-        limiterHint.textContent = 'SHIFT AT LIMITER'
-        limiterHint.title = 'The best shift point for this gear is at the rev limiter.'
-        targetCell.append(limiterHint)
-      }
-      row.append(targetCell)
-
-      const powerCell = document.createElement('td')
-      appendCellText(
-        powerCell,
-        `${diagnostic?.acceptedShiftCount ?? gear.acceptedShiftCount ?? gear.sampleCount} ACCEPTED`,
-        Number.isFinite(diagnostic?.lastDeltaPct ?? gear.lastDeltaPct)
-          ? `LAST Δ ${formatDelta(diagnostic?.lastDeltaPct ?? gear.lastDeltaPct)}`
-          : 'WAITING FOR AN ACCEPTED SHIFT'
-      )
-      row.append(powerCell)
-
-      const dataCell = document.createElement('td')
-      const lastRpm = gear.lastRpmBefore ?? null
-      appendCellText(
-        dataCell,
-        Number.isFinite(gear.lastDeltaPct) ? `${formatDelta(gear.lastDeltaPct)} POWER DELTA` : 'NO LAST SHIFT',
-        Number.isFinite(lastRpm) ? `RECORDED ${formatRpm(lastRpm)}` : 'WAITING FOR A COMPARABLE UPSHIFT'
-      )
-      row.append(dataCell)
-
-      const stateCell = document.createElement('td')
-      stateCell.className = 'events-run-table__end'
-      appendCellText(
-        stateCell,
-        diagnosticStatus === 'potential'
-          ? `POTENTIAL ${Math.max(1, diagnostic?.confirmationCount ?? gear.confirmationCount)}/3`
-          : diagnosticStatus.toUpperCase(),
-        diagnosticStatus === 'learning' ? 'REDLINE FALLBACK ACTIVE' : ''
-      )
-      row.append(stateCell)
-      shiftLightGearRows.append(row)
-    }
-
-    if (!state.gears.length) {
-      const row = document.createElement('tr')
-      const cell = document.createElement('td')
-      cell.colSpan = 5
-      cell.textContent = 'NO GEAR SAMPLES YET'
-      row.append(cell)
-      shiftLightGearRows.append(row)
-    }
-
-    if (state.persistenceError) {
-      setStatus(`SHIFT LIGHT SAVE ERROR · ${state.persistenceError}`, true)
-    }
-  }
-
-  async function requestShiftLightReset() {
-    const carKey = latestShiftLightState?.carKey
-    if (shiftLightResetPending || !carKey) return
-    const reset = globalScope.__TAURI_INTERNALS__?.invoke
-    if (typeof reset !== 'function') {
-      setStatus('TAURI COMMANDS ARE UNAVAILABLE', true)
-      return
-    }
-    if (!(await confirmDestructive('Reset the calibration of the current car? Its learned shift points are deleted and learning starts again.'))) return
-    if (shiftLightResetPending) return
-    // The answer was given for the car shown when the question opened; a different car is never reset.
-    if (latestShiftLightState?.carKey !== carKey) {
-      setStatus('CURRENT CAR CHANGED. CALIBRATION NOT RESET', true)
-      return
-    }
-    shiftLightResetPending = true
-    shiftLightReset.disabled = true
-    setStatus('RESETTING CALIBRATION')
-    Promise.resolve(reset('reset_shift_light'))
-      .catch(error => {
-        shiftLightResetPending = false
-        shiftLightReset.disabled = !latestShiftLightState?.carKey
-        setStatus(error.message || 'Unable to reset calibration', true)
-      })
-  }
-
-  function renderShiftLightResetResult(result) {
-    shiftLightResetPending = false
-    shiftLightReset.disabled = !latestShiftLightState?.carKey
-    if (result?.ok === true) {
-      setStatus('CALIBRATION RESET COMPLETE')
-      return
-    }
-    setStatus(result?.message || 'Unable to reset calibration', true)
-  }
-
-  async function listenShiftLightEvents() {
-    const eventApi = globalScope.HudTauriEvents?.getEventApi?.()
-    if (!eventApi || typeof eventApi.listen !== 'function') return
-    await eventApi.listen('hud_shift_light', event => {
-      renderShiftLightState(event.payload)
-      shiftLightReset.disabled = !latestShiftLightState?.carKey || shiftLightResetPending
-    })
-    await eventApi.listen('hud_shift_light_reset_result', event => {
-      renderShiftLightResetResult(event.payload)
-    })
-    await call('sync_shift_light_status')
   }
 
   async function listenRouteEvents() {
@@ -4124,11 +2656,6 @@
     )
   })
 
-  shiftLightHelp?.addEventListener('click', () => {
-    const expanded = shiftLightHelp.getAttribute('aria-expanded') === 'true'
-    shiftLightHelp.setAttribute('aria-expanded', String(!expanded))
-    if (shiftLightHelpPanel) shiftLightHelpPanel.hidden = expanded
-  })
 
   const visibility = readVisibility()
   async function setHudComponentVisibility(component, visible) {
@@ -4166,9 +2693,6 @@
     })()
   }
 
-  shiftLightReset.addEventListener('click', () => {
-    void requestShiftLightReset()
-  })
   redlineBrightness.addEventListener('input', () => {
     renderRedlineBrightness(redlineBrightness.value)
   })
@@ -4283,39 +2807,8 @@
   eventRecorderToggle?.addEventListener('click', () => {
     void sendRecorderConfig(recorderState.recording === true ? 'stop' : 'record')
   })
-  driverAnalysisEnabled?.addEventListener('click', () => {
-    void setDriverAnalysisEnabled(driverAnalysisSettings.enabled !== true)
-  })
-  driverAnalysisRecord?.addEventListener('click', () => {
-    void sendDriverAnalysisAction(driverAnalysisState.recording ? 'stop' : 'record')
-  })
-  driverAnalysisHotkeyChange?.addEventListener('click', () => {
-    void setDriverAnalysisHotkeyCapture(!driverAnalysisHotkeyCapture)
-  })
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && driverAnalysisHotkeyCapture) void setDriverAnalysisHotkeyCapture(false)
-  })
   window.addEventListener('focus', () => {
     void refreshHudDisplay()
-  })
-  document.addEventListener('keydown', event => {
-    if (!driverAnalysisHotkeyCapture) return
-    event.preventDefault()
-    event.stopImmediatePropagation()
-    if (event.key === 'Escape') {
-      void setDriverAnalysisHotkeyCapture(false)
-      setStatus('DRIVER ANALYSIS HOTKEY UNCHANGED')
-      return
-    }
-    const hotkey = driverAnalysisApi?.hotkeyFromKeyboardEvent?.(event)
-    if (!hotkey) {
-      if (!['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) {
-        setStatus('USE CTRL, ALT OR SHIFT WITH ONE KEY. WINDOWS KEY IS NOT ALLOWED.', true)
-      }
-      return
-    }
-    void setDriverAnalysisHotkeyCapture(false)
-    void setDriverAnalysisHotkey(hotkey)
   })
   hudEditHotkeyChange?.addEventListener('click', () => {
     void setHudEditHotkeyCapture(!hudEditHotkeyCapture)
@@ -4342,13 +2835,12 @@
     void setHudEditHotkeyCapture(false)
     void setHudEditHotkey(hotkey)
   })
-  garageCurrentVariantsToggle?.addEventListener('click', toggleGarageVariants)
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return
     if (event.target?.classList?.contains('garage-current-car__input')
       || event.target?.classList?.contains('events-detail-view__title-input')) return
     const isDriverAnalysisPanelVisible = !document.getElementById('driver-analysis-panel')?.hidden
-    if (isDriverAnalysisPanelVisible && driverAnalysisView.level !== 'history') {
+    if (isDriverAnalysisPanelVisible && driverAnalysisTab.getView().level !== 'history') {
       event.preventDefault()
       closeDriverAnalysisLevel()
       return
@@ -4389,10 +2881,6 @@
       return
     }
     closeGarageVariants()
-  })
-
-  driverAnalysisDetailBack?.addEventListener('click', () => {
-    closeDriverAnalysisLevel()
   })
 
   telemetryStatusButton?.addEventListener('click', openConnectionGuide)

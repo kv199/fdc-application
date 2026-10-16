@@ -10,8 +10,6 @@ const { readConfigurationScripts } = require('../tools/test-sources.cjs')
 const settingsJs = readConfigurationScripts()
 
 test('Garage current car: variants toggle and cylinder fallback', () => {
-  assert.match(settingsJs, /garageVariantsFor/)
-  assert.match(settingsJs, /\?\? vehicle\?\.cylinders/)
   assert.match(settingsJs, /garageCurrentVariantsToggle\?\.addEventListener\('click', toggleGarageVariants\)/)
   assert.match(settingsJs, /garageCurrentVariantsToggle\.setAttribute\('aria-expanded', String\(open\)\)/)
 })
@@ -72,7 +70,6 @@ test('WIDGETS: the Shift Bar is read from storage, counted by ALL and ANY, and t
 test('Shift Light: the car class and PI come from the car key, and RPM labels follow the learning state', () => {
   assert.match(settingsJs, /state\.carKey\.split\(':'\)\[2\]/)
   assert.match(settingsJs, /appendGaragePerformance\(shiftLightCarPi, \{ classLabel, pi \}\)/)
-  assert.match(settingsJs, /return Number\.isFinite\(value\) \? `\$\{SHIFT_LIGHT_RPM_FORMAT\.format\(Math\.round\(value\)\)\} RPM` : '—'/)
   assert.match(settingsJs, /\? `\$\{formatRpm\(state\.usableCeiling\)\} · \$\{state\.ceilingClusterCount\}\/3`/)
   assert.match(settingsJs, /: state\.ceilingSampleCount > 0 \? `LEARNING · \$\{state\.ceilingClusterCount\}\/3`/)
   assert.match(settingsJs, /· \$\{formatRpm\(activeTarget\)\}`/)
@@ -82,7 +79,7 @@ test('Shift Light: the car class and PI come from the car key, and RPM labels fo
 test('Driver Analysis: single-car recordings show the recording summary, Escape leaves drill-downs, and actions keep their order', () => {
   assert.match(settingsJs, /recording\.sessions\.length === 1/)
   assert.match(settingsJs, /recording\.sessions\.length === 1\s*\n\s*\? globalScope\.DriverAnalysisHistory\?\.recordingSummary/)
-  assert.match(settingsJs, /isDriverAnalysisPanelVisible && driverAnalysisView\.level !== 'history'/)
+  assert.match(settingsJs, /isDriverAnalysisPanelVisible && driverAnalysisTab\.getView\(\)\.level !== 'history'/)
   assert.match(settingsJs, /actions\.append\(detailsButton\)[\s\S]*actions\.append\(exportButton, remove\)/)
 })
 

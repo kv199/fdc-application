@@ -309,7 +309,7 @@ test('Configuration opens on the connection guide until Forza first sends Data O
   assert.match(guide, /<code class="connect-guide__value">127\.0\.0\.1<\/code>/)
   assert.match(guide, /<code class="connect-guide__value">5301<\/code>/)
   for (const id of ['connect-guide-retry', 'connect-guide-skip', 'connect-guide-done']) assert.match(guide, new RegExp('id="' + id + '"'))
-  assert.match(settingsJs, /connectionGuideApi\.shouldShow\(connectionGuideApi\.read\(\), garageVehicles\.size > 0\)/)
+  assert.match(settingsJs, /connectionGuideApi\.shouldShow\(connectionGuideApi\.read\(\), garageView\.getGarageVehicles\(\)\.size > 0\)/)
   assert.match(settingsJs, /telemetryStatusLabel\.textContent = presentation\.statusLabel/)
   assert.match(settingsCss, /\.connect-guide \{[^}]*z-index: 15;/)
 })

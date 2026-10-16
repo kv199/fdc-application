@@ -189,8 +189,8 @@ test('the HUD tab offers an edit hotkey in the layout edit row that is registere
   assert.match(settingsJs, /THAT HOTKEY IS ALREADY USED BY DRIVER ANALYSIS/)
   assert.match(settingsJs, /THAT HOTKEY IS ALREADY USED BY HUD EDIT/)
   // One capture at a time: starting either capture ends the other.
-  assert.match(settingsJs, /if \(hudEditHotkeyCapture && driverAnalysisHotkeyCapture\) await setDriverAnalysisHotkeyCapture\(false\)/)
-  assert.match(settingsJs, /if \(driverAnalysisHotkeyCapture && hudEditHotkeyCapture\) await setHudEditHotkeyCapture\(false\)/)
+  assert.match(settingsJs, /if \(hudEditHotkeyCapture && driverAnalysisTab\.isHotkeyCapturing\(\)\) await setDriverAnalysisHotkeyCapture\(false\)/)
+  assert.match(settingsJs, /if \(driverAnalysisHotkeyCapture && isHudEditHotkeyCapturing\(\)\) await setHudEditHotkeyCapture\(false\)/)
   assert.match(tauriMain, /fn set_hud_edit_hotkey\(/)
   assert.match(tauriMain, /window\.HudLayout\?\.toggleEditSession\?\.\(\)/)
 })
