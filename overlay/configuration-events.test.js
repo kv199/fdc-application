@@ -401,7 +401,8 @@ test('Run page Escape clears a focused sector, then collapses the lap, then retu
 })
 
 test('Event theory and run page: the recorder no longer emits the removed Delta reference event', () => {
-  const overlaySource = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
+  // A Windows checkout can have CRLF line endings; the pattern below spans a line break.
+  const overlaySource = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8').replace(/\r\n/g, '\n')
   assert.doesNotMatch(overlaySource, /event_recorder_reference/)
   assert.match(overlaySource, /function installBetterDeltaReference\(candidate\)/)
   assert.match(overlaySource, /deltaRuntime\.setReference\?\.\(normalized\)\n\s*syncDeltaVisibility\(\)/)
