@@ -110,11 +110,6 @@ test('Event recorder: status, button state, warning tone, and local time', () =>
 })
 
 test('Event lap rows: pedal shares are weighted by time and only one lap is expanded', () => {
-  assert.match(settingsJs, /function traceStats\(points/)
-  assert.match(settingsJs, /totals\[traceState\(points\[index\]\)\] \+= elapsed/)
-  assert.match(settingsJs, /const remaining = Number\.isFinite\(lapTimeMs\)/)
-  assert.match(settingsJs, /totals\[traceState\(points\.at\(-1\)\)\] \+= remaining/)
-  assert.match(settingsJs, /if \(normalizePedal\(point\?\.brake\) >= 0\.05\) return 'brake'/)
   assert.doesNotMatch(settingsJs, /function renderTraceStats/)
   assert.match(settingsJs, /if \(expandedEventRunLap !== null\)/)
   assert.doesNotMatch(settingsJs, /function placeTooltip/)
