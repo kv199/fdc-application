@@ -332,11 +332,6 @@ pub(crate) fn load_garage_snapshot(app: AppHandle) -> Result<GarageSnapshot, Str
     load_garage_snapshot_from_connection(&connection)
 }
 
-#[tauri::command(async)]
-pub(crate) fn load_garage(app: AppHandle) -> Result<GarageSnapshot, String> {
-    load_garage_snapshot(app)
-}
-
 // Stays on the main thread: overlapping renames from Settings must apply in call order.
 #[tauri::command]
 pub(crate) fn rename_garage_car(

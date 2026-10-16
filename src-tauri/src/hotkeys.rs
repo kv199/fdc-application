@@ -321,19 +321,6 @@ pub(crate) fn set_hud_edit_hotkey(
     )
 }
 
-#[tauri::command]
-pub(crate) fn clear_hud_edit_hotkey(
-    app: AppHandle,
-    state: State<HudEditHotkeyState>,
-) -> Result<(), String> {
-    clear_hotkey_binding(
-        &app,
-        controller_input::HotkeyAction::HudEdit,
-        "HUD edit",
-        &state.current,
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1131,25 +1131,6 @@ fn save_driver_analysis_stats_in_connection(
     load_driver_analysis_session_from_connection(connection, session_id)
 }
 
-fn delete_driver_analysis_session_in_connection(
-    connection: &Connection,
-    session_id: i64,
-) -> Result<(), String> {
-    if session_id <= 0 {
-        return Err("Driver Analysis session id must be positive".to_string());
-    }
-    let changed = connection
-        .execute(
-            "DELETE FROM driver_analysis_sessions WHERE id = ?1",
-            params![session_id],
-        )
-        .map_err(|error| format!("unable to delete Driver Analysis session: {error}"))?;
-    if changed == 0 {
-        return Err("Driver Analysis session does not exist".to_string());
-    }
-    Ok(())
-}
-
 fn create_driver_analysis_recording_in_connection(
     connection: &mut Connection,
     started_at_ms: i64,
@@ -1302,15 +1283,6 @@ pub(crate) fn load_driver_analysis_sessions(
 }
 
 #[tauri::command(async)]
-pub(crate) fn delete_driver_analysis_session(
-    app: AppHandle,
-    session_id: i64,
-) -> Result<(), String> {
-    let connection = open_shift_light_db(&app)?;
-    delete_driver_analysis_session_in_connection(&connection, session_id)
-}
-
-#[tauri::command(async)]
 pub(crate) fn create_driver_analysis_recording(
     app: AppHandle,
     started_at_ms: i64,
@@ -1442,6 +1414,27 @@ mod tests {
     use super::*;
     use crate::test_support::*;
     use std::{fs, path::PathBuf};
+
+    // The app deletes whole recordings; deleting one session directly checks that the
+    // schema cascades a session's samples, opportunities, and evidence.
+    fn delete_driver_analysis_session_in_connection(
+        connection: &Connection,
+        session_id: i64,
+    ) -> Result<(), String> {
+        if session_id <= 0 {
+            return Err("Driver Analysis session id must be positive".to_string());
+        }
+        let changed = connection
+            .execute(
+                "DELETE FROM driver_analysis_sessions WHERE id = ?1",
+                params![session_id],
+            )
+            .map_err(|error| format!("unable to delete Driver Analysis session: {error}"))?;
+        if changed == 0 {
+            return Err("Driver Analysis session does not exist".to_string());
+        }
+        Ok(())
+    }
 
     fn driver_analysis_sample(sequence: i64) -> DriverAnalysisSampleInput {
         DriverAnalysisSampleInput {

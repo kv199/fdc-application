@@ -3,13 +3,8 @@ const assert = require('node:assert/strict')
 
 const { registeredTauriCommands, invokedTauriCommands } = require('../tools/test-sources.cjs')
 
-// Registered commands that runtime JS does not call. Each entry says why.
-// The current entries have no caller at all and are kept until their removal is decided.
-const NOT_INVOKED_FROM_JS = new Map([
-  ['clear_hud_edit_hotkey', 'unused: no caller in runtime JS or Rust'],
-  ['delete_driver_analysis_session', 'unused: JS deletes whole recordings with delete_driver_analysis_recording'],
-  ['load_garage', 'unused: JS loads the Garage with load_garage_snapshot']
-])
+// Registered commands that runtime JS does not call, each mapped to the reason it stays.
+const NOT_INVOKED_FROM_JS = new Map()
 
 test('every command invoked from runtime JS is registered in generate_handler!', () => {
   const registered = new Set(registeredTauriCommands())

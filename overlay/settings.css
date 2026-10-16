@@ -319,14 +319,6 @@ h1 {
   background: var(--accent);
 }
 
-.settings-section__intro {
-  margin: 0 0 16px;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.45;
-  max-width: 72ch;
-}
-
 /* Shared empty state: use .settings-empty for any "nothing here yet" message; add --inline inside an existing card. */
 .settings-empty {
   margin: 0;
@@ -577,15 +569,6 @@ h1 {
   min-width: 0;
 }
 
-.garage-card__name-label {
-  display: grid;
-  gap: 4px;
-  color: var(--text-subtle);
-  font-size: var(--type-label);
-  font-weight: 400;
-  letter-spacing: 0.14em;
-}
-
 .garage-card__name {
   margin: 0;
   min-width: 0;
@@ -793,8 +776,7 @@ h1 {
   gap: 6px;
 }
 
-.events-card__badge,
-.events-detail-view__hint {
+.events-card__badge {
   display: inline-flex;
   align-items: center;
   min-height: 27px;
@@ -4102,16 +4084,6 @@ h1 {
 
 .hud-display-card .shift-light-brightness-card__heading {
   margin-bottom: 12px;
-}
-
-.hud-edit-hotkey-card .shift-light-brightness-card__heading {
-  margin-bottom: 0;
-}
-
-.hud-edit-hotkey-card .shift-light-brightness-card__heading output {
-  min-width: 136px;
-  font-size: 13px;
-  letter-spacing: 0;
 }
 
 .hud-display-card__description {
