@@ -1,0 +1,15 @@
+# Text files are stored and checked out with LF on every platform, including the
+# Windows CI runner, so tests that read source files see the same text everywhere.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.webp binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.gz binary
