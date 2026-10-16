@@ -105,14 +105,18 @@
    * @param {number} x - query x coordinate
    * @param {number} y - query y coordinate
    * @param {number} maxDistance - maximum distance to search, default 14
-   * @returns {number|null} index of nearest point, or null if none within maxDistance
+   * @param {number} start - first index to search, default 0
+   * @param {number} end - last index to search (inclusive), default the last point
+   * @returns {number|null} index of nearest point in the whole array, or null if none within maxDistance
    */
-  function nearestPointIndex(projected, x, y, maxDistance = 14) {
+  function nearestPointIndex(projected, x, y, maxDistance = 14, start = 0, end = Infinity) {
     if (!Array.isArray(projected) || projected.length === 0) return null
     let nearest = null
     let nearestDistance = maxDistance
 
-    for (let i = 0; i < projected.length; i += 1) {
+    // The range is searched in place so hover does not copy a sector's points on every pointer move.
+    const last = Math.min(end, projected.length - 1)
+    for (let i = Math.max(0, start); i <= last; i += 1) {
       const p = projected[i]
       if (!p || typeof p !== 'object') continue
       const px = finiteNumber(p.x)

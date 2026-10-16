@@ -118,6 +118,31 @@ test('nearestPointIndex returns null for empty array', () => {
   assert.equal(index, null)
 })
 
+test('nearestPointIndex with a range matches searching a slice and returns whole-array indexes', () => {
+  const projected = [
+    { x: 0, y: 0 },
+    { x: 5, y: 5 },
+    { x: 10, y: 10 },
+    { x: 6, y: 6 },
+    { x: 30, y: 30 }
+  ]
+  const cases = [
+    [4, 4, 14, 1, 3],
+    [4, 4, 14, 0, 2],
+    [9, 9, 14, 2, 3],
+    [29, 29, 14, 3, 4],
+    [29, 29, 2, 3, 3],
+    [0, 0, 14, 2, 4],
+    [0, 0, 14, 3, 3]
+  ]
+  for (const [x, y, reach, start, end] of cases) {
+    const ranged = EventTraceMap.nearestPointIndex(projected, x, y, reach, start, end)
+    const sliced = EventTraceMap.nearestPointIndex(projected.slice(start, end + 1), x, y, reach)
+    assert.equal(ranged, sliced === null ? null : sliced + start, `range ${start}..${end} at ${x},${y}`)
+  }
+  assert.equal(EventTraceMap.nearestPointIndex(projected, 4, 4, 14), 1)
+})
+
 test('formatGear returns R for 0', () => {
   assert.equal(EventTraceMap.formatGear(0), 'R')
 })

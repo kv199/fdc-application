@@ -159,6 +159,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   read. Distance and time lead in large type, the other values sit in two
   columns, the per-wheel table is larger, and the notes sit at the foot, so
   the panel fills the height of the map.
+- **Events** and **Driver Analysis**: moving the pointer over a map uses less
+  processor time. The **POINT DATA** panel and the point marker update at
+  most once per screen refresh, and only when the point under the pointer
+  changes.
 
 ## 7.24.67 - 2026-10-06
 

@@ -1947,37 +1947,62 @@
     markerCircle.style.display = 'none'
     svg.append(markerCircle)
 
-    svg.addEventListener('pointermove', (event) => {
-      // A pan keeps the hover marker and POINT DATA hidden until the pointer is released.
+    // Hover is computed at most once per frame from the latest pointer position. shownHoverKey is the point the
+    // panel and marker show now; it is reset whenever they are cleared, so an unchanged point is not redrawn.
+    let hoverFrame = null
+    let hoverPointer = null
+    let shownHoverKey = null
+    const cancelHoverFrame = () => {
+      if (hoverFrame === null) return
+      cancelAnimationFrame(hoverFrame)
+      hoverFrame = null
+    }
+    const updateHover = () => {
+      hoverFrame = null
       if (drag) return
       // The viewBox is letterboxed inside the padded element, so map through the screen matrix.
       const matrix = svg.getScreenCTM()
       if (!matrix) return
-      const cursor = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse())
+      const cursor = new DOMPoint(hoverPointer.x, hoverPointer.y).matrixTransform(matrix.inverse())
       const x = cursor.x
       const y = cursor.y
 
       const nearestIdx = (marks ? globalThis.DriverAnalysisMap?.nearestErrorIndex(marks, projected, x, y, hoverReach()) : null)
         ?? hoverIndex(x, y, hoverReach()) ?? null
       if (nearestIdx !== null) {
+        const errorMark = marks ? globalThis.DriverAnalysisMap?.errorAt(marks, nearestIdx) : null
+        // The panel depends only on the point and whether it is a problem mark, so the key fixes what is shown.
+        const key = `${nearestIdx}:${errorMark ? 'error' : 'point'}`
+        if (key === shownHoverKey) return
+        shownHoverKey = key
+
         const p = projected[nearestIdx]
         markerCircle.setAttribute('cx', p.x)
         markerCircle.setAttribute('cy', p.y)
 
-        const errorMark = marks ? globalThis.DriverAnalysisMap?.errorAt(marks, nearestIdx) : null
         const tooltipData = errorMark
           ? globalThis.DriverAnalysisMap.errorTooltipModel(errorMark, points)
           : globalThis.EventTraceMap?.tooltipModel(points[nearestIdx], points[0].distanceM ?? 0) ?? { rows: [], wheelTable: [] }
         renderTooltip(inspectorBody, tooltipData)
         markerCircle.style.display = 'block'
       } else {
+        shownHoverKey = null
         inspectorBody.replaceChildren()
         markerCircle.style.display = 'none'
       }
+    }
+    svg.addEventListener('pointermove', (event) => {
+      // A pan keeps the hover marker and POINT DATA hidden until the pointer is released.
+      if (drag) return
+      hoverPointer = { x: event.clientX, y: event.clientY }
+      if (hoverFrame === null) hoverFrame = requestAnimationFrame(updateHover)
     })
 
     // The panel sits beside the SVG, so leaving the whole layout (not just the SVG) clears it.
+    // A frame still pending from the last move must not re-show the panel after the pointer left.
     layout.addEventListener('pointerleave', () => {
+      cancelHoverFrame()
+      shownHoverKey = null
       inspectorBody.replaceChildren()
       markerCircle.style.display = 'none'
     })
@@ -2095,6 +2120,7 @@
       }
       svg.setPointerCapture(event.pointerId)
       svg.classList.add('is-panning')
+      shownHoverKey = null
       inspectorBody.replaceChildren()
       markerCircle.style.display = 'none'
     })
@@ -2172,8 +2198,7 @@
     const hoverIndex = (x, y, reach) => {
       const range = rangeOf(focusedSector)
       if (!range) return globalThis.EventTraceMap?.nearestPointIndex(projected, x, y, reach) ?? null
-      const index = globalThis.EventTraceMap?.nearestPointIndex(projected.slice(range.startIndex, range.endIndex + 1), x, y, reach) ?? null
-      return index === null ? null : index + range.startIndex
+      return globalThis.EventTraceMap?.nearestPointIndex(projected, x, y, reach, range.startIndex, range.endIndex) ?? null
     }
     const rebuildFocus = () => {
       if (!focusGroup) return
@@ -2235,6 +2260,7 @@
       focusedSector = next
       sectorFitted = false
       // POINT DATA and its marker belong to the previous focus, so they clear with it.
+      shownHoverKey = null
       inspectorBody.replaceChildren()
       markerCircle.style.display = 'none'
       rebuildFocus()
