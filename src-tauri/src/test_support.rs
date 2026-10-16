@@ -60,3 +60,12 @@ pub(crate) fn driver_analysis_connection() -> Connection {
     initialize_shift_light_schema(&mut connection).unwrap();
     connection
 }
+
+pub(crate) fn hud_bounds(left: f64, top: f64, width: f64, height: f64) -> HudWindowBounds {
+    HudWindowBounds {
+        left,
+        top,
+        width,
+        height,
+    }
+}
