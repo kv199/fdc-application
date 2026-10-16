@@ -6437,19 +6437,12 @@ fn set_window_edit_mode(app: AppHandle, enabled: bool) -> tauri::Result<()> {
     emit_hud_stage(&app)
 }
 
+const LAYOUT_TARGET_NAMES: [&str; 9] = [
+    "delta", "hud", "shiftBar", "tires", "pedals", "steering", "gear", "engine", "history",
+];
+
 fn is_valid_layout_target(target: &str) -> bool {
-    matches!(
-        target,
-        "delta"
-            | "hud"
-            | "shiftBar"
-            | "tires"
-            | "pedals"
-            | "steering"
-            | "gear"
-            | "engine"
-            | "history"
-    )
+    LAYOUT_TARGET_NAMES.contains(&target)
 }
 
 #[tauri::command]
@@ -6530,30 +6523,41 @@ fn set_layout_mode(app: AppHandle, mode: String) -> Result<(), String> {
     )
 }
 
+const HUD_COMPONENT_NAMES: [&str; 6] = ["tires", "pedals", "steering", "gear", "engine", "history"];
+const OVERLAY_COMPONENT_NAMES: [&str; 3] = ["delta", "hud", "shiftBar"];
+
+// Only these HUD widgets can be shown or hidden through set_hud_visibility.
+fn is_hud_component(name: &str) -> bool {
+    HUD_COMPONENT_NAMES.contains(&name)
+}
+
+// Only these overlay switches can be set through set_overlay_visibility.
+fn is_overlay_component(name: &str) -> bool {
+    OVERLAY_COMPONENT_NAMES.contains(&name)
+}
+
 #[tauri::command]
 fn set_hud_visibility(app: AppHandle, component: String, visible: bool) -> Result<(), String> {
-    let safe_component = match component.as_str() {
-        "tires" | "pedals" | "steering" | "gear" | "engine" | "history" => component,
-        _ => return Err("unknown HUD component".to_string()),
-    };
+    if !is_hud_component(&component) {
+        return Err("unknown HUD component".to_string());
+    }
     let value = if visible { "true" } else { "false" };
     let script = format!(
         "window.HudPreferences?.setVisibility?.('{}', {})",
-        safe_component, value
+        component, value
     );
     eval_main(&app, &script)
 }
 
 #[tauri::command]
 fn set_overlay_visibility(app: AppHandle, component: String, visible: bool) -> Result<(), String> {
-    let safe_component = match component.as_str() {
-        "delta" | "hud" | "shiftBar" => component,
-        _ => return Err("unknown overlay component".to_string()),
-    };
+    if !is_overlay_component(&component) {
+        return Err("unknown overlay component".to_string());
+    }
     let value = if visible { "true" } else { "false" };
     let script = format!(
         "window.HudPreferences?.setOverlayVisibility?.('{}', {})",
-        safe_component, value
+        component, value
     );
     eval_main(&app, &script)
 }
@@ -6959,19 +6963,6 @@ mod tests {
     }
 
     #[test]
-    fn layout_targets_cover_grouped_and_freeform_hud_widgets() {
-        for target in [
-            "delta", "hud", "shiftBar", "tires", "pedals", "steering", "gear", "engine", "history",
-        ] {
-            assert!(
-                is_valid_layout_target(target),
-                "missing layout target: {target}"
-            );
-        }
-        assert!(!is_valid_layout_target("telemetry"));
-    }
-
-    #[test]
     fn hud_rendering_defaults_to_gpu_and_cpu_disables_gpu_with_wry_defaults() {
         assert_eq!(
             parse_hud_renderer(r#"{"renderer":"cpu"}"#),
@@ -7003,6 +6994,103 @@ mod tests {
     #[test]
     fn exposes_the_compiled_cargo_package_version() {
         assert_eq!(get_app_version(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn every_configuration_context_has_a_window_title_label() {
+        let labels = [
+            ("hud", "HUD"),
+            ("driver-analysis", "DRIVER ANALYSIS"),
+            ("garage", "GARAGE"),
+            ("events", "EVENTS"),
+            ("shift-light", "SHIFT LIGHT"),
+            ("settings", "SETTINGS"),
+        ];
+        for (context, label) in labels {
+            assert_eq!(settings_window_context_label(context), Some(label));
+        }
+        for context in ["", "HUD", "telemetry", "driver_analysis"] {
+            assert_eq!(
+                settings_window_context_label(context),
+                None,
+                "context {context:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn settings_window_title_names_the_section_and_build_version_without_game_branding() {
+        assert_eq!(
+            settings_window_title("HUD"),
+            format!("FDC · HUD · v{}", env!("CARGO_PKG_VERSION"))
+        );
+        for context in [
+            "hud",
+            "driver-analysis",
+            "garage",
+            "events",
+            "shift-light",
+            "settings",
+        ] {
+            let title = settings_window_title(context);
+            assert!(title.starts_with("FDC · "), "{title}");
+            assert!(!title.contains("Forza"), "{title}");
+        }
+    }
+
+    #[test]
+    fn hud_component_whitelist_is_exactly_the_compact_widgets() {
+        assert_eq!(
+            HUD_COMPONENT_NAMES,
+            ["tires", "pedals", "steering", "gear", "engine", "history"]
+        );
+        for name in HUD_COMPONENT_NAMES {
+            assert!(is_hud_component(name), "missing HUD component: {name}");
+        }
+        for name in ["", "delta", "hud", "shiftBar", "Engine", "telemetry"] {
+            assert!(
+                !is_hud_component(name),
+                "unexpected HUD component: {name:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn overlay_component_whitelist_is_exactly_the_three_switches() {
+        assert_eq!(OVERLAY_COMPONENT_NAMES, ["delta", "hud", "shiftBar"]);
+        for name in OVERLAY_COMPONENT_NAMES {
+            assert!(
+                is_overlay_component(name),
+                "missing overlay component: {name}"
+            );
+        }
+        for name in ["", "tires", "engine", "shiftbar"] {
+            assert!(
+                !is_overlay_component(name),
+                "unexpected overlay component: {name:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn layout_target_whitelist_is_the_overlay_switches_plus_the_hud_widgets() {
+        let expected = [
+            "delta", "hud", "shiftBar", "tires", "pedals", "steering", "gear", "engine", "history",
+        ];
+        assert_eq!(LAYOUT_TARGET_NAMES, expected);
+        for target in expected {
+            assert!(
+                is_valid_layout_target(target),
+                "missing layout target: {target}"
+            );
+        }
+        assert!(!is_valid_layout_target("telemetry"));
+        assert!(!is_valid_layout_target(""));
+    }
+
+    #[test]
+    fn event_reference_coverage_threshold_is_97_percent() {
+        assert_eq!(EVENT_REFERENCE_DISTANCE_RATIO, 0.97);
     }
 
     #[test]

@@ -141,15 +141,8 @@ test('Configuration window title reflects the active section and build version w
   assert.deepEqual(configuredTitles, ['FDC · HUD', 'FDC · HUD'])
   assert.doesNotMatch(`${configuredTitles.join(' ')} ${overlayHtml}`, /Forza Horizon 6 HUD/u)
   assert.match(settingsJs, /call\('set_settings_window_context', \{ context: /)
-  assert.match(tauriMain, /fn settings_window_context_label\(context: &str\) -> Option<&'static str>/)
-  assert.match(tauriMain, /"hud" => Some\("HUD"\)/)
-  assert.match(tauriMain, /"driver-analysis" => Some\("DRIVER ANALYSIS"\)/)
-  assert.match(tauriMain, /"garage" => Some\("GARAGE"\)/)
-  assert.match(tauriMain, /"events" => Some\("EVENTS"\)/)
-  assert.match(tauriMain, /"shift-light" => Some\("SHIFT LIGHT"\)/)
-  assert.match(tauriMain, /"settings" => Some\("SETTINGS"\)/)
-  assert.match(tauriMain, /fn settings_window_title\(context: &str\) -> String/)
-  assert.match(tauriMain, /format!\("FDC · \{context\} · v\{\}", get_app_version\(\)\)/)
+  // The context-to-label table and the title format are checked by the Rust unit tests
+  // (every_configuration_context_has_a_window_title_label, settings_window_title_...).
   assert.match(tauriMain, /fn set_settings_window_context\(app: AppHandle, context: String\)/)
 })
 

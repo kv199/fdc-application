@@ -20,6 +20,13 @@ function rustFunction(name) {
   return body.slice(0, body.search(/\r?\n\}\r?\n/))
 }
 
+// The string literals of a Rust `const NAME: [&str; N] = [...]` array, in order.
+function rustStringArray(name) {
+  const match = tauriMain.match(new RegExp(`const ${name}: \\[&str; \\d+\\] = \\[([^\\]]*)\\]`))
+  assert.ok(match, `the Rust sources define ${name}`)
+  return quotedNames(match[1], /"([^"]*)"/g)
+}
+
 function quotedNames(source, pattern) {
   return [...source.matchAll(pattern)].map(match => match[1])
 }
@@ -51,9 +58,11 @@ test('native command whitelists match the shared HUD widget lists exactly', () =
   const layoutAction = rustFunction('layout_action')
   assert.deepEqual(quotedNames(layoutAction, new RegExp(`enterEditMode\\?\\.\\('${NAME}'\\)`, 'g')), LAYOUT_TARGETS)
   assert.deepEqual(quotedNames(layoutAction, new RegExp(`resetPosition\\?\\.\\('${NAME}'\\)`, 'g')), LAYOUT_TARGETS)
-  assert.deepEqual(quotedNames(rustFunction('is_valid_layout_target'), new RegExp(`"${NAME}"`, 'g')), LAYOUT_TARGETS)
-  assert.deepEqual(quotedNames(rustFunction('set_hud_visibility').split('=> component')[0], new RegExp(`"${NAME}"`, 'g')), COMPONENTS)
-  assert.deepEqual(quotedNames(rustFunction('set_overlay_visibility').split('=> component')[0], new RegExp(`"${NAME}"`, 'g')), OVERLAY_COMPONENTS)
+  // The native whitelists must list exactly the JavaScript widgets, or a widget switched in
+  // Configuration would be rejected by the native command.
+  assert.deepEqual(rustStringArray('LAYOUT_TARGET_NAMES'), LAYOUT_TARGETS)
+  assert.deepEqual(rustStringArray('HUD_COMPONENT_NAMES'), [...COMPONENTS])
+  assert.deepEqual(rustStringArray('OVERLAY_COMPONENT_NAMES'), [...OVERLAY_COMPONENTS])
 })
 
 test('both windows load the shared HUD widget list before its consumers', () => {

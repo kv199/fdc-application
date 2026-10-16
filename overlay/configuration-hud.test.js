@@ -34,7 +34,7 @@ test('Engine visibility is part of the safe HUD component contract', () => {
 
   assert.deepEqual(hudWidgets.COMPONENTS, ['tires', 'pedals', 'steering', 'gear', 'engine', 'history'])
   assert.equal(hudWidgets.COLUMN_WIDTHS.engine, 116)
-  assert.match(tauriMain, /"tires" \| "pedals" \| "steering" \| "gear" \| "engine" \| "history"/)
+  // hud-widgets.test.js checks that the native HUD_COMPONENT_NAMES whitelist lists exactly these widgets.
 })
 
 test('HUD layout exposes grouped and freeform modes with unified widgets and layout editing', () => {
@@ -135,7 +135,6 @@ test('HUD heading has no redundant position and visibility label, and status use
   assert.match(settingsJs, /document\.execCommand\('copy'\)/)
   assert.match(settingsJs, /COPIED/)
   assert.match(settingsJs, /call\('open_feedback_link', \{ kind \}\)/)
-  assert.match(tauriMain, /fn get_app_version\(\) -> &'static str/)
   assert.match(cargoManifest, /^version = "\d+\.\d+\.\d+"$/m)
   assert.equal(Object.hasOwn(JSON.parse(tauriConfig), 'version'), false)
   assert.match(settingsCss, /--settings-footer-height:\s*52px;/)
