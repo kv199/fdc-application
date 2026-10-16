@@ -163,6 +163,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   processor time. The **POINT DATA** panel and the point marker update at
   most once per screen refresh, and only when the point under the pointer
   changes.
+- **Events**, **Driver Analysis**, and **Shift Light**: saving and loading
+  data no longer holds up the HUD and Configuration windows, and FDC checks
+  its database once per launch instead of before every save. A completed lap
+  and its map are saved about four times faster.
 
 ## 7.24.67 - 2026-10-06
 

@@ -73,7 +73,14 @@ the tray menu, Direct Data Out, and native persistence commands.
   visibility, display preferences, Garage and Events operations, Shift Light
   profile operations, Driver Analysis recording/history operations, and reset.
 - Garage, Driver Analysis, Events, and Shift Light database commands open `fdc.sqlite` below the Tauri
-  application data directory and apply the versioned schema there.
+  application data directory. The first connection in a launch applies the
+  versioned schema; later connections only enable foreign keys and a
+  five-second busy timeout, and the schema is applied again if the file has
+  been removed. Most database commands run on Tauri's worker threads.
+  Recording a Garage car and renaming a Garage car or an Event stay on the
+  main thread, because overlapping calls must apply in call order. Write
+  transactions start as `IMMEDIATE`, so concurrent writers wait for each
+  other instead of failing.
 - At startup the HUD window is sized and positioned to cover the saved HUD
   monitor, or the primary monitor. `list_hud_displays` and `set_hud_display`
   list the connected monitors and move the HUD to one of them. When Windows

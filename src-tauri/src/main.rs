@@ -4,16 +4,18 @@ use std::{
     collections::HashSet,
     fs,
     net::UdpSocket,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, PoisonError,
         atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::{Connection, Error as SqliteError, OptionalExtension, Transaction, params};
+use rusqlite::{
+    Connection, Error as SqliteError, OptionalExtension, Transaction, TransactionBehavior, params,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use tauri::{
@@ -1625,6 +1627,36 @@ fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), Stri
     Ok(())
 }
 
+// Migrations run once per process for each database path. The lock is held while
+// migrating so concurrent commands can never run the same migration at once.
+static SHIFT_LIGHT_SCHEMA_READY: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+fn open_shift_light_connection(path: &Path) -> Result<Connection, String> {
+    let mut ready = SHIFT_LIGHT_SCHEMA_READY
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    // A database file removed while the app runs must be migrated again.
+    if !path.is_file() {
+        *ready = None;
+    }
+    let mut connection = Connection::open(path)
+        .map_err(|error| format!("unable to open HUD SQLite database: {error}"))?;
+    // Commands run on worker threads and can write at the same time, so a writer
+    // waits for the lock instead of failing immediately.
+    connection
+        .busy_timeout(Duration::from_secs(5))
+        .map_err(|error| format!("unable to configure HUD SQLite database: {error}"))?;
+    // Foreign keys are a per-connection setting, so every connection enables them.
+    connection
+        .execute_batch("PRAGMA foreign_keys = ON;")
+        .map_err(|error| format!("unable to configure HUD SQLite database: {error}"))?;
+    if ready.as_deref() != Some(path) {
+        initialize_shift_light_schema(&mut connection)?;
+        *ready = Some(path.to_path_buf());
+    }
+    Ok(connection)
+}
+
 fn open_shift_light_db<R: Runtime>(app: &AppHandle<R>) -> Result<Connection, String> {
     let directory = app
         .path()
@@ -1632,11 +1664,7 @@ fn open_shift_light_db<R: Runtime>(app: &AppHandle<R>) -> Result<Connection, Str
         .map_err(|error| format!("unable to resolve HUD data directory: {error}"))?;
     fs::create_dir_all(&directory)
         .map_err(|error| format!("unable to create HUD data directory: {error}"))?;
-    let path = directory.join("fdc.sqlite");
-    let mut connection = Connection::open(path)
-        .map_err(|error| format!("unable to open HUD SQLite database: {error}"))?;
-    initialize_shift_light_schema(&mut connection)?;
-    Ok(connection)
+    open_shift_light_connection(&directory.join("fdc.sqlite"))
 }
 
 #[derive(Clone, Deserialize)]
@@ -1990,83 +2018,86 @@ fn append_driver_analysis_samples_in_connection(
         return Err("Driver Analysis session is not recording".to_string());
     }
     let transaction = connection
-        .transaction()
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|error| format!("unable to start Driver Analysis sample batch: {error}"))?;
+    let mut statement = transaction
+        .prepare_cached(
+            "INSERT INTO driver_analysis_samples
+               (session_id, sequence, timestamp_ms, speed_kmh, throttle, brake, steer,
+                gear, rpm, rpm_max, acceleration_x, acceleration_y, acceleration_z, yaw_rate,
+                slip_ratio_fl, slip_ratio_fr, slip_ratio_rl, slip_ratio_rr,
+                slip_angle_fl, slip_angle_fr, slip_angle_rl, slip_angle_rr,
+                combined_slip_fl, combined_slip_fr, combined_slip_rl, combined_slip_rr,
+                tire_temp_fl, tire_temp_fr, tire_temp_rl, tire_temp_rr,
+                suspension_fl, suspension_fr, suspension_rl, suspension_rr,
+                rumble_fl, rumble_fr, rumble_rl, rumble_rr,
+                puddle_fl, puddle_fr, puddle_rl, puddle_rr,
+                lap_time, lap_number, lap_distance, position_x, position_y, position_z)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+                     ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
+                     ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38,
+                     ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48)",
+        )
+        .map_err(|error| format!("unable to append Driver Analysis samples: {error}"))?;
     for sample in samples {
         let (position_x, position_y, position_z) = sample
             .position
             .map(|[x, y, z]| (Some(x), Some(y), Some(z)))
             .unwrap_or((None, None, None));
-        transaction
-            .execute(
-                "INSERT INTO driver_analysis_samples
-                   (session_id, sequence, timestamp_ms, speed_kmh, throttle, brake, steer,
-                    gear, rpm, rpm_max, acceleration_x, acceleration_y, acceleration_z, yaw_rate,
-                    slip_ratio_fl, slip_ratio_fr, slip_ratio_rl, slip_ratio_rr,
-                    slip_angle_fl, slip_angle_fr, slip_angle_rl, slip_angle_rr,
-                    combined_slip_fl, combined_slip_fr, combined_slip_rl, combined_slip_rr,
-                    tire_temp_fl, tire_temp_fr, tire_temp_rl, tire_temp_rr,
-                    suspension_fl, suspension_fr, suspension_rl, suspension_rr,
-                    rumble_fl, rumble_fr, rumble_rl, rumble_rr,
-                    puddle_fl, puddle_fr, puddle_rl, puddle_rr,
-                    lap_time, lap_number, lap_distance, position_x, position_y, position_z)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-                         ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
-                         ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38,
-                         ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48)",
-                params![
-                    session_id,
-                    sample.sequence,
-                    sample.timestamp_ms,
-                    sample.speed_kmh,
-                    sample.throttle,
-                    sample.brake,
-                    sample.steer,
-                    sample.gear,
-                    sample.rpm,
-                    sample.rpm_max,
-                    sample.acceleration_x,
-                    sample.acceleration_y,
-                    sample.acceleration_z,
-                    sample.yaw_rate,
-                    sample.slip_ratio[0],
-                    sample.slip_ratio[1],
-                    sample.slip_ratio[2],
-                    sample.slip_ratio[3],
-                    sample.slip_angle[0],
-                    sample.slip_angle[1],
-                    sample.slip_angle[2],
-                    sample.slip_angle[3],
-                    sample.combined_slip[0],
-                    sample.combined_slip[1],
-                    sample.combined_slip[2],
-                    sample.combined_slip[3],
-                    sample.tire_temp_c[0],
-                    sample.tire_temp_c[1],
-                    sample.tire_temp_c[2],
-                    sample.tire_temp_c[3],
-                    sample.suspension[0],
-                    sample.suspension[1],
-                    sample.suspension[2],
-                    sample.suspension[3],
-                    sample.rumble[0],
-                    sample.rumble[1],
-                    sample.rumble[2],
-                    sample.rumble[3],
-                    sample.puddle[0],
-                    sample.puddle[1],
-                    sample.puddle[2],
-                    sample.puddle[3],
-                    sample.lap_time,
-                    sample.lap_number,
-                    sample.lap_distance,
-                    position_x,
-                    position_y,
-                    position_z,
-                ],
-            )
+        statement
+            .execute(params![
+                session_id,
+                sample.sequence,
+                sample.timestamp_ms,
+                sample.speed_kmh,
+                sample.throttle,
+                sample.brake,
+                sample.steer,
+                sample.gear,
+                sample.rpm,
+                sample.rpm_max,
+                sample.acceleration_x,
+                sample.acceleration_y,
+                sample.acceleration_z,
+                sample.yaw_rate,
+                sample.slip_ratio[0],
+                sample.slip_ratio[1],
+                sample.slip_ratio[2],
+                sample.slip_ratio[3],
+                sample.slip_angle[0],
+                sample.slip_angle[1],
+                sample.slip_angle[2],
+                sample.slip_angle[3],
+                sample.combined_slip[0],
+                sample.combined_slip[1],
+                sample.combined_slip[2],
+                sample.combined_slip[3],
+                sample.tire_temp_c[0],
+                sample.tire_temp_c[1],
+                sample.tire_temp_c[2],
+                sample.tire_temp_c[3],
+                sample.suspension[0],
+                sample.suspension[1],
+                sample.suspension[2],
+                sample.suspension[3],
+                sample.rumble[0],
+                sample.rumble[1],
+                sample.rumble[2],
+                sample.rumble[3],
+                sample.puddle[0],
+                sample.puddle[1],
+                sample.puddle[2],
+                sample.puddle[3],
+                sample.lap_time,
+                sample.lap_number,
+                sample.lap_distance,
+                position_x,
+                position_y,
+                position_z,
+            ])
             .map_err(|error| format!("unable to append Driver Analysis samples: {error}"))?;
     }
+    drop(statement);
     let storage_bytes = (samples.len() * std::mem::size_of::<DriverAnalysisSampleInput>()) as i64;
     transaction
         .execute(
@@ -2286,7 +2317,7 @@ fn save_driver_analysis_result_in_connection(
     }
 
     let transaction = connection
-        .transaction()
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|error| format!("unable to start Driver Analysis finalization: {error}"))?;
     let current_state: Option<(String, String, i64)> = transaction
         .query_row(
@@ -2328,77 +2359,85 @@ fn save_driver_analysis_result_in_connection(
                 params![session_id],
             )
             .map_err(|error| format!("unable to replace Driver Analysis drives: {error}"))?;
+        let mut statement = transaction
+            .prepare_cached(
+                "INSERT INTO driver_analysis_drives
+                   (session_id, drive_index, kind, finished, lap_count, first_sequence, last_sequence,
+                    started_at_ms, finished_at_ms, started_wall_ms, distance_m)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            )
+            .map_err(|error| format!("unable to save Driver Analysis drive: {error}"))?;
         for (drive_index, drive) in drives_list.iter().enumerate() {
-            transaction
-                .execute(
-                    "INSERT INTO driver_analysis_drives
-                       (session_id, drive_index, kind, finished, lap_count, first_sequence, last_sequence,
-                        started_at_ms, finished_at_ms, started_wall_ms, distance_m)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-                    params![
-                        session_id,
-                        drive_index as i32,
-                        drive.kind,
-                        drive.finished as i32,
-                        drive.lap_count,
-                        drive.first_sequence,
-                        drive.last_sequence,
-                        drive.started_at_ms,
-                        drive.finished_at_ms,
-                        drive.started_wall_ms,
-                        drive.distance_m,
-                    ],
-                )
+            statement
+                .execute(params![
+                    session_id,
+                    drive_index as i32,
+                    drive.kind,
+                    drive.finished as i32,
+                    drive.lap_count,
+                    drive.first_sequence,
+                    drive.last_sequence,
+                    drive.started_at_ms,
+                    drive.finished_at_ms,
+                    drive.started_wall_ms,
+                    drive.distance_m,
+                ])
                 .map_err(|error| format!("unable to save Driver Analysis drive: {error}"))?;
         }
     }
 
     let mut opportunity_ids = Vec::with_capacity(opportunities.len());
+    let mut statement = transaction
+        .prepare_cached(
+            "INSERT INTO driver_analysis_opportunities
+               (session_id, maneuver_id, opportunity_type, started_at_ms, finished_at_ms,
+                speed_bin, gear, outcome, valid, invalid_reason, context_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        )
+        .map_err(|error| format!("unable to save Driver Analysis opportunity: {error}"))?;
     for opportunity in opportunities {
         let context_json = validate_json_text(opportunity.context_json.as_deref(), "contextJson")?;
-        transaction
-            .execute(
-                "INSERT INTO driver_analysis_opportunities
-                   (session_id, maneuver_id, opportunity_type, started_at_ms, finished_at_ms,
-                    speed_bin, gear, outcome, valid, invalid_reason, context_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-                params![
-                    session_id,
-                    opportunity.maneuver_id,
-                    opportunity.opportunity_type,
-                    opportunity.started_at_ms,
-                    opportunity.finished_at_ms,
-                    opportunity.speed_bin,
-                    opportunity.gear,
-                    opportunity.outcome,
-                    opportunity.valid,
-                    opportunity.invalid_reason,
-                    context_json,
-                ],
-            )
+        statement
+            .execute(params![
+                session_id,
+                opportunity.maneuver_id,
+                opportunity.opportunity_type,
+                opportunity.started_at_ms,
+                opportunity.finished_at_ms,
+                opportunity.speed_bin,
+                opportunity.gear,
+                opportunity.outcome,
+                opportunity.valid,
+                opportunity.invalid_reason,
+                context_json,
+            ])
             .map_err(|error| format!("unable to save Driver Analysis opportunity: {error}"))?;
         opportunity_ids.push(transaction.last_insert_rowid());
     }
+    drop(statement);
+    let mut statement = transaction
+        .prepare_cached(
+            "INSERT INTO driver_analysis_evidence
+               (opportunity_id, problem_type, is_primary, detector_confidence,
+                attribution_confidence, severity, metrics_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        )
+        .map_err(|error| format!("unable to save Driver Analysis evidence: {error}"))?;
     for item in evidence {
         let metrics_json = validate_json_text(item.metrics_json.as_deref(), "metricsJson")?;
-        transaction
-            .execute(
-                "INSERT INTO driver_analysis_evidence
-                   (opportunity_id, problem_type, is_primary, detector_confidence,
-                    attribution_confidence, severity, metrics_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![
-                    opportunity_ids[item.opportunity_index],
-                    item.problem_type,
-                    item.primary,
-                    item.detector_confidence,
-                    item.attribution_confidence,
-                    item.severity,
-                    metrics_json,
-                ],
-            )
+        statement
+            .execute(params![
+                opportunity_ids[item.opportunity_index],
+                item.problem_type,
+                item.primary,
+                item.detector_confidence,
+                item.attribution_confidence,
+                item.severity,
+                metrics_json,
+            ])
             .map_err(|error| format!("unable to save Driver Analysis evidence: {error}"))?;
     }
+    drop(statement);
     let finished_at_ms = now_epoch_ms();
     let primary_evidence_count = evidence.iter().filter(|item| item.primary).count();
     let status = if result.result == "interrupted" {
@@ -2786,7 +2825,7 @@ fn delete_driver_analysis_recording_in_connection(
         return Err("Driver Analysis recording id must be positive".to_string());
     }
     let transaction = connection
-        .transaction()
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|error| format!("unable to start Driver Analysis recording deletion: {error}"))?;
     let changed = transaction
         .execute(
@@ -2808,7 +2847,7 @@ fn delete_driver_analysis_recording_in_connection(
         .map_err(|error| format!("unable to commit Driver Analysis recording deletion: {error}"))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn create_driver_analysis_session(
     app: AppHandle,
     input: DriverAnalysisSessionInput,
@@ -2817,7 +2856,7 @@ fn create_driver_analysis_session(
     create_driver_analysis_session_in_connection(&mut connection, &input)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn append_driver_analysis_samples(
     app: AppHandle,
     session_id: i64,
@@ -2827,7 +2866,7 @@ fn append_driver_analysis_samples(
     append_driver_analysis_samples_in_connection(&mut connection, session_id, &samples)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn finalize_driver_analysis_session(
     app: AppHandle,
     session_id: i64,
@@ -2847,7 +2886,7 @@ fn finalize_driver_analysis_session(
     )
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_driver_analysis_checks(
     app: AppHandle,
     session_id: i64,
@@ -2863,7 +2902,7 @@ fn load_driver_analysis_checks(
     )
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_driver_analysis_samples(
     app: AppHandle,
     session_id: i64,
@@ -2874,7 +2913,7 @@ fn load_driver_analysis_samples(
     load_driver_analysis_samples_in_connection(&connection, session_id, after_sequence, limit)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn reanalyze_driver_analysis_session(
     app: AppHandle,
     session_id: i64,
@@ -2895,7 +2934,7 @@ fn reanalyze_driver_analysis_session(
     )
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_driver_analysis_stats(
     app: AppHandle,
     session_id: i64,
@@ -2905,7 +2944,7 @@ fn save_driver_analysis_stats(
     save_driver_analysis_stats_in_connection(&connection, session_id, &stats_json)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_driver_analysis_sessions(
     app: AppHandle,
 ) -> Result<Vec<DriverAnalysisHistoryRecord>, String> {
@@ -2913,19 +2952,19 @@ fn load_driver_analysis_sessions(
     load_driver_analysis_sessions_from_connection(&connection)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn delete_driver_analysis_session(app: AppHandle, session_id: i64) -> Result<(), String> {
     let connection = open_shift_light_db(&app)?;
     delete_driver_analysis_session_in_connection(&connection, session_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn create_driver_analysis_recording(app: AppHandle, started_at_ms: i64) -> Result<i64, String> {
     let mut connection = open_shift_light_db(&app)?;
     create_driver_analysis_recording_in_connection(&mut connection, started_at_ms)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn delete_driver_analysis_recording(app: AppHandle, recording_id: i64) -> Result<(), String> {
     let mut connection = open_shift_light_db(&app)?;
     delete_driver_analysis_recording_in_connection(&mut connection, recording_id)
@@ -2973,13 +3012,13 @@ fn discard_driver_analysis_recording_in_connection(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn discard_driver_analysis_session(app: AppHandle, session_id: i64) -> Result<(), String> {
     let connection = open_shift_light_db(&app)?;
     discard_driver_analysis_session_in_connection(&connection, session_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn discard_driver_analysis_recording(app: AppHandle, recording_id: i64) -> Result<(), String> {
     let mut connection = open_shift_light_db(&app)?;
     discard_driver_analysis_recording_in_connection(&mut connection, recording_id)
@@ -3426,7 +3465,7 @@ fn create_event_in_connection(
 ) -> Result<EventRecord, String> {
     let event = normalize_event_input(event)?;
     let transaction = connection
-        .transaction()
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|error| format!("unable to start Event creation: {error}"))?;
     transaction
         .execute(
@@ -4325,76 +4364,78 @@ fn insert_event_run_lap(
             ],
         )
         .map_err(|error| format!("unable to record Event run lap: {error}"))?;
+    let mut statement = transaction
+        .prepare_cached(
+            "INSERT INTO event_run_lap_trace_points
+               (run_id, lap_number, sample_index, elapsed_ms, distance,
+                position_x, position_y, position_z, throttle, brake,
+                speed_kmh, gear, rpm, steer,
+                acceleration_x, acceleration_y, acceleration_z, yaw_rate,
+                slip_angle_fl, slip_angle_fr, slip_angle_rl, slip_angle_rr,
+                slip_ratio_fl, slip_ratio_fr, slip_ratio_rl, slip_ratio_rr,
+                combined_slip_fl, combined_slip_fr, combined_slip_rl, combined_slip_rr,
+                tire_temp_c_fl, tire_temp_c_fr, tire_temp_c_rl, tire_temp_c_rr,
+                suspension_fl, suspension_fr, suspension_rl, suspension_rr,
+                puddle_fl, puddle_fr, puddle_rl, puddle_rr,
+                rumble_fl, rumble_fr, rumble_rl, rumble_rr)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                     ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
+                     ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
+                     ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34,
+                     ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42,
+                     ?43, ?44, ?45, ?46)",
+        )
+        .map_err(|error| format!("unable to record Event run trace point: {error}"))?;
     for point in lap.trace_points {
-        transaction
-            .execute(
-                "INSERT INTO event_run_lap_trace_points
-                   (run_id, lap_number, sample_index, elapsed_ms, distance,
-                    position_x, position_y, position_z, throttle, brake,
-                    speed_kmh, gear, rpm, steer,
-                    acceleration_x, acceleration_y, acceleration_z, yaw_rate,
-                    slip_angle_fl, slip_angle_fr, slip_angle_rl, slip_angle_rr,
-                    slip_ratio_fl, slip_ratio_fr, slip_ratio_rl, slip_ratio_rr,
-                    combined_slip_fl, combined_slip_fr, combined_slip_rl, combined_slip_rr,
-                    tire_temp_c_fl, tire_temp_c_fr, tire_temp_c_rl, tire_temp_c_rr,
-                    suspension_fl, suspension_fr, suspension_rl, suspension_rr,
-                    puddle_fl, puddle_fr, puddle_rl, puddle_rr,
-                    rumble_fl, rumble_fr, rumble_rl, rumble_rr)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
-                         ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
-                         ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
-                         ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34,
-                         ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42,
-                         ?43, ?44, ?45, ?46)",
-                params![
-                    run_id,
-                    lap_number,
-                    point.sample_index,
-                    point.elapsed_ms,
-                    point.distance,
-                    point.position_x,
-                    point.position_y,
-                    point.position_z,
-                    point.throttle,
-                    point.brake,
-                    point.speed_kmh,
-                    point.gear,
-                    point.rpm,
-                    point.steer,
-                    point.acceleration_x,
-                    point.acceleration_y,
-                    point.acceleration_z,
-                    point.yaw_rate,
-                    point.slip_angle_fl,
-                    point.slip_angle_fr,
-                    point.slip_angle_rl,
-                    point.slip_angle_rr,
-                    point.slip_ratio_fl,
-                    point.slip_ratio_fr,
-                    point.slip_ratio_rl,
-                    point.slip_ratio_rr,
-                    point.combined_slip_fl,
-                    point.combined_slip_fr,
-                    point.combined_slip_rl,
-                    point.combined_slip_rr,
-                    point.tire_temp_c_fl,
-                    point.tire_temp_c_fr,
-                    point.tire_temp_c_rl,
-                    point.tire_temp_c_rr,
-                    point.suspension_fl,
-                    point.suspension_fr,
-                    point.suspension_rl,
-                    point.suspension_rr,
-                    point.puddle_fl,
-                    point.puddle_fr,
-                    point.puddle_rl,
-                    point.puddle_rr,
-                    point.rumble_fl.map(|v| if v { 1 } else { 0 }),
-                    point.rumble_fr.map(|v| if v { 1 } else { 0 }),
-                    point.rumble_rl.map(|v| if v { 1 } else { 0 }),
-                    point.rumble_rr.map(|v| if v { 1 } else { 0 }),
-                ],
-            )
+        statement
+            .execute(params![
+                run_id,
+                lap_number,
+                point.sample_index,
+                point.elapsed_ms,
+                point.distance,
+                point.position_x,
+                point.position_y,
+                point.position_z,
+                point.throttle,
+                point.brake,
+                point.speed_kmh,
+                point.gear,
+                point.rpm,
+                point.steer,
+                point.acceleration_x,
+                point.acceleration_y,
+                point.acceleration_z,
+                point.yaw_rate,
+                point.slip_angle_fl,
+                point.slip_angle_fr,
+                point.slip_angle_rl,
+                point.slip_angle_rr,
+                point.slip_ratio_fl,
+                point.slip_ratio_fr,
+                point.slip_ratio_rl,
+                point.slip_ratio_rr,
+                point.combined_slip_fl,
+                point.combined_slip_fr,
+                point.combined_slip_rl,
+                point.combined_slip_rr,
+                point.tire_temp_c_fl,
+                point.tire_temp_c_fr,
+                point.tire_temp_c_rl,
+                point.tire_temp_c_rr,
+                point.suspension_fl,
+                point.suspension_fr,
+                point.suspension_rl,
+                point.suspension_rr,
+                point.puddle_fl,
+                point.puddle_fr,
+                point.puddle_rl,
+                point.puddle_rr,
+                point.rumble_fl.map(|v| if v { 1 } else { 0 }),
+                point.rumble_fr.map(|v| if v { 1 } else { 0 }),
+                point.rumble_rl.map(|v| if v { 1 } else { 0 }),
+                point.rumble_rr.map(|v| if v { 1 } else { 0 }),
+            ])
             .map_err(|error| format!("unable to record Event run trace point: {error}"))?;
     }
     Ok(())
@@ -4406,7 +4447,7 @@ fn record_event_run_in_connection(
 ) -> Result<EventRunRecord, String> {
     let run = normalize_event_run_input(run)?;
     let transaction = connection
-        .transaction()
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|error| format!("unable to start Event run record: {error}"))?;
     let event_exists: bool = transaction
         .query_row(
@@ -4461,7 +4502,7 @@ fn append_event_run_lap_in_connection(
     }
     validate_event_run_lap(&lap)?;
     let transaction = connection
-        .transaction()
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|error| format!("unable to start Event run lap record: {error}"))?;
     let run_type: String = transaction
         .query_row(
@@ -4513,7 +4554,7 @@ fn update_event_run_result_in_connection(
     let run_type = run_type.trim().to_ascii_lowercase();
     let result = result.trim().to_ascii_lowercase();
     let transaction = connection
-        .transaction()
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|error| format!("unable to start Event run result update: {error}"))?;
     let lap_count: i64 = transaction
         .query_row(
@@ -4555,13 +4596,13 @@ fn update_event_run_result_in_connection(
     load_event_run_record_from_connection(connection, run_id, false)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn record_event_run(app: AppHandle, run: NewEventRun) -> Result<EventRunRecord, String> {
     let mut connection = open_shift_light_db(&app)?;
     record_event_run_in_connection(&mut connection, run)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn append_event_run_lap(
     app: AppHandle,
     run_id: i64,
@@ -4571,7 +4612,7 @@ fn append_event_run_lap(
     append_event_run_lap_in_connection(&mut connection, run_id, lap)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn update_event_run_result(
     app: AppHandle,
     run_id: i64,
@@ -4591,19 +4632,19 @@ fn update_event_run_result(
     )
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_event_runs(app: AppHandle, event_id: Option<i64>) -> Result<Vec<EventRunRecord>, String> {
     let connection = open_shift_light_db(&app)?;
     load_event_runs_from_connection(&connection, event_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_event_run(app: AppHandle, run_id: i64) -> Result<EventRunRecord, String> {
     let connection = open_shift_light_db(&app)?;
     load_event_run_from_connection(&connection, run_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_event_absolute_best(
     app: AppHandle,
     event_id: i64,
@@ -4612,7 +4653,7 @@ fn load_event_absolute_best(
     load_event_absolute_best_from_connection(&connection, event_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_event_theoretical_best(
     app: AppHandle,
     event_id: i64,
@@ -4621,7 +4662,7 @@ fn load_event_theoretical_best(
     load_event_theoretical_best_from_connection(&connection, event_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn create_event(
     app: AppHandle,
     name: String,
@@ -4643,25 +4684,26 @@ fn create_event(
     )
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_events(app: AppHandle) -> Result<Vec<EventRecord>, String> {
     let connection = open_shift_light_db(&app)?;
     load_events_from_connection(&connection)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_event(app: AppHandle, event_id: i64) -> Result<EventRecord, String> {
     let connection = open_shift_light_db(&app)?;
     load_event_from_connection(&connection, event_id)
 }
 
+// Stays on the main thread: overlapping renames from Settings must apply in call order.
 #[tauri::command]
 fn rename_event(app: AppHandle, event_id: i64, name: String) -> Result<EventRecord, String> {
     let connection = open_shift_light_db(&app)?;
     rename_event_in_connection(&connection, event_id, name)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn delete_event(app: AppHandle, event_id: i64) -> Result<(), String> {
     let connection = open_shift_light_db(&app)?;
     delete_event_in_connection(&connection, event_id)
@@ -4901,7 +4943,7 @@ fn record_garage_vehicle_in_connection(
 ) -> Result<GarageSnapshot, String> {
     validate_garage_vehicle(vehicle)?;
     let transaction = connection
-        .transaction()
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|error| format!("unable to start Garage record: {error}"))?;
     let sequence: i64 = transaction
         .query_row(
@@ -4961,6 +5003,7 @@ fn record_garage_vehicle_in_connection(
     load_garage_snapshot_from_connection(connection)
 }
 
+// Stays on the main thread: the Garage sequence and the reported latest car depend on call order.
 #[tauri::command]
 fn record_garage_vehicle(
     app: AppHandle,
@@ -4983,17 +5026,18 @@ fn record_garage_vehicle(
     record_garage_vehicle_in_connection(&mut connection, &vehicle)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_garage_snapshot(app: AppHandle) -> Result<GarageSnapshot, String> {
     let connection = open_shift_light_db(&app)?;
     load_garage_snapshot_from_connection(&connection)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_garage(app: AppHandle) -> Result<GarageSnapshot, String> {
     load_garage_snapshot(app)
 }
 
+// Stays on the main thread: overlapping renames from Settings must apply in call order.
 #[tauri::command]
 fn rename_garage_car(
     app: AppHandle,
@@ -5074,7 +5118,7 @@ fn assert_shift_light_config_matches_key(
     Ok((identity, reported_redline_rpm, usable_ceiling_rpm))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn resolve_shift_light_config(
     app: AppHandle,
     key: String,
@@ -5105,9 +5149,11 @@ fn resolve_shift_light_config_in_connection(
     }
     let identity = parse_shift_light_config_key(key)?;
     let key_redline = key_reported_redline_rpm(key)?;
-    let transaction = connection.transaction().map_err(|error| {
-        format!("unable to start Shift Light configuration resolution: {error}")
-    })?;
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| {
+            format!("unable to start Shift Light configuration resolution: {error}")
+        })?;
     let existing: Option<i64> = transaction
         .query_row(
             "SELECT id FROM shift_light_configs
@@ -5269,7 +5315,7 @@ fn save_shift_light_calibration_in_connection(
     }
     assert_shift_light_config_matches_key(connection, request.config_id, &request.key)?;
     let transaction = connection
-        .transaction()
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|error| format!("unable to start Shift Light calibration save: {error}"))?;
     transaction
         .execute(
@@ -5308,16 +5354,27 @@ fn save_shift_light_calibration_in_connection(
     let keep_from = positive_ceiling_samples
         .len()
         .saturating_sub(MAX_SHIFT_LIGHT_CEILING_SAMPLES);
+    let mut statement = transaction
+        .prepare_cached(
+            "INSERT INTO shift_light_ceiling_samples (config_id, rpm)
+             VALUES (?1, ?2)",
+        )
+        .map_err(|error| format!("unable to save Shift Light ceiling sample: {error}"))?;
     for rpm in positive_ceiling_samples.into_iter().skip(keep_from) {
-        transaction
-            .execute(
-                "INSERT INTO shift_light_ceiling_samples (config_id, rpm)
-                 VALUES (?1, ?2)",
-                params![request.config_id, rpm],
-            )
+        statement
+            .execute(params![request.config_id, rpm])
             .map_err(|error| format!("unable to save Shift Light ceiling sample: {error}"))?;
     }
+    drop(statement);
     let mut target_pairs = HashSet::new();
+    let mut statement = transaction
+        .prepare_cached(
+            "INSERT INTO shift_light_gear_targets
+               (config_id, source_gear, destination_gear, status, candidate_rpm,
+                optimal_rpm, confirmation_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        )
+        .map_err(|error| format!("unable to save Shift Light target: {error}"))?;
     for target in request
         .gear_targets
         .iter()
@@ -5349,24 +5406,28 @@ fn save_shift_light_calibration_in_connection(
         {
             continue;
         }
-        transaction
-            .execute(
-                "INSERT INTO shift_light_gear_targets
-                   (config_id, source_gear, destination_gear, status, candidate_rpm,
-                    optimal_rpm, confirmation_count)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![
-                    request.config_id,
-                    target.source_gear,
-                    target.destination_gear,
-                    target.status,
-                    target.candidate_rpm.filter(|value| *value > 0),
-                    target.optimal_rpm.filter(|value| *value > 0),
-                    target.confirmation_count.clamp(0, 3)
-                ],
-            )
+        statement
+            .execute(params![
+                request.config_id,
+                target.source_gear,
+                target.destination_gear,
+                target.status,
+                target.candidate_rpm.filter(|value| *value > 0),
+                target.optimal_rpm.filter(|value| *value > 0),
+                target.confirmation_count.clamp(0, 3)
+            ])
             .map_err(|error| format!("unable to save Shift Light target: {error}"))?;
     }
+    drop(statement);
+    let mut statement = transaction
+        .prepare_cached(
+            "INSERT INTO shift_light_shift_samples
+               (config_id, source_gear, destination_gear, before_timestamp_ms,
+                after_timestamp_ms, before_rpm, after_rpm, before_power_w,
+                after_power_w, delta_percent, classification)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        )
+        .map_err(|error| format!("unable to save Shift Light sample: {error}"))?;
     for sample in request
         .shift_samples
         .iter()
@@ -5391,35 +5452,29 @@ fn save_shift_light_calibration_in_connection(
         {
             continue;
         }
-        transaction
-            .execute(
-                "INSERT INTO shift_light_shift_samples
-                   (config_id, source_gear, destination_gear, before_timestamp_ms,
-                    after_timestamp_ms, before_rpm, after_rpm, before_power_w,
-                    after_power_w, delta_percent, classification)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-                params![
-                    request.config_id,
-                    sample.source_gear,
-                    sample.destination_gear,
-                    sample.before_timestamp_ms,
-                    sample.after_timestamp_ms,
-                    sample.before_rpm,
-                    sample.after_rpm,
-                    sample.before_power,
-                    sample.after_power,
-                    sample.delta_percent,
-                    sample.classification
-                ],
-            )
+        statement
+            .execute(params![
+                request.config_id,
+                sample.source_gear,
+                sample.destination_gear,
+                sample.before_timestamp_ms,
+                sample.after_timestamp_ms,
+                sample.before_rpm,
+                sample.after_rpm,
+                sample.before_power,
+                sample.after_power,
+                sample.delta_percent,
+                sample.classification
+            ])
             .map_err(|error| format!("unable to save Shift Light sample: {error}"))?;
     }
+    drop(statement);
     transaction
         .commit()
         .map_err(|error| format!("unable to commit Shift Light calibration: {error}"))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn load_shift_light_calibration(
     app: AppHandle,
     key: String,
@@ -5429,7 +5484,7 @@ fn load_shift_light_calibration(
     load_shift_light_calibration_from_connection(&connection, &key, config_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_shift_light_calibration(
     app: AppHandle,
     request: ShiftLightCalibrationRequest,
@@ -5438,7 +5493,7 @@ fn save_shift_light_calibration(
     save_shift_light_calibration_in_connection(&mut connection, &request)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn clear_shift_light_config(
     app: AppHandle,
     config_id: i64,
@@ -5447,7 +5502,7 @@ fn clear_shift_light_config(
     let _ = gearbox_signature;
     let mut connection = open_shift_light_db(&app)?;
     let transaction = connection
-        .transaction()
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|error| format!("unable to start Shift Light configuration clear: {error}"))?;
     for table in [
         "shift_light_ceiling_samples",
@@ -11803,5 +11858,30 @@ mod tests {
         assert_eq!(bounds, Some(hud_bounds(1.0, 2.0, 3.0, 4.0)));
         let whole: Option<HudWindowBounds> = serde_json::from_str("null").unwrap();
         assert_eq!(whole, None);
+    }
+
+    #[test]
+    fn shift_light_connections_enable_foreign_keys_and_migrate_again_after_file_removal() {
+        let folder = std::env::temp_dir().join(format!("fdc-open-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&folder);
+        fs::create_dir_all(&folder).unwrap();
+        let path = folder.join("fdc.sqlite");
+        for _ in 0..2 {
+            let connection = open_shift_light_connection(&path).unwrap();
+            let enabled: i64 = connection
+                .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(enabled, 1);
+        }
+        fs::remove_file(&path).unwrap();
+        let connection = open_shift_light_connection(&path).unwrap();
+        let versions: i64 = connection
+            .query_row("SELECT COUNT(*) FROM hud_schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(versions, 1);
+        drop(connection);
+        fs::remove_dir_all(folder).unwrap();
     }
 }
