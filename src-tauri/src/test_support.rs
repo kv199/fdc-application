@@ -1,5 +1,7 @@
 //! Test fixtures shared by Rust test modules that live in more than one feature file.
 
+use rusqlite::Connection;
+
 use crate::*;
 
 pub(crate) fn test_event(
