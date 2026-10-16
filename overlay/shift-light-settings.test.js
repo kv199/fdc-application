@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 
 const { normalizeShiftLightState } = require('./shift-light-settings.js')
+const { readConfigurationScripts } = require('../tools/test-sources.cjs')
 
 test('normalizes compact per-pair calibration without legacy bin or reason fields', () => {
   assert.deepEqual(normalizeShiftLightState({
@@ -130,7 +131,7 @@ test('caps the displayed ceiling cluster at three and keeps up to twelve stored 
 })
 
 test('renders the SHIFT AT LIMITER hint with its explanatory title in the gear table', () => {
-  const settingsJs = require('node:fs').readFileSync(require('node:path').join(__dirname, 'settings.js'), 'utf8')
+  const settingsJs = readConfigurationScripts()
   assert.match(settingsJs, /isShiftAtLimiter\(diagnosticStatus, gearTargetRpm, state\.usableCeiling\)/)
   assert.match(settingsJs, /limiterHint\.textContent = 'SHIFT AT LIMITER'/)
   assert.match(settingsJs, /limiterHint\.title = 'The best shift point for this gear is at the rev limiter\.'/)

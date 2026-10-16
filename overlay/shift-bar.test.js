@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { readHudScripts } = require('../tools/test-sources.cjs')
 
 const {
   LIMITER_RPM_FRACTION,
@@ -294,8 +295,8 @@ test('overlay.js no longer uses the steady 85 percent redline threshold', () => 
   assert.doesNotMatch(overlay, /getShiftLightSignal|getRpmSignal|getLearnedShiftRpm/)
 })
 
-test('overlay.js drives the Gear block and the Shift Bar from the shared signal', () => {
-  const overlay = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
+test('the HUD page scripts drive the Gear block and the Shift Bar from the shared signal', () => {
+  const overlay = readHudScripts()
   assert.match(overlay, /const signal = DEMO_MODE \? demoSignal : getHudSignal\(telemetry\)/)
   assert.match(overlay, /renderShiftBar\(telemetry, signal\)/)
   assert.match(overlay, /thresholdRpm: getShiftBarThresholdRpm\(telemetry\)/)

@@ -4,7 +4,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { COMPONENTS, OVERLAY_COMPONENTS, DEFAULT_OFF_OVERLAY_COMPONENTS, COLUMN_WIDTHS, isOverlayComponentOn } = require('./hud-widgets.js')
-const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8')
+const { readRustSources } = require('../tools/test-sources.cjs')
+const tauriMain = readRustSources()
 const indexHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 const settingsHtml = fs.readFileSync(path.join(__dirname, 'settings.html'), 'utf8')
 
@@ -14,7 +15,7 @@ const NAME = '([A-Za-z]+)'
 
 function rustFunction(name) {
   const start = tauriMain.indexOf(`fn ${name}(`)
-  assert.notEqual(start, -1, `main.rs defines ${name}`)
+  assert.notEqual(start, -1, `the Rust sources define ${name}`)
   const body = tauriMain.slice(start)
   return body.slice(0, body.search(/\r?\n\}\r?\n/))
 }

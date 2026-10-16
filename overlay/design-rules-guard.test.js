@@ -3,6 +3,8 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { readConfigurationScripts } = require('../tools/test-sources.cjs')
+
 const stylesDir = process.env.FDC_STYLES_DIR || __dirname
 const read = file => fs.readFileSync(path.join(stylesDir, file), 'utf8')
 const stripComments = css => css.replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, ''))
@@ -204,8 +206,7 @@ test('No disabled hover fills: .settings-button hover/focus needs :not(:disabled
 // focus color silently never shows.
 test('Button state hovers are not shadowed by the base button hover', () => {
   const css = stripComments(read('settings.css'))
-  const markup = fs.readFileSync(path.join(__dirname, 'settings.html'), 'utf8') +
-    fs.readFileSync(path.join(__dirname, 'settings.js'), 'utf8')
+  const markup = fs.readFileSync(path.join(__dirname, 'settings.html'), 'utf8') + readConfigurationScripts()
   const partners = new Set()
   for (const match of markup.matchAll(/["'`]([^"'`]*\bsettings-button\b[^"'`]*)["'`]/g)) {
     for (const name of match[1].split(/\s+/)) {

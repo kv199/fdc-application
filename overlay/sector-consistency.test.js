@@ -1,8 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const path = require('node:path')
 
+const { readRustSources } = require('../tools/test-sources.cjs')
 const HudEventRecorder = require('./event-recorder.js')
 const HudDelta = require('./delta-runtime.js')
 const EventTraceMap = require('./event-trace-map.js')
@@ -146,9 +145,8 @@ test('documents: a lap whose first sample is 400 ms in gives the Delta reference
 test.todo('recorder and Delta reference agree on a lap whose first trace sample is 400 ms into the lap (see the documenting test above)')
 
 test('the 97% reference-coverage threshold is identical in the recorder, the Delta runtime and the native store', () => {
-  const tauriMain = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8').replace(/\r\n/g, '\n')
-  const rustMatch = tauriMain.match(/const EVENT_REFERENCE_DISTANCE_RATIO: f64 = ([0-9.]+);/)
-  assert.ok(rustMatch, 'main.rs defines EVENT_REFERENCE_DISTANCE_RATIO')
+  const rustMatch = readRustSources().match(/const EVENT_REFERENCE_DISTANCE_RATIO: f64 = ([0-9.]+);/)
+  assert.ok(rustMatch, 'the Rust sources define EVENT_REFERENCE_DISTANCE_RATIO')
 
   assert.equal(Number(rustMatch[1]), 0.97)
   assert.equal(HudEventRecorder.SPRINT_MIN_REFERENCE_DISTANCE_RATIO, 0.97)

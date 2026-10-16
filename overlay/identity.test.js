@@ -3,6 +3,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
+const { readConfigurationScripts, readHudScripts, readRustSources } = require('../tools/test-sources.cjs')
+
 const root = path.join(__dirname, '..')
 const storageSources = [
   'hud-layout.js',
@@ -10,9 +12,10 @@ const storageSources = [
   'display-preferences.js',
   'quit-confirmation.js',
   'connection-guide.js',
-  'hud-preferences.js',
-  'settings.js'
-].map(file => fs.readFileSync(path.join(__dirname, file), 'utf8')).join('\n')
+  'hud-preferences.js'
+].map(file => fs.readFileSync(path.join(__dirname, file), 'utf8'))
+  .concat(readConfigurationScripts())
+  .join('\n')
 
 test('FDC uses only current versioned browser storage keys', () => {
   for (const key of [
@@ -34,7 +37,7 @@ test('FDC uses only current versioned browser storage keys', () => {
 test('FDC uses its canonical native identity and database filename', () => {
   const config = JSON.parse(fs.readFileSync(path.join(root, 'src-tauri', 'tauri.conf.json'), 'utf8'))
   const cargo = fs.readFileSync(path.join(root, 'src-tauri', 'Cargo.toml'), 'utf8')
-  const rust = fs.readFileSync(path.join(root, 'src-tauri', 'src', 'main.rs'), 'utf8')
+  const rust = readRustSources()
 
   assert.equal(config.productName, 'FDC')
   assert.equal(config.identifier, 'FDC')
@@ -46,8 +49,8 @@ test('FDC uses its canonical native identity and database filename', () => {
 test('FDC exposes only the Direct Data Out runtime path', () => {
   const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
   const settings = fs.readFileSync(path.join(__dirname, 'settings.html'), 'utf8')
-  const settingsRuntime = fs.readFileSync(path.join(__dirname, 'settings.js'), 'utf8')
-  const overlayRuntime = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
+  const settingsRuntime = readConfigurationScripts()
+  const overlayRuntime = readHudScripts()
   const route = fs.readFileSync(path.join(__dirname, 'telemetry-route.js'), 'utf8')
   const config = fs.readFileSync(path.join(root, 'src-tauri', 'tauri.conf.json'), 'utf8')
 

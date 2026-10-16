@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { readHudScripts } = require('../tools/test-sources.cjs')
 
 const {
   calculateDelta,
@@ -188,14 +189,14 @@ test('runtime accepts an active Event reference and updates its presentation sta
 })
 
 test('HUD and Delta telemetry visibility follows live IsRaceOn samples only', () => {
-  const overlaySource = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
+  const overlaySource = readHudScripts()
   assert.match(overlaySource, /const TELEMETRY_HIDE_DELAY_MS = 500/)
   assert.match(overlaySource, /if \(telemetry\.isRaceOn === true\) lastLiveTelemetryAt = performance\.now\(\)/)
   assert.match(overlaySource, /performance\.now\(\) - lastLiveTelemetryAt < TELEMETRY_HIDE_DELAY_MS/)
 })
 
 test('the shared telemetry path loads and clears the Event reference with recording', () => {
-  const overlaySource = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
+  const overlaySource = readHudScripts()
   assert.match(overlaySource, /deltaRuntime\?\.update\?\.\(telemetry\)/)
   assert.match(overlaySource, /const nativeEventId = Number\(eventId\)/)
   assert.match(overlaySource, /Number\.isSafeInteger\(nativeEventId\) \|\| nativeEventId <= 0/)

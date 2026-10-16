@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const layout = require('./hud-layout.js')
+const { readRustSources } = require('../tools/test-sources.cjs')
 const source = fs.readFileSync(path.join(__dirname, 'hud-layout.js'), 'utf8')
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 const css = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
@@ -184,7 +185,7 @@ test('Shift Bar is a window-shrink target and uses the edit guard', () => {
 })
 
 test('native layout_action maps start and reset_all actions', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8').replace(/\r\n/g, '\n')
+  const source = readRustSources()
   // Check that the actions are defined and call the correct JS functions
   assert.match(source, /"start"\s*=>\s*"window\.HudLayout\?\.startEditSession\?\.\(\)"/)
   assert.match(source, /"reset_all"\s*=>\s*"window\.HudLayout\?\.resetAllPositions\?\.\(\)"/)

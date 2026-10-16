@@ -4,7 +4,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const overlayCss = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
-const overlayJs = fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf8')
+const { readHudScripts } = require('../tools/test-sources.cjs')
+
+const overlayJs = readHudScripts()
 
 test('HUD opacity applies to the game overlay shell with an 80 percent default', () => {
   assert.match(overlayCss, /:root\s*{[^}]*--hud-opacity:\s*0\.8;/s)
