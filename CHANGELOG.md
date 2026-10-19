@@ -5,6 +5,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+## 7.37.101 - 2026-10-19
+
 This release lets you edit the HUD over a running game, adds sector results
 to Delta and a Theoretical Best to Events, saves Event laps as you drive,
 makes the maps zoomable, and gives FDC a new look, FDC Dark. Your data and
