@@ -16,12 +16,6 @@ FDC receives Forza Horizon 6 Data Out directly on your PC and turns it into an
 always-on-top driving HUD, learned shift cues, and local review tools. No
 account, no cloud: everything stays on the local machine.
 
-> FDC is an independent, unofficial application. It is not affiliated with,
-> endorsed by, sponsored by, or otherwise approved by Microsoft, Xbox,
-> Playground Games, Turn 10 Studios, or the Forza franchise. Microsoft, Xbox,
-> Forza, Forza Horizon, and related names and marks belong to their respective
-> owners. FDC does not include or redistribute game assets.
-
 ## Features
 
 ### HUD
@@ -47,7 +41,7 @@ smallest size, and can only be enlarged.
 
 ### Shift Light
 
-![Purple optimal shift cue](docs/images/hud-shift-light.png)
+![Gear block and Shift Bar flashing red at the rev limiter](docs/images/hud-shift-light.png)
 
 Shift Light learns per-gear shift points for each car and tune from live
 telemetry. The gear block flashes red near the rev limiter, from 97% of the
