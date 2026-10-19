@@ -26,6 +26,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Driver Analysis**: cars only shown on car-selection screens no longer
   appear as extra cars in a recording; a car that moved no more than 25 metres
   without a race is not saved.
+- **Shift Light**: the tab's introduction now says the gear flashes purple at
+  the best moment and red near the rev limiter, instead of turning red as the
+  shift nears.
 
 ### Added
 
