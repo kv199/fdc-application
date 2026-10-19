@@ -118,6 +118,42 @@ exits with code 2. When a car was recorded with another analysis version, the
 report says so; replay the file with the release that recorded it for an exact
 comparison.
 
+## Tests that read source code
+
+`tools/test-sources.cjs` returns source text without naming the file that holds
+the code. Its exports are `readRustSources()` (every file under
+`src-tauri/src`, recursively), `readPageScripts(htmlFileName)` (the local
+scripts an `overlay/` page loads, in document order; a missing one throws),
+`readConfigurationScripts()` and `readHudScripts()` (the same for
+`settings.html` and `index.html`), `registeredTauriCommands()` (the names in
+`tauri::generate_handler![...]`), and `invokedTauriCommands()` (the command
+names that runtime JavaScript passes to its invoke wrappers, without plugin
+commands). New tests that inspect source text read it through these helpers,
+so moving code between the Configuration tab modules or the Rust modules does
+not break them. Some existing tests still read a single file directly, such as
+`overlay/hud-layout.test.js` and `overlay/theme-boot.test.js`; switch them to a
+helper when that file is split.
+
+Prefer behavior tests that call a module's exported functions. Text assertions
+are for contracts that survive a refactor: visible text, CSS classes and ids,
+command names and argument keys, event names, and storage keys. Do not assert
+internal names or statement shapes.
+
+`overlay/configuration-extraction-backlog.test.js` lists Configuration rules
+that still live inside DOM code and can only be checked against the script
+text. When a rule's logic moves into a testable function, replace its entry
+with a behavior test of that module. The file is meant to shrink to nothing.
+
+`overlay/tauri-command-contract.test.js` requires every command that runtime
+JavaScript invokes to be registered in `tauri::generate_handler!`, and every
+registered command to have a JavaScript caller. `NOT_INVOKED_FROM_JS` maps
+justified exceptions to a reason; it is currently empty.
+
+`.gitattributes` checks out every text file with LF on every platform,
+including the Windows CI runner, so a test may match `\n`. A test that reads a
+file directly should still normalize `\r\n`, as `tools/test-sources.cjs` and
+`overlay/configuration-events.test.js` do.
+
 ## Configuration UI conventions
 
 Each Configuration tab starts with a `settings-page-title` heading. Its

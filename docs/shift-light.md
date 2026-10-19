@@ -45,12 +45,18 @@ pair. Until the limiter has been measured reliably, the highest limiter
 observation at or above 85% of the reported redline stands in for it as the
 provisional ceiling, from the first such hit on: a first hit is usually within
 about 2% below the real limiter, and the value only rises with later hits. The
-HUD limiter and the Shift Bar fill use it too, and the Configuration shows it as
-`LEARNING · 1/3 · ~9,195 RPM`. Only before any such hit is the current positive
-game-reported redline used. The provisional ceiling is a presentation fallback;
-learning still compares against the trusted ceiling or the reported redline.
-This means `LEARNING` still has a usable purple cue; it does not mean "no
-guidance".
+Configuration shows it as `LEARNING · 1/3 · ~9,195 RPM`.
+
+The learner's fallback effective target is the provisional ceiling. Before any
+such hit, it is the current positive game-reported redline. The learner's
+comparison baseline is the usable ceiling or, before one exists, the reported
+redline; the provisional ceiling is not used there. This means `LEARNING` still
+has a usable purple cue; it does not mean "no guidance".
+
+The HUD limiter, which sets the red flash and caps the Shift Bar fill, uses the
+usable ceiling, then the provisional ceiling. Before either exists, it estimates
+the limiter at 89% of the game's maximum RPM, because real limiters sit at
+87–97% of it. See [the HUD shift cue](hud.md#shift-cue).
 
 A learned ceiling requires three stable limiter observations. An observation
 comes from a continuous same-gear full-throttle pull that rises by at least
@@ -117,7 +123,8 @@ not inputs to this decision.
 Each observed source/destination pair has one of three states:
 
 - `LEARNING` — no earlier crossover has been demonstrated. The effective target
-  is the learned usable ceiling or, until then, the reported redline.
+  is the learned usable ceiling, then the provisional ceiling, or until either
+  exists, the reported redline.
 - `POTENTIAL` — a comparable shift produced `PowerDeltaPercent >= 0` at an RPM
   strictly below the known safe baseline and created an earlier candidate. The
   candidate immediately becomes the effective cue target while it is checked.
@@ -269,7 +276,8 @@ the bounded crossover journal.
 - Learning is WOT-only. Partial-throttle shifts continue to receive the current
   cue but do not train the model.
 - Until three stable limiter observations exist, fallback accuracy depends on
-  the redline reported by the game.
+  the provisional ceiling and, before the first limiter hit, on the redline
+  reported by the game.
 
 ## Settings
 
@@ -279,11 +287,13 @@ RPM limit, learned ceiling progress, effective target and state. Reported and
 learned RPM values use thousands separators, for example `9,360 RPM`, matching
 the in-game HUD. The LEARNED CEILING row shows `9,195 RPM · 3/3` once a ceiling
 exists, where the trailing count is the size of the accepted group, capped at
-three. Before a ceiling exists it shows `LEARNING · 2/3` while observations
-exist, where the count is the size of the group at the highest considered
-observation, capped at three (`0/3` when every observation is below 85% of the
-redline), and `NOT OBSERVED` when there are none. Below the metadata, a table lists each observed gear with its
-shift point, accepted sample count, last power comparison and state. Each cell
+three. Before a ceiling exists it shows `LEARNING · 2/3 · ~9,195 RPM` once any
+observation is at or above 85% of the redline. The tilde value is the
+provisional ceiling, and the count is the size of the group at the highest
+considered observation, capped at three. When every observation is below 85% of
+the redline it shows `LEARNING · 0/3`, and `NOT OBSERVED` when there are none.
+Below the metadata, a table lists each observed gear with its shift point,
+accepted sample count, last power comparison and state. Each cell
 keeps its second line of detail. When a potential or optimal gear's shift point
 is within `100 RPM` of the usable ceiling, its cell also shows `SHIFT AT LIMITER`
 with the title `The best shift point for this gear is at the rev limiter.`

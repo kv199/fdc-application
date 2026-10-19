@@ -31,7 +31,11 @@ power and torque, and an eight-second input graph. Keep the blocks in one
 panel or place and resize each one freely, hide what you don't need, and set
 the overlay opacity. Press the edit hotkey in Forza to move the HUD over the
 running game without pausing it, with an alignment grid to line blocks up.
-The HUD stays click-through and hides in the pause menu and garage.
+The HUD stays click-through and hides in the pause menu and garage. An
+optional **Shift Bar** is a row of triangles, by default above the HUD, that
+fills toward the shift point and shows the same red and purple signal as the
+gear block. It is off until you switch it on in **WIDGETS**, starts at its
+smallest size, and can only be enlarged.
 [More about the HUD](docs/hud.md)
 
 <details>
@@ -46,8 +50,9 @@ The HUD stays click-through and hides in the pause menu and garage.
 ![Purple optimal shift cue](docs/images/hud-shift-light.png)
 
 Shift Light learns per-gear shift points for each car and tune from live
-telemetry. The gear block turns red as the shift approaches and purple at the
-learned optimal moment. [More about Shift Light](docs/shift-light.md)
+telemetry. The gear block flashes red near the rev limiter, from 97% of the
+car's limiter RPM, and flashes purple at the learned Shift Light cue. The Shift
+Bar shows the same signal. [More about Shift Light](docs/shift-light.md)
 
 <details>
 <summary>Shift Light calibration</summary>
@@ -151,9 +156,10 @@ Select the Data Out status in the Configuration header to open it again.
 FDC receives Data Out from the local game session and keeps runtime data on
 the machine. Garage, Events, Driver Analysis, and Shift Light data are stored
 in `%APPDATA%\FDC\fdc.sqlite`; Driver Analysis recordings stay there until you
-delete them. Layout and display preferences are stored in the local
-application webview. FDC sends nothing over the internet; the **HELP** menu only
-opens GitHub pages in your default browser.
+delete them. Layout and display preferences are kept in the webview's local
+storage. The Configuration window size and position, the HUD monitor, and the
+HUD rendering choice are small files in `%APPDATA%\FDC`. FDC sends nothing over
+the internet; the **HELP** menu only opens GitHub pages in your default browser.
 
 ## Current limitations
 
@@ -164,7 +170,8 @@ opens GitHub pages in your default browser.
   least 200 ms.
 - Shift Light learns from live telemetry and has no manual target entry or
   car-name database.
-- Garage shows image placeholders; it does not download car images or names.
+- Garage does not download car images or car names. Forza Data Out sends no
+  car name, so a car is shown by its number until you name it in Garage.
 
 ## Build from source
 

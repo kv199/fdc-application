@@ -296,12 +296,16 @@ telemetry path. It provides:
   opens it again at any time;
 - current Shift Light diagnostics and reset.
 
-Layout, visibility, and display choices are kept in versioned browser storage
-keys (`fdc.layout.v2`, `fdc.layout-mode.v1`, `fdc.hud-visibility.v1`,
-`fdc.overlay-visibility.v1`, `fdc.display-preferences.v1`,
-`fdc.quit-confirmation.v1`, and `fdc.connection-guide.v1`). The prior
-`fdc.layout.v1` position is intentionally not migrated. Commands that affect
-the native window or Shift Light database cross the Tauri IPC boundary.
+Layout, visibility, display, and other preferences are kept in versioned browser
+storage keys (`fdc.layout.v2`, `fdc.layout-mode.v1`, `fdc.layout-snap.v1` for
+the alignment grid on or off, `fdc.hud-visibility.v1`,
+`fdc.overlay-visibility.v1`, `fdc.hud-edit-hotkey.v1` for the HUD edit hotkey,
+`fdc.display-preferences.v1`, `fdc.quit-confirmation.v1`,
+`fdc.connection-guide.v1`, `fdc.events-sort.v1` for the Events list sort
+order, and `fdc.driver-analysis.settings.v1` for the Driver Analysis enable
+state and hotkey). The prior `fdc.layout.v1` position is intentionally not
+migrated. Commands that affect the native window or Shift Light database cross
+the Tauri IPC boundary.
 
 ## Local persistence
 

@@ -62,6 +62,7 @@ Read only the source relevant to the current task:
 - Visual design, tokens, and building new screens: `docs/design-system.md`
 - Garage behavior and contracts: `docs/garage.md`
 - Driver Analysis behavior and contracts: `docs/driver-analysis.md`
+- Events behavior and contracts: `docs/events.md`
 - Shift Light behavior and contracts: `docs/shift-light.md`
 - Development workflow and verification commands: `docs/development.md`
 - Branches, versioning, and release procedure: `docs/releasing.md`
