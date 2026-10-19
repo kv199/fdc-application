@@ -5,169 +5,71 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+This release lets you edit the HUD over a running game, adds sector results
+to Delta and a Theoretical Best to Events, saves Event laps as you drive,
+makes the maps zoomable, and gives FDC a new look, FDC Dark. Your data and
+settings carry over unchanged.
+
 ### Fixed
 
-- **Shift Light**: the rev limiter is now learned for almost every car. One
-  wrong reading, for example from wheelspin, no longer blocks it, so the red
-  limiter flash and the purple cue use the car's real limiter instead of the
-  game's higher RPM limit, which many engines never reach. From the first time
-  you hit the limiter, the HUD already uses that RPM, so red flashes and the
-  Shift Bar fills to the end without waiting for three hits. Even before the
-  first hit, red flashes and the bar fills on the first pull, using 89% of the
-  game's RPM limit as an estimate. **LEARNED
-  CEILING** shows how many matching limiter hits it has, out of three, and the
-  RPM in use until then.
-- **Hotkeys**: the HUD edit and Driver Analysis hotkeys now accept Ctrl, Alt,
-  or Shift with a number key, such as `Ctrl + Shift + 8`, and letter keys on
-  any keyboard layout.
-- **Driver Analysis**: free roam before a race is no longer included at the
-  start of that race's drive, so the drive's start time, duration, and map
-  begin at the race start.
-- **Driver Analysis**: cars only shown on car-selection screens no longer
-  appear as extra cars in a recording; a car that moved no more than 25 metres
-  without a race is not saved.
-- **Shift Light**: the tab's introduction now says the gear flashes purple at
-  the best moment and red near the rev limiter, instead of turning red as the
-  shift nears.
+- **Driver Analysis**: a race's drive now begins at the race start instead of
+  including the free roam before it, cars only shown on car-selection screens
+  no longer appear in a recording, and the hotkey accepts Ctrl, Alt, or Shift
+  with a number key and letter keys on any keyboard layout.
 
 ### Added
 
+- **HUD**: edit the HUD layout over a running Forza without pausing it. Press
+  the in-game edit hotkey, `Ctrl + Shift + F8` by default, drag or resize any
+  enabled block, Delta, or the Shift Bar, and press the hotkey again to save;
+  **CANCEL** puts everything back. While you drag, blocks snap to an alignment
+  grid, which **GRID ON** turns off. The HUD tab is simpler and the same in
+  Grouped and Freeform: **EDIT LAYOUT**, **RESET LAYOUT**, the hotkey, and one
+  **WIDGETS** list.
+- **Delta**: three sector results under the Delta bar show how much faster or
+  slower each third of the lap was than the reference: green when faster,
+  yellow when slower, and purple for the Event's best time in that sector.
+  They stay on screen until the first sector of the next lap is done.
+- **Events**: **THEORETICAL BEST** replaces Absolute Best: the sum of the
+  Event's best three sectors, with the run, lap, and car each one came from.
+  **VIEW SECTOR**, the sector times in the lap table, and **SECTOR 1–3** on a
+  lap map highlight one sector with its distance and its throttle, brake,
+  coast, and slip shares; **FIT SECTOR** zooms to it. Each run shows its own
+  Theoretical Best too.
+- **Events**: circuit laps are saved as each one is completed, so closing FDC
+  no longer loses a session. The Event page updates during the session and
+  marks the run being recorded **LIVE**. After a Sprint finish, **STOP** waits
+  up to five seconds for the game's result; a time taken from the last live
+  race time is shown with `~`.
+- **Events** and **Driver Analysis**: maps can be zoomed and moved. Scroll to
+  zoom around the pointer, drag to move, double-click to zoom in, or use
+  **+**, **−**, and **FIT**.
+- **HUD**: a new **Shift Bar** widget, off by default: a slim row of triangles
+  above the HUD that fills green as RPM climbs to the shift point, then
+  flashes red or purple together with the Gear block.
 - **Settings**: **HUD RENDERING** draws the HUD with the graphics card or the
   processor. Choose **CPU** if the HUD lags behind the game while Forza fully
   loads the graphics card, for example with an uncapped frame rate; it costs
   some FPS. The change applies after FDC restarts.
-- **HUD**: move and resize the HUD over a running Forza without pausing it.
-  Press the new in-game edit hotkey, `Ctrl + Shift + F8` by default, then
-  drag any enabled block or Delta and press the hotkey again to save;
-  **CANCEL** puts every block back.
-- **HUD**: the HUD tab is simpler and the same in Grouped and Freeform.
-  **EDIT LAYOUT** starts one edit of every enabled block, and you pick the
-  block to change by clicking it on the screen. **RESET LAYOUT** returns
-  every block and Delta to its default place after you confirm. The
-  **IN-GAME EDIT HOTKEY** row shows and changes the hotkey, and one
-  **WIDGETS** list switches each widget, or every widget with **ALL**.
-- **HUD**: the layout edit shows an alignment grid, 4 × 4 zones with a finer
-  dot grid measured from the screen center. A dragged block moves dot to dot
-  by its top-left corner and centers itself on the middle and quarter lines
-  of the screen; resizing never snaps. **GRID ON** on the edit toolbar turns
-  the grid off and then reads **GRID OFF**.
-- **Design**: FDC has a new look, FDC Dark. Configuration gets a painted
-  header with each tab's description and the Data Out status, which opens the
-  connection guide when selected; drill-down pages show where you are, such as
-  `← EVENTS / EVENT`; and the next step on each screen, such as CREATE,
-  DETAILS, or RECORD RUN, is highlighted in lime. The HUD and Delta use the new
-  fonts and cut corners and keep their colors and opacity, and the layout
-  editor sets SAVE, CANCEL, and RESET apart. Your data and settings are
-  unchanged.
-- **Events** and **Driver Analysis**: the values of the point under the pointer
-  now appear in a **POINT DATA** panel beside the map, instead of a box that
-  followed the pointer and covered the route. The panel clears when the pointer
-  leaves the map.
-- **Delta**: three sector results now appear under the Delta bar. Each third
-  of the lap shows how much faster or slower it was than the reference:
-  green when faster, yellow when slower, and purple for the Event's best time
-  in that sector. A finished lap's results stay on screen until the first
-  sector of the next lap is done.
-- **Events**: circuit laps are saved as soon as each one is completed, so
-  closing FDC no longer loses a session, and **STOP** only ends the
-  recording. The Event page updates during the session, and the run being
-  recorded is marked **LIVE**. After a Sprint finish, **STOP** waits up to
-  five seconds for the game's result. A result taken from the last live race
-  time is shown with `~`, because it can be a few milliseconds short.
-- **Events** and **Driver Analysis**: maps can be zoomed. Scroll over the map
-  to zoom in around the pointer, drag to move around, double-click to zoom in,
-  or use **+**, **−**, and **FIT**. Lines and markers keep their size at any
-  zoom, and the `S1`, `S2`, `S3` sector labels are larger and stay easy to read
-  at every zoom and window size.
-- **Driver Analysis**: the drive map shows the `S1`, `S2`, `S3` sector marks
-  like the Events lap map: thirds of the first completed lap in a circuit, or
-  of the whole drive in a finished sprint.
-- **Events**: the Event page shows **THEORETICAL BEST** instead of Absolute
-  Best: the sum of the Event's best three sectors, with the run, lap, and car
-  each sector came from. **VIEW SECTOR** opens that lap with the sector
-  highlighted on the map. On a lap map, **SECTOR 1–3** highlights one sector,
-  shows its distance and its throttle, brake, coast, and slip shares, and
-  **FIT SECTOR** zooms to it. Sector times in the lap table open the same
-  view. The run page shows its own **THEORETICAL BEST** time.
-- **HUD**: a new **Shift Bar** widget, off by default: a wide row of triangles
-  that fills green as RPM climbs to the shift point, then turns red or flashes
-  purple exactly when the Gear block does. Turn it on in **WIDGETS**; it can be
-  moved and resized like Delta and works with Speed / Gear / RPM switched off.
+- **Design**: FDC has a new look, Settings is grouped
+  into **WINDOW & EXIT**, **HUD BEHAVIOR**, and **UNITS**, and the Garage
+  lists observed variants in their own panel.
 
 ### Improved
 
-- **HUD**: red no longer lights steadily from 85% of max RPM. The Gear block
-  and the Shift Bar now flash red only near the rev limiter, from 97%, and
-  flash purple at the Shift Light cue, which comes earlier on fast-revving
-  gears so there is time to react. The highest gear you have reached in a car
-  shows no purple, and Shift Light marks gears best shifted at the limiter with
-  **SHIFT AT LIMITER**.
-- **HUD**: the HUD and Configuration use less processor time while you drive.
-  The HUD only redraws what changed, and Configuration only updates its Shift
-  Light panel when its values change.
-- **HUD**: with **HUD RENDERING** on **CPU**, the HUD costs far less graphics
-  card time and fewer game frames. Outside a layout edit its window now covers
-  only the area around the visible blocks instead of the whole monitor; the
-  blocks stay where you placed them, and a layout edit still uses the whole
-  monitor.
+- **Shift Light**: the rev limiter is now learned for almost every car, so
+  the red limiter flash and the purple cue use the car's real limiter instead
+  of the game's RPM limit, which many engines never reach. Before the first
+  limiter hit FDC estimates it at 89% of the game's limit, uses the first hit
+  right away, and confirms it after three matching hits, shown in **LEARNED
+  CEILING**.
+- **Performance**: FDC uses less processor time while you drive. The HUD only
+  redraws what changed, the map **POINT DATA** panel updates at most once per
+  screen refresh, and with **HUD RENDERING** on **CPU** the HUD window covers
+  only its blocks, which costs far less graphics card time.
 - **Driver Analysis**: while a recording is exported, its button reads
-  EXPORTING… with a moving bar, and a finished export is reported in green with
-  its size, without a size warning.
-- **Driver Analysis**: the recording and car pages follow the FDC Dark design.
-  The recording page shows its duration, cars, drives, and storage as tiles;
-  the car page shows its result in a raised panel, with `MOST FREQUENT:`
-  headlines in amber, above large distance, speed, and corner tiles; and the
-  `CARS` and `DRIVES` tables sit on plain panels with larger car names.
-- **Design**: the large titles of the event, run, recording, car, and drive
-  pages use the condensed FDC Dark title font, larger on Driver Analysis
-  pages, instead of a heavy bold interface font. The event title no longer
-  turns lime under the pointer; selecting it still renames the event.
-- **Events**: saved runs and the lap breakdown use the same tables as Driver
-  Analysis, on plain panels. Saved runs are one table with a single header
-  row instead of separate boxes that repeated every column name; select a row
-  to open the run and a header to sort, as before.
-- **Events**: a saved run's best time lines up under its column header, with
-  its best lap or `SPRINT` at the right edge of the cell, and the RECORD RUN
-  button is centered beside the title and its hint.
-- **Design**: event, run, and drive IDs are shown as plain numbers, without a
-  `#`, for example `DRIVE 2`.
-- **Events**: a saved run's `BEST` column shows only the time, without the
-  best lap or `SPRINT` next to it.
-- **Design**: Configuration text follows the FDC Dark type roles: lighter
-  panel titles, row names, labels, and buttons without the extra-bold spaced
-  lettering, and the New Event lists and notes now use the app font instead of
-  a system font. The Garage shows the current car's number larger, its PI,
-  drive, and cylinders as badges, and a highlighted **VIEW VARIANTS** button.
-- **Garage**: observed variants open in their own **OBSERVED VARIANTS** panel
-  below the current car, one plain row per variant marked `OBSERVED`. Saved
-  car cards are quieter: only the class badge carries the class color, and
-  `LAST USED` is a small label beside the name.
-- **Shift Light**: the tab follows the FDC Dark design. The brightness sliders
-  sit on raised cards with their percentage in large type, the calibration
-  appears under **CURRENT CAR PROFILE** with large values and the same gear
-  table as Events and Driver Analysis, and **RESET CURRENT CALIBRATION** sits
-  below it. RPM values use thousands separators, such as `9,360 RPM`, as in
-  the HUD.
-- **Settings**: the settings are grouped into **WINDOW & EXIT**, **HUD
-  BEHAVIOR**, and **UNITS**, which span the full width like the other tabs.
-- **Design**: FDC has a new app icon, the Chroma F, in the taskbar, tray,
-  window, and installer, and beside the FDC name in the Configuration header.
-- **Events** and **Driver Analysis**: the **POINT DATA** panel is easier to
-  read. Distance and time lead in large type, the other values sit in two
-  columns, the per-wheel table is larger, and the notes sit at the foot, so
-  the panel fills the height of the map.
-- **Events** and **Driver Analysis**: moving the pointer over a map uses less
-  processor time. The **POINT DATA** panel and the point marker update at
-  most once per screen refresh, and only when the point under the pointer
-  changes.
-- **Events**, **Driver Analysis**, and **Shift Light**: saving and loading
-  data no longer holds up the HUD and Configuration windows, and FDC checks
-  its database once per launch instead of before every save. A completed lap
-  and its map are saved about four times faster.
-- **HUD**: the **Shift Bar** starts at half its previous size, a slim strip
-  above the HUD, and can only be made larger, up to four times that size. A
-  bar you have never resized and **RESET LAYOUT** use the new size; a bar you
-  already resized keeps its size.
+  **EXPORTING…** with a moving bar, and a finished export is reported in green
+  with its size.
 
 ## 7.24.67 - 2026-10-06
 
