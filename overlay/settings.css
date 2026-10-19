@@ -3835,6 +3835,15 @@ h1 {
   border-top: 1px solid var(--line-subtle);
 }
 
+/* The THEME row is hidden while theme selection is switched off; its class sets display: flex. */
+.display-setting-row[hidden] {
+  display: none;
+}
+
+.settings-group .display-setting-row:has(+ .display-setting-row[hidden]:last-child) {
+  border-bottom: 0;
+}
+
 .display-setting-row__copy {
   min-width: 0;
   padding: 0;

@@ -7,6 +7,7 @@
   <title>FDC · HUD</title>
   <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="settings.css">
+  <script src="display-preferences.js"></script>
   <script src="theme-boot.js"></script>
 </head>
 <body>
@@ -620,7 +621,7 @@
                 <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
               </button>
             </div>
-            <div class="display-setting-row" data-display-preference role="group" aria-labelledby="theme-title">
+            <div class="display-setting-row" data-display-preference role="group" aria-labelledby="theme-title" id="theme-setting-row" hidden>
               <div class="display-setting-row__copy">
                 <strong id="theme-title">THEME</strong>
                 <small>Choose a dark or light Configuration window, or follow Windows. The HUD stays dark.</small>
@@ -727,7 +728,6 @@
   <script src="units.js"></script>
   <script src="telemetry-route.js"></script>
   <script src="shift-light-settings.js"></script>
-  <script src="display-preferences.js"></script>
   <script src="quit-confirmation.js"></script>
   <script src="connection-guide.js"></script>
   <script src="tauri-events.js"></script>

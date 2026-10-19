@@ -1,7 +1,21 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 const test = require('node:test')
+const vm = require('node:vm')
 
 const DisplayPreferences = require('./display-preferences.js')
+
+// Loads display-preferences.js with the theme switch set to `enabled`, the same one-line
+// change a maintainer makes to re-enable theme selection.
+function loadWithThemeSelection(enabled) {
+  const source = fs.readFileSync(path.join(__dirname, 'display-preferences.js'), 'utf8')
+  const flag = 'const THEME_SELECTION_ENABLED = false'
+  assert.ok(source.includes(flag), 'the theme switch is declared as false')
+  const sandbox = { module: { exports: {} } }
+  vm.runInNewContext(source.replace(flag, `const THEME_SELECTION_ENABLED = ${enabled}`), sandbox)
+  return sandbox.module.exports
+}
 
 test('uses the fresh FDC display preference key', () => {
   assert.equal(DisplayPreferences.STORAGE_KEY, 'fdc.display-preferences.v1')
@@ -169,6 +183,30 @@ test('migrates old stored records without a theme to dark and keeps the theme on
   assert.equal(DisplayPreferences.update({ theme: 'light' }, storage).theme, 'light')
   assert.equal(DisplayPreferences.read(storage).theme, 'light')
   assert.equal(DisplayPreferences.read(storage).speedUnit, 'mph')
+})
+
+test('switches theme selection off, so every saved theme resolves to dark', () => {
+  assert.equal(DisplayPreferences.THEME_SELECTION_ENABLED, false)
+  for (const saved of ['light', 'system', 'dark', 'LIGHT', 'auto', null, undefined]) {
+    assert.equal(DisplayPreferences.effectiveTheme(saved), 'dark', String(saved))
+  }
+})
+
+test('keeps the saved theme while selection is switched off, so re-enabling restores it', () => {
+  const storage = createStorage(JSON.stringify({ speedUnit: 'kmh', theme: 'light' }))
+  assert.equal(DisplayPreferences.read(storage).theme, 'light')
+  assert.equal(DisplayPreferences.update({ speedUnit: 'mph' }, storage).theme, 'light')
+  assert.equal(JSON.parse(storage.value()).theme, 'light')
+})
+
+test('resolves light and system to themselves once theme selection is switched on', () => {
+  const enabled = loadWithThemeSelection(true)
+  assert.equal(enabled.THEME_SELECTION_ENABLED, true)
+  assert.equal(enabled.effectiveTheme('light'), 'light')
+  assert.equal(enabled.effectiveTheme('system'), 'system')
+  assert.equal(enabled.effectiveTheme('dark'), 'dark')
+  assert.equal(enabled.effectiveTheme('LIGHT'), 'dark')
+  assert.equal(enabled.effectiveTheme(null), 'dark')
 })
 
 test('updates one preference without resetting the other', () => {

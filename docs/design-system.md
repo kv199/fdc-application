@@ -2,8 +2,8 @@
 
 This is the rulebook for building or changing a Configuration screen, so new
 features look and behave like the rest of FDC. The in-game HUD is dark;
-Configuration is dark by default and also has a light theme (see "Light
-theme").
+Configuration is always dark for now. Its light theme is built but switched off
+(see "Light theme").
 
 ## Sources and checks
 
@@ -247,10 +247,13 @@ Delta use even fills.
 
 ## Light theme
 
-- Configuration offers a light theme. Settings → THEME chooses DARK, LIGHT, or
-  SYSTEM, and SYSTEM follows Windows. When light is active the Configuration
-  document carries `data-theme="light"`; otherwise it carries
-  `data-theme="dark"`.
+- The light theme is switched off. `THEME_SELECTION_ENABLED` in
+  `overlay/display-preferences.js` is `false`, so the Configuration document
+  always carries `data-theme="dark"`, its native title bar is dark, and the
+  Settings → THEME row is hidden. Setting the switch to `true` restores the
+  row (DARK, LIGHT, or SYSTEM, and SYSTEM follows Windows); the saved choice is
+  kept while the switch is off. When light is active the Configuration document
+  carries `data-theme="light"`; otherwise it carries `data-theme="dark"`.
 - `overlay/tokens.css` redefines the paint, surface, line, text, accent,
   status, and map roles under `:root[data-theme="light"]`. The dark `:root`
   values do not change. Light keeps a light `--bg` canvas with neutral grey
@@ -282,8 +285,9 @@ Delta use even fills.
   both themes. Class badges use `--text-on-class` text, except S2, which uses
   `--text-on-class-s2` (white). In light, the white EventLab card edge and mode
   badge get a `--line-strong` edge so they stay visible.
-- `overlay/theme-boot.js` sets the attribute from the saved preference before
-  the first paint, so a light window does not flash dark.
+- `overlay/theme-boot.js` sets the attribute from `DisplayPreferences.effectiveTheme`
+  before the first paint, so a light window does not flash dark. While the
+  switch is off, that is always dark.
 
 ## Checklist for a new screen or feature
 

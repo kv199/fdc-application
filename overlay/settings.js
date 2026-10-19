@@ -89,6 +89,11 @@
     ? globalScope.matchMedia('(prefers-color-scheme: light)')
     : null
   const CONFIGURATION_WINDOW_LABEL = globalScope.__TAURI_INTERNALS__?.metadata?.currentWindow?.label || 'settings'
+  // The THEME row stays hidden while theme selection is switched off (display-preferences.js).
+  const themeSettingRow = document.getElementById('theme-setting-row')
+  if (themeSettingRow) themeSettingRow.hidden = displayPreferencesApi?.THEME_SELECTION_ENABLED !== true
+  // While selection is off, effectiveTheme returns 'dark' for every saved value.
+  const configurationTheme = savedTheme => displayPreferencesApi?.effectiveTheme?.(savedTheme) ?? 'dark'
 
   function setConfigurationWindowTheme(windowTheme) {
     if (typeof invoke !== 'function') return
@@ -99,7 +104,8 @@
     }
   }
 
-  function applyConfigurationTheme(theme) {
+  function applyConfigurationTheme(savedTheme) {
+    const theme = configurationTheme(savedTheme)
     const resolved = theme === 'system'
       ? (themeMediaQuery?.matches ? 'light' : 'dark')
       : theme === 'light' ? 'light' : 'dark'
@@ -109,7 +115,7 @@
   }
 
   themeMediaQuery?.addEventListener?.('change', () => {
-    if (displayPreferences.theme === 'system') applyConfigurationTheme('system')
+    if (configurationTheme(displayPreferences.theme) === 'system') applyConfigurationTheme(displayPreferences.theme)
   })
   applyConfigurationTheme(displayPreferences.theme)
   let latestShiftLightState = null

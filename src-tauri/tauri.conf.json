@@ -38,6 +38,7 @@
         "maximizable": true,
         "minimizable": true,
         "decorations": true,
+        "theme": "Dark",
         "transparent": false,
         "shadow": true,
         "alwaysOnTop": false,

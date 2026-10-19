@@ -208,13 +208,18 @@ test('Settings groups its display rows under three headings in order', () => {
   assert.match(settingsStyles, /\.settings-group\s*\{[^}]*border:\s*1px solid var\(--line\)[^}]*background:\s*var\(--surface\)/)
 })
 
-test('Settings exposes a THEME row with dark, light, and system radios after CONFIRM BEFORE QUITTING', () => {
+test('Settings keeps a hidden THEME row with dark, light, and system radios after CONFIRM BEFORE QUITTING', () => {
   const windowStart = settingsHtml.indexOf('<section class="settings-group" aria-labelledby="settings-window-title">')
   const windowGroup = settingsHtml.slice(windowStart, settingsHtml.indexOf('</section>', windowStart))
   const themeStart = windowGroup.indexOf('aria-labelledby="theme-title"')
   assert.ok(themeStart > windowGroup.indexOf('CONFIRM BEFORE QUITTING'), 'THEME follows CONFIRM BEFORE QUITTING')
   const themeRow = windowGroup.slice(themeStart)
 
+  // Theme selection is switched off (display-preferences.js), so the row ships hidden.
+  assert.match(windowGroup, /<div class="display-setting-row" data-display-preference role="group" aria-labelledby="theme-title" id="theme-setting-row" hidden>/)
+  assert.match(settingsJs, /getElementById\('theme-setting-row'\)/)
+  assert.match(settingsJs, /THEME_SELECTION_ENABLED !== true/)
+  assert.match(settingsJs, /effectiveTheme/)
   assert.match(themeRow, /<strong id="theme-title">THEME<\/strong>/)
   assert.match(themeRow, /<small>Choose a dark or light Configuration window, or follow Windows\. The HUD stays dark\.<\/small>/)
   assert.match(themeRow, /<div class="unit-options" aria-label="Theme">/)

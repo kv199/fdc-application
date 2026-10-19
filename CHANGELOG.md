@@ -60,12 +60,6 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   now appear in a **POINT DATA** panel beside the map, instead of a box that
   followed the pointer and covered the route. The panel clears when the pointer
   leaves the map.
-- **Settings**: a new **THEME** setting gives the Configuration window a light
-  look. Choose **DARK** (the default), **LIGHT**, or **SYSTEM** to follow
-  Windows. The light theme uses neutral grey cards and fields on a light
-  background, a muted lime for controls and actions, a light painted header,
-  Events and Driver Analysis maps that keep their dark route canvas, and a
-  light window title bar; the in-game HUD and Delta stay dark.
 - **Delta**: three sector results now appear under the Delta bar. Each third
   of the lap shows how much faster or slower it was than the reference:
   green when faster, yellow when slower, and purple for the Event's best time

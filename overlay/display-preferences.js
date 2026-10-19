@@ -5,6 +5,10 @@
   else globalScope.DisplayPreferences = api
 }(typeof globalThis !== 'undefined' ? globalThis : this, globalScope => {
   const STORAGE_KEY = 'fdc.display-preferences.v1'
+  // Theme selection is switched off until the light theme is finished. While it is
+  // off, the Configuration window is always dark. The saved theme is kept, not
+  // changed, so setting this to true restores the user's choice.
+  const THEME_SELECTION_ENABLED = false
   const DEFAULTS = Object.freeze({
     speedUnit: 'kmh',
     distanceUnit: 'km',
@@ -104,6 +108,13 @@
     return write({ ...read(storage), ...candidate }, storage)
   }
 
+  // The Configuration theme to paint: 'dark', 'light', or 'system' (resolved by the caller
+  // against Windows). Always 'dark' while THEME_SELECTION_ENABLED is false.
+  function effectiveTheme(savedTheme) {
+    if (!THEME_SELECTION_ENABLED) return 'dark'
+    return ['light', 'system'].includes(savedTheme) ? savedTheme : DEFAULTS.theme
+  }
+
   function shiftLightBrightnessScale(brightness) {
     return normalize({ shiftLightBrightness: brightness }).shiftLightBrightness / DEFAULTS.shiftLightBrightness
   }
@@ -124,6 +135,8 @@
   return {
     DEFAULTS,
     STORAGE_KEY,
+    THEME_SELECTION_ENABLED,
+    effectiveTheme,
     normalize,
     REDLINE_BRIGHTNESS_STOPS,
     redlineBrightnessColor,
