@@ -1,7 +1,7 @@
 <div align="center">
   <img src="src-tauri/icons/icon.png" width="128" alt="FDC app icon">
   <h1>FDC</h1>
-  <p><strong>Feedback-Driven Companion — a local-first telemetry HUD compatible with Forza Horizon 6 on Windows.</strong></p>
+  <p><strong>Feedback-Driven Companion – a local-first driving companion for Forza Horizon 6. Live telemetry, adaptive shift cues, run analysis and driver feedback.</strong></p>
   <p><a href="https://github.com/kv199/fdc-application/releases/latest/download/FDC-setup.exe">Download</a> · <a href="https://github.com/kv199/fdc-application/releases">Releases</a> · <a href="https://github.com/kv199/fdc-application/discussions">Discussions</a> · <a href="SECURITY.md">Security</a></p>
   <p>
     <a href="https://github.com/kv199/fdc-application/actions/workflows/ci.yml"><img src="https://github.com/kv199/fdc-application/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
@@ -70,6 +70,13 @@ lap with its fastest saved run. [More about Events](docs/events.md)
 
 </details>
 
+<details>
+<summary>Lap map focused on one sector</summary>
+
+![Lap map with sector 2 focused and point data](docs/images/configuration-event-sector-map.png)
+
+</details>
+
 ### Driver Analysis (beta)
 
 Record an asphalt session from Configuration, a keyboard hotkey, or a
@@ -81,6 +88,13 @@ with the session statistics. [More about Driver Analysis](docs/driver-analysis.m
 <summary>Driver Analysis history</summary>
 
 ![Driver Analysis recordings](docs/images/configuration-driver-analysis.png)
+
+</details>
+
+<details>
+<summary>Driver Analysis drive map</summary>
+
+![Driver Analysis drive map with problem marks](docs/images/configuration-driver-analysis-drive.png)
 
 </details>
 
