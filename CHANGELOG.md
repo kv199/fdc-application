@@ -161,6 +161,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   data no longer holds up the HUD and Configuration windows, and FDC checks
   its database once per launch instead of before every save. A completed lap
   and its map are saved about four times faster.
+- **HUD**: the **Shift Bar** starts at half its previous size, a slim strip
+  above the HUD, and can only be made larger, up to four times that size. A
+  bar you have never resized and **RESET LAYOUT** use the new size; a bar you
+  already resized keeps its size.
 
 ## 7.24.67 - 2026-10-06
 

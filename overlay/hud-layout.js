@@ -24,6 +24,9 @@
   const DEFAULT_SIZE = 0
   const MIN_WIDGET_SIZE = 0.5
   const MAX_WIDGET_SIZE = 2
+  // The Shift Bar's default is its smallest size: it can only be enlarged, so an unresized bar is 0.5.
+  const SHIFT_BAR_DEFAULT_SIZE = 0.5
+  const SHIFT_BAR_MIN_SIZE = 0.5
   const EDITOR_CHROME_MARGIN = 8
   const EDITOR_CHROME_GAP = 10
   const WINDOW_BOUNDS_PADDING = 8
@@ -48,10 +51,36 @@
     return safePosition || { x: 0, y: 0 }
   }
 
-  function sanitizeWidgetSize(raw) {
+  function getWidgetMinSize(name) {
+    return name === 'shiftBar' ? SHIFT_BAR_MIN_SIZE : MIN_WIDGET_SIZE
+  }
+
+  // A stored size of 0 means "never resized" and stays 0; any other size is clamped to the widget's minimum and MAX_WIDGET_SIZE.
+  function sanitizeWidgetSize(raw, name) {
     const size = Number(raw)
     if (!Number.isFinite(size) || size <= DEFAULT_SIZE) return DEFAULT_SIZE
-    return clamp(size, MIN_WIDGET_SIZE, MAX_WIDGET_SIZE)
+    return clamp(size, getWidgetMinSize(name), MAX_WIDGET_SIZE)
+  }
+
+  // User scale factor of a widget: a never-resized widget uses 1, except the Shift Bar's default.
+  function resolveWidgetScaleFactor(name, raw) {
+    const size = sanitizeWidgetSize(raw, name)
+    if (size !== DEFAULT_SIZE) return size
+    return name === 'shiftBar' ? SHIFT_BAR_DEFAULT_SIZE : 1
+  }
+
+  // Clamps a resize request to the widget's minimum and to the largest factor that still fits the viewport.
+  function clampResizedWidgetSize(name, requested, viewport, baseSize) {
+    const minimum = getWidgetMinSize(name)
+    const maximum = Math.max(
+      minimum,
+      Math.min(
+        MAX_WIDGET_SIZE,
+        baseSize.width > 0 ? viewport.width / baseSize.width : MAX_WIDGET_SIZE,
+        baseSize.height > 0 ? viewport.height / baseSize.height : MAX_WIDGET_SIZE
+      )
+    )
+    return clamp(requested, minimum, maximum)
   }
 
   function calculateEditorToolbarPosition(targetRect, toolbarRect, viewport) {
@@ -107,16 +136,16 @@
     try { globalScope.localStorage?.setItem(key, value) } catch { /* restricted webview */ }
   }
 
-  function sanitizeTargetPosition(raw) {
+  function sanitizeTargetPosition(raw, name) {
     const position = sanitizePosition(raw)
     if (!position) return null
-    position.size = sanitizeWidgetSize(raw.size)
+    position.size = sanitizeWidgetSize(raw.size, name)
     return position
   }
 
   function sanitizePositionMap(source, names) {
     return names.reduce((result, name) => {
-      const position = sanitizeTargetPosition(source?.[name])
+      const position = sanitizeTargetPosition(source?.[name], name)
       if (position) result[name] = position
       return result
     }, {})
@@ -434,12 +463,12 @@
     }
 
     function getWidgetSize(name) {
-      return sanitizeWidgetSize(positionMap(name)[name]?.size)
+      return sanitizeWidgetSize(positionMap(name)[name]?.size, name)
     }
 
+    // Every size consumer (fallback size, Delta's anchor, window bounds, editor frame, CSS variable) reads this factor.
     function getWidgetScaleFactor(name) {
-      const size = getWidgetSize(name)
-      return size === DEFAULT_SIZE ? 1 : size
+      return resolveWidgetScaleFactor(name, getWidgetSize(name))
     }
 
     function getHudScale() {
@@ -917,16 +946,8 @@
         ? widthScale
         : heightScale
       const viewport = getViewport()
-      const maximum = Math.max(
-        MIN_WIDGET_SIZE,
-        Math.min(
-          MAX_WIDGET_SIZE,
-          baseSize.width > 0 ? viewport.width / baseSize.width : MAX_WIDGET_SIZE,
-          baseSize.height > 0 ? viewport.height / baseSize.height : MAX_WIDGET_SIZE
-        )
-      )
       const map = positionMap(name)
-      map[name] = { ...ensurePosition(name), size: clamp(requested, MIN_WIDGET_SIZE, maximum) }
+      map[name] = { ...ensurePosition(name), size: clampResizedWidgetSize(name, requested, viewport, baseSize) }
 
       if (name === 'hud') syncHudFrameSize()
       applyPosition(name)
@@ -1023,6 +1044,12 @@
     clampPosition,
     sanitizePosition,
     sanitizeWidgetSize,
+    resolveWidgetScaleFactor,
+    clampResizedWidgetSize,
+    MIN_WIDGET_SIZE,
+    MAX_WIDGET_SIZE,
+    SHIFT_BAR_DEFAULT_SIZE,
+    SHIFT_BAR_MIN_SIZE,
     calculateEditorToolbarPosition,
     computeWindowBounds,
     readStoredLayout,

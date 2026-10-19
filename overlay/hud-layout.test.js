@@ -19,6 +19,52 @@ test('sanitizes finite positions and widget sizes', () => {
   assert.equal(layout.sanitizeWidgetSize(3), 2)
 })
 
+test('the Shift Bar defaults to 0.5 and reads a stored size below 0.5 as 0.5', () => {
+  assert.equal(layout.SHIFT_BAR_DEFAULT_SIZE, 0.5)
+  assert.equal(layout.SHIFT_BAR_MIN_SIZE, 0.5)
+  // Stored size 0 means never resized, so the Shift Bar uses its 0.5 default.
+  assert.equal(layout.resolveWidgetScaleFactor('shiftBar', 0), 0.5)
+  assert.equal(layout.resolveWidgetScaleFactor('shiftBar', undefined), 0.5)
+  assert.equal(layout.resolveWidgetScaleFactor('shiftBar', 'not a number'), 0.5)
+  assert.equal(layout.resolveWidgetScaleFactor('shiftBar', 0.3), 0.5)
+  // Stored sizes from 0.5 to 2 keep working unchanged.
+  assert.equal(layout.resolveWidgetScaleFactor('shiftBar', 0.5), 0.5)
+  assert.equal(layout.resolveWidgetScaleFactor('shiftBar', 1.2), 1.2)
+  assert.equal(layout.resolveWidgetScaleFactor('shiftBar', 2), 2)
+  assert.equal(layout.resolveWidgetScaleFactor('shiftBar', 3), 2)
+  assert.equal(layout.sanitizeWidgetSize(0.3, 'shiftBar'), 0.5)
+  assert.equal(layout.sanitizeWidgetSize(0, 'shiftBar'), 0, 'the stored never-resized value stays 0')
+})
+
+test('every other widget still defaults to 1 and keeps the 0.5 to 2 limits', () => {
+  for (const name of ['delta', 'hud', 'tires', 'history']) {
+    assert.equal(layout.resolveWidgetScaleFactor(name, 0), 1, `${name} default`)
+    assert.equal(layout.resolveWidgetScaleFactor(name, undefined), 1, `${name} unset`)
+    assert.equal(layout.resolveWidgetScaleFactor(name, 0.3), 0.5, `${name} minimum`)
+    assert.equal(layout.resolveWidgetScaleFactor(name, 1.2), 1.2, `${name} stored`)
+    assert.equal(layout.resolveWidgetScaleFactor(name, 3), 2, `${name} maximum`)
+  }
+})
+
+test('the editor never resizes the Shift Bar below 0.5 and keeps the 2x maximum', () => {
+  const viewport = { width: 1920, height: 1080 }
+  const baseSize = { width: 736, height: 48 }
+  assert.equal(layout.clampResizedWidgetSize('shiftBar', 0.2, viewport, baseSize), 0.5)
+  assert.equal(layout.clampResizedWidgetSize('shiftBar', 0.5, viewport, baseSize), 0.5)
+  assert.equal(layout.clampResizedWidgetSize('shiftBar', 1.5, viewport, baseSize), 1.5)
+  assert.equal(layout.clampResizedWidgetSize('shiftBar', 9, viewport, baseSize), 2)
+  // A small viewport lowers the maximum, but never below the minimum.
+  assert.equal(layout.clampResizedWidgetSize('shiftBar', 1.5, { width: 368, height: 1080 }, baseSize), 0.5)
+  // Other widgets keep their own 0.5 minimum.
+  assert.equal(layout.clampResizedWidgetSize('delta', 0.2, viewport, baseSize), 0.5)
+  assert.equal(layout.clampResizedWidgetSize('hud', 0.2, viewport, baseSize), 0.5)
+  assert.equal(layout.clampResizedWidgetSize('hud', 9, viewport, baseSize), 2)
+  assert.equal(layout.clampResizedWidgetSize('tires', 1.2, viewport, baseSize), 1.2)
+  // The live editor resize and the size lookup both go through the shared helpers.
+  assert.match(source, /size: clampResizedWidgetSize\(name, requested, viewport, baseSize\)/)
+  assert.match(source, /return resolveWidgetScaleFactor\(name, getWidgetSize\(name\)\)/)
+})
+
 test('keeps editor toolbar inside the viewport and flips it above bottom-edge targets', () => {
   const viewport = { width: 1000, height: 800 }
   const toolbar = { width: 420, height: 48 }
@@ -162,7 +208,10 @@ test('Shift Bar is an independent shared target with its own markup, handles and
 })
 
 test('Shift Bar positioning: absolute, sized from the HUD scale and the user scale, edit state visible', () => {
-  assert.match(css, /\.shift-bar \{[^}]*position: absolute;[^}]*width: calc\(736px \* var\(--hud-scale\) \* var\(--shift-bar-user-scale, 1\)\);[^}]*height: calc\(48px \* var\(--hud-scale\) \* var\(--shift-bar-user-scale, 1\)\);/s)
+  assert.match(css, /\.shift-bar \{[^}]*position: absolute;[^}]*width: calc\(736px \* var\(--hud-scale\) \* var\(--shift-bar-user-scale, 0\.5\)\);[^}]*height: calc\(48px \* var\(--hud-scale\) \* var\(--shift-bar-user-scale, 0\.5\)\);/s)
+  // The CSS fallback is the Shift Bar default (0.5), so the first paint matches the layout script.
+  assert.doesNotMatch(css, /--shift-bar-user-scale, 1\)/)
+  assert.equal((css.match(/--shift-bar-user-scale, 0\.5\)/g) || []).length, 3)
   assert.match(css, /\.shift-bar\.is-editing \{[^}]*pointer-events: auto;/s)
   assert.match(css, /\.shift-bar\.is-editing\.is-selected \.layout-resize-handle \{\s*display: block;\s*\}/)
   assert.match(source, /const SHIFT_BAR_BASE_HEIGHT = 48/)

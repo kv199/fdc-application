@@ -320,7 +320,7 @@ body {
    visible. Padding, the 2 px seam between triangles, and the cut follow the
    HUD scale and the user scale together, like the bar's width and height. */
 .shift-bar {
-  --shift-bar-scale: calc(var(--hud-scale, 1) * var(--shift-bar-user-scale, 1));
+  --shift-bar-scale: calc(var(--hud-scale, 1) * var(--shift-bar-user-scale, 0.5));
   --shift-bar-seam: calc(2px * var(--shift-bar-scale));
   --shift-bar-cut: calc(var(--hud-cut-widget) * var(--shift-bar-scale));
   position: relative;
@@ -658,16 +658,18 @@ body {
 
 /* Shift Bar is an independent layout target above the HUD. Its surface and
    segments come from the rules above; this block places and sizes the bar in
-   stage space and shows its layout-edit state. The default geometry is the
-   736 px HUD width and 48 px height, scaled by the HUD and the user scale. */
+   stage space and shows its layout-edit state. The base geometry is the
+   736 px HUD width and 48 px height, scaled by the HUD and the user scale.
+   The fallback 0.5 is the Shift Bar default (its smallest size; users can only
+   enlarge it), so the first paint matches the layout script's default. */
 .shift-bar {
   position: absolute;
   top: 0;
   right: auto;
   bottom: auto;
   left: 0;
-  width: calc(736px * var(--hud-scale) * var(--shift-bar-user-scale, 1));
-  height: calc(48px * var(--hud-scale) * var(--shift-bar-user-scale, 1));
+  width: calc(736px * var(--hud-scale) * var(--shift-bar-user-scale, 0.5));
+  height: calc(48px * var(--hud-scale) * var(--shift-bar-user-scale, 0.5));
   margin: 0;
   z-index: 1;
 }

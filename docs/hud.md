@@ -174,11 +174,13 @@ widget stays out of the edit; switch it on to place it. Two ways start it:
 the Shift Bar to its default place and size in both arrangements.
 
 By default the Shift Bar sits directly above the telemetry HUD, centered on it
-with a 10 px gap. At 1× HUD scale it is as wide as the full Grouped HUD (736 px)
-and 48 px high; resizing scales both. Delta sits 10 px above the Shift Bar while
-the bar is on, and 10 px above the HUD while it is off. A saved position always
-wins over these defaults, and a Delta or Shift Bar place that is not saved
-follows the HUD and the Shift Bar switch.
+with a 10 px gap. Its default size is 0.5× the Grouped HUD: at 1× HUD scale it is
+368 px wide and 24 px high. The default is also its smallest size, so the Shift
+Bar can only be made larger, up to 2×; a never-resized bar and RESET LAYOUT both
+return it to 0.5×. Delta sits 10 px above the Shift Bar while the bar is on, and
+10 px above the HUD while it is off. A saved position always wins over these
+defaults, and a Delta or Shift Bar place that is not saved follows the HUD and
+the Shift Bar switch.
 
 During the edit:
 
@@ -190,7 +192,9 @@ During the edit:
 - drag any target to move it; with the grid on, it moves along the
   alignment grid described below;
 - drag a corner of the selected target to resize it between 0.5× and 2× of
-  its default size; resizing never snaps;
+  its base size, where the default is 1× for every block except the Shift Bar;
+  the Shift Bar starts at its 0.5× default and can only be made larger, up to
+  2×; resizing never snaps;
 - **GRID ON**, filled with lime, on every edit toolbar turns the grid and
   snapping off and then reads **GRID OFF** with a plain frame; pressing it
   again turns them back on. It is on by default, and FDC remembers the choice;

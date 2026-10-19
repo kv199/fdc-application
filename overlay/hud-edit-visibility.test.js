@@ -437,20 +437,56 @@ test('Shift Bar defaults above the HUD, and Delta sits above the bar only while 
   withOverlayRuntime(({ element }) => {
     // HUD scale is 2 here: the HUD is 1472 x 138 at the bottom, 28 px above the edge.
     element('hud-frame').getBoundingClientRect = () => rect(224, 914, 1472, 138)
-    element('shift-bar').getBoundingClientRect = () => rect(224, 808, 1472, 96)
-    element('delta-strip').getBoundingClientRect = () => rect(224, 738, 1472, 60)
+    // The default Shift Bar size is 0.5: 736 x 48 at HUD scale 2.
+    element('shift-bar').getBoundingClientRect = () => rect(592, 856, 736, 48)
+    element('delta-strip').getBoundingClientRect = () => rect(224, 786, 1472, 60)
     // Delta is hidden without an Event reference, so its place is only applied with one.
     HudPreferences.setDeltaReferenceActive(true)
 
     HudPreferences.setOverlayVisibility('shiftBar', true)
-    assert.equal(element('shift-bar').style.left, '224px', 'centered on the HUD')
-    assert.equal(element('shift-bar').style.top, '808px', 'a 10 px gap above the HUD')
-    assert.equal(element('delta-strip').style.top, '738px', 'Delta 10 px above the bar: 914 - 10 - 96 - 10 - 60')
+    assert.equal(element('shift-bar').style.left, '592px', 'centered on the HUD: 224 + 736 - 368')
+    assert.equal(element('shift-bar').style.top, '856px', 'a 10 px gap above the HUD: 914 - 10 - 48')
+    assert.equal(element('delta-strip').style.top, '786px', 'Delta 10 px above the bar: 914 - 10 - 48 - 10 - 60')
 
     // Turning the bar off moves an unsaved Delta back above the HUD, because defaults are not stored.
     HudPreferences.setOverlayVisibility('shiftBar', false)
     assert.equal(element('shift-bar').hidden, true)
     assert.equal(element('delta-strip').style.top, '844px', 'Delta 10 px above the HUD: 914 - 10 - 60')
+  })
+})
+
+test('a never-resized Shift Bar uses the 0.5 user scale, and a stored size below 0.5 reads as 0.5', () => {
+  const cases = [
+    [undefined, '0.5'],
+    [0.3, '0.5'],
+    [1.2, '1.2']
+  ]
+  for (const [storedSize, expectedScale] of cases) {
+    const shared = storedSize === undefined ? {} : { shiftBar: { x: 0.25, y: 0.5, size: storedSize } }
+    const seed = {
+      'fdc.overlay-visibility.v1': JSON.stringify({ shiftBar: true }),
+      'fdc.layout.v2': JSON.stringify({ version: 2, shared, grouped: {}, freeform: {} })
+    }
+    withOverlayRuntime(({ element }) => {
+      const props = {}
+      element('shift-bar').style.setProperty = (name, value) => { props[name] = value }
+      HudLayout.refreshLayout()
+      assert.equal(props['--shift-bar-user-scale'], expectedScale, `stored size ${storedSize}`)
+    }, seed)
+  }
+})
+
+test('a never-resized Delta keeps the default user scale 1 while the Shift Bar defaults to 0.5', () => {
+  withOverlayRuntime(({ element }) => {
+    const props = {}
+    element('delta-strip').style.setProperty = (name, value) => { props[name] = value }
+    element('shift-bar').style.setProperty = (name, value) => { props[`shift:${name}`] = value }
+    // Delta and the Shift Bar are applied only while visible: Delta needs an Event reference.
+    HudPreferences.setDeltaReferenceActive(true)
+    HudPreferences.setOverlayVisibility('shiftBar', true)
+    HudLayout.refreshLayout()
+    assert.equal(props['--delta-user-scale'], '1')
+    assert.equal(props['shift:--shift-bar-user-scale'], '0.5')
   })
 })
 
@@ -468,7 +504,7 @@ test('a saved Shift Bar size sets its user scale, and RESET returns it to the de
 
     HudLayout.resetPosition('shiftBar')
     assert.equal(HudLayout.getPosition('shiftBar').size, 0)
-    assert.equal(props['--shift-bar-user-scale'], '1')
+    assert.equal(props['--shift-bar-user-scale'], '0.5', 'RESET returns the Shift Bar to its 0.5 default')
   }, seed)
 })
 
