@@ -27,6 +27,153 @@ var HudShiftLight = (() => {
     getShiftLightIdentity: () => getShiftLightIdentity
   });
 
+  // src/shift-light/power-model.ts
+  var BIN_RPM = 100;
+  var MAX_BIN_VALUES = 32;
+  var MIN_BIN_VALUES = 3;
+  var BIN_QUANTILE = 0.9;
+  var MAX_RATIO_VALUES = 64;
+  var MIN_RATIO_VALUES = 10;
+  var RATIO_MIN_SPEED_KMH = 20;
+  var RATIO_MAX_SLIP = 0.15;
+  var SCAN_STEP_RPM = 50;
+  var AT_LIMITER_RPM = 200;
+  var MIN_COVERAGE = 0.5;
+  var NO_POINT = { rpm: null, kind: null, coverage: null, ratioStep: null };
+  var ValueWindow = class {
+    constructor(capacity, minimum, fraction) {
+      this.capacity = capacity;
+      this.minimum = minimum;
+      this.fraction = fraction;
+    }
+    capacity;
+    minimum;
+    fraction;
+    values = [];
+    next = 0;
+    cached = null;
+    dirty = false;
+    add(value) {
+      if (this.values.length < this.capacity) this.values.push(value);
+      else {
+        this.values[this.next] = value;
+        this.next = (this.next + 1) % this.capacity;
+      }
+      this.dirty = true;
+    }
+    get size() {
+      return this.values.length;
+    }
+    value() {
+      if (this.values.length < this.minimum) return null;
+      if (this.dirty) {
+        const sorted = [...this.values].sort((a, b) => a - b);
+        this.cached = sorted[Math.min(sorted.length - 1, Math.floor(this.fraction * sorted.length))];
+        this.dirty = false;
+      }
+      return this.cached;
+    }
+  };
+  function maxAbsSlip(slip) {
+    if (!slip || typeof slip !== "object") return null;
+    const values = [slip.fl, slip.fr, slip.rl, slip.rr];
+    if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) return null;
+    return Math.max(...values.map(Math.abs));
+  }
+  var PowerModel = class {
+    bins = /* @__PURE__ */ new Map();
+    ratios = /* @__PURE__ */ new Map();
+    /**
+     * Adds one settled clean full-throttle frame. Engine power does not depend on wheelspin, so
+     * every such frame feeds the curve; rpm / speed only gives a gear ratio without wheelspin.
+     */
+    add(telemetry) {
+      const bin = Math.floor(telemetry.rpm / BIN_RPM);
+      let window = this.bins.get(bin);
+      if (!window) {
+        window = new ValueWindow(MAX_BIN_VALUES, MIN_BIN_VALUES, BIN_QUANTILE);
+        this.bins.set(bin, window);
+      }
+      window.add(telemetry.power);
+      const slip = maxAbsSlip(telemetry.slipRatio);
+      if (telemetry.speedKmh > RATIO_MIN_SPEED_KMH && slip !== null && slip < RATIO_MAX_SLIP) {
+        let ratio = this.ratios.get(telemetry.gear);
+        if (!ratio) {
+          ratio = new ValueWindow(MAX_RATIO_VALUES, MIN_RATIO_VALUES, 0.5);
+          this.ratios.set(telemetry.gear, ratio);
+        }
+        ratio.add(telemetry.rpm / telemetry.speedKmh);
+      }
+    }
+    clear() {
+      this.bins.clear();
+      this.ratios.clear();
+    }
+    isEmpty() {
+      return this.bins.size === 0 && this.ratios.size === 0;
+    }
+    getRatio(gear) {
+      return this.ratios.get(gear)?.value() ?? null;
+    }
+    /** Current power curve: bin index to its 90th-percentile power, only for bins with enough values. */
+    curve() {
+      const curve = /* @__PURE__ */ new Map();
+      for (const [bin, window] of this.bins) {
+        const value = window.value();
+        if (value !== null) curve.set(bin, value);
+      }
+      return curve;
+    }
+    /**
+     * The pair's model point from a curve snapshot: scan every 50 RPM from the power peak to the
+     * ceiling and skip points where either power is unknown. The first point where the next gear
+     * has at least as much power is the crossover, but only after a known point where the current
+     * gear was still stronger; otherwise the crossover may lie in a gap before it. Without a
+     * crossover, known points reaching within 200 RPM of the ceiling put the point at the ceiling.
+     */
+    modelPoint(sourceGear, ceilingRpm, curve = this.curve()) {
+      const from = this.getRatio(sourceGear), to = this.getRatio(sourceGear + 1);
+      if (from === null || to === null || !(from > 0)) return { ...NO_POINT };
+      const ratioStep = to / from;
+      if (ceilingRpm === null || !(ceilingRpm > 0) || !(ratioStep > 0)) return { ...NO_POINT, ratioStep };
+      let peakRpm = null, peakValue = -Infinity;
+      for (const [bin, value] of curve) {
+        const rpm = bin * BIN_RPM + BIN_RPM / 2;
+        if (rpm <= ceilingRpm && (value > peakValue || value === peakValue && peakRpm !== null && rpm < peakRpm)) {
+          peakRpm = rpm;
+          peakValue = value;
+        }
+      }
+      if (peakRpm === null) return { ...NO_POINT, ratioStep };
+      let steps = 0, evaluable = 0, highest = null, sawLower = false;
+      for (let rpm = peakRpm; rpm <= ceilingRpm; rpm += SCAN_STEP_RPM) {
+        steps++;
+        const here = curveValue(curve, rpm), shifted = curveValue(curve, rpm * ratioStep);
+        if (here === null || shifted === null) continue;
+        evaluable++;
+        highest = rpm;
+        if (shifted >= here) {
+          const coverage2 = evaluable / steps;
+          if (!sawLower || coverage2 < MIN_COVERAGE) return { ...NO_POINT, ratioStep, coverage: coverage2 };
+          return { rpm: Math.round(rpm), kind: "crossover", coverage: coverage2, ratioStep };
+        }
+        sawLower = true;
+      }
+      const coverage = steps === 0 ? 0 : evaluable / steps;
+      if (highest !== null && ceilingRpm - highest <= AT_LIMITER_RPM && coverage >= MIN_COVERAGE) {
+        return { rpm: Math.round(ceilingRpm), kind: "at-limiter", coverage, ratioStep };
+      }
+      return { ...NO_POINT, ratioStep, coverage };
+    }
+  };
+  function curveValue(curve, rpm) {
+    const position = rpm / BIN_RPM - 0.5;
+    const low = Math.floor(position);
+    const lowValue = curve.get(low), highValue = curve.get(low + 1);
+    if (lowValue === void 0 || highValue === void 0) return null;
+    return lowValue + (highValue - lowValue) * (position - low);
+  }
+
   // src/shift-light/optimal-shift.ts
   var SHIFT_LIGHT_LEARNING_VERSION = 4;
   var FORWARD_GEAR_MIN = 1;
@@ -45,6 +192,9 @@ var HudShiftLight = (() => {
   var MIN_LIMITER_DROP_RPM = 40;
   var LIMITER_RECOVERY_TOLERANCE_RPM = 60;
   var MAX_CLEAN_TIMESTAMP_GAP_MS = 1e3;
+  var MODEL_REFRESH_MS = 250;
+  var MODEL_CHECK_RPM = 150;
+  var MODEL_REJECT_CONTRADICTIONS = 2;
   function isForwardGear(gear) {
     return Number.isInteger(gear) && gear >= FORWARD_GEAR_MIN && gear <= FORWARD_GEAR_MAX;
   }
@@ -85,7 +235,8 @@ var HudShiftLight = (() => {
       confirmationRpms: [],
       confirmationCount: 0,
       lastReason: null,
-      evidence: []
+      evidence: [],
+      modelRpm: null
     };
   }
   function cloneEvidence(item) {
@@ -153,6 +304,14 @@ var HudShiftLight = (() => {
     limiterRearmed = true;
     /** Highest clean full-throttle RPM of this run; in memory only, cleared by reset(). */
     peakWotRpm = 0;
+    /** Power curve and gear ratios of this run; in memory only, cleared by reset(). */
+    powerModel = new PowerModel();
+    /** Latest live model result per source gear. */
+    liveModel = /* @__PURE__ */ new Map();
+    modelDataChanged = false;
+    modelCeiling = null;
+    lastModelRefreshMs = null;
+    modelInfoCache = /* @__PURE__ */ new Map();
     ingest(telemetry) {
       if (Number.isFinite(telemetry.rpmMax) && telemetry.rpmMax > 0) this.reportedRedlineRpm = roundRpm(telemetry.rpmMax);
       const cleanWot = cleanWotMotionTelemetry(telemetry);
@@ -183,6 +342,7 @@ var HudShiftLight = (() => {
       this.shiftSamples = [...this.shiftSamples, evidence].slice(-MAX_SHIFT_SAMPLES);
       const state = this.getOrCreate(sourceGear, destinationGear);
       state.evidence = [...state.evidence, evidence].slice(-MAX_SHIFT_SAMPLES);
+      this.modelInfoCache.delete(sourceGear);
       const baseline = this.usableCeiling ?? this.reportedRedlineRpm;
       if (evidence.outcome === "better" && baseline !== null && evidence.beforeRpm < baseline) this.applyBetterOutcome(state, evidence.beforeRpm);
       return cloneEvidence(evidence);
@@ -211,7 +371,8 @@ var HudShiftLight = (() => {
         reportedRedlineRpm: this.reportedRedlineRpm,
         ceilingSamples: [...this.ceilingSamples],
         usableCeiling: this.usableCeiling,
-        gearTargets: this.getStates(),
+        // Only a model point in use is saved: a rejected one must not read as READY after a restart or in Garage.
+        gearTargets: this.getStates().map((state) => ({ ...state, modelRpm: this.getModelRpm(state.sourceGear) })),
         shiftSamples: this.shiftSamples.map(cloneEvidence)
       };
     }
@@ -244,6 +405,8 @@ var HudShiftLight = (() => {
         target.confirmationCount = Math.min(MAX_CONFIRMATIONS, Math.max(persistedCount, target.confirmationRpms.length));
         target.lastReason = typeof item.lastReason === "string" ? item.lastReason.slice(0, 160) : null;
         target.evidence = samples.filter((sample) => sample.sourceGear === target.sourceGear && sample.destinationGear === target.destinationGear);
+        const modelRpm = finiteInRange(item.modelRpm, 1, 1e5);
+        target.modelRpm = modelRpm === null ? null : roundRpm(modelRpm);
         restored.set(target.sourceGear, target);
       }
       this.gears.clear();
@@ -252,6 +415,7 @@ var HudShiftLight = (() => {
       this.reportedRedlineRpm = finiteInRange(raw.reportedRedlineRpm, 0, 1e5);
       this.ceilingSamples = normalizeCeilingSamples(raw.ceilingSamples);
       this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples);
+      this.applyLiveModel();
       return true;
     }
     mergeLearningState(state, key) {
@@ -261,15 +425,22 @@ var HudShiftLight = (() => {
         const current = this.gears.get(target.sourceGear);
         if (!current) this.gears.set(target.sourceGear, target);
         else if (this.statusRank(target.status) > this.statusRank(current.status)) {
+          const modelRpm = current.modelRpm ?? target.modelRpm;
           this.mergeSameRank(target, current);
+          target.modelRpm = modelRpm;
           this.gears.set(target.sourceGear, target);
-        } else this.mergeSameRank(current, target);
+        } else {
+          const modelRpm = current.modelRpm ?? target.modelRpm;
+          this.mergeSameRank(current, target);
+          current.modelRpm = modelRpm;
+        }
       }
       const seen = new Set(this.shiftSamples.map((item) => `${item.beforeTimestampMs}:${item.afterTimestampMs}`));
       this.shiftSamples = [...this.shiftSamples, ...incoming.shiftSamples.filter((item) => !seen.has(`${item.beforeTimestampMs}:${item.afterTimestampMs}`))].slice(-MAX_SHIFT_SAMPLES);
       this.reportedRedlineRpm = incoming.reportedRedlineRpm ?? this.reportedRedlineRpm;
       this.ceilingSamples = normalizeCeilingSamples([...this.ceilingSamples, ...incoming.ceilingSamples]);
       this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples);
+      this.applyLiveModel();
       return true;
     }
     exportState(key) {
@@ -298,7 +469,8 @@ var HudShiftLight = (() => {
         status: state?.status ?? "learning",
         confirmationCount: state?.confirmationCount ?? 0,
         lastReason: state?.lastReason ?? null,
-        evidenceCount: state?.evidence.length ?? 0
+        evidenceCount: state?.evidence.length ?? 0,
+        model: this.modelDiagnostics(gear)
       };
     }
     reset() {
@@ -308,12 +480,55 @@ var HudShiftLight = (() => {
       this.usableCeiling = null;
       this.reportedRedlineRpm = null;
       this.peakWotRpm = 0;
+      this.powerModel.clear();
+      this.liveModel.clear();
+      this.modelInfoCache.clear();
+      this.modelDataChanged = false;
+      this.modelCeiling = null;
+      this.lastModelRefreshMs = null;
       this.resetTransient();
     }
     resetTransient() {
       this.limiterTracker = null;
       this.lastCleanTelemetry = null;
       this.limiterRearmed = true;
+    }
+    /** Feeds one clean full-throttle frame that is settled in its gear into the power model. */
+    observeModelFrame(telemetry) {
+      if (!cleanPowerTelemetry(telemetry)) return;
+      this.powerModel.add(telemetry);
+      this.modelDataChanged = true;
+    }
+    /**
+     * Recomputes the model points when the curve, the ratios or the ceiling changed, at most every
+     * MODEL_REFRESH_MS of telemetry time. A pair whose live model places a point gets a gear row,
+     * and that point replaces any persisted one.
+     */
+    refreshModel(timestampMs) {
+      const ceiling = this.usableCeiling ?? this.getProvisionalCeiling();
+      if (!this.modelDataChanged && ceiling === this.modelCeiling) return;
+      const last = this.lastModelRefreshMs;
+      if (last !== null && timestampMs >= last && timestampMs - last < MODEL_REFRESH_MS) return;
+      this.lastModelRefreshMs = timestampMs;
+      this.modelDataChanged = false;
+      this.modelCeiling = ceiling;
+      this.liveModel.clear();
+      if (!this.powerModel.isEmpty()) {
+        const curve = this.powerModel.curve();
+        for (let sourceGear = FORWARD_GEAR_MIN; sourceGear < FORWARD_GEAR_MAX; sourceGear++) {
+          if (this.powerModel.getRatio(sourceGear) === null || this.powerModel.getRatio(sourceGear + 1) === null) continue;
+          this.liveModel.set(sourceGear, this.powerModel.modelPoint(sourceGear, ceiling, curve));
+        }
+      }
+      this.applyLiveModel();
+    }
+    /** Model point in use for the pair: null when there is none or real comparisons reject it. */
+    getModelRpm(gear) {
+      return this.modelInfo(gear).inUse;
+    }
+    modelDiagnostics(gear) {
+      const { inUse: _inUse, ...diagnostics } = this.modelInfo(gear);
+      return diagnostics;
     }
     getUsableCeiling() {
       return this.usableCeiling;
@@ -393,6 +608,51 @@ var HudShiftLight = (() => {
     }
     deriveUsableCeiling(samples) {
       return this.analyzeCeiling(samples).ceiling;
+    }
+    applyLiveModel() {
+      for (const [sourceGear, point] of this.liveModel) {
+        if (point.rpm !== null) this.getOrCreate(sourceGear).modelRpm = point.rpm;
+      }
+      this.modelInfoCache.clear();
+    }
+    /**
+     * A comparison well above the model point agrees when the next gear was at least as strong,
+     * and one well below agrees when it was weaker; comparisons within MODEL_CHECK_RPM are
+     * neutral. Two or more contradictions that outnumber the agreements reject the point.
+     */
+    modelInfo(gear) {
+      const cached = this.modelInfoCache.get(gear);
+      if (cached) return cached;
+      const state = this.gears.get(gear);
+      const rpm = state?.modelRpm ?? null;
+      const live = this.liveModel.get(gear);
+      let agree = 0, contradict = 0;
+      if (state && rpm !== null) {
+        for (const sample of state.evidence) {
+          if (sample.beforeRpm > rpm + MODEL_CHECK_RPM) {
+            if (sample.powerDeltaPct >= 0) agree++;
+            else contradict++;
+          } else if (sample.beforeRpm < rpm - MODEL_CHECK_RPM) {
+            if (sample.powerDeltaPct < 0) agree++;
+            else contradict++;
+          }
+        }
+      }
+      const rejected = contradict >= MODEL_REJECT_CONTRADICTIONS && contradict > agree;
+      const fromLive = live !== void 0 && live.rpm !== null && live.rpm === rpm;
+      const coverage = live?.coverage ?? null;
+      const info = {
+        rpm,
+        kind: fromLive ? live.kind : null,
+        coverage: coverage === null ? null : Math.round(coverage * 100) / 100,
+        ratioStep: live?.ratioStep ?? null,
+        agree,
+        contradict,
+        rejected,
+        inUse: rpm !== null && !rejected ? rpm : null
+      };
+      this.modelInfoCache.set(gear, info);
+      return info;
     }
     /**
      * The limiter is the highest RPM the engine can hold, so low false detections never
@@ -589,6 +849,7 @@ var HudShiftLight = (() => {
       if (forward) this.maxObservedGear = Math.max(this.maxObservedGear, telemetry.gear);
       this.estimator.ingest(telemetry);
       this.captureShift(previous, telemetry, forward);
+      this.estimator.refreshModel(telemetry.timestampMs);
       this.updateRpmRate(previous, telemetry);
       this.previous = telemetry;
       return this.snapshot(telemetry);
@@ -600,13 +861,15 @@ var HudShiftLight = (() => {
       const usableCeiling = this.estimator.getUsableCeiling();
       const provisionalCeiling = usableCeiling === null ? this.estimator.getProvisionalCeiling(rpmMax > 0 ? rpmMax : null) : null;
       const fallbackShiftRpm = usableCeiling ?? provisionalCeiling ?? (rpmMax > 0 ? roundRpm2(rpmMax) : null);
-      const effectiveTargetRpm = current?.targetRpm ?? current?.candidateRpm ?? fallbackShiftRpm;
+      const modelRpm = currentGear === null ? null : this.estimator.getModelRpm(currentGear);
+      const effectiveTargetRpm = modelRpm ?? current?.targetRpm ?? current?.candidateRpm ?? fallbackShiftRpm;
       const leadRpm = this.getLeadRpm(), lightOnRpm = effectiveTargetRpm === null ? null : Math.max(0, roundRpm2(effectiveTargetRpm - leadRpm));
       let phase = fallbackPhase(telemetry?.rpm ?? 0, rpmMax);
       if (lightOnRpm !== null && telemetry) phase = telemetry.rpm >= lightOnRpm ? "shift" : phase;
       const highestKnownGear = Math.max(this.maxObservedGear, this.estimator.getHighestKnownGear());
       const lastKnownGear = currentGear !== null && currentGear >= highestKnownGear;
-      const status = current?.status === "optimal" || current?.status === "potential" ? "calibrated" : current ? "learning" : "fallback";
+      const learned = modelRpm !== null || current?.status === "optimal" || current?.status === "potential";
+      const status = learned ? "calibrated" : current ? "learning" : "fallback";
       const lastEvidence = current?.evidence[current.evidence.length - 1] ?? null;
       return {
         status,
@@ -640,8 +903,8 @@ var HudShiftLight = (() => {
         gearboxSignature: null,
         currentGear,
         lastKnownGear,
-        method: current?.status === "optimal" || current?.status === "potential" ? "optimal" : null,
-        gears: this.getGearStates(),
+        method: learned ? "optimal" : null,
+        gears: this.getGearStates(fallbackShiftRpm ?? this.estimator.getReportedRedlineRpm()),
         diagnostics: this.getGearDiagnostics()
       };
     }
@@ -685,6 +948,7 @@ var HudShiftLight = (() => {
           this.preShiftFrames = [];
         }
         const settled = telemetry.timestampMs - this.cleanRunStartMs >= PRE_SHIFT_SETTLE_MS;
+        if (settled) this.estimator.observeModelFrame(telemetry);
         if (settled && (!this.pendingUpshift || this.pendingUpshift.sourceGear !== telemetry.gear)) this.preShiftFrames = [...this.preShiftFrames.filter((item) => telemetry.timestampMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS), telemetry].slice(-MAX_PRE_SHIFT_FRAMES);
         return;
       }
@@ -726,10 +990,28 @@ var HudShiftLight = (() => {
       const raw = (this.rpmRate ?? 0) * REACTION_TIME_S;
       return Math.round(Math.max(MIN_LEAD_RPM, Math.min(MAX_LEAD_RPM, Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_LEAD_RPM)));
     }
-    getGearStates() {
+    getGearStates(fallbackShiftRpm) {
       return this.estimator.getStates().map((state) => {
         const last = state.evidence[state.evidence.length - 1] ?? null;
-        return { gear: state.sourceGear, status: state.status, shiftRpm: state.targetRpm ?? state.candidateRpm, sampleCount: state.evidence.length, method: state.status === "learning" ? null : "optimal", ratioDrop: null, candidateRpm: state.candidateRpm, confirmationCount: state.confirmationCount, confirmationRpms: [...state.confirmationRpms], lastReason: state.lastReason, acceptedShiftCount: state.evidence.length, lastRpmBefore: last?.beforeRpm ?? null, lastDeltaPct: last?.powerDeltaPct ?? null };
+        const modelRpm = this.estimator.getModelRpm(state.sourceGear);
+        return {
+          gear: state.sourceGear,
+          status: state.status,
+          shiftRpm: state.targetRpm ?? state.candidateRpm,
+          sampleCount: state.evidence.length,
+          method: state.status === "learning" ? null : "optimal",
+          ratioDrop: null,
+          candidateRpm: state.candidateRpm,
+          confirmationCount: state.confirmationCount,
+          confirmationRpms: [...state.confirmationRpms],
+          lastReason: state.lastReason,
+          acceptedShiftCount: state.evidence.length,
+          lastRpmBefore: last?.beforeRpm ?? null,
+          lastDeltaPct: last?.powerDeltaPct ?? null,
+          modelRpm,
+          shiftAtRpm: modelRpm ?? state.targetRpm ?? state.candidateRpm ?? fallbackShiftRpm,
+          ready: modelRpm !== null || state.status === "optimal"
+        };
       });
     }
     getGearDiagnostics() {

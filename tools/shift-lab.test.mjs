@@ -375,6 +375,53 @@ test('checkExpectations checks accepted shifts and reference crossovers', () => 
   ])
 })
 
+test('checkExpectations checks the final shift point of each pair', () => {
+  const model = (shiftAtRpm, extra = {}) => ({ modelRpm: shiftAtRpm, shiftAtRpm, ready: true, kind: 'crossover', coverage: 1, agree: 0, contradict: 0, rejected: false, ...extra })
+  const car = {
+    ceiling: { usable: 9000 },
+    learner: { gearTargets: [] },
+    comparison: [
+      { pair: '2->3', model: model(7450) },
+      { pair: '3->4', model: model(9000, { modelRpm: null, ready: false, kind: null }) },
+      { pair: '4->5', model: null }
+    ]
+  }
+  assert.deepEqual(checkExpectations(car, { shiftAtRpm: { '2->3': [7200, 7700] } }), [])
+  assert.deepEqual(checkExpectations(car, { shiftAtRpm: { '2->3': [7500, 7700], '3->4': [6800, 7300], '4->5': [6000, 6500], '5->6': [6000, 6500] } }), [
+    '2->3 shifts at 7450, outside 7500-7700',
+    '3->4 shifts at 9000, outside 6800-7300',
+    '4->5 has no shift point, expected 6000-6500',
+    '5->6 has no shift point, expected 6000-6500'
+  ])
+})
+
+test('the report shows the learner model point and readiness of each pair', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'shift-lab-'))
+  let lab = null
+  try {
+    lab = labDatabase(join(dir, 'fdc-lab.sqlite'), [{ car: CAR_A, packets: pullPackets(CAR_A) }, { car: CAR_A, packets: pullPackets(CAR_A) }])
+    const result = replayLab(lab)
+    const [car] = result.cars
+    for (const row of car.comparison.filter(item => item.replay !== null)) {
+      assert.deepEqual(Object.keys(row.model), ['modelRpm', 'shiftAtRpm', 'ready', 'kind', 'coverage', 'agree', 'contradict', 'rejected'])
+      assert.equal(typeof row.model.shiftAtRpm, 'number')
+      assert.equal(row.model.ready, row.model.modelRpm !== null || row.replay.status === 'optimal')
+    }
+    // The power peak at 7,000 RPM and the gear step put the 2 -> 3 model point at the reference crossover below the limiter.
+    const row = car.comparison.find(item => item.pair === '2->3')
+    assert.equal(row.model.kind, 'crossover')
+    assert.ok(row.model.modelRpm > 7000 && row.model.modelRpm < 9100, `model ${row.model.modelRpm}`)
+    assert.ok(Math.abs(row.model.modelRpm - row.reference.rpm) <= 50, `model ${row.model.modelRpm}, reference ${row.reference.rpm}`)
+    assert.equal(row.model.shiftAtRpm, row.model.modelRpm)
+    const report = formatReport({ ...result, source: { lab: 'fdc-lab.sqlite', fdc: null } })
+    assert.match(report, /pair\s+replay\s+model\s+game\s+reference/)
+    assert.match(report, new RegExp(`2->3\\s+\\S+(?: \\d+)?\\s+${row.model.modelRpm} ready`))
+  } finally {
+    lab?.close()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('findFixtures pairs fixtures with their expectations and tolerates a missing folder', () => {
   const dir = mkdtempSync(join(tmpdir(), 'shift-lab-'))
   try {

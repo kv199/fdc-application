@@ -52,9 +52,10 @@ test('Shift Light exposes separate redline and FDC cue controls in the Shift Lig
   assert.match(settingsHtml, /id="shift-light-brightness" type="range" min="0" max="100" step="5" value="80"/)
   assert.match(settingsHtml, /<span class="calibration-label">LEARNED CEILING<\/span>/)
   assert.match(settingsHtml, /id="shift-light-usable-ceiling"/)
-  assert.match(settingsHtml, /<dt>LEARNING<\/dt><dd>Shifts at the safe redline while FDC watches your full-throttle upshifts\.<\/dd>/)
-  assert.match(settingsHtml, /<dt>POTENTIAL<\/dt>/)
-  assert.match(settingsHtml, /Only clean full-throttle upshifts count; other shifts are ignored\./)
+  assert.match(settingsHtml, /<dt>LEARNING<\/dt><dd>FDC is still learning this gear and shifts near the limiter\./)
+  assert.match(settingsHtml, /<dt>READY<\/dt><dd>FDC has found where the next gear pulls harder and uses that shift point\.<\/dd>/)
+  assert.doesNotMatch(settingsHtml, /<dt>POTENTIAL<\/dt>|<dt>OPTIMAL<\/dt>/)
+  assert.match(settingsHtml, /checked by your clean full-throttle upshifts\./)
   // The redline and FDC cue values are sent in the set_display_preferences payload,
   // which configuration-shell.test.js pins.
 })
@@ -67,8 +68,9 @@ test('Shift Light calibration card uses the design book title, table, and reset 
   assert.ok(profileIndex >= 0)
   assert.match(settingsHtml, /<div id="shift-light-profile" class="calibration-card" hidden>\s*<h3 class="calibration-card__title">CURRENT CAR PROFILE<\/h3>/)
   assert.match(settingsHtml, /class="events-run-table shift-light-gear-table"/)
-  assert.match(settingsHtml, /<th scope="col" class="events-run-table__end">STATE<\/th>/)
-  assert.match(settingsHtml, /<th scope="col">LAST COMPARISON<\/th>/)
+  // The gear table has exactly three columns: GEAR, SHIFT AT and STATUS.
+  assert.match(settingsHtml, /<thead>\s*<tr>\s*<th scope="col">GEAR<\/th>\s*<th scope="col">SHIFT AT<\/th>\s*<th scope="col" class="events-run-table__end">STATUS<\/th>\s*<\/tr>\s*<\/thead>\s*<tbody id="shift-light-gear-rows">/)
+  assert.doesNotMatch(settingsHtml, /LAST COMPARISON|ACCEPTED SHIFTS/)
   assert.doesNotMatch(settingsHtml, /calibration-table/)
   assert.ok(gearRowsIndex > profileIndex)
   assert.ok(resetIndex > gearRowsIndex)
@@ -78,7 +80,8 @@ test('Shift Light calibration card uses the design book title, table, and reset 
   assert.match(settingsJs, /\.hidden = !hasProfile/)
   assert.match(settingsJs, /\.scope = 'row'/)
   assert.match(settingsJs, /'events-run-table__end'/)
-  assert.match(settingsJs, /colSpan = 5/)
+  assert.match(settingsJs, /colSpan = 3/)
+  assert.doesNotMatch(settingsJs, /SHIFT AT LIMITER|PURPLE CUE ACTIVE|REDLINE FALLBACK/)
   assert.match(settingsJs, /'NO GEAR SAMPLES YET'/)
 })
 
@@ -90,8 +93,8 @@ test('Shift Light RPM values use thousands separators through formatRpm', () => 
   assert.match(settingsJs, /formatRpm\(state\.usableCeiling\)/)
   assert.match(settingsJs, /LEARNING · \$\{state\.ceilingClusterCount\}\/3/)
   assert.match(settingsJs, /· \$\{formatRpm\(/)
-  assert.match(settingsJs, /LEARNING · \$\{formatRpm\(/)
-  assert.doesNotMatch(settingsJs, /\$\{(state\.rpmMax|state\.usableCeiling|activeTarget|fallbackTarget)\} RPM/)
+  assert.match(settingsJs, /\$\{readiness\} · \$\{formatRpm\(/)
+  assert.doesNotMatch(settingsJs, /\$\{(state\.rpmMax|state\.usableCeiling|target|fallbackRpm)\} RPM/)
 })
 
 test('Configuration replays Shift Light state and waits for the real reset result', () => {

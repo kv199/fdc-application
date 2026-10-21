@@ -89,7 +89,8 @@ fn load_garage_shift_light_summary(
             "WITH configuration_profiles AS (
                 SELECT 'config:' || configs.id AS configuration_id,
                        targets.status AS status,
-                       targets.optimal_rpm AS shift_rpm,
+                       targets.model_rpm AS model_rpm,
+                       COALESCE(targets.model_rpm, targets.optimal_rpm) AS shift_rpm,
                        targets.source_gear AS gear
                 FROM shift_light_configs AS configs
                 LEFT JOIN shift_light_gear_targets AS targets
@@ -97,18 +98,24 @@ fn load_garage_shift_light_summary(
                 WHERE configs.game_id = 'fh6'
                   AND configs.car_ordinal = ?1
                   AND configs.car_performance_index = ?2
+             ),
+             -- A pair with a model point is ready whatever its status.
+             gear_readiness AS (
+                SELECT configuration_id, gear,
+                       CASE
+                         WHEN model_rpm IS NOT NULL THEN 1
+                         WHEN status = 'optimal' AND shift_rpm IS NOT NULL THEN 1
+                         ELSE 0
+                       END AS ready
+                FROM configuration_profiles
              )
              SELECT COUNT(DISTINCT configuration_id),
+                    COALESCE(SUM(CASE WHEN ready = 1 THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(CASE
-                      WHEN status = 'optimal' AND shift_rpm IS NOT NULL THEN 1
-                      ELSE 0
-                    END), 0),
-                    COALESCE(SUM(CASE
-                      WHEN gear IS NOT NULL
-                       AND (status <> 'optimal' OR shift_rpm IS NULL) THEN 1
+                      WHEN gear IS NOT NULL AND ready = 0 THEN 1
                       ELSE 0
                     END), 0)
-             FROM configuration_profiles",
+             FROM gear_readiness",
             params![car_ordinal, pi],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
@@ -401,6 +408,54 @@ mod tests {
         assert_eq!(car.variants[0].cylinders, 6);
         assert!(car.variants[0].is_current);
         assert!(!car.variants[1].is_current);
+    }
+
+    #[test]
+    fn garage_counts_a_gear_pair_with_a_model_point_as_calibrated() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let vehicle = GarageVehicle {
+            ordinal: 3766,
+            class: 1,
+            pi: 800,
+            car_group: 42,
+            drivetrain: 1,
+            cylinders: 10,
+        };
+        record_garage_vehicle_in_connection(&mut connection, &vehicle).unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO shift_light_configs
+                   (id, game_id, car_ordinal, car_class, car_performance_index,
+                    drivetrain_type, num_cylinders)
+                 VALUES (7, 'fh6', 3766, 1, 800, 1, 10);
+                 INSERT INTO shift_light_gear_targets
+                   (config_id, source_gear, destination_gear, status, candidate_rpm,
+                    optimal_rpm, confirmation_count, model_rpm)
+                 VALUES (7, 1, 2, 'learning', NULL, NULL, 0, NULL),
+                        (7, 2, 3, 'potential', 9100, NULL, 1, NULL);",
+            )
+            .unwrap();
+        let summary = load_garage_shift_light_summary(&connection, 3766, 800).unwrap();
+        assert_eq!(summary.status, "learning");
+        assert_eq!(summary.calibrated_gear_count, 0);
+        assert_eq!(summary.learning_gear_count, 2);
+
+        connection
+            .execute_batch(
+                "UPDATE shift_light_gear_targets SET model_rpm = 7500 WHERE source_gear = 1;
+                 INSERT INTO shift_light_gear_targets
+                   (config_id, source_gear, destination_gear, status, candidate_rpm,
+                    optimal_rpm, confirmation_count, model_rpm)
+                 VALUES (7, 3, 4, 'optimal', 9000, 9050, 3, NULL);",
+            )
+            .unwrap();
+        let snapshot = load_garage_snapshot_from_connection(&connection).unwrap();
+        let summary = &snapshot.cars[0].variants[0].shift_light;
+        assert_eq!(summary.status, "ready");
+        assert_eq!(summary.tune_count, 1);
+        assert_eq!(summary.calibrated_gear_count, 2);
+        assert_eq!(summary.learning_gear_count, 1);
     }
 
     #[test]

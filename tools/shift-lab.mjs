@@ -313,6 +313,23 @@ function fdcStatus(fdcDb) {
     : { available: false, message: `missing tables: ${missing.join(', ')}` }
 }
 
+// The learner's own model point for a pair, read from the last snapshot of the replay.
+function learnerModel(snapshot, sourceGear) {
+  const gear = snapshot?.gears.find(item => item.gear === sourceGear)
+  if (!gear) return null
+  const model = snapshot.diagnostics.find(item => item.gear === sourceGear)?.model ?? null
+  return {
+    modelRpm: gear.modelRpm,
+    shiftAtRpm: gear.shiftAtRpm,
+    ready: gear.ready,
+    kind: model?.kind ?? null,
+    coverage: model?.coverage ?? null,
+    agree: model?.agree ?? 0,
+    contradict: model?.contradict ?? 0,
+    rejected: model?.rejected ?? false
+  }
+}
+
 function summarizeCar(group, fdcDb) {
   const [, carOrdinal, carClass, pi, drivetrain, cylinders] = group.key.split(':').map((part, index) => index === 0 ? part : Number(part))
   const identity = { gameId: 'fh6', carOrdinal, carClass, pi, drivetrain, cylinders }
@@ -343,6 +360,7 @@ function summarizeCar(group, fdcDb) {
   ])
   const comparison = [...sourceGears].sort((left, right) => left - right).map(sourceGear => {
     const learner = learnerPairs.find(pair => pair.sourceGear === sourceGear)
+    const model = learnerModel(group.lastSnapshot, sourceGear)
     const referencePair = reference.pairs.find(pair => pair.sourceGear === sourceGear) ?? null
     const gamePair = game?.pairs.find(pair => pair.sourceGear === sourceGear) ?? null
     const replayRpm = learner ? learner.targetRpm ?? learner.candidateRpm : null
@@ -360,6 +378,7 @@ function summarizeCar(group, fdcDb) {
         ? { kind: referencePair.kind, rpm: referencePair.referenceRpm, ratioStep: referencePair.ratioStep, coverage: referencePair.coverage }
         : null,
       differenceRpm: referencePair?.differenceRpm ?? null,
+      model,
       flags
     }
   })
@@ -542,6 +561,11 @@ export function checkExpectations(carResult, expect) {
   if (expect.minAcceptedShifts !== undefined && carResult.summary.acceptedCount < expect.minAcceptedShifts) {
     failures.push(`${carResult.summary.acceptedCount} accepted shifts, expected at least ${expect.minAcceptedShifts}`)
   }
+  for (const [pair, [min, max]] of Object.entries(expect.shiftAtRpm ?? {})) {
+    const shiftAtRpm = carResult.comparison.find(item => item.pair === pair)?.model?.shiftAtRpm ?? null
+    if (shiftAtRpm === null) failures.push(`${pair} has no shift point, expected ${min}-${max}`)
+    else if (shiftAtRpm < min || shiftAtRpm > max) failures.push(`${pair} shifts at ${shiftAtRpm}, outside ${min}-${max}`)
+  }
   for (const [pair, [min, max]] of Object.entries(expect.referenceRpm ?? {})) {
     const reference = carResult.reference.pairs.find(item => item.pair === pair)
     if (!reference) failures.push(`${pair} has no reference, expected a crossover at ${min}-${max}`)
@@ -561,6 +585,14 @@ function formatPoint(point, label = '') {
   if (!point) return '-'
   const rpm = point.rpm === null || point.rpm === undefined ? '' : ` ${Math.round(point.rpm)}`
   return `${point.status ?? point.kind ?? label}${rpm}`
+}
+
+// The learner's model point and whether the pair is ready: `7500 ready`, `9498 ready (limiter)`, `- learning`.
+function formatModel(model) {
+  if (!model) return '-'
+  const rpm = model.modelRpm === null ? '-' : String(model.modelRpm)
+  const suffix = model.rejected ? ' (rejected)' : model.modelRpm !== null && model.kind === 'at-limiter' ? ' (limiter)' : ''
+  return `${rpm} ${model.ready ? 'ready' : 'learning'}${suffix}`
 }
 
 function formatDifference(value) {
@@ -589,7 +621,7 @@ export function formatReport(result) {
       : 'game -'
     lines.push(`ceiling: replay usable ${ceiling.usable ?? '-'}, provisional ${ceiling.provisional ?? '-'}, redline ${ceiling.reportedRedlineRpm ?? '-'}, max observed ${ceiling.maxObservedRpm ?? '-'}; ${gameText}; reference uses ${ceiling.usedForReference ?? '-'}`)
     lines.push('')
-    const header = [pad('pair', 8), pad('replay', 22), pad('game', 22), pad('reference', 30), pad('diff', 8), 'flags']
+    const header = [pad('pair', 8), pad('replay', 22), pad('model', 22), pad('game', 22), pad('reference', 30), pad('diff', 8), 'flags']
     lines.push(header.join(' '))
     for (const row of car.comparison) {
       const reference = row.reference
@@ -599,6 +631,7 @@ export function formatReport(result) {
       lines.push([
         pad(row.pair, 8),
         pad(formatPoint(row.replay), 22),
+        pad(formatModel(row.model), 22),
         pad(formatPoint(row.game), 22),
         pad(reference, 30),
         pad(formatDifference(row.differenceRpm), 8),
@@ -614,7 +647,8 @@ export function formatReport(result) {
     const delay = summary.medianCueDelayMs === null ? '-' : `${Math.round(summary.medianCueDelayMs)} ms over ${summary.cueDelayCount} shifts with a cue`
     lines.push(`median cue-to-shift delay: ${delay}`)
     lines.push('note: the reference ignores the turbo boost drop after a shift; it compares clean full-throttle power only. ' +
-      'cov is the share of 50-RPM points from the power peak to the ceiling where both powers were known.')
+      'cov is the share of 50-RPM points from the power peak to the ceiling where both powers were known. ' +
+      'model is the learner\'s own model point at the end of the replay; ready means it has a model point in use or an optimal target.')
   }
   return `${lines.join('\n')}\n`
 }

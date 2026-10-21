@@ -534,11 +534,10 @@
       <div id="shift-light-help-panel" class="calibration-help" hidden>
         <div class="calibration-help__title">HOW TO READ DIAGNOSTICS</div>
         <dl>
-          <div><dt>LEARNING</dt><dd>Shifts at the safe redline while FDC watches your full-throttle upshifts.</dd></div>
-          <div><dt>POTENTIAL</dt><dd>An earlier shift point looked at least as strong. Two more matching shifts confirm it.</dd></div>
-          <div><dt>OPTIMAL</dt><dd>Confirmed by three matching shifts. FDC now uses it.</dd></div>
+          <div><dt>LEARNING</dt><dd>FDC is still learning this gear and shifts near the limiter. Drive a few full-throttle runs through the gears.</dd></div>
+          <div><dt>READY</dt><dd>FDC has found where the next gear pulls harder and uses that shift point.</dd></div>
         </dl>
-        <p>Only clean full-throttle upshifts count; other shifts are ignored.</p>
+        <p>Shift points come from the engine's power and the gear ratios, checked by your clean full-throttle upshifts.</p>
       </div>
 
       <div id="shift-light-empty" class="settings-empty">
@@ -579,10 +578,8 @@
             <thead>
               <tr>
                 <th scope="col">GEAR</th>
-                <th scope="col">SHIFT POINT</th>
-                <th scope="col">ACCEPTED SHIFTS</th>
-                <th scope="col">LAST COMPARISON</th>
-                <th scope="col" class="events-run-table__end">STATE</th>
+                <th scope="col">SHIFT AT</th>
+                <th scope="col" class="events-run-table__end">STATUS</th>
               </tr>
             </thead>
             <tbody id="shift-light-gear-rows"></tbody>

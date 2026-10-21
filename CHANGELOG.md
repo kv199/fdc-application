@@ -26,6 +26,13 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ### Added
 
+- **Shift Light**: shift points are now worked out from the engine's power
+  curve and the car's gear ratios, so the cue can ask for an earlier shift
+  than you have tried yourself. On a car whose power falls well before the
+  limiter, a few full-throttle runs through the gears are enough. Your real
+  shifts check each point, and the old learning takes over for a gear where
+  they disagree. The Shift Light tab now lists each gear with its shift point
+  and **READY** or **LEARNING**.
 - **Shift Light**: FDC now keeps your last drives, about one hour and at
   most 200 MB, in `fdc-lab.sqlite` next to its other data, so Shift Light can
   be checked against real drives. The file stays on your computer; share a

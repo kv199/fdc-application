@@ -11,7 +11,7 @@ use std::{
 use rusqlite::{Connection, Transaction, params};
 use tauri::{AppHandle, Manager, Runtime};
 
-const HUD_SCHEMA_VERSION: i32 = 23;
+const HUD_SCHEMA_VERSION: i32 = 24;
 
 fn table_exists(connection: &Connection, table: &str) -> Result<bool, String> {
     connection
@@ -80,6 +80,7 @@ fn create_shift_light_config_tables(connection: &Connection) -> Result<(), Strin
                candidate_rpm INTEGER,
                optimal_rpm INTEGER,
                confirmation_count INTEGER NOT NULL DEFAULT 0 CHECK (confirmation_count BETWEEN 0 AND 3),
+               model_rpm INTEGER CHECK (model_rpm IS NULL OR model_rpm > 0),
                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                CHECK (
                  (status = 'learning' AND candidate_rpm IS NULL AND optimal_rpm IS NULL AND confirmation_count = 0)
@@ -998,6 +999,35 @@ fn migrate_event_result_approximate_schema(connection: &mut Connection) -> Resul
     })
 }
 
+// Schema version 24 stores the model-computed shift point of each gear pair.
+// It is independent of the pair status, so existing targets keep NULL.
+fn migrate_shift_light_model_rpm(connection: &mut Connection) -> Result<(), String> {
+    let has_column = table_has_column(connection, "shift_light_gear_targets", "model_rpm")?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("unable to start Shift Light model point migration: {error}"))?;
+    if !has_column {
+        transaction
+            .execute(
+                "ALTER TABLE shift_light_gear_targets ADD COLUMN model_rpm INTEGER
+                   CHECK (model_rpm IS NULL OR model_rpm > 0)",
+                [],
+            )
+            .map_err(|error| format!("unable to add Shift Light model point: {error}"))?;
+    }
+    transaction
+        .execute(
+            "UPDATE hud_schema_version SET version = ?1",
+            params![HUD_SCHEMA_VERSION],
+        )
+        .map_err(|error| {
+            format!("unable to update Shift Light model point schema version: {error}")
+        })?;
+    transaction
+        .commit()
+        .map_err(|error| format!("unable to commit Shift Light model point migration: {error}"))
+}
+
 pub(crate) fn initialize_shift_light_schema(connection: &mut Connection) -> Result<(), String> {
     connection
         .execute_batch(
@@ -1125,6 +1155,9 @@ pub(crate) fn initialize_shift_light_schema(connection: &mut Connection) -> Resu
     if version < 23 {
         migrate_event_result_approximate_schema(connection)?;
     }
+    if version < 24 {
+        migrate_shift_light_model_rpm(connection)?;
+    }
     Ok(())
 }
 
@@ -1193,6 +1226,7 @@ mod tests {
                 candidate_rpm: Some(9000),
                 optimal_rpm: Some(9050),
                 confirmation_count: 3,
+                model_rpm: Some(9100),
             }],
             shift_samples: vec![
                 ShiftLightShiftSample {
@@ -1243,6 +1277,7 @@ mod tests {
         assert_eq!(loaded.ceiling_samples, vec![10240, 10250, 10260]);
         assert_eq!(loaded.gear_targets.len(), 1);
         assert_eq!(loaded.gear_targets[0].optimal_rpm, Some(9050));
+        assert_eq!(loaded.gear_targets[0].model_rpm, Some(9100));
         assert_eq!(loaded.shift_samples.len(), 2);
         assert_eq!(loaded.shift_samples[0].classification, "crossover");
         assert_eq!(loaded.shift_samples[1].classification, "not_better");
@@ -2106,6 +2141,163 @@ mod tests {
         let migrated = load_event_run_from_connection(&connection, existing.id).unwrap();
         assert_eq!(migrated.result_time_ms, Some(74_000));
         assert!(!migrated.result_time_approximate);
+    }
+
+    fn schema_version(connection: &Connection) -> i32 {
+        connection
+            .query_row("SELECT version FROM hud_schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn fresh_schema_stores_a_positive_shift_light_model_point() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        assert_eq!(HUD_SCHEMA_VERSION, 24);
+        assert_eq!(schema_version(&connection), HUD_SCHEMA_VERSION);
+        assert!(table_has_column(&connection, "shift_light_gear_targets", "model_rpm").unwrap());
+        connection
+            .execute_batch(
+                "INSERT INTO shift_light_configs
+                   (id, game_id, car_ordinal, car_class, car_performance_index,
+                    drivetrain_type, num_cylinders)
+                 VALUES (7, 'fh6', 3766, 1, 800, 1, 10);
+                 INSERT INTO shift_light_gear_targets
+                   (config_id, source_gear, destination_gear, status, model_rpm)
+                 VALUES (7, 1, 2, 'learning', 7500);",
+            )
+            .unwrap();
+        assert!(
+            connection
+                .execute(
+                    "INSERT INTO shift_light_gear_targets
+                       (config_id, source_gear, destination_gear, status, model_rpm)
+                     VALUES (7, 2, 3, 'learning', 0)",
+                    [],
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn v24_migration_keeps_shift_light_targets_and_adds_an_empty_model_point() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        // A released schema version 23 database has no model point column.
+        connection
+            .execute_batch(
+                "DROP TABLE shift_light_gear_targets;
+                 CREATE TABLE shift_light_gear_targets (
+                   config_id INTEGER NOT NULL,
+                   source_gear INTEGER NOT NULL CHECK (source_gear BETWEEN 1 AND 9),
+                   destination_gear INTEGER NOT NULL CHECK (destination_gear = source_gear + 1),
+                   status TEXT NOT NULL CHECK (status IN ('learning', 'potential', 'optimal')),
+                   candidate_rpm INTEGER,
+                   optimal_rpm INTEGER,
+                   confirmation_count INTEGER NOT NULL DEFAULT 0 CHECK (confirmation_count BETWEEN 0 AND 3),
+                   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                   CHECK (
+                     (status = 'learning' AND candidate_rpm IS NULL AND optimal_rpm IS NULL AND confirmation_count = 0)
+                     OR (status = 'potential' AND candidate_rpm > 0 AND optimal_rpm IS NULL AND confirmation_count BETWEEN 1 AND 2)
+                     OR (status = 'optimal' AND candidate_rpm > 0 AND optimal_rpm > 0 AND confirmation_count = 3)
+                   ),
+                   PRIMARY KEY (config_id, source_gear, destination_gear),
+                   FOREIGN KEY (config_id) REFERENCES shift_light_configs(id) ON DELETE CASCADE
+                 );
+                 INSERT INTO shift_light_configs
+                   (id, game_id, car_ordinal, car_class, car_performance_index,
+                    drivetrain_type, num_cylinders, reported_redline_rpm, usable_ceiling_rpm)
+                 VALUES (42, 'fh6', 3766, 1, 800, 1, 10, 10300, 10250);
+                 INSERT INTO shift_light_ceiling_samples (config_id, rpm)
+                 VALUES (42, 10240), (42, 10250), (42, 10260);
+                 INSERT INTO shift_light_gear_targets
+                   (config_id, source_gear, destination_gear, status, candidate_rpm,
+                    optimal_rpm, confirmation_count)
+                 VALUES (42, 1, 2, 'learning', NULL, NULL, 0),
+                        (42, 2, 3, 'potential', 9100, NULL, 2),
+                        (42, 3, 4, 'optimal', 9000, 9050, 3);
+                 INSERT INTO shift_light_shift_samples
+                   (config_id, source_gear, destination_gear, before_timestamp_ms,
+                    after_timestamp_ms, before_rpm, after_rpm, before_power_w,
+                    after_power_w, delta_percent, classification)
+                 VALUES (42, 3, 4, 1000, 1120, 9050, 6500, 600, 630, 5, 'crossover');
+                 UPDATE hud_schema_version SET version = 23;",
+            )
+            .unwrap();
+        assert!(!table_has_column(&connection, "shift_light_gear_targets", "model_rpm").unwrap());
+
+        initialize_shift_light_schema(&mut connection).unwrap();
+
+        assert_eq!(schema_version(&connection), HUD_SCHEMA_VERSION);
+        assert!(table_has_column(&connection, "shift_light_gear_targets", "model_rpm").unwrap());
+        let read_targets = |connection: &Connection| {
+            connection
+                .prepare(
+                    "SELECT source_gear, status, candidate_rpm, optimal_rpm,
+                            confirmation_count, model_rpm
+                       FROM shift_light_gear_targets
+                      WHERE config_id = 42 ORDER BY source_gear",
+                )
+                .unwrap()
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, i32>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<i32>>(2)?,
+                        row.get::<_, Option<i32>>(3)?,
+                        row.get::<_, i32>(4)?,
+                        row.get::<_, Option<i32>>(5)?,
+                    ))
+                })
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+        };
+        let expected = vec![
+            (1, "learning".to_string(), None, None, 0, None),
+            (2, "potential".to_string(), Some(9100), None, 2, None),
+            (3, "optimal".to_string(), Some(9000), Some(9050), 3, None),
+        ];
+        assert_eq!(read_targets(&connection), expected);
+        let count = |connection: &Connection, table: &str| {
+            connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .unwrap()
+        };
+        assert_eq!(count(&connection, "shift_light_configs"), 1);
+        assert_eq!(count(&connection, "shift_light_ceiling_samples"), 3);
+        assert_eq!(count(&connection, "shift_light_shift_samples"), 1);
+        assert!(
+            connection
+                .execute(
+                    "UPDATE shift_light_gear_targets SET model_rpm = -1 WHERE source_gear = 1",
+                    [],
+                )
+                .is_err()
+        );
+
+        // Reopening an already migrated database changes nothing.
+        initialize_shift_light_schema(&mut connection).unwrap();
+        assert_eq!(schema_version(&connection), HUD_SCHEMA_VERSION);
+        assert_eq!(read_targets(&connection), expected);
+        assert_eq!(count(&connection, "shift_light_ceiling_samples"), 3);
+        assert_eq!(count(&connection, "shift_light_shift_samples"), 1);
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM pragma_table_info('shift_light_gear_targets')
+                      WHERE name = 'model_rpm'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            1
+        );
     }
 
     #[test]

@@ -13,8 +13,34 @@
     return Number.isFinite(value) ? `${SHIFT_LIGHT_RPM_FORMAT.format(Math.round(value))} RPM` : '—'
   }
 
-  function formatDelta(value) {
-    return Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${value.toFixed(1)}%` : '—'
+  // The RPM the shift light uses when a pair has no shift point of its own.
+  function fallbackShiftRpm(state) {
+    return state?.usableCeiling || state?.fallbackShiftRpm || state?.reportedRedlineRpm || state?.rpmMax || null
+  }
+
+  function readinessLabel(gear) {
+    return gear?.ready === true ? 'READY' : 'LEARNING'
+  }
+
+  // One row of the per-gear table: the pair, where to shift, and whether that point is ready.
+  function gearRowView(gear, fallbackRpm) {
+    return {
+      state: gear.ready === true ? 'ready' : 'learning',
+      pair: `${gear.gear} → ${gear.gear + 1}`,
+      shiftAt: formatRpm(gear.shiftAtRpm ?? fallbackRpm),
+      status: readinessLabel(gear)
+    }
+  }
+
+  // CURRENT TARGET and STATE describe the pair of the gear the car is in.
+  function currentGearView(state) {
+    const activeGear = state.gears.find(gear => gear.gear === state.currentGear)
+    const target = activeGear?.shiftAtRpm ?? fallbackShiftRpm(state)
+    const readiness = readinessLabel(activeGear)
+    return {
+      target: target ? `${readiness} · ${formatRpm(target)}` : 'WAITING FOR RPM LIMIT',
+      state: `${readiness}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
+    }
   }
 
   // The Shift Light tab: the learned shift points of the current car, its gear table, and the
@@ -32,7 +58,6 @@
       garageVariantsFor
     } = ctx
     const normalizeShiftLightState = globalScope.ShiftLightSettings?.normalizeShiftLightState
-    const isShiftAtLimiter = globalScope.ShiftLightSettings?.isShiftAtLimiter
     const garageApi = globalScope.HudGarageRuntime
     const FdcVehicle = globalScope.FdcVehicle
     const shiftLightEmpty = document.getElementById('shift-light-empty')
@@ -48,16 +73,6 @@
     const shiftLightHelp = document.getElementById('shift-light-help')
     const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
     let shiftLightResetPending = false
-
-  function appendCellText(cell, primary, secondary = '') {
-    cell.textContent = primary
-    if (secondary) {
-      const detail = document.createElement('span')
-      detail.className = 'calibration-cell__sub'
-      detail.textContent = secondary
-      cell.append(detail)
-    }
-  }
 
   // The Shift Light car key is fh6:<ordinal>:<class>:<pi>:..., so the class
   // is read from it and falls back to the Garage variant with the same PI.
@@ -97,92 +112,37 @@
       : state.provisionalCeiling
         ? `LEARNING · ${state.ceilingClusterCount}/3 · ~${formatRpm(state.provisionalCeiling)}`
         : state.ceilingSampleCount > 0 ? `LEARNING · ${state.ceilingClusterCount}/3` : 'NOT OBSERVED'
-    const activeGear = state.gears.find(gear => gear.gear === state.currentGear)
-    const activeStatus = activeGear?.status || 'learning'
-    const fallbackTarget = state.usableCeiling || state.fallbackShiftRpm || state.reportedRedlineRpm || state.rpmMax
-    const activeTarget = activeStatus === 'learning'
-      ? fallbackTarget
-      : activeGear?.shiftRpm ?? state.shiftRpm
-    shiftLightCurrentTarget.textContent = activeTarget
-      ? `${activeStatus === 'optimal' ? 'OPTIMAL' : activeStatus === 'potential' ? 'POTENTIAL' : 'LEARNING'} · ${formatRpm(activeTarget)}`
-      : fallbackTarget
-        ? `LEARNING · ${formatRpm(fallbackTarget)}`
-        : 'WAITING FOR RPM LIMIT'
-    const activeState = activeStatus === 'potential'
-      ? `POTENTIAL ${Math.max(1, activeGear?.confirmationCount || 1)}/3`
-      : activeStatus.toUpperCase()
-    shiftLightState.textContent = `${activeState}${state.currentGear ? ` · GEAR ${state.currentGear}` : ''}`
+    const current = currentGearView(state)
+    shiftLightCurrentTarget.textContent = current.target
+    shiftLightState.textContent = current.state
     shiftLightGearRows.replaceChildren()
 
-    const diagnosticsByGear = new Map((state.diagnostics || []).map(diagnostic => [diagnostic.gear, diagnostic]))
-
+    const fallbackRpm = fallbackShiftRpm(state)
     for (const gear of state.gears) {
-      const diagnostic = diagnosticsByGear.get(gear.gear)
-      const diagnosticStatus = diagnostic?.status || gear.status
+      const view = gearRowView(gear, fallbackRpm)
       const row = document.createElement('tr')
-      row.dataset.state = diagnosticStatus
+      row.dataset.state = view.state
 
       const gearCell = document.createElement('th')
       gearCell.scope = 'row'
-      gearCell.textContent = `G${gear.gear}`
+      gearCell.textContent = view.pair
       row.append(gearCell)
 
-      const targetCell = document.createElement('td')
-      const gearTargetRpm = diagnostic?.targetRpm ?? gear.shiftRpm
-      appendCellText(
-        targetCell,
-        formatRpm(gearTargetRpm ?? (gear.status === 'learning' ? fallbackTarget : null)),
-        gear.status === 'potential'
-          ? `POTENTIAL · ${Math.max(1, diagnostic?.confirmationCount ?? gear.confirmationCount)}/3`
-          : gear.status === 'optimal'
-            ? 'PURPLE CUE ACTIVE'
-            : 'REDLINE FALLBACK'
-      )
-      if (typeof isShiftAtLimiter === 'function' && isShiftAtLimiter(diagnosticStatus, gearTargetRpm, state.usableCeiling)) {
-        const limiterHint = document.createElement('span')
-        limiterHint.className = 'calibration-cell__sub'
-        limiterHint.textContent = 'SHIFT AT LIMITER'
-        limiterHint.title = 'The best shift point for this gear is at the rev limiter.'
-        targetCell.append(limiterHint)
-      }
-      row.append(targetCell)
+      const shiftAtCell = document.createElement('td')
+      shiftAtCell.textContent = view.shiftAt
+      row.append(shiftAtCell)
 
-      const powerCell = document.createElement('td')
-      appendCellText(
-        powerCell,
-        `${diagnostic?.acceptedShiftCount ?? gear.acceptedShiftCount ?? gear.sampleCount} ACCEPTED`,
-        Number.isFinite(diagnostic?.lastDeltaPct ?? gear.lastDeltaPct)
-          ? `LAST Δ ${formatDelta(diagnostic?.lastDeltaPct ?? gear.lastDeltaPct)}`
-          : 'WAITING FOR AN ACCEPTED SHIFT'
-      )
-      row.append(powerCell)
-
-      const dataCell = document.createElement('td')
-      const lastRpm = gear.lastRpmBefore ?? null
-      appendCellText(
-        dataCell,
-        Number.isFinite(gear.lastDeltaPct) ? `${formatDelta(gear.lastDeltaPct)} POWER DELTA` : 'NO LAST SHIFT',
-        Number.isFinite(lastRpm) ? `RECORDED ${formatRpm(lastRpm)}` : 'WAITING FOR A COMPARABLE UPSHIFT'
-      )
-      row.append(dataCell)
-
-      const stateCell = document.createElement('td')
-      stateCell.className = 'events-run-table__end'
-      appendCellText(
-        stateCell,
-        diagnosticStatus === 'potential'
-          ? `POTENTIAL ${Math.max(1, diagnostic?.confirmationCount ?? gear.confirmationCount)}/3`
-          : diagnosticStatus.toUpperCase(),
-        diagnosticStatus === 'learning' ? 'REDLINE FALLBACK ACTIVE' : ''
-      )
-      row.append(stateCell)
+      const statusCell = document.createElement('td')
+      statusCell.className = 'events-run-table__end'
+      statusCell.textContent = view.status
+      row.append(statusCell)
       shiftLightGearRows.append(row)
     }
 
     if (!state.gears.length) {
       const row = document.createElement('tr')
       const cell = document.createElement('td')
-      cell.colSpan = 5
+      cell.colSpan = 3
       cell.textContent = 'NO GEAR SAMPLES YET'
       row.append(cell)
       shiftLightGearRows.append(row)
@@ -261,6 +221,8 @@
   return {
     create,
     formatRpm,
-    formatDelta
+    fallbackShiftRpm,
+    gearRowView,
+    currentGearView
   }
 }))

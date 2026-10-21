@@ -28,6 +28,12 @@ export interface ShiftLightGearState {
   acceptedShiftCount: number
   lastRpmBefore: number | null
   lastDeltaPct: number | null
+  /** Model point in use for this pair; null when there is none or real comparisons reject it. */
+  modelRpm: number | null
+  /** The pair's effective target: model point, optimal target, potential candidate, then the ceiling fallbacks. */
+  shiftAtRpm: number | null
+  /** True when the pair has a model point in use or a confirmed optimal target. */
+  ready: boolean
 }
 export interface ShiftLightGearDiagnostics extends OptimalShiftDiagnostics {}
 export interface ShiftLightSnapshot {
@@ -157,6 +163,7 @@ export class ShiftLightLearner {
     if (forward) this.maxObservedGear = Math.max(this.maxObservedGear, telemetry.gear)
     this.estimator.ingest(telemetry)
     this.captureShift(previous, telemetry, forward)
+    this.estimator.refreshModel(telemetry.timestampMs)
     this.updateRpmRate(previous, telemetry)
     this.previous = telemetry
     return this.snapshot(telemetry)
@@ -169,13 +176,16 @@ export class ShiftLightLearner {
     const usableCeiling = this.estimator.getUsableCeiling()
     const provisionalCeiling = usableCeiling === null ? this.estimator.getProvisionalCeiling(rpmMax > 0 ? rpmMax : null) : null
     const fallbackShiftRpm = usableCeiling ?? provisionalCeiling ?? (rpmMax > 0 ? roundRpm(rpmMax) : null)
-    const effectiveTargetRpm = current?.targetRpm ?? current?.candidateRpm ?? fallbackShiftRpm
+    const modelRpm = currentGear === null ? null : this.estimator.getModelRpm(currentGear)
+    const effectiveTargetRpm = modelRpm ?? current?.targetRpm ?? current?.candidateRpm ?? fallbackShiftRpm
     const leadRpm = this.getLeadRpm(), lightOnRpm = effectiveTargetRpm === null ? null : Math.max(0, roundRpm(effectiveTargetRpm - leadRpm))
     let phase = fallbackPhase(telemetry?.rpm ?? 0, rpmMax)
     if (lightOnRpm !== null && telemetry) phase = telemetry.rpm >= lightOnRpm ? 'shift' : phase
     const highestKnownGear = Math.max(this.maxObservedGear, this.estimator.getHighestKnownGear())
     const lastKnownGear = currentGear !== null && currentGear >= highestKnownGear
-    const status: ShiftLightStatus = current?.status === 'optimal' || current?.status === 'potential' ? 'calibrated' : current ? 'learning' : 'fallback'
+    // A model point in use counts as a learned target, so the HUD lets red wait for it.
+    const learned = modelRpm !== null || current?.status === 'optimal' || current?.status === 'potential'
+    const status: ShiftLightStatus = learned ? 'calibrated' : current ? 'learning' : 'fallback'
     const lastEvidence = current?.evidence[current.evidence.length - 1] ?? null
     return { status, phase, shiftRpm: effectiveTargetRpm, effectiveTargetRpm, lightOnRpm, leadRpm,
       acceptedShiftCount: current?.evidence.length ?? 0, lastRpmBefore: lastEvidence?.beforeRpm ?? null, lastDeltaPct: lastEvidence?.powerDeltaPct ?? null,
@@ -185,8 +195,8 @@ export class ShiftLightLearner {
       ceilingSampleCount: this.estimator.getCeilingSampleCount(), ceilingClusterCount: this.estimator.getCeilingClusterCount(), provisionalCeiling, fallbackShiftRpm,
       carClass: identity?.carClass ?? null, drivetrain: identity?.drivetrain ?? null, cylinders: identity?.cylinders ?? null,
       gearCount: null, observedGearCount: this.maxObservedGear, gearboxChanged: false, gearboxValidation: null, gearboxSignature: null,
-      currentGear, lastKnownGear, method: current?.status === 'optimal' || current?.status === 'potential' ? 'optimal' : null,
-      gears: this.getGearStates(), diagnostics: this.getGearDiagnostics() }
+      currentGear, lastKnownGear, method: learned ? 'optimal' : null,
+      gears: this.getGearStates(fallbackShiftRpm ?? this.estimator.getReportedRedlineRpm()), diagnostics: this.getGearDiagnostics() }
   }
 
   clearConfiguration(): void { this.reset() }
@@ -223,6 +233,8 @@ export class ShiftLightLearner {
       // Before evidence comes only from the settled clean run in this gear that directly precedes the transition.
       if (this.cleanRunStartMs === null || this.cleanRunGear !== telemetry.gear) { this.cleanRunStartMs = telemetry.timestampMs; this.cleanRunGear = telemetry.gear; this.preShiftFrames = [] }
       const settled = telemetry.timestampMs - this.cleanRunStartMs >= PRE_SHIFT_SETTLE_MS
+      // The power model uses the same settled frames, so power ramping back after an interruption stays out of it.
+      if (settled) this.estimator.observeModelFrame(telemetry)
       if (settled && (!this.pendingUpshift || this.pendingUpshift.sourceGear !== telemetry.gear)) this.preShiftFrames = [...this.preShiftFrames.filter(item => telemetry.timestampMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS), telemetry].slice(-MAX_PRE_SHIFT_FRAMES)
       return
     }
@@ -257,7 +269,14 @@ export class ShiftLightLearner {
     return { ...pivot, timestampMs: median(frames.map(item => item.timestampMs)), rpm: median(frames.map(item => item.rpm)), power: median(frames.map(item => item.power)) }
   }
   private getLeadRpm(): number { const raw = (this.rpmRate ?? 0) * REACTION_TIME_S; return Math.round(Math.max(MIN_LEAD_RPM, Math.min(MAX_LEAD_RPM, Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_LEAD_RPM))) }
-  private getGearStates(): ShiftLightGearState[] { return this.estimator.getStates().map(state => { const last = state.evidence[state.evidence.length - 1] ?? null; return { gear: state.sourceGear, status: state.status, shiftRpm: state.targetRpm ?? state.candidateRpm, sampleCount: state.evidence.length, method: state.status === 'learning' ? null : 'optimal', ratioDrop: null, candidateRpm: state.candidateRpm, confirmationCount: state.confirmationCount, confirmationRpms: [...state.confirmationRpms], lastReason: state.lastReason, acceptedShiftCount: state.evidence.length, lastRpmBefore: last?.beforeRpm ?? null, lastDeltaPct: last?.powerDeltaPct ?? null } }) }
+  private getGearStates(fallbackShiftRpm: number | null): ShiftLightGearState[] {
+    return this.estimator.getStates().map(state => {
+      const last = state.evidence[state.evidence.length - 1] ?? null
+      const modelRpm = this.estimator.getModelRpm(state.sourceGear)
+      return { gear: state.sourceGear, status: state.status, shiftRpm: state.targetRpm ?? state.candidateRpm, sampleCount: state.evidence.length, method: state.status === 'learning' ? null : 'optimal', ratioDrop: null, candidateRpm: state.candidateRpm, confirmationCount: state.confirmationCount, confirmationRpms: [...state.confirmationRpms], lastReason: state.lastReason, acceptedShiftCount: state.evidence.length, lastRpmBefore: last?.beforeRpm ?? null, lastDeltaPct: last?.powerDeltaPct ?? null,
+        modelRpm, shiftAtRpm: modelRpm ?? state.targetRpm ?? state.candidateRpm ?? fallbackShiftRpm, ready: modelRpm !== null || state.status === 'optimal' }
+    })
+  }
   private getGearDiagnostics(): ShiftLightGearDiagnostics[] { return this.estimator.getStates().map(state => this.estimator.diagnose(state.sourceGear)) }
   private updateRpmRate(previous: Telemetry | null, telemetry: Telemetry): void {
     if (!previous || !isCleanShiftEvidence(previous) || !isCleanShiftEvidence(telemetry) || previous.gear !== telemetry.gear) { this.rpmRate = null; return }

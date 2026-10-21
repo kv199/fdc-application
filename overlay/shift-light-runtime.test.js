@@ -12,11 +12,11 @@ function frame(overrides = {}) {
 }
 const flush = () => new Promise(resolve => setImmediate(resolve))
 
-function createRuntime({ stored = null, failSave = false, events = [] } = {}) {
+function createRuntime({ stored = null, failSave = false, events = [], shiftLight = engine } = {}) {
   const calls = []
   const path = require.resolve('./shift-light-runtime.js')
   delete require.cache[path]
-  global.HudShiftLight = engine
+  global.HudShiftLight = shiftLight
   global.HudTauriEvents = { getEventApi: () => ({
     emit: (name, payload) => {
       events.push({ name, payload })
@@ -171,4 +171,99 @@ test('passes cue timing, ceiling and last known gear through to the overlay', ()
   assert.equal(back.lastKnownGear, false)
   const published = events.filter(event => event.name === 'hud_shift_light').at(-1).payload
   assert.equal(published.lastKnownGear, false)
+})
+
+// A minimal learner that exposes the model point of each pair, independent of the real bundle.
+function fakeShiftLight() {
+  const learners = []
+  class ShiftLightLearner {
+    constructor(key) {
+      this.key = key
+      this.modelRpm = null
+      this.merged = null
+      learners.push(this)
+    }
+
+    snapshot() {
+      return { carKey: this.key, observedGearCount: 1, gears: [] }
+    }
+
+    update() {
+      return this.snapshot()
+    }
+
+    serializeLearningState() {
+      return {
+        reportedRedlineRpm: 11000,
+        usableCeiling: null,
+        ceilingSamples: [],
+        gearTargets: [{
+          sourceGear: 1, destinationGear: 2, status: 'learning',
+          candidateRpm: null, optimalRpm: null, confirmationCount: 0, modelRpm: this.modelRpm
+        }],
+        shiftSamples: []
+      }
+    }
+
+    mergeCalibration(calibration) {
+      this.merged = calibration
+    }
+
+    resetTransient() {}
+    reset() {}
+  }
+  return { learners, shiftLight: { getShiftLightCarKey: engine.getShiftLightCarKey, ShiftLightLearner } }
+}
+
+test('saves a new model point of a gear pair as part of the compact calibration', async () => {
+  const { learners, shiftLight } = fakeShiftLight()
+  const { calls, runtime } = createRuntime({ shiftLight })
+  runtime.update(frame({ timestampMs: 0 }))
+  await flush(); await flush(); await flush(); await flush(); await flush()
+  const saves = () => calls.filter(call => call.command === 'save_shift_light_calibration')
+  assert.equal(saves().at(-1).args.request.gearTargets[0].modelRpm, null)
+  const savedBefore = saves().length
+
+  runtime.update(frame({ timestampMs: 16 }))
+  await flush(); await flush()
+  assert.equal(saves().length, savedBefore, 'an unchanged state is not saved again')
+
+  learners[0].modelRpm = 7499.6
+  runtime.update(frame({ timestampMs: 32 }))
+  await flush(); await flush(); await flush()
+  assert.equal(saves().length, savedBefore + 1)
+  assert.deepEqual(saves().at(-1).args.request.gearTargets[0], {
+    sourceGear: 1,
+    destinationGear: 2,
+    status: 'learning',
+    candidateRpm: null,
+    optimalRpm: null,
+    confirmationCount: 0,
+    modelRpm: 7500,
+    acceptedShiftCount: 0,
+    lastDeltaPct: null,
+    lastAcceptedAt: null
+  })
+})
+
+test('hands a stored model point to the learner and drops a malformed one', async () => {
+  const { learners, shiftLight } = fakeShiftLight()
+  const stored = {
+    modelVersion: 4,
+    reportedRedlineRpm: 11000,
+    usableCeiling: null,
+    ceilingSamples: [],
+    gearTargets: [
+      { sourceGear: 1, destinationGear: 2, status: 'optimal', candidateRpm: 7400, optimalRpm: 7450, confirmationCount: 3, modelRpm: 7500 },
+      { sourceGear: 2, destinationGear: 3, status: 'learning', candidateRpm: null, optimalRpm: null, confirmationCount: 0, modelRpm: null },
+      { sourceGear: 3, destinationGear: 4, status: 'learning', candidateRpm: null, optimalRpm: null, confirmationCount: 0, modelRpm: -1 }
+    ],
+    shiftSamples: []
+  }
+  const { runtime } = createRuntime({ stored, shiftLight })
+  runtime.update(frame({ timestampMs: 0 }))
+  await flush(); await flush(); await flush(); await flush(); await flush()
+  const targets = learners[0].merged.gearTargets
+  assert.deepEqual(targets.map(target => target.modelRpm), [7500, null, null])
+  assert.equal(targets[0].targetRpm, 7450)
 })

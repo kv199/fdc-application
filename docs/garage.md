@@ -116,9 +116,9 @@ with the same ordinal and PI therefore display the same aggregate Shift Light
 summary even when their class, drivetrain, or cylinder count differs. The
 snapshot reports:
 
-- `READY` when at least one `OPTIMAL` per-pair target exists;
-- `LEARNING` when a Shift Light configuration exists without an `OPTIMAL`
-  target;
+- `READY` when at least one per-pair target is ready: it has a model shift
+  point, or it is `OPTIMAL`;
+- `LEARNING` when a Shift Light configuration exists without a ready target;
 - `NOT CALIBRATED` when no Shift Light configuration exists.
 
 Shift Light remains visible only in the Shift Light tab, which provides the

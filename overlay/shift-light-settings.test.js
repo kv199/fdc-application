@@ -58,6 +58,9 @@ test('normalizes compact per-pair calibration without legacy bin or reason field
       destinationGear: 6,
       status: 'potential',
       shiftRpm: 9550,
+      modelRpm: null,
+      shiftAtRpm: 9550,
+      ready: false,
       sampleCount: 6,
       candidateRpm: 9550,
       confirmationCount: 2,
@@ -108,15 +111,34 @@ test('turns an unavailable or malformed state into a safe empty state', () => {
   })
 })
 
-test('marks only learned shift points within 100 RPM of the usable ceiling as at the limiter', () => {
-  const { isShiftAtLimiter } = require('./shift-light-settings.js')
-  assert.equal(isShiftAtLimiter('optimal', 10950, 11000), true)
-  assert.equal(isShiftAtLimiter('potential', 10900, 11000), true)
-  assert.equal(isShiftAtLimiter('optimal', 10899, 11000), false)
-  assert.equal(isShiftAtLimiter('optimal', 9550, 11000), false)
-  assert.equal(isShiftAtLimiter('learning', 11000, 11000), false)
-  assert.equal(isShiftAtLimiter('optimal', 10950, null), false)
-  assert.equal(isShiftAtLimiter('optimal', null, 11000), false)
+test('keeps the model point, effective shift point and readiness of each pair', () => {
+  const { gears } = normalizeShiftLightState({
+    gears: [
+      { sourceGear: 1, destinationGear: 2, status: 'learning', shiftRpm: null, modelRpm: 7499.6, shiftAtRpm: 7499.6, ready: true },
+      { sourceGear: 2, destinationGear: 3, status: 'potential', shiftRpm: 8800, modelRpm: null, shiftAtRpm: 8800, ready: false },
+      { sourceGear: 3, destinationGear: 4, status: 'learning', shiftRpm: null, modelRpm: -5, shiftAtRpm: null, ready: false }
+    ]
+  })
+  assert.deepEqual(gears.map(({ gear, modelRpm, shiftAtRpm, ready }) => ({ gear, modelRpm, shiftAtRpm, ready })), [
+    { gear: 1, modelRpm: 7500, shiftAtRpm: 7500, ready: true },
+    { gear: 2, modelRpm: null, shiftAtRpm: 8800, ready: false },
+    { gear: 3, modelRpm: null, shiftAtRpm: null, ready: false }
+  ])
+})
+
+test('derives the shift point and readiness of a snapshot from a learner without model points', () => {
+  const { gears } = normalizeShiftLightState({
+    gears: [
+      { sourceGear: 1, destinationGear: 2, status: 'learning', shiftRpm: 9000 },
+      { sourceGear: 2, destinationGear: 3, status: 'potential', shiftRpm: 8800, confirmationCount: 1 },
+      { sourceGear: 3, destinationGear: 4, status: 'optimal', shiftRpm: 8700, confirmationCount: 3 }
+    ]
+  })
+  assert.deepEqual(gears.map(({ gear, modelRpm, shiftAtRpm, ready }) => ({ gear, modelRpm, shiftAtRpm, ready })), [
+    { gear: 1, modelRpm: null, shiftAtRpm: null, ready: false },
+    { gear: 2, modelRpm: null, shiftAtRpm: 8800, ready: false },
+    { gear: 3, modelRpm: null, shiftAtRpm: 8700, ready: true }
+  ])
 })
 
 test('caps the displayed ceiling cluster at three and keeps up to twelve stored samples', () => {
@@ -130,9 +152,7 @@ test('caps the displayed ceiling cluster at three and keeps up to twelve stored 
   assert.equal(normalizeShiftLightState({}).ceilingClusterCount, 0)
 })
 
-test('renders the SHIFT AT LIMITER hint with its explanatory title in the gear table', () => {
+test('the gear table shows no limiter hint, counts or power comparisons', () => {
   const settingsJs = readConfigurationScripts()
-  assert.match(settingsJs, /isShiftAtLimiter\(diagnosticStatus, gearTargetRpm, state\.usableCeiling\)/)
-  assert.match(settingsJs, /limiterHint\.textContent = 'SHIFT AT LIMITER'/)
-  assert.match(settingsJs, /limiterHint\.title = 'The best shift point for this gear is at the rev limiter\.'/)
+  assert.doesNotMatch(settingsJs, /isShiftAtLimiter|SHIFT AT LIMITER|ACCEPTED`|POWER DELTA|LAST Δ/)
 })

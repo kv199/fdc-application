@@ -51,6 +51,32 @@ pub(crate) struct ShiftLightGearTarget {
     pub(crate) candidate_rpm: Option<i32>,
     pub(crate) optimal_rpm: Option<i32>,
     pub(crate) confirmation_count: i32,
+    /// Model-computed shift point of the pair, independent of its status.
+    #[serde(default, deserialize_with = "deserialize_model_rpm")]
+    pub(crate) model_rpm: Option<i32>,
+}
+
+/// A model point is optional, so a malformed value becomes NULL instead of
+/// rejecting the whole calibration request.
+fn deserialize_model_rpm<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(positive_rpm(&value))
+}
+
+fn positive_rpm(value: &serde_json::Value) -> Option<i32> {
+    let rpm = if let Some(integer) = value.as_i64() {
+        integer
+    } else {
+        let float = value.as_f64()?;
+        if !float.is_finite() || float.fract() != 0.0 {
+            return None;
+        }
+        float as i64
+    };
+    i32::try_from(rpm).ok().filter(|rpm| *rpm > 0)
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -315,7 +341,7 @@ pub(crate) fn load_shift_light_calibration_from_connection(
     let mut target_statement = connection
         .prepare(
             "SELECT source_gear, destination_gear, status, candidate_rpm,
-                    optimal_rpm, confirmation_count
+                    optimal_rpm, confirmation_count, model_rpm
                FROM shift_light_gear_targets
               WHERE config_id = ?1 ORDER BY source_gear, destination_gear",
         )
@@ -329,6 +355,7 @@ pub(crate) fn load_shift_light_calibration_from_connection(
                 candidate_rpm: row.get(3)?,
                 optimal_rpm: row.get(4)?,
                 confirmation_count: row.get(5)?,
+                model_rpm: row.get(6)?,
             })
         })
         .map_err(|error| format!("unable to load Shift Light targets: {error}"))?
@@ -436,8 +463,8 @@ pub(crate) fn save_shift_light_calibration_in_connection(
         .prepare_cached(
             "INSERT INTO shift_light_gear_targets
                (config_id, source_gear, destination_gear, status, candidate_rpm,
-                optimal_rpm, confirmation_count)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                optimal_rpm, confirmation_count, model_rpm)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         )
         .map_err(|error| format!("unable to save Shift Light target: {error}"))?;
     for target in request
@@ -479,7 +506,8 @@ pub(crate) fn save_shift_light_calibration_in_connection(
                 target.status,
                 target.candidate_rpm.filter(|value| *value > 0),
                 target.optimal_rpm.filter(|value| *value > 0),
-                target.confirmation_count.clamp(0, 3)
+                target.confirmation_count.clamp(0, 3),
+                target.model_rpm.filter(|value| *value > 0)
             ])
             .map_err(|error| format!("unable to save Shift Light target: {error}"))?;
     }
@@ -649,5 +677,94 @@ mod tests {
         );
         assert_eq!(loaded.ceiling_samples.first(), Some(&9003));
         assert_eq!(loaded.ceiling_samples.last(), Some(&9014));
+    }
+
+    fn saved_model_points(request: serde_json::Value) -> (Vec<(i32, Option<i32>)>, String) {
+        let mut connection = Connection::open_in_memory().unwrap();
+        initialize_shift_light_schema(&mut connection).unwrap();
+        let key = "fh6:3766:1:800:1:10:10300";
+        let config = resolve_shift_light_config_in_connection(&mut connection, key, 4).unwrap();
+        let mut request = request;
+        request["key"] = serde_json::json!(key);
+        request["configId"] = serde_json::json!(config.variant_id);
+        let request: ShiftLightCalibrationRequest = serde_json::from_value(request).unwrap();
+        save_shift_light_calibration_in_connection(&mut connection, &request).unwrap();
+        let loaded =
+            load_shift_light_calibration_from_connection(&connection, key, config.variant_id)
+                .unwrap();
+        let points = loaded
+            .gear_targets
+            .iter()
+            .map(|target| (target.source_gear, target.model_rpm))
+            .collect();
+        (points, serde_json::to_string(&loaded).unwrap())
+    }
+
+    #[test]
+    fn round_trips_the_model_point_of_each_gear_pair() {
+        let (points, json) = saved_model_points(serde_json::json!({
+            "reportedRedlineRpm": 10300,
+            "usableCeiling": 10250,
+            "gearTargets": [
+                { "sourceGear": 1, "destinationGear": 2, "status": "learning",
+                  "candidateRpm": null, "optimalRpm": null, "confirmationCount": 0,
+                  "modelRpm": 7500 },
+                { "sourceGear": 2, "destinationGear": 3, "status": "optimal",
+                  "candidateRpm": 9000, "optimalRpm": 9050, "confirmationCount": 3,
+                  "modelRpm": 9001 },
+                { "sourceGear": 3, "destinationGear": 4, "status": "potential",
+                  "candidateRpm": 9100, "optimalRpm": null, "confirmationCount": 1,
+                  "modelRpm": null }
+            ]
+        }));
+        assert_eq!(points, vec![(1, Some(7500)), (2, Some(9001)), (3, None)]);
+        assert!(json.contains("\"modelRpm\":7500"));
+        assert!(json.contains("\"modelRpm\":null"));
+    }
+
+    #[test]
+    fn saves_targets_without_a_model_point_and_drops_malformed_ones_to_null() {
+        let (points, json) = saved_model_points(serde_json::json!({
+            "reportedRedlineRpm": 10300,
+            "usableCeiling": null,
+            "gearTargets": [
+                { "sourceGear": 1, "destinationGear": 2, "status": "learning",
+                  "candidateRpm": null, "optimalRpm": null, "confirmationCount": 0 },
+                { "sourceGear": 2, "destinationGear": 3, "status": "learning",
+                  "candidateRpm": null, "optimalRpm": null, "confirmationCount": 0,
+                  "modelRpm": 0 },
+                { "sourceGear": 3, "destinationGear": 4, "status": "learning",
+                  "candidateRpm": null, "optimalRpm": null, "confirmationCount": 0,
+                  "modelRpm": -7000 },
+                { "sourceGear": 4, "destinationGear": 5, "status": "learning",
+                  "candidateRpm": null, "optimalRpm": null, "confirmationCount": 0,
+                  "modelRpm": "7500" },
+                { "sourceGear": 5, "destinationGear": 6, "status": "learning",
+                  "candidateRpm": null, "optimalRpm": null, "confirmationCount": 0,
+                  "modelRpm": 7500.5 },
+                { "sourceGear": 6, "destinationGear": 7, "status": "learning",
+                  "candidateRpm": null, "optimalRpm": null, "confirmationCount": 0,
+                  "modelRpm": 99999999999u64 },
+                { "sourceGear": 7, "destinationGear": 8, "status": "learning",
+                  "candidateRpm": null, "optimalRpm": null, "confirmationCount": 0,
+                  "modelRpm": 8200.0 },
+                { "sourceGear": 8, "destinationGear": 10, "status": "learning",
+                  "candidateRpm": null, "optimalRpm": null, "confirmationCount": 0,
+                  "modelRpm": 8000 }
+            ]
+        }));
+        assert_eq!(
+            points,
+            vec![
+                (1, None),
+                (2, None),
+                (3, None),
+                (4, None),
+                (5, None),
+                (6, None),
+                (7, Some(8200))
+            ]
+        );
+        assert!(!json.contains("\"modelRpm\":8000"));
     }
 }

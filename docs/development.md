@@ -163,14 +163,16 @@ Every key is optional:
   "minLearnedShiftRpm": 9400,
   "pairs": { "4->5": "learning" },
   "minAcceptedShifts": 5,
-  "referenceRpm": { "2->3": [7200, 7700] } }
+  "referenceRpm": { "2->3": [7200, 7700] },
+  "shiftAtRpm": { "2->3": [7200, 7700] } }
 ```
 
 `usableCeilingRpm` bounds the learned ceiling, `minLearnedShiftRpm` is the
 lowest RPM any `POTENTIAL` or `OPTIMAL` pair may have, `pairs` sets exact
 pair states, `minAcceptedShifts` is the fewest compared upshifts, and
 `referenceRpm` requires a reference `crossover` within the range for each
-listed pair. `tools/shift-lab-fixtures.test.mjs` replays every fixture that has
+listed pair, and `shiftAtRpm` bounds the shift point the replayed Shift Light
+ends with for each listed pair. `tools/shift-lab-fixtures.test.mjs` replays every fixture that has
 an expectation file through the current bundle as part of the Node suite and
 lists every failed expectation.
 

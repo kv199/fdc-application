@@ -3583,22 +3583,8 @@ h1 {
   color: var(--text-muted);
 }
 
-.shift-light-gear-table tr[data-state='potential'] td:last-child {
-  color: var(--warning);
-}
-
-.shift-light-gear-table tr[data-state='optimal'] td:last-child {
+.shift-light-gear-table tr[data-state='ready'] td:last-child {
   color: var(--best);
-}
-
-.calibration-cell__sub {
-  display: block;
-  margin-top: 3px;
-  color: var(--text-subtle);
-  font-size: var(--type-label);
-  font-weight: 400;
-  letter-spacing: 0;
-  white-space: normal;
 }
 
 /* The reset is an ordinary button below the plate, sized to its label. */

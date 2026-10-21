@@ -70,8 +70,8 @@ test('Shift Light: the car class and PI come from the car key, and RPM labels fo
   assert.match(settingsJs, /appendGaragePerformance\(shiftLightCarPi, \{ classLabel, pi \}\)/)
   assert.match(settingsJs, /\? `\$\{formatRpm\(state\.usableCeiling\)\} · \$\{state\.ceilingClusterCount\}\/3`/)
   assert.match(settingsJs, /: state\.ceilingSampleCount > 0 \? `LEARNING · \$\{state\.ceilingClusterCount\}\/3`/)
-  assert.match(settingsJs, /· \$\{formatRpm\(activeTarget\)\}`/)
-  assert.match(settingsJs, /LEARNING · \$\{formatRpm\(fallbackTarget\)\}`/)
+  assert.match(settingsJs, /`\$\{readiness\} · \$\{formatRpm\(target\)\}`/)
+  assert.match(settingsJs, /gear\?\.ready === true \? 'READY' : 'LEARNING'/)
 })
 
 test('Driver Analysis: single-car recordings show the recording summary, Escape leaves drill-downs, and actions keep their order', () => {

@@ -2,9 +2,11 @@
 
 ## Purpose
 
-Shift Light learns a practical full-throttle upshift point independently for
-each real next-gear pair (`1 → 2`, `2 → 3`, and so on). It deliberately does
-not attempt to reconstruct a complete engine or gearbox model.
+Shift Light finds a practical full-throttle upshift point independently for
+each real next-gear pair (`1 → 2`, `2 → 3`, and so on). It works the point out
+from the engine's power curve and the gear ratios seen in telemetry, checks it
+against real shifts, and otherwise learns it from the shifts themselves. See
+[Model shift points](#model-shift-points).
 
 The red game redline and the purple FDC cue are separate displays. The purple
 cue is timed before the desired shift RPM so the driver reaches the target
@@ -162,6 +164,53 @@ later non-negative observation outside `±100 RPM` of the current candidate
 starts a new potential sequence. A confirmed target is stable until the active
 configuration is reset.
 
+These states learn a point only at an RPM where the driver actually shifted,
+so they never find a point below it. A model shift point, when one is in use,
+outranks them.
+
+## Model shift points
+
+While driving, the learner keeps a power curve and gear ratios for the active
+configuration in memory. They start empty in every run and are cleared by a
+reset.
+
+- **Power curve.** Every clean full-throttle frame that is at least `150 ms`
+  into an uninterrupted clean run in its gear (the same settle rule as
+  comparable shift capture) adds its engine power to a `100 RPM` bin. A bin
+  keeps its latest 32 values, needs at least 3, and its value is the 90th
+  percentile. Frames with wheelspin count, because engine power does not
+  depend on it.
+- **Gear ratios.** The same frames above `20 km/h` with every wheel's slip
+  ratio below `0.15` add `rpm / speed` to their gear. A gear keeps its latest
+  64 values, needs at least 10, and its ratio is the median.
+
+For a pair `G → G+1` with both ratios and a known ceiling (the usable ceiling,
+else the provisional ceiling), the step is `ratio(G+1) / ratio(G)`. From the
+power-peak bin up to the ceiling, every `50 RPM` where the power at that RPM
+and at that RPM times the step are both known is compared, with linear
+interpolation between bin centres; unknown points are skipped. The model point
+is the first RPM where the next gear has at least as much power, but only
+after a known point where the current gear was still stronger, because
+otherwise the crossover may lie in a gap. Without a crossover, the model point
+is the ceiling when the known points reach within `200 RPM` of it. The known
+points must be at least half of the points scanned up to the result; otherwise
+there is no model point. The model is recomputed when its data or the ceiling
+changes, at most every `250 ms` of telemetry time.
+
+Real comparable shifts check the point. A shift more than `150 RPM` above it
+agrees when the next gear had at least as much power and contradicts it
+otherwise; a shift more than `150 RPM` below it agrees when the next gear had
+less power and contradicts it otherwise; shifts within `150 RPM` are neutral.
+With at least two contradictions that outnumber the agreements, the point is
+rejected for that pair, and the pair uses the learning states above. A turbo
+lag after a shift, which the steady power curve cannot show, appears this way.
+The game's `boost` value is not used: it stays almost constant while driving.
+
+The point in use is saved with the pair's target. After a restart the saved
+point is used, and checked against the saved comparisons, until the new run's
+model places a point for the pair, which then replaces it. A rejected point is
+not saved.
+
 ## Cue timing
 
 The desired shift RPM and cue-on RPM are different values:
@@ -175,9 +224,11 @@ The lead is clamped to `100–1000 RPM`; when a reliable acceleration rate is no
 available it defaults to `200 RPM`. FH6 sends two different packets for each
 game timestamp, so a frame with the same timestamp as the previous one keeps
 the current rate instead of resetting it; otherwise the lead would jump to
-the default on every second frame. The effective target priority is confirmed
-target, potential candidate, usable ceiling, provisional ceiling, then reported
-redline. The visual
+the default on every second frame. The effective target priority is model
+shift point, confirmed target, potential candidate, usable ceiling,
+provisional ceiling, then reported redline. The snapshot status is
+`calibrated` when the current gear's pair has a model point in use or is
+`POTENTIAL` or `OPTIMAL`. The visual
 presentation latches the purple shift phase for at least `250 ms` so a brief
 telemetry change cannot erase the cue immediately.
 
@@ -204,7 +255,9 @@ the Configuration window does not render it and it only changes with
 
 ## Persistence
 
-Schema version 15 contains exactly four Shift Light tables:
+The schema contains exactly four Shift Light tables. They were rebuilt in
+schema version 15; version 24 added the nullable `model_rpm` to
+`shift_light_gear_targets`, with existing rows keeping `NULL`.
 
 ```text
 shift_light_configs
@@ -231,6 +284,7 @@ shift_light_gear_targets
   candidate_rpm
   optimal_rpm
   confirmation_count                      0–3
+  model_rpm                               nullable positive model point in use
   updated_at
 
 shift_light_shift_samples
@@ -282,7 +336,8 @@ The browser runtime uses four native commands:
   supplied key and returns the compact model-version-4 state;
 - `save_shift_light_calibration` transactionally replaces ceiling samples,
   targets and shift samples for that configuration; malformed child records
-  are skipped instead of invalidating the remaining compact state;
+  are skipped instead of invalidating the remaining compact state, and a
+  target's malformed `modelRpm` is saved as `NULL`;
 - `clear_shift_light_config` performs the scoped reset described above.
 
 The runtime coalesces identical snapshots, serializes writes, retries failed
@@ -300,7 +355,11 @@ the bounded crossover journal.
   the active calibration after such a change.
 - `PowerDeltaPercent >= 0` is an intentionally simple crossover threshold. The
   three-confirmation rule supplies stability; there is no additional power
-  hysteresis or curve fitting.
+  hysteresis.
+- The model point needs a full-throttle pull across the RPM range and enough
+  frames without wheelspin in both gears of a pair; a gear that always spins
+  gets no ratio and its pairs keep the learning states. A turbo lag after a
+  shift is only caught through contradicting real shifts.
 - Learning is WOT-only. Partial-throttle shifts continue to receive the current
   cue but do not train the model.
 - Until three stable limiter observations exist, fallback accuracy depends on
@@ -311,7 +370,9 @@ the bounded crossover journal.
 
 The Shift Light tab in Configuration opens with a short intro. Once a car has a
 profile, a `CURRENT CAR PROFILE` card shows the car, its class, the reported
-RPM limit, learned ceiling progress, effective target and state. Reported and
+RPM limit, learned ceiling progress, current target and state. CURRENT TARGET
+reads `READY · 7,500 RPM` or `LEARNING · 9,001 RPM` for the current gear's
+pair, and STATE reads `READY · GEAR 2` or `LEARNING · GEAR 2`. Reported and
 learned RPM values use thousands separators, for example `9,360 RPM`, matching
 the in-game HUD. The LEARNED CEILING row shows `9,195 RPM · 3/3` once a ceiling
 exists, where the trailing count is the size of the accepted group, capped at
@@ -320,13 +381,13 @@ observation is at or above 85% of the redline. The tilde value is the
 provisional ceiling, and the count is the size of the group at the highest
 considered observation, capped at three. When every observation is below 85% of
 the redline it shows `LEARNING · 0/3`, and `NOT OBSERVED` when there are none.
-Below the metadata, a table lists each observed gear with its shift point,
-accepted sample count, last power comparison and state. Each cell
-keeps its second line of detail. When a potential or optimal gear's shift point
-is within `100 RPM` of the usable ceiling, its cell also shows `SHIFT AT LIMITER`
-with the title `The best shift point for this gear is at the rev limiter.`
-Learning gears never show this hint, because their displayed target is only the
-fallback ceiling rather than a learned shift point. The `RESET CURRENT CALIBRATION` button sits
+Below the metadata, a table has three columns for each observed pair: GEAR
+(`1 → 2`), SHIFT AT (the pair's effective target, or the fallback ceiling when
+it has none) and STATUS. STATUS is `READY` when the pair has a model point in
+use or is `OPTIMAL`, and `LEARNING` otherwise. Model details, confirmations and
+power comparisons are not shown there; they are in the snapshot diagnostics
+and the Shift Lab report. The help panel explains `LEARNING` and `READY`. The
+`RESET CURRENT CALIBRATION` button sits
 directly below the card and stays hidden until a car profile exists. The
 tab does not diagnose the driver's shift as "bad" or "too early" when the
 capture was unusable or the next gear was weaker.
@@ -376,7 +437,9 @@ file uses the default rollback journal, so it is complete after every commit.
 the same payload the HUD receives, feeds every car's sessions in order into one
 fresh Shift Light learner from the checked-in bundle, and reports per car:
 
-- the learned ceiling, and every gear pair's state and shift point;
+- the learned ceiling, and every gear pair's state and shift point, including
+  the model shift point with READY or LEARNING, and whether real shifts
+  rejected it;
 - each purple cue, each real upshift, whether the learner accepted it, the
   tool's own guess at why not (`partial-throttle`, `clutch`, `brake`,
   `no-power`, `capture-incomplete`), and the time from the cue to the shift;

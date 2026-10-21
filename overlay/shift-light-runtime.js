@@ -152,6 +152,8 @@
       confirmationCount: Number.isFinite(value.confirmationCount)
         ? Math.max(0, Math.round(value.confirmationCount))
         : 0,
+      // The model point is part of the compact state, so a new one changes the fingerprint and is saved.
+      modelRpm: finiteRpm(value.modelRpm),
       acceptedShiftCount: Number.isFinite(value.acceptedShiftCount)
         ? Math.max(0, Math.round(value.acceptedShiftCount))
         : Number.isFinite(value.sampleCount) ? Math.max(0, Math.round(value.sampleCount)) : 0,
@@ -203,7 +205,8 @@
         ? value.gearTargets.map(target => ({
           ...target,
           status: target.status,
-          targetRpm: target.targetRpm ?? target.optimalRpm
+          targetRpm: target.targetRpm ?? target.optimalRpm,
+          modelRpm: finiteRpm(target.modelRpm)
         })) : [],
       shiftSamples: Array.isArray(value.shiftSamples)
         ? value.shiftSamples.map(sample => ({

@@ -89,8 +89,8 @@ both:
   87–97% of it. Red therefore shows on the first pull too, usually shortly
   before the limiter. Red takes priority over purple. When purple can show,
   the gear's Shift Light target lies above 97% of the limiter, and either the
-  limiter has been hit or the target is a shift point Shift Light learned for
-  this gear (`POTENTIAL` or `OPTIMAL`), red starts only once RPM reaches that
+  limiter has been hit or the target is a shift point Shift Light found for
+  this gear (a model point, `POTENTIAL` or `OPTIMAL`), red starts only once RPM reaches that
   target (at most the limiter), so purple shows first. Without that rule, a
   learned point just below an estimated limiter would always be covered by
   red. An unlearned target before any limiter hit is the game's maximum RPM,

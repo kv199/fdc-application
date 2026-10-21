@@ -32,8 +32,37 @@
     return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0
   }
 
+  function positiveRpmOrNull(value) {
+    return Number.isFinite(value) && value > 0 ? Math.round(value) : null
+  }
+
   function gearStatus(value) {
     return ['learning', 'potential', 'optimal'].includes(value) ? value : 'learning'
+  }
+
+  // A learner without model points reports neither shiftAtRpm nor ready: its learned
+  // shift point is shiftRpm, and only an OPTIMAL pair is ready.
+  function normalizeGear(gear) {
+    const status = gearStatus(gear.status)
+    const shiftRpm = finiteOrNull(gear.shiftRpm ?? gear.optimalRpm ?? gear.targetRpm ?? gear.candidateRpm)
+    return {
+      gear: Number.isInteger(gear.sourceGear) ? gear.sourceGear : gear.gear,
+      destinationGear: Number.isInteger(gear.destinationGear) ? gear.destinationGear : gear.gear + 1,
+      status,
+      shiftRpm,
+      modelRpm: positiveRpmOrNull(gear.modelRpm),
+      shiftAtRpm: Object.hasOwn(gear, 'shiftAtRpm')
+        ? positiveRpmOrNull(gear.shiftAtRpm)
+        : status === 'learning' ? null : positiveRpmOrNull(shiftRpm),
+      ready: typeof gear.ready === 'boolean' ? gear.ready : status === 'optimal',
+      sampleCount: nonNegativeInteger(gear.acceptedShiftCount ?? gear.sampleCount),
+      candidateRpm: finiteOrNull(gear.candidateRpm ?? gear.optimalRpm ?? gear.targetRpm),
+      confirmationCount: Math.min(3, nonNegativeInteger(gear.confirmationCount)),
+      acceptedShiftCount: nonNegativeInteger(gear.acceptedShiftCount ?? gear.sampleCount),
+      lastRpmBefore: finiteOrNull(gear.lastRpmBefore ?? gear.rpmBefore),
+      lastDeltaPct: Number.isFinite(gear.lastDeltaPct) ? gear.lastDeltaPct : null,
+      lastAcceptedAt: Number.isFinite(gear.lastAcceptedAt) ? Math.round(gear.lastAcceptedAt) : null
+    }
   }
 
   function normalizeAcceptedShift(value) {
@@ -60,19 +89,7 @@
           const sourceGear = Number.isInteger(gear?.sourceGear) ? gear.sourceGear : gear?.gear
           return Number.isInteger(sourceGear) && sourceGear >= 1 && sourceGear <= 10
         })
-        .map(gear => ({
-          gear: Number.isInteger(gear.sourceGear) ? gear.sourceGear : gear.gear,
-          destinationGear: Number.isInteger(gear.destinationGear) ? gear.destinationGear : gear.gear + 1,
-          status: gearStatus(gear.status),
-          shiftRpm: finiteOrNull(gear.shiftRpm ?? gear.optimalRpm ?? gear.targetRpm ?? gear.candidateRpm),
-          sampleCount: nonNegativeInteger(gear.acceptedShiftCount ?? gear.sampleCount),
-          candidateRpm: finiteOrNull(gear.candidateRpm ?? gear.optimalRpm ?? gear.targetRpm),
-          confirmationCount: Math.min(3, nonNegativeInteger(gear.confirmationCount)),
-          acceptedShiftCount: nonNegativeInteger(gear.acceptedShiftCount ?? gear.sampleCount),
-          lastRpmBefore: finiteOrNull(gear.lastRpmBefore ?? gear.rpmBefore),
-          lastDeltaPct: Number.isFinite(gear.lastDeltaPct) ? gear.lastDeltaPct : null,
-          lastAcceptedAt: Number.isFinite(gear.lastAcceptedAt) ? Math.round(gear.lastAcceptedAt) : null
-        }))
+        .map(normalizeGear)
         .sort((left, right) => left.gear - right.gear)
       : []
     const diagnostics = Array.isArray(state.diagnostics)
@@ -127,17 +144,7 @@
     }
   }
 
-  // A learned shift point within 100 RPM of the measured usable ceiling sits at the limiter.
-  // Learning gears are excluded: their shown target is only the fallback ceiling, not a learned best point.
-  const LIMITER_HINT_TOLERANCE_RPM = 100
-
-  function isShiftAtLimiter(status, targetRpm, usableCeiling) {
-    if (status !== 'potential' && status !== 'optimal') return false
-    if (!Number.isFinite(targetRpm) || !Number.isFinite(usableCeiling) || usableCeiling <= 0) return false
-    return Math.abs(targetRpm - usableCeiling) <= LIMITER_HINT_TOLERANCE_RPM
-  }
-
-  const api = { normalizeShiftLightState, isShiftAtLimiter }
+  const api = { normalizeShiftLightState }
   globalScope.ShiftLightSettings = api
   if (typeof module !== 'undefined') module.exports = api
 })(typeof globalThis === 'undefined' ? this : globalThis)

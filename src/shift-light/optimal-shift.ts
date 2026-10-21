@@ -1,4 +1,5 @@
 import type { Telemetry } from './telemetry'
+import { PowerModel, type ShiftModelKind, type ShiftModelPoint } from './power-model'
 
 /** Persisted facts are intentionally small and incompatible with the old curve learner. */
 export const SHIFT_LIGHT_LEARNING_VERSION = 4
@@ -31,6 +32,8 @@ export interface GearLearningState {
   confirmationCount: number
   lastReason: string | null
   evidence: ShiftEvidenceState[]
+  /** Last model shift point for the pair (live, or persisted until the live model places one). */
+  modelRpm: number | null
 }
 
 /** Compact JSON contract persisted by the native host. */
@@ -46,6 +49,24 @@ export interface ShiftLightLearningState {
 }
 
 export interface OptimalShiftEstimate { gear: number, shiftRpm: number, evidence: number }
+
+/** Model point of a pair and its check against the pair's real comparisons. */
+export interface ShiftModelDiagnostics {
+  /** Model point, also when rejected; null when there is none. */
+  rpm: number | null
+  /** How the live model placed the point; null when unknown or only persisted. */
+  kind: ShiftModelKind | null
+  coverage: number | null
+  ratioStep: number | null
+  agree: number
+  contradict: number
+  rejected: boolean
+}
+
+interface ShiftModelInfo extends ShiftModelDiagnostics {
+  /** Model point in use: the point unless rejected. */
+  inUse: number | null
+}
 
 /** Stable diagnostic shape for the settings UI; curve fields are now empty. */
 export interface OptimalShiftDiagnostics {
@@ -67,6 +88,7 @@ export interface OptimalShiftDiagnostics {
   confirmationCount: number
   lastReason: string | null
   evidenceCount: number
+  model: ShiftModelDiagnostics
 }
 
 export interface ShiftTransitionObservation {
@@ -98,6 +120,10 @@ const MIN_LIMITER_RISE_RPM = 100
 const MIN_LIMITER_DROP_RPM = 40
 const LIMITER_RECOVERY_TOLERANCE_RPM = 60
 const MAX_CLEAN_TIMESTAMP_GAP_MS = 1000
+const MODEL_REFRESH_MS = 250
+// A real comparison this far from the model point checks it; closer ones are neutral.
+const MODEL_CHECK_RPM = 150
+const MODEL_REJECT_CONTRADICTIONS = 2
 
 interface LimiterTracker { gear: number, startRpm: number, peakRpm: number, phase: 'rising' | 'falling' }
 
@@ -132,7 +158,7 @@ export function isCleanShiftEvidence(telemetry: Telemetry): boolean { return cle
 
 function emptyGear(sourceGear: number, destinationGear = sourceGear + 1): GearLearningState {
   return { sourceGear, destinationGear, status: 'learning', targetRpm: null, candidateRpm: null,
-    confirmationRpms: [], confirmationCount: 0, lastReason: null, evidence: [] }
+    confirmationRpms: [], confirmationCount: 0, lastReason: null, evidence: [], modelRpm: null }
 }
 function cloneEvidence(item: ShiftEvidenceState): ShiftEvidenceState { return { ...item } }
 function cloneGear(state: GearLearningState): GearLearningState {
@@ -186,6 +212,14 @@ export class OptimalShiftEstimator {
   private limiterRearmed = true
   /** Highest clean full-throttle RPM of this run; in memory only, cleared by reset(). */
   private peakWotRpm = 0
+  /** Power curve and gear ratios of this run; in memory only, cleared by reset(). */
+  private readonly powerModel = new PowerModel()
+  /** Latest live model result per source gear. */
+  private readonly liveModel = new Map<number, ShiftModelPoint>()
+  private modelDataChanged = false
+  private modelCeiling: number | null = null
+  private lastModelRefreshMs: number | null = null
+  private readonly modelInfoCache = new Map<number, ShiftModelInfo>()
 
   ingest(telemetry: Telemetry): void {
     if (Number.isFinite(telemetry.rpmMax) && telemetry.rpmMax > 0) this.reportedRedlineRpm = roundRpm(telemetry.rpmMax)
@@ -209,6 +243,7 @@ export class OptimalShiftEstimator {
     this.shiftSamples = [...this.shiftSamples, evidence].slice(-MAX_SHIFT_SAMPLES)
     const state = this.getOrCreate(sourceGear, destinationGear)
     state.evidence = [...state.evidence, evidence].slice(-MAX_SHIFT_SAMPLES)
+    this.modelInfoCache.delete(sourceGear)
     const baseline = this.usableCeiling ?? this.reportedRedlineRpm
     if (evidence.outcome === 'better' && baseline !== null && evidence.beforeRpm < baseline) this.applyBetterOutcome(state, evidence.beforeRpm)
     return cloneEvidence(evidence)
@@ -229,7 +264,9 @@ export class OptimalShiftEstimator {
   serializeLearningState(key: string): ShiftLightLearningState {
     return { modelVersion: SHIFT_LIGHT_LEARNING_VERSION, version: SHIFT_LIGHT_LEARNING_VERSION, key,
       reportedRedlineRpm: this.reportedRedlineRpm, ceilingSamples: [...this.ceilingSamples], usableCeiling: this.usableCeiling,
-      gearTargets: this.getStates(), shiftSamples: this.shiftSamples.map(cloneEvidence) }
+      // Only a model point in use is saved: a rejected one must not read as READY after a restart or in Garage.
+      gearTargets: this.getStates().map(state => ({ ...state, modelRpm: this.getModelRpm(state.sourceGear) })),
+      shiftSamples: this.shiftSamples.map(cloneEvidence) }
   }
 
   importLearningState(state: unknown, key: string): boolean {
@@ -263,6 +300,8 @@ export class OptimalShiftEstimator {
       target.confirmationCount = Math.min(MAX_CONFIRMATIONS, Math.max(persistedCount, target.confirmationRpms.length))
       target.lastReason = typeof item.lastReason === 'string' ? item.lastReason.slice(0, 160) : null
       target.evidence = samples.filter(sample => sample.sourceGear === target.sourceGear && sample.destinationGear === target.destinationGear)
+      const modelRpm = finiteInRange(item.modelRpm, 1, 100_000)
+      target.modelRpm = modelRpm === null ? null : roundRpm(modelRpm)
       restored.set(target.sourceGear, target)
     }
     this.gears.clear(); restored.forEach((value, gear) => this.gears.set(gear, value))
@@ -270,6 +309,7 @@ export class OptimalShiftEstimator {
     this.reportedRedlineRpm = finiteInRange(raw.reportedRedlineRpm, 0, 100_000)
     this.ceilingSamples = normalizeCeilingSamples(raw.ceilingSamples)
     this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples)
+    this.applyLiveModel()
     return true
   }
 
@@ -280,15 +320,23 @@ export class OptimalShiftEstimator {
       const current = this.gears.get(target.sourceGear)
       if (!current) this.gears.set(target.sourceGear, target)
       else if (this.statusRank(target.status) > this.statusRank(current.status)) {
+        // The model point of this run wins over a persisted one.
+        const modelRpm = current.modelRpm ?? target.modelRpm
         this.mergeSameRank(target, current)
+        target.modelRpm = modelRpm
         this.gears.set(target.sourceGear, target)
-      } else this.mergeSameRank(current, target)
+      } else {
+        const modelRpm = current.modelRpm ?? target.modelRpm
+        this.mergeSameRank(current, target)
+        current.modelRpm = modelRpm
+      }
     }
     const seen = new Set(this.shiftSamples.map(item => `${item.beforeTimestampMs}:${item.afterTimestampMs}`))
     this.shiftSamples = [...this.shiftSamples, ...incoming.shiftSamples.filter(item => !seen.has(`${item.beforeTimestampMs}:${item.afterTimestampMs}`))].slice(-MAX_SHIFT_SAMPLES)
     this.reportedRedlineRpm = incoming.reportedRedlineRpm ?? this.reportedRedlineRpm
     this.ceilingSamples = normalizeCeilingSamples([...this.ceilingSamples, ...incoming.ceilingSamples])
     this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples)
+    this.applyLiveModel()
     return true
   }
 
@@ -300,10 +348,50 @@ export class OptimalShiftEstimator {
       ratioDrop: null, currentRatioSamples: 0, nextRatioSamples: 0, targetRpm: state?.targetRpm ?? state?.candidateRpm ?? null,
       postShiftRpm: null, powerAtTarget: null, powerAfterShift: null, estimateEvidence: state?.evidence.length ?? 0,
       status: state?.status ?? 'learning', confirmationCount: state?.confirmationCount ?? 0,
-      lastReason: state?.lastReason ?? null, evidenceCount: state?.evidence.length ?? 0 }
+      lastReason: state?.lastReason ?? null, evidenceCount: state?.evidence.length ?? 0, model: this.modelDiagnostics(gear) }
   }
-  reset(): void { this.gears.clear(); this.shiftSamples = []; this.ceilingSamples = []; this.usableCeiling = null; this.reportedRedlineRpm = null; this.peakWotRpm = 0; this.resetTransient() }
+  reset(): void {
+    this.gears.clear(); this.shiftSamples = []; this.ceilingSamples = []; this.usableCeiling = null; this.reportedRedlineRpm = null; this.peakWotRpm = 0
+    this.powerModel.clear(); this.liveModel.clear(); this.modelInfoCache.clear(); this.modelDataChanged = false; this.modelCeiling = null; this.lastModelRefreshMs = null
+    this.resetTransient()
+  }
   resetTransient(): void { this.limiterTracker = null; this.lastCleanTelemetry = null; this.limiterRearmed = true }
+
+  /** Feeds one clean full-throttle frame that is settled in its gear into the power model. */
+  observeModelFrame(telemetry: Telemetry): void {
+    if (!cleanPowerTelemetry(telemetry)) return
+    this.powerModel.add(telemetry)
+    this.modelDataChanged = true
+  }
+  /**
+   * Recomputes the model points when the curve, the ratios or the ceiling changed, at most every
+   * MODEL_REFRESH_MS of telemetry time. A pair whose live model places a point gets a gear row,
+   * and that point replaces any persisted one.
+   */
+  refreshModel(timestampMs: number): void {
+    const ceiling = this.usableCeiling ?? this.getProvisionalCeiling()
+    if (!this.modelDataChanged && ceiling === this.modelCeiling) return
+    const last = this.lastModelRefreshMs
+    if (last !== null && timestampMs >= last && timestampMs - last < MODEL_REFRESH_MS) return
+    this.lastModelRefreshMs = timestampMs
+    this.modelDataChanged = false
+    this.modelCeiling = ceiling
+    this.liveModel.clear()
+    if (!this.powerModel.isEmpty()) {
+      const curve = this.powerModel.curve()
+      for (let sourceGear = FORWARD_GEAR_MIN; sourceGear < FORWARD_GEAR_MAX; sourceGear++) {
+        if (this.powerModel.getRatio(sourceGear) === null || this.powerModel.getRatio(sourceGear + 1) === null) continue
+        this.liveModel.set(sourceGear, this.powerModel.modelPoint(sourceGear, ceiling, curve))
+      }
+    }
+    this.applyLiveModel()
+  }
+  /** Model point in use for the pair: null when there is none or real comparisons reject it. */
+  getModelRpm(gear: number): number | null { return this.modelInfo(gear).inUse }
+  modelDiagnostics(gear: number): ShiftModelDiagnostics {
+    const { inUse: _inUse, ...diagnostics } = this.modelInfo(gear)
+    return diagnostics
+  }
   getUsableCeiling(): number | null { return this.usableCeiling }
   /**
    * Until the usable ceiling is trusted, the highest observation at or above
@@ -366,6 +454,39 @@ export class OptimalShiftEstimator {
     current.lastReason = current.lastReason ?? incoming.lastReason
   }
   private deriveUsableCeiling(samples: number[]): number | null { return this.analyzeCeiling(samples).ceiling }
+  private applyLiveModel(): void {
+    for (const [sourceGear, point] of this.liveModel) {
+      if (point.rpm !== null) this.getOrCreate(sourceGear).modelRpm = point.rpm
+    }
+    this.modelInfoCache.clear()
+  }
+  /**
+   * A comparison well above the model point agrees when the next gear was at least as strong,
+   * and one well below agrees when it was weaker; comparisons within MODEL_CHECK_RPM are
+   * neutral. Two or more contradictions that outnumber the agreements reject the point.
+   */
+  private modelInfo(gear: number): ShiftModelInfo {
+    const cached = this.modelInfoCache.get(gear)
+    if (cached) return cached
+    const state = this.gears.get(gear)
+    const rpm = state?.modelRpm ?? null
+    const live = this.liveModel.get(gear)
+    let agree = 0, contradict = 0
+    if (state && rpm !== null) {
+      for (const sample of state.evidence) {
+        if (sample.beforeRpm > rpm + MODEL_CHECK_RPM) { if (sample.powerDeltaPct >= 0) agree++; else contradict++ }
+        else if (sample.beforeRpm < rpm - MODEL_CHECK_RPM) { if (sample.powerDeltaPct < 0) agree++; else contradict++ }
+      }
+    }
+    const rejected = contradict >= MODEL_REJECT_CONTRADICTIONS && contradict > agree
+    const fromLive = live !== undefined && live.rpm !== null && live.rpm === rpm
+    const coverage = live?.coverage ?? null
+    const info: ShiftModelInfo = { rpm, kind: fromLive ? live.kind : null,
+      coverage: coverage === null ? null : Math.round(coverage * 100) / 100, ratioStep: live?.ratioStep ?? null,
+      agree, contradict, rejected, inUse: rpm !== null && !rejected ? rpm : null }
+    this.modelInfoCache.set(gear, info)
+    return info
+  }
   /**
    * The limiter is the highest RPM the engine can hold, so low false detections never
    * block it. When the reported redline is known, only samples at or above
