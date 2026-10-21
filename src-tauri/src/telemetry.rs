@@ -12,7 +12,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 const DIRECT_UDP_BIND: &str = "127.0.0.1:5301";
 
@@ -278,6 +278,12 @@ pub(crate) fn start_direct_source(
             let mut last_packet_at: Option<Instant> = None;
             let mut live = false;
             let mut incompatible_packet_reported = false;
+            let lab_recorder = match thread_app.path().app_data_dir() {
+                Ok(directory) if std::fs::create_dir_all(&directory).is_ok() => Some(
+                    crate::shift_lab::LabRecorder::start(directory.join("fdc-lab.sqlite")),
+                ),
+                _ => None,
+            };
             emit_direct_status(&thread_app, "is-waiting", None);
 
             while !thread_stop.load(Ordering::Relaxed) {
@@ -295,6 +301,11 @@ pub(crate) fn start_direct_source(
                             continue;
                         };
                         incompatible_packet_reported = false;
+                        if telemetry.is_race_on
+                            && let Some(recorder) = &lab_recorder
+                        {
+                            recorder.record(&buffer[..length]);
+                        }
                         last_packet_at = Some(Instant::now());
                         if !live {
                             live = true;
@@ -353,6 +364,46 @@ mod tests {
 
     fn put_i32(packet: &mut [u8], offset: usize, value: i32) {
         packet[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    }
+
+    // tools/shift-lab-decoder.mjs reproduces this decoder for replays. Both decode the same
+    // synthetic packet and must produce the payload the HUD parses from the emitted JSON text.
+    #[test]
+    fn decodes_the_shared_shift_lab_golden_packet() {
+        let golden: serde_json::Value =
+            serde_json::from_str(include_str!("../../tools/shift-lab-decoder-golden.json"))
+                .unwrap();
+        let hex = golden["packetHex"].as_str().unwrap();
+        let packet: Vec<u8> = (0..hex.len())
+            .step_by(2)
+            .map(|index| u8::from_str_radix(&hex[index..index + 2], 16).unwrap())
+            .collect();
+
+        let telemetry = decode_direct_packet(&packet).expect("golden packet should decode");
+        let emitted: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&telemetry).unwrap()).unwrap();
+        assert_same_json(&emitted, &golden["expected"], "payload");
+    }
+
+    // JavaScript has one number type, so `900.0` and `900` are the same value to the HUD.
+    fn assert_same_json(actual: &serde_json::Value, expected: &serde_json::Value, path: &str) {
+        use serde_json::Value;
+        match (actual, expected) {
+            (Value::Number(left), Value::Number(right)) => {
+                assert_eq!(left.as_f64(), right.as_f64(), "{path}");
+            }
+            (Value::Object(left), Value::Object(right)) => {
+                let mut left_keys: Vec<_> = left.keys().collect();
+                let mut right_keys: Vec<_> = right.keys().collect();
+                left_keys.sort();
+                right_keys.sort();
+                assert_eq!(left_keys, right_keys, "{path}");
+                for (key, value) in left {
+                    assert_same_json(value, &right[key], &format!("{path}.{key}"));
+                }
+            }
+            _ => assert_eq!(actual, expected, "{path}"),
+        }
     }
 
     #[test]

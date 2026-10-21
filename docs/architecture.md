@@ -67,7 +67,8 @@ the tray menu, Direct Data Out, and native persistence commands.
 builds the windows and the tray, and registers the commands. Each area is its
 own module: `telemetry.rs` (the Direct Data Out receiver), `db.rs` (the
 `fdc.sqlite` schema, migrations, and connections), `events.rs`, `garage.rs`,
-`shift_light.rs`, `driver_analysis.rs` with `driver_analysis_export.rs`,
+`shift_light.rs`, `shift_lab.rs` (the Shift Lab packet recorder),
+`driver_analysis.rs` with `driver_analysis_export.rs`,
 `windows.rs` (Configuration and HUD window state, monitors, and rendering),
 `hotkeys.rs` with `controller_input.rs`, and `hud_commands.rs` (commands that
 drive the HUD page). Each module keeps its unit tests; fixtures that several
@@ -79,6 +80,10 @@ modules share live in `test_support.rs`.
   vehicle, lap, engine, control, tire, motion, and surface-contact data.
 - A valid packet emits `direct_telemetry`. Receiver lifecycle emits
   `direct_status`; a packet gap longer than one second becomes stale.
+- A valid packet whose `IsRaceOn` is `1` is also handed, unchanged, to the
+  Shift Lab recorder. It runs on its own thread behind a bounded channel and
+  drops packets rather than delaying the receive loop. See
+  [Shift Lab recording](shift-light.md#shift-lab-recording).
 - Tauri commands control source lifecycle, Configuration, layout and
   visibility, display preferences, Garage and Events operations, Shift Light
   profile operations, Driver Analysis recording/history operations, and reset.
@@ -318,6 +323,11 @@ metadata. Transactional native commands enforce Garage recency and
 Shift Light identity. Shift Light replaces one bounded compact calibration per
 configuration, skips writes for unchanged snapshots, and retries failed writes
 in memory with bounded backoff. Reset invalidates stale writers.
+
+`fdc-lab.sqlite`, in the same directory, is the Shift Lab recording of raw
+Data Out packets. It holds no feature state, nothing in FDC reads it, and it
+is limited to 200 MB. It exists only for replaying drives with
+`tools/shift-lab.mjs`.
 
 Lap timing state and HUD telemetry history remain in memory. Driver Analysis
 keeps only its enable state and hotkey in versioned browser storage; its

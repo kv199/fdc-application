@@ -14,6 +14,7 @@ mod events;
 mod garage;
 mod hotkeys;
 mod hud_commands;
+mod shift_lab;
 mod shift_light;
 mod telemetry;
 #[cfg(test)]

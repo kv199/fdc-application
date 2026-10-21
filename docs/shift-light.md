@@ -312,6 +312,55 @@ purple background and maps 80% to `filter: brightness(1)`. Its toggle defaults
 to ON and affects only cue visibility. Existing saved redline brightness
 values remain unchanged.
 
+## Shift Lab recording
+
+Shift Lab keeps real drives so the learner can be replayed and checked against
+them. It does not change Shift Light learning, its cue, or `fdc.sqlite`.
+
+The Direct Data Out receiver hands every valid 324-byte packet whose
+`IsRaceOn` is `1` to a recorder that stores it unchanged in `fdc-lab.sqlite`,
+next to `fdc.sqlite` in the application-data directory. Menu and pause packets
+are not stored. Recording is always on and has no setting. The recorder runs on
+its own thread behind a bounded channel of 4,096 packets; when the channel is
+full, packets are dropped instead of delaying the HUD, and a failing database
+only stops recording.
+
+```text
+lab_schema_version   version 1
+lab_sessions         id, started_at_ms, finished_at_ms, app_version,
+                     shift_light_model_version, car_ordinal, car_class,
+                     car_pi, car_drivetrain, car_cylinders, packet_count
+lab_packets          id, session_id, sequence, received_at_ms,
+                     packet (324 bytes)
+```
+
+Times are wall-clock UNIX milliseconds of reception. A new session starts when
+the car identity (ordinal, class, PI, drivetrain, cylinders) changes or when
+more than `2000 ms` passes between packets. Packets are written in one
+transaction at least every `500 ms`. The database is limited to 200 MB, about
+three hours of driving: when it is larger, the oldest sessions are deleted
+first, and if only the current session remains, its oldest packets are. The
+file uses the default rollback journal, so it is complete after every commit.
+
+`tools/shift-lab.mjs` replays a copy of the file. It decodes each packet into
+the same payload the HUD receives, feeds every car's sessions in order into one
+fresh Shift Light learner from the checked-in bundle, and reports per car:
+
+- the learned ceiling, and every gear pair's state and shift point;
+- each purple cue, each real upshift, whether the learner accepted it, the
+  tool's own guess at why not (`partial-throttle`, `clutch`, `brake`,
+  `no-power`, `capture-incomplete`), and the time from the cue to the shift;
+- an independent reference shift point per pair from a power curve and gear
+  ratios built from clean full-throttle frames, flagged when it differs from
+  the learner by more than `150 RPM`. The reference ignores the boost drop
+  after a shift, so turbocharged cars can show an earlier reference point;
+- with `--fdc`, the ceiling and pair states stored in a copy of `fdc.sqlite`
+  next to the replay result.
+
+A fair comparison with `fdc.sqlite` needs a calibration that was reset before
+the recorded drives, because older learning is not in the recording. See
+[the replay command](development.md#shift-lab-replay).
+
 ## Source, build, and release boundary
 
 Canonical Shift Light TypeScript lives in `src/shift-light/`.

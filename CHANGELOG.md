@@ -5,6 +5,13 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+### Added
+
+- **Shift Light**: FDC now keeps your last drives, about three hours and at
+  most 200 MB, in `fdc-lab.sqlite` next to its other data, so Shift Light can
+  be checked against real drives. The file stays on your computer; share a
+  copy only if you want to send drives for feedback.
+
 ## 7.37.101 - 2026-10-19
 
 This release lets you edit the HUD over a running game, adds sector results

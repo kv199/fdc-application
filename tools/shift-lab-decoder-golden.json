@@ -1,0 +1,118 @@
+{
+  "packetHex": "0100000040e2010000c00f46000061440044e8450000a03f000000bfc3f51c41cdccf041000080be00004c41cdcccc3dcdcc4cbe9a99993e0000c03f000040bf0000803d0000803e9a99993ecdcccc3d8fc2f53dcdcc4c3d8fc2f5bc8fc2f53d0ad7a33d00801643004016430000144300c01343000000000000803f000000000000003f000000000000803e0000003f00000000000000000000000000000000000000000ad7a33c0ad723bd8fc2753d0ad7a3bdcdcccc3dae47e13d8fc2f53db81e053e0ad7233ca69b443c5839343cf4fd543cb60e00000100000020030000010000000a0000000100008000000000000000000010804400004441003000c4333305423357c9480020004400004843008057430040344300003e4333336b410000403f00981245ae87c5420000cb420000294200005e42030004e6280c0003c0fb0c00",
+  "expected": {
+    "isRaceOn": true,
+    "timestampMs": 123456,
+    "rpmMax": 9200,
+    "rpmIdle": 900,
+    "rpm": 7432.5,
+    "speedKmh": 119.88,
+    "power": 412345.6,
+    "torque": 512.5,
+    "boost": 14.7,
+    "gear": 3,
+    "throttle": 0.9019608,
+    "brake": 0.15686275,
+    "clutch": 0.047058824,
+    "handBrake": 0,
+    "steer": -0.503937,
+    "drivingLine": -5,
+    "aiBrakeDifference": 12,
+    "suspension": {
+      "fl": 0.25,
+      "fr": 0.3,
+      "rl": 0.1,
+      "rr": 0.12
+    },
+    "suspensionMeters": {
+      "fl": 0.01,
+      "fr": 0.012,
+      "rl": 0.011,
+      "rr": 0.013
+    },
+    "slipRatio": {
+      "fl": 0.05,
+      "fr": -0.03,
+      "rl": 0.12,
+      "rr": 0.08
+    },
+    "slipAngle": {
+      "fl": 0.02,
+      "fr": -0.04,
+      "rl": 0.06,
+      "rr": -0.08
+    },
+    "combinedSlip": {
+      "fl": 0.1,
+      "fr": 0.11,
+      "rl": 0.12,
+      "rr": 0.13
+    },
+    "tireTempC": {
+      "fl": 93.333336,
+      "fr": 101.94444,
+      "rl": 82.361115,
+      "rr": 87.77778
+    },
+    "wheelRotation": {
+      "fl": 150.5,
+      "fr": 150.25,
+      "rl": 148,
+      "rr": 147.75
+    },
+    "rumble": {
+      "fl": false,
+      "fr": true,
+      "rl": false,
+      "rr": true
+    },
+    "puddle": {
+      "fl": 0,
+      "fr": 0.25,
+      "rl": 0.5,
+      "rr": 0
+    },
+    "yaw": 1.5,
+    "pitch": -0.75,
+    "roll": 0.0625,
+    "position": {
+      "x": 1024.5,
+      "y": 12.25,
+      "z": -512.75
+    },
+    "velocity": {
+      "x": 30.1,
+      "y": -0.25,
+      "z": 12.75
+    },
+    "acceleration": {
+      "x": 1.25,
+      "y": -0.5,
+      "z": 9.81
+    },
+    "angularVelocity": {
+      "x": 0.1,
+      "y": -0.2,
+      "z": 0.3
+    },
+    "car": {
+      "ordinal": 3766,
+      "class": 1,
+      "pi": 800,
+      "carGroup": 2147483649,
+      "drivetrain": 1,
+      "cylinders": 10
+    },
+    "lap": {
+      "number": 3,
+      "racePosition": 4,
+      "current": 42.25,
+      "last": 101.5,
+      "best": 98.765,
+      "raceTime": 55.5,
+      "distance": 2345.5
+    },
+    "fuel": 0.75,
+    "rawLength": 324
+  }
+}

@@ -118,6 +118,32 @@ exits with code 2. When a car was recorded with another analysis version, the
 report says so; replay the file with the release that recorded it for an exact
 comparison.
 
+## Shift Lab replay
+
+`tools/shift-lab.mjs` replays the drives FDC recorded in `fdc-lab.sqlite`
+through the current Shift Light bundle. It opens its inputs read-only, writes
+only the `--out` file, and requires Node.js with the built-in `node:sqlite`
+module. See [Shift Lab recording](shift-light.md#shift-lab-recording) for what
+is recorded and what the report contains.
+
+Close FDC, copy `fdc-lab.sqlite` and, for the game comparison, `fdc.sqlite`
+from the FDC application-data directory, and run the tool on the copies:
+
+```powershell
+node tools/shift-lab.mjs --lab path\to\fdc-lab.sqlite --fdc path\to\fdc.sqlite
+node tools/shift-lab.mjs --lab path\to\fdc-lab.sqlite --session 4 --json --out shift-lab.json
+```
+
+Without `--session`, every session is replayed. `--json` prints the full
+result instead of the text report. `--fdc` is optional; without it the report
+shows only the replay and the reference.
+
+`tools/shift-lab-decoder.mjs` turns a raw packet into the payload the HUD
+receives, including its `f32` rounding. A Rust test and a Node test decode the
+synthetic packet in `tools/shift-lab-decoder-golden.json` and must both
+produce its `expected` payload. Recordings and fixtures made from them stay on
+the developer's computer and are never committed.
+
 ## Tests that read source code
 
 `tools/test-sources.cjs` returns source text without naming the file that holds

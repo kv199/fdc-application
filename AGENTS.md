@@ -50,7 +50,9 @@
 - FDC receives Forza Horizon 6 Data Out on `127.0.0.1:5301`.
 - The native Tauri layer decodes packets into normalized telemetry.
 - The browser overlay consumes telemetry through `queueTelemetry`.
-- Feature persistence belongs to FDC-local `fdc.sqlite`.
+- Feature persistence belongs to FDC-local `fdc.sqlite`. The only other
+  database is the Shift Lab recording `fdc-lab.sqlite`, which holds raw Data
+  Out packets for replay and no feature state.
 - Preserve the local runtime boundary and do not add another telemetry transport.
 
 ## Documentation routing
@@ -105,6 +107,9 @@ Do not repeat checks that already passed for the same final state.
   captures, logs, exports, and QA screenshots out of Git.
 - Runtime Shift Light data belongs in the application-data directory as
   `fdc.sqlite`.
+- Shift Lab recordings and fixtures made from them stay on the developer's
+  computer and are never committed; tests that need them are skipped without
+  them.
 - Canonical Shift Light TypeScript source lives in `src/shift-light/`.
 - `tools/build-shift-light.mjs` generates the runtime bundle at
   `overlay/shift-light-engine.js`.
