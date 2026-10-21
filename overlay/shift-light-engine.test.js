@@ -374,6 +374,45 @@ test('derives the cue lead from the RPM rate and clamps it to 100–1000 RPM', (
   assert.equal(leadAfterRpmStep(8), 100)
 })
 
+// Data Out sends two different packets per game timestamp: t=0 9000, t=0 9010, t=16 9050, t=16 9060, ...
+function pairedPull(learner, pairs, overridesAt = () => ({})) {
+  const states = []
+  for (let index = 0; index < pairs; index += 1) {
+    const timestampMs = index * 16, rpm = 9000 + index * 50
+    states.push([
+      learner.update(frame({ timestampMs, rpm, ...overridesAt(index, 0) })),
+      learner.update(frame({ timestampMs, rpm: rpm + 10, ...overridesAt(index, 1) }))
+    ])
+  }
+  return states
+}
+
+test('the second packet of a paired timestamp keeps the measured cue lead', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  // The redline cue targets 11,000 RPM; the pull rises about 2,500 RPM/s, so the lead is 375 RPM.
+  const states = pairedPull(learner, 40)
+  for (const [first, second] of states.slice(1)) {
+    assert.equal(second.leadRpm, first.leadRpm)
+    assert.notEqual(first.leadRpm, 200)
+    assert.notEqual(second.leadRpm, 200)
+  }
+  let inShift = false
+  for (const [first, second] of states) {
+    if (first.phase === 'shift') inShift = true
+    if (inShift) { assert.equal(first.phase, 'shift'); assert.equal(second.phase, 'shift') }
+  }
+  assert.equal(inShift, true)
+})
+
+test('a gear change or a non-clean packet on a paired timestamp still resets the cue lead', () => {
+  const gearChange = pairedPull(new ShiftLightLearner(getShiftLightCarKey(frame())), 6, (index, part) => index === 5 && part === 1 ? { gear: 2 } : {})
+  assert.notEqual(gearChange[5][0].leadRpm, 200)
+  assert.equal(gearChange[5][1].leadRpm, 200)
+  const lift = pairedPull(new ShiftLightLearner(getShiftLightCarKey(frame())), 6, (index, part) => index === 5 && part === 1 ? { throttle: 0 } : {})
+  assert.notEqual(lift[5][0].leadRpm, 200)
+  assert.equal(lift[5][1].leadRpm, 200)
+})
+
 test('marks the highest forward gear as last known', () => {
   const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
   assert.equal(learner.update(frame({ timestampMs: 0, gear: 1 })).lastKnownGear, true)

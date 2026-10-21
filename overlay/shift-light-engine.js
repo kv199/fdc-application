@@ -740,6 +740,7 @@ var HudShiftLight = (() => {
         this.rpmRate = null;
         return;
       }
+      if (telemetry.timestampMs === previous.timestampMs) return;
       const dt = (telemetry.timestampMs - previous.timestampMs) / 1e3, rate = (telemetry.rpm - previous.rpm) / dt;
       if (dt < 5e-3 || dt > 0.1 || !Number.isFinite(rate) || rate <= 0 || rate > MAX_RPM_RATE) {
         this.rpmRate = null;

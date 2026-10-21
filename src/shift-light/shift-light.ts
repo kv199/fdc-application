@@ -261,6 +261,8 @@ export class ShiftLightLearner {
   private getGearDiagnostics(): ShiftLightGearDiagnostics[] { return this.estimator.getStates().map(state => this.estimator.diagnose(state.sourceGear)) }
   private updateRpmRate(previous: Telemetry | null, telemetry: Telemetry): void {
     if (!previous || !isCleanShiftEvidence(previous) || !isCleanShiftEvidence(telemetry) || previous.gear !== telemetry.gear) { this.rpmRate = null; return }
+    // Data Out sends two different packets per game timestamp; the second one carries no time step, so the rate is kept.
+    if (telemetry.timestampMs === previous.timestampMs) return
     const dt = (telemetry.timestampMs - previous.timestampMs) / 1000, rate = (telemetry.rpm - previous.rpm) / dt
     if (dt < 0.005 || dt > 0.1 || !Number.isFinite(rate) || rate <= 0 || rate > MAX_RPM_RATE) { this.rpmRate = null; return }
     this.rpmRate = this.rpmRate === null ? rate : this.rpmRate * (1 - RPM_RATE_ALPHA) + rate * RPM_RATE_ALPHA

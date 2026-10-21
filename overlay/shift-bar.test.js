@@ -232,6 +232,35 @@ test('with only the estimate red does not wait for the unreached game max target
   assert.equal(resolveSignal({ ...first, rpm: 8634 }), 'redline')
 })
 
+test('with only the estimate red waits for a learned shift target', () => {
+  // Game max 10000, estimated limiter 8900, 97% is 8633. A learned target of 8858
+  // with the cue on at 8658 must show purple before red.
+  const learned = { rpmMax: 10000, shiftCueEnabled: true, shiftPhase: 'shift', effectiveTargetRpm: 8858, learnedTarget: true }
+  assert.equal(resolveSignal({ ...learned, rpm: 8658 }), 'shift')
+  assert.equal(resolveSignal({ ...learned, rpm: 8700 }), 'shift')
+  assert.equal(resolveSignal({ ...learned, rpm: 8857 }), 'shift')
+  assert.equal(resolveSignal({ ...learned, rpm: 8858 }), 'redline')
+})
+
+test('with only the estimate an unlearned target keeps red at 97 percent of the estimate', () => {
+  const unlearned = { rpmMax: 10000, shiftCueEnabled: true, shiftPhase: 'shift', effectiveTargetRpm: 8858 }
+  assert.equal(resolveSignal({ ...unlearned, rpm: 8632 }), 'shift')
+  assert.equal(resolveSignal({ ...unlearned, rpm: 8634 }), 'redline')
+  assert.equal(resolveSignal({ ...unlearned, learnedTarget: false, rpm: 8700 }), 'redline')
+})
+
+test('a learned target above the estimated limiter is capped at the estimated limiter', () => {
+  const above = { rpmMax: 10000, shiftCueEnabled: true, shiftPhase: 'shift', effectiveTargetRpm: 9200, learnedTarget: true }
+  assert.equal(resolveSignal({ ...above, rpm: 8899 }), 'shift')
+  assert.equal(resolveSignal({ ...above, rpm: 8900 }), 'redline')
+})
+
+test('a learned target is ignored while the cue is disabled', () => {
+  const disabled = { rpmMax: 10000, shiftCueEnabled: false, shiftPhase: 'shift', effectiveTargetRpm: 8858, learnedTarget: true }
+  assert.equal(resolveSignal({ ...disabled, rpm: 8632 }), 'normal')
+  assert.equal(resolveSignal({ ...disabled, rpm: 8634 }), 'redline')
+})
+
 test('resolveThresholdRpm is the Shift Light cue-on RPM while the cue is enabled', () => {
   assert.equal(resolveThresholdRpm({ rpmMax: 8000, shiftCueEnabled: true, lightOnRpm: 6400, effectiveTargetRpm: 6500 }), 6400)
 })
@@ -252,6 +281,16 @@ test('resolveThresholdRpm never fills later than red starts', () => {
   assert.ok(Math.abs((resolveThresholdRpm({ rpmMax: 10000, shiftCueEnabled: true, lightOnRpm: 9500 })) - (10000 * 0.89 * 0.97)) < 1e-6)
   // With an earlier learned cue the bar fills to the cue.
   assert.equal(resolveThresholdRpm({ rpmMax: 10000, usableCeiling: 9190, shiftCueEnabled: true, lightOnRpm: 8300, effectiveTargetRpm: 8500 }), 8300)
+})
+
+test('resolveThresholdRpm uses the redline that waits for a learned target', () => {
+  // Estimated limiter 8900: with a learned target of 8858 red starts at 8858, so the bar fills to the 8658 cue.
+  const learned = { rpmMax: 10000, shiftCueEnabled: true, lightOnRpm: 8658, effectiveTargetRpm: 8858 }
+  assert.equal(resolveThresholdRpm({ ...learned, learnedTarget: true }), 8658)
+  // Unlearned, red starts at 97% of the estimate, before the cue.
+  assert.ok(Math.abs(resolveThresholdRpm(learned) - (10000 * 0.89 * 0.97)) < 1e-6)
+  // A learned cue past the capped redline still fills by the time red starts.
+  assert.equal(resolveThresholdRpm({ rpmMax: 10000, shiftCueEnabled: true, lightOnRpm: 9000, effectiveTargetRpm: 9200, learnedTarget: true }), 8900)
 })
 
 test('resolveThresholdRpm is null without a cue or limiter', () => {

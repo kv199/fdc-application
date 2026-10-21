@@ -261,7 +261,8 @@ function getHudSignal(telemetry) {
     provisionalCeiling: latestShiftLight.provisionalCeiling,
     shiftCueEnabled: isShiftCueEnabled(),
     shiftPhase: shiftLightPresentation.getPhase(),
-    effectiveTargetRpm: latestShiftLight.effectiveTargetRpm
+    effectiveTargetRpm: latestShiftLight.effectiveTargetRpm,
+    learnedTarget: latestShiftLight.status === 'calibrated'
   })
 }
 
@@ -272,7 +273,8 @@ function getShiftBarThresholdRpm(telemetry) {
     provisionalCeiling: latestShiftLight.provisionalCeiling,
     shiftCueEnabled: isShiftCueEnabled(),
     lightOnRpm: latestShiftLight.lightOnRpm,
-    effectiveTargetRpm: latestShiftLight.effectiveTargetRpm
+    effectiveTargetRpm: latestShiftLight.effectiveTargetRpm,
+    learnedTarget: latestShiftLight.status === 'calibrated'
   })
 }
 

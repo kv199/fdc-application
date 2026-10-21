@@ -52,18 +52,21 @@
 
   /**
    * The RPM where red starts: LIMITER_RPM_FRACTION of the limiter. While the
-   * cue is enabled, the limiter is measured, and the gear's shift target lies
-   * above that point, red waits until RPM passes the target (at most the
-   * limiter), so a gear that should be shifted at the limiter still shows purple
-   * first. With only the estimate, the target is the unreached game max, so red
-   * does not wait.
+   * cue is enabled and the gear's shift target lies above that point, red waits
+   * until RPM passes the target (at most the limiter), so purple shows first.
+   * This applies when the limiter is measured, so a gear that should be
+   * shifted at the limiter still shows purple, and when the target is a learned
+   * shift point for the current gear (learnedTarget), so a learned target just
+   * below the estimated limiter still shows purple before red. With only the
+   * estimate and no learned target, the target is the unreached game max, so
+   * red does not wait.
    */
-  function redlineRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled = false, effectiveTargetRpm } = {}) {
+  function redlineRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled = false, effectiveTargetRpm, learnedTarget = false } = {}) {
     const limiter = limiterRpm({ usableCeiling, provisionalCeiling, rpmMax })
     if (limiter === null) return null
     const threshold = limiter * LIMITER_RPM_FRACTION
     const measured = measuredLimiterRpm({ usableCeiling, provisionalCeiling }) !== null
-    const target = shiftCueEnabled === true && measured ? finitePositive(effectiveTargetRpm) : null
+    const target = shiftCueEnabled === true && (measured || learnedTarget === true) ? finitePositive(effectiveTargetRpm) : null
     return target === null ? threshold : Math.min(limiter, Math.max(threshold, target))
   }
 
@@ -72,9 +75,9 @@
    * redlineRpm, takes priority over purple. Purple is the Shift Light cue:
    * phase 'shift' while the cue is enabled. The 'approach' phase shows nothing.
    */
-  function resolveSignal({ rpm, rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled = false, shiftPhase = 'normal', effectiveTargetRpm } = {}) {
+  function resolveSignal({ rpm, rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled = false, shiftPhase = 'normal', effectiveTargetRpm, learnedTarget = false } = {}) {
     const current = finite(rpm)
-    const redline = redlineRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled, effectiveTargetRpm })
+    const redline = redlineRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled, effectiveTargetRpm, learnedTarget })
     if (current !== null && redline !== null && current >= redline) return 'redline'
     if (shiftCueEnabled === true && shiftPhase === 'shift') return 'shift'
     return 'normal'
@@ -86,8 +89,8 @@
    * the point where red starts, so the bar is full by then; otherwise where red
    * starts. Null when no threshold is known.
    */
-  function resolveThresholdRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled = false, lightOnRpm, effectiveTargetRpm } = {}) {
-    const redline = redlineRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled, effectiveTargetRpm })
+  function resolveThresholdRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled = false, lightOnRpm, effectiveTargetRpm, learnedTarget = false } = {}) {
+    const redline = redlineRpm({ rpmMax, usableCeiling, provisionalCeiling, shiftCueEnabled, effectiveTargetRpm, learnedTarget })
     if (shiftCueEnabled === true) {
       const cueRpm = finitePositive(lightOnRpm) ?? finitePositive(effectiveTargetRpm)
       if (cueRpm !== null) return redline === null ? cueRpm : Math.min(cueRpm, redline)

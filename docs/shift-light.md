@@ -172,7 +172,10 @@ cueOnRPM = effectiveTargetRPM - leadRPM
 ```
 
 The lead is clamped to `100–1000 RPM`; when a reliable acceleration rate is not
-available it defaults to `200 RPM`. The effective target priority is confirmed
+available it defaults to `200 RPM`. FH6 sends two different packets for each
+game timestamp, so a frame with the same timestamp as the previous one keeps
+the current rate instead of resetting it; otherwise the lead would jump to
+the default on every second frame. The effective target priority is confirmed
 target, potential candidate, usable ceiling, provisional ceiling, then reported
 redline. The visual
 presentation latches the purple shift phase for at least `250 ms` so a brief

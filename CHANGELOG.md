@@ -17,6 +17,12 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   moment after each limiter cut, which made the next gear look stronger; such
   shifts are now ignored. Reset the calibration of a car that learned a shift
   point this way.
+- **HUD**: the purple shift cue is no longer hidden by the red limiter flash
+  when Shift Light has learned a shift point for the gear but not yet the
+  car's limiter; red now waits until RPM passes that shift point.
+- **Shift Light**: the shift cue comes on at a steady point that follows how
+  fast the engine revs, instead of switching between two lead values on every
+  other telemetry frame.
 
 ### Added
 
