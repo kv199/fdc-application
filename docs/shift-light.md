@@ -444,9 +444,12 @@ fresh Shift Light learner from the checked-in bundle, and reports per car:
   tool's own guess at why not (`partial-throttle`, `clutch`, `brake`,
   `no-power`, `capture-incomplete`), and the time from the cue to the shift;
 - an independent reference shift point per pair, flagged when it differs from
-  the learner by more than `150 RPM`. The power curve uses full-throttle
-  frames in 100-RPM bins, including frames with wheelspin, because engine
-  power does not depend on it; gear ratios use only frames without wheelspin.
+  the learner by more than `150 RPM`. Like the learner, it uses only
+  full-throttle frames at least `150 ms` into an uninterrupted clean run in
+  one gear, because right after a shift with the clutch the engine still turns
+  faster than the road speed gives. The power curve uses those frames in
+  100-RPM bins, including frames with wheelspin, because engine power does not
+  depend on it; gear ratios use only frames without wheelspin.
   From the power peak to the ceiling, every 50 RPM where both the current gear
   and the next gear's RPM are known is compared, and gaps are skipped. The
   first point where the next gear has at least as much power is a `crossover`;

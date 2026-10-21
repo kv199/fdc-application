@@ -458,3 +458,73 @@ test('the fixture export refuses a selection with several cars unless --car name
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+// One packet per entry at full throttle with no wheelspin; an entry may override throttle or skip ahead in time.
+function runPackets(car, startMs, stepMs, entries) {
+  let timestampMs = startMs
+  return entries.map(entry => {
+    const packet = encodePacket({ car, timestampMs, power: 400000, throttle: 255, ...entry })
+    timestampMs += stepMs
+    return packet
+  })
+}
+
+// A clutch upshift from 2 to 3 at full throttle: the engine was revved in neutral, so for the first frames of gear 3
+// the RPM is far above what the road speed gives while the tyres do not slip at all.
+function clutchShiftSession(car, startMs, settledFrames) {
+  const gear2 = Array.from({ length: 40 }, (_, index) => {
+    const rpm = 6000 + index * 75
+    return { gear: 2, rpm, speedKmh: rpm / RPM_PER_KMH[2] }
+  })
+  const speedKmh = gear2.at(-1).speedKmh
+  const slipping = Array.from({ length: 10 }, (_, index) => ({ gear: 3, rpm: 8800 - index * 100, speedKmh }))
+  const settled = Array.from({ length: settledFrames }, (_, index) => {
+    const rpm = speedKmh * RPM_PER_KMH[3] + index * 50
+    return { gear: 3, rpm, speedKmh: rpm / RPM_PER_KMH[3] }
+  })
+  const lift = { gear: 3, rpm: 7000, speedKmh: 7000 / RPM_PER_KMH[3], throttle: 0 }
+  return runPackets(car, startMs, 16, [...gear2, ...slipping, ...settled, lift])
+}
+
+test('the reference gear ratio ignores clutch slip right after an upshift', () => {
+  // One pull settles in gear 3; in two more the driver lifts before gear 3 settles, so most gear-3 frames slip.
+  const packetSessions = [clutchShiftSession(CAR_A, 0, 12), clutchShiftSession(CAR_A, 0, 0), clutchShiftSession(CAR_A, 0, 0)]
+  const sessions = decodedSessions(packetSessions)
+  const unfiltered = referenceModel(sessions.flatMap(session => session.frames), 9000)
+  assert.ok(unfiltered.ratios.find(ratio => ratio.gear === 3).ratio > 40, 'the scenario must corrupt an unfiltered gear-3 ratio')
+
+  const [car] = replayFrames(sessions).cars
+  const gear3 = car.reference.ratios.find(ratio => ratio.gear === 3)
+  assert.equal(gear3.frames, 12)
+  assert.ok(Math.abs(gear3.ratio - RPM_PER_KMH[3]) < 0.01, `gear 3 ratio ${gear3.ratio}`)
+  const gear2 = car.reference.ratios.find(ratio => ratio.gear === 2)
+  assert.equal(gear2.frames, 3 * 30)
+  assert.ok(Math.abs(gear2.ratio - RPM_PER_KMH[2]) < 0.01, `gear 2 ratio ${gear2.ratio}`)
+  const pair = car.reference.pairs.find(item => item.pair === '2->3')
+  assert.ok(Math.abs(pair.ratioStep - RPM_PER_KMH[3] / RPM_PER_KMH[2]) < 0.001, `2->3 step ${pair.ratioStep}`)
+})
+
+test('the reference uses no frame from the first 150 ms of a clean run', () => {
+  // Every segment is 20 frames 10 ms apart, so only the frames at 150-190 ms into the run are settled.
+  const segment = (gear, overrides = {}) => Array.from({ length: 20 }, (_, index) => {
+    const rpm = 6000 + index * 20
+    return { gear, rpm, speedKmh: rpm / RPM_PER_KMH[gear], ...(index === 0 ? overrides : {}) }
+  })
+  const lift = { gear: 4, rpm: 6400, speedKmh: 6400 / RPM_PER_KMH[4], throttle: 0 }
+  const first = [
+    ...runPackets(CAR_A, 1000, 10, segment(4)),
+    ...runPackets(CAR_A, 1200, 10, [lift, ...segment(4)]),
+    ...runPackets(CAR_A, 2900, 10, segment(4)),
+    ...runPackets(CAR_A, 2500, 10, segment(4)),
+    ...runPackets(CAR_B, 2700, 10, [{ gear: 4, rpm: 6000, speedKmh: 6000 / RPM_PER_KMH[4] }]),
+    ...runPackets(CAR_A, 2710, 10, segment(4)),
+    ...runPackets(CAR_A, 2910, 10, segment(3))
+  ]
+  // The second session continues seamlessly in the same gear, so only the session start restarts the run.
+  const second = runPackets(CAR_A, 3110, 10, segment(3))
+  const car = replayFrames(decodedSessions([first, second])).cars.find(item => item.key === KEY_A)
+  const frames = gear => car.reference.ratios.find(ratio => ratio.gear === gear)?.frames ?? 0
+  // Runs restart at the session start, after a lift, after a 1.5 s gap, when time goes back, after another car and in a new gear.
+  assert.equal(frames(4), 5 * 5)
+  assert.equal(frames(3), 2 * 5)
+})

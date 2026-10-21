@@ -25,6 +25,10 @@ const RATIO_MIN_FRAMES = 10
 const SCAN_STEP_RPM = 50
 const AT_CEILING_RPM = 200
 const SLIP_LIMIT = 0.15
+// Mirrors the learner's PRE_SHIFT_SETTLE_MS: a clean run counts only after this long in one gear.
+const SETTLE_MS = 150
+// Mirrors the learner's MAX_TIMESTAMP_GAP_MS: a larger jump, or time going backwards, starts a new run.
+const MAX_TIMESTAMP_GAP_MS = 1000
 const SHIFT_TABLES = ['shift_light_configs', 'shift_light_gear_targets']
 const FIXTURE_FORMAT = 'fdc-shift-lab-fixture'
 const FIXTURE_VERSION = 1
@@ -106,7 +110,8 @@ function crossoverPoint(curve, ratioStep, ceilingRpm) {
   return { kind: 'insufficient-data', referenceRpm: null, coverage }
 }
 
-// Reference shift points from clean full-throttle frames only; the learner's own state is passed in to compare against.
+// Reference shift points from clean full-throttle frames only; replaySession passes only settled frames.
+// The learner's own state is passed in to compare against.
 export function referenceModel(frames, ceilingRpm = null, learnerPairs = []) {
   const clean = frames.filter(isCleanPowerFrame)
   // Recordings hold hundreds of thousands of frames, so values are pushed in place and the maximum is found by reduce.
@@ -206,7 +211,7 @@ function rejectionReason(window) {
 function createGroup(key) {
   const group = {
     key, sessionIds: [], spans: new Map(), frameCount: 0, cues: [], shifts: [],
-    referenceFrames: [], maxRpm: null, lastPhase: null, lastSnapshot: null, currentSession: null, learner: null
+    referenceFrames: [], referenceRun: null, maxRpm: null, lastPhase: null, lastSnapshot: null, currentSession: null, learner: null
   }
   group.learner = new ShiftLightLearner(key, { onLearningState: state => recordAcceptedSamples(group, state) })
   return group
@@ -222,6 +227,24 @@ function recordAcceptedSamples(group, state) {
   if (shift) Object.assign(shift, { accepted: true, reason: null, powerDeltaPct: sample.powerDeltaPct })
 }
 
+// Like the learner, the reference uses only frames at least SETTLE_MS into an uninterrupted clean run in one gear.
+// Right after a clutch shift at full throttle the engine still turns faster than the road speed gives, without any
+// tyre slip, so those first frames would corrupt both the gear ratios and the power curve.
+function isSettledReferenceFrame(group, frame) {
+  if (!isCleanPowerFrame(frame)) {
+    group.referenceRun = null
+    return false
+  }
+  const run = group.referenceRun
+  const delta = run === null ? null : frame.timestampMs - run.lastMs
+  if (run === null || run.gear !== frame.gear || !(delta >= 0 && delta <= MAX_TIMESTAMP_GAP_MS)) {
+    group.referenceRun = { gear: frame.gear, startMs: frame.timestampMs, lastMs: frame.timestampMs }
+    return false
+  }
+  run.lastMs = frame.timestampMs
+  return frame.timestampMs - run.startMs >= SETTLE_MS
+}
+
 function replaySession(session, frames, groups, totals) {
   const upshiftAt = new Map(findUpshifts(frames).map(shift => [shift.index, shift]))
   let active = null
@@ -232,14 +255,17 @@ function replaySession(session, frames, groups, totals) {
       if (active) {
         active.learner.resetTransient()
         active.lastPhase = 'normal'
+        active.referenceRun = null
       }
       return
     }
     if (!groups.has(key)) groups.set(key, createGroup(key))
     const group = groups.get(key)
+    // active starts as null in every session, so this also restarts the clean run at a session start.
     if (group !== active) {
       group.learner.resetTransient()
       group.lastPhase = null
+      group.referenceRun = null
     }
     active = group
     group.currentSession = session.id
@@ -250,7 +276,7 @@ function replaySession(session, frames, groups, totals) {
     group.frameCount++
     totals.keyedFrames++
     if (frame.gear >= 1 && frame.gear <= 10) group.maxRpm = Math.max(group.maxRpm ?? 0, frame.rpm)
-    if (isCleanPowerFrame(frame)) group.referenceFrames.push(referenceFrame(frame))
+    if (isSettledReferenceFrame(group, frame)) group.referenceFrames.push(referenceFrame(frame))
 
     const detected = upshiftAt.get(index)
     if (detected) {
