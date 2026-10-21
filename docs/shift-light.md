@@ -180,9 +180,16 @@ reset.
   keeps its latest 32 values, needs at least 3, and its value is the 90th
   percentile. Frames with wheelspin count, because engine power does not
   depend on it.
-- **Gear ratios.** The same frames above `20 km/h` with every wheel's slip
-  ratio below `0.15` add `rpm / speed` to their gear. A gear keeps its latest
-  64 values, needs at least 10, and its ratio is the median.
+- **Gear ratios.** The same frames above `5 km/h` add the engine's angular
+  speed divided by the mean angular speed of the wheels locked to the engine:
+  the front pair for front-wheel drive, the rear pair for rear-wheel and
+  all-wheel drive. This is the overall gear ratio even with wheelspin. In
+  all-wheel drive the rear axle keeps that ratio through wheelspin while the
+  front axle drifts by up to about 12%. When
+  wheel speeds or the drivetrain are missing, frames above `20 km/h` with every
+  wheel's slip ratio below `0.15` add `rpm / speed` instead, and a pair only
+  compares two gears measured the same way. A gear keeps its latest 64 values,
+  needs at least 10, and its ratio is the median.
 
 For a pair `G → G+1` with both ratios and a known ceiling (the usable ceiling,
 else the provisional ceiling), the step is `ratio(G+1) / ratio(G)`. From the
@@ -356,10 +363,11 @@ the bounded crossover journal.
 - `PowerDeltaPercent >= 0` is an intentionally simple crossover threshold. The
   three-confirmation rule supplies stability; there is no additional power
   hysteresis.
-- The model point needs a full-throttle pull across the RPM range and enough
-  frames without wheelspin in both gears of a pair; a gear that always spins
-  gets no ratio and its pairs keep the learning states. A turbo lag after a
-  shift is only caught through contradicting real shifts.
+- The model point needs a full-throttle pull across the RPM range and at
+  least 10 settled full-throttle frames in both gears of a pair; a gear that
+  is barely driven at full throttle gets no ratio and its pairs keep the
+  learning states. A turbo lag after a shift is only caught through
+  contradicting real shifts.
 - Learning is WOT-only. Partial-throttle shifts continue to receive the current
   cue but do not train the model.
 - Until three stable limiter observations exist, fallback accuracy depends on
@@ -449,7 +457,8 @@ fresh Shift Light learner from the checked-in bundle, and reports per car:
   one gear, because right after a shift with the clutch the engine still turns
   faster than the road speed gives. The power curve uses those frames in
   100-RPM bins, including frames with wheelspin, because engine power does not
-  depend on it; gear ratios use only frames without wheelspin.
+  depend on it; gear ratios come from the driven wheels the same way as in the
+  learner.
   From the power peak to the ceiling, every 50 RPM where both the current gear
   and the next gear's RPM are known is compared, and gaps are skipped. The
   first point where the next gear has at least as much power is a `crossover`;

@@ -29,12 +29,12 @@ function frame(overrides = {}) {
  */
 function pull(learner, options = {}) {
   const { startMs = 0, gears = [1, 2, 3, 4], startRpm = 3000, powerAt = peakAtSixThousand, comparable = true,
-    slipFor = () => NO_SLIP, skip = () => false, limiter = true } = options
+    slipFor = () => NO_SLIP, skip = () => false, limiter = true, extraFor = () => ({}) } = options
   let timestampMs = startMs
   let rpm = startRpm
   const update = (gear, overrides) => {
     const speedKmh = overrides.rpm / RATIOS[gear]
-    learner.update(frame({ timestampMs, gear, speedKmh, slipRatio: slipFor(gear), ...overrides }))
+    learner.update(frame({ timestampMs, gear, speedKmh, slipRatio: slipFor(gear), ...extraFor(gear, overrides.rpm), ...overrides }))
     timestampMs += 16
   }
   gears.forEach((gear, index) => {
@@ -154,6 +154,107 @@ test('missing slip data gives no gear ratio and no model point', () => {
     assert.equal(gearOf(snapshot, sourceGear).modelRpm, null)
     assert.equal(modelOf(snapshot, sourceGear).ratioStep, null)
   }
+})
+
+const TIRE_RADIUS_M = 0.33
+const RPM_TO_RAD_S = 2 * Math.PI / 60
+// Engine over wheel angular speed in a gear whose wheel-surface speed is rpm / RATIOS[gear] km/h.
+function overallRatio(gear) { return RATIOS[gear] * RPM_TO_RAD_S * 3.6 * TIRE_RADIUS_M }
+// Driven-wheel surface speed over ground speed per gear: heavy wheelspin in 1st, less in 2nd.
+const SPIN = { 1: 1.6, 2: 1.3, 3: 1, 4: 1 }
+const DRIVEN = { 0: ['fl', 'fr'], 1: ['rl', 'rr'], 2: ['fl', 'fr', 'rl', 'rr'] }
+/**
+ * Frames of a car whose driven wheels spin: Data Out speed is the ground speed, so rpm / speed is
+ * inflated, while the driven wheels turn with the engine through the gear ratio. Undriven wheels
+ * roll at ground speed. `split(gear)` makes AWD fronts turn faster than the engine-locked rears by that share.
+ */
+function spinningWheels(drivetrain, { split = () => 0, wheels = true } = {}) {
+  const driven = DRIVEN[drivetrain] ?? DRIVEN[1]
+  return (gear, rpm) => {
+    const spin = SPIN[gear], speedKmh = rpm / RATIOS[gear] / spin
+    const drivenRad = rpm * RPM_TO_RAD_S / overallRatio(gear), groundRad = speedKmh / 3.6 / TIRE_RADIUS_M
+    const wheelRotation = {}, slipRatio = {}
+    for (const wheel of ['fl', 'fr', 'rl', 'rr']) {
+      const isDriven = driven.includes(wheel)
+      const share = drivetrain === 2 && wheel.startsWith('f') ? 1 + split(gear) : 1
+      wheelRotation[wheel] = isDriven ? drivenRad * share : groundRad
+      slipRatio[wheel] = isDriven ? spin - 1 : 0
+    }
+    return { car: { ...car, drivetrain }, speedKmh, slipRatio, wheelRotation: wheels ? wheelRotation : null }
+  }
+}
+function assertModel(snapshot, sourceGears, label) {
+  for (const sourceGear of sourceGears) {
+    const model = modelOf(snapshot, sourceGear)
+    assert.ok(Math.abs(model.ratioStep - RATIOS[sourceGear + 1] / RATIOS[sourceGear]) < 1e-9, `${label} ${sourceGear}: step ${model.ratioStep}`)
+    assert.ok(Math.abs(gearOf(snapshot, sourceGear).modelRpm - analyticCrossover(sourceGear)) <= 50, `${label} ${sourceGear}: ${gearOf(snapshot, sourceGear).modelRpm}`)
+  }
+}
+
+test('driven-wheel rotation gives gear ratios through rear wheelspin on a RWD car', () => {
+  const learner = new ShiftLightLearner('fh6:4223:2:590:1:6')
+  pull(learner, { comparable: false, extraFor: spinningWheels(1) })
+  const snapshot = learner.snapshot(frame({ gear: 1, rpm: 5000 }))
+  assertModel(snapshot, [1, 2, 3], 'RWD')
+  // rpm / speed alone has no ratio for the spinning gears, so their pairs had no model point.
+  const speedOnly = new ShiftLightLearner('fh6:4223:2:590:1:6')
+  pull(speedOnly, { comparable: false, extraFor: spinningWheels(1, { wheels: false }) })
+  const old = speedOnly.snapshot(frame({ gear: 1, rpm: 5000 }))
+  for (const sourceGear of [1, 2]) {
+    assert.equal(gearOf(old, sourceGear).modelRpm, null)
+    assert.equal(modelOf(old, sourceGear).ratioStep, null)
+  }
+  assert.ok(Math.abs(gearOf(old, 3).modelRpm - analyticCrossover(3)) <= 50)
+})
+
+test('FWD reads the front wheels and AWD the rear pair', () => {
+  const fwd = new ShiftLightLearner('fh6:4223:2:590:0:6')
+  pull(fwd, { comparable: false, extraFor: spinningWheels(0) })
+  assertModel(fwd.snapshot(frame({ gear: 1, rpm: 5000 })), [1, 2, 3], 'FWD')
+  // AWD fronts drift from the engine by a gear-dependent share, so all four wheels would give wrong steps.
+  const awd = new ShiftLightLearner(KEY)
+  pull(awd, { comparable: false, extraFor: spinningWheels(2, { split: gear => ({ 1: 0.3, 2: 0.1 })[gear] ?? 0 }) })
+  assertModel(awd.snapshot(frame({ gear: 1, rpm: 5000 })), [1, 2, 3], 'AWD')
+})
+
+test('without a known drivetrain or wheel data the ratios fall back to rpm / speed without wheelspin', () => {
+  const spinning = spinningWheels(1)
+  const variants = {
+    'unknown drivetrain': (gear, rpm) => ({ ...spinning(gear, rpm), car: { ...car, drivetrain: 7 } }),
+    'missing drivetrain': (gear, rpm) => ({ ...spinning(gear, rpm), car: { ordinal: 4223, class: 2, pi: 590, cylinders: 6 } }),
+    'null wheel rotation': (gear, rpm) => ({ ...spinning(gear, rpm), wheelRotation: null }),
+    'non-finite wheel rotation': (gear, rpm) => ({ ...spinning(gear, rpm), wheelRotation: { ...spinning(gear, rpm).wheelRotation, rr: Number.NaN } })
+  }
+  for (const [label, extraFor] of Object.entries(variants)) {
+    const learner = new ShiftLightLearner('fh6:4223:2:590:1:6')
+    pull(learner, { comparable: false, extraFor })
+    const snapshot = learner.snapshot(frame({ gear: 1, rpm: 5000 }))
+    for (const sourceGear of [1, 2]) {
+      assert.equal(gearOf(snapshot, sourceGear).modelRpm, null, `${label} ${sourceGear}`)
+      assert.equal(modelOf(snapshot, sourceGear).ratioStep, null, `${label} ${sourceGear}`)
+    }
+    assert.ok(Math.abs(modelOf(snapshot, 3).ratioStep - RATIOS[4] / RATIOS[3]) < 1e-9, label)
+    assert.ok(Math.abs(gearOf(snapshot, 3).modelRpm - analyticCrossover(3)) <= 50, label)
+  }
+})
+
+test('a pair never divides a wheel-based ratio by an rpm / speed ratio', () => {
+  // 1st has only wheel ratios (wheelspin), 2nd only rpm / speed ratios (no wheel data): no step.
+  const spinning = spinningWheels(1)
+  const wheelOnly = new ShiftLightLearner('fh6:4223:2:590:1:6')
+  pull(wheelOnly, { comparable: false, extraFor: (gear, rpm) => gear === 1 ? spinning(gear, rpm) : { car: { ...car, drivetrain: 1 }, wheelRotation: null } })
+  const none = wheelOnly.snapshot(frame({ gear: 1, rpm: 5000 }))
+  assert.equal(modelOf(none, 1).ratioStep, null)
+  assert.equal(gearOf(none, 1).modelRpm, null)
+  assert.ok(Math.abs(modelOf(none, 2).ratioStep - RATIOS[3] / RATIOS[2]) < 1e-9)
+  // With 1st also giving rpm / speed ratios, the pair uses rpm / speed for both gears.
+  const both = new ShiftLightLearner('fh6:4223:2:590:1:6')
+  const rwd = { ...car, drivetrain: 1 }
+  pull(both, { comparable: false, extraFor: (gear, rpm) => {
+    const rear = rpm * RPM_TO_RAD_S / overallRatio(1)
+    return { car: rwd, wheelRotation: gear === 1 ? { fl: rear, fr: rear, rl: rear, rr: rear } : null }
+  } })
+  assertModel(both.snapshot(frame({ gear: 1, rpm: 5000 })), [1, 2, 3], 'speed for both')
 })
 
 test('a missing next-gear ratio leaves that pair without a model point', () => {

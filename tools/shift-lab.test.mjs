@@ -16,8 +16,16 @@ const DASH = 244
 const CAR_A = { ordinal: 3766, class: 1, pi: 800, drivetrain: 1, cylinders: 10 }
 const CAR_B = { ordinal: 1234, class: 2, pi: 650, drivetrain: 2, cylinders: 8 }
 const RPM_PER_KMH = { 1: 80, 2: 52, 3: 38, 4: 29 }
+const WHEEL_RADIUS_M = 0.33
+const RPM_TO_RAD_S = 2 * Math.PI / 60
+const roadWheelRadS = speedKmh => speedKmh / 3.6 / WHEEL_RADIUS_M
+// The engine-to-wheel ratio of a gear that turns the engine rpmPerKmh RPM per km/h with the wheels rolling at road speed.
+const wheelRatioOf = rpmPerKmh => rpmPerKmh * RPM_TO_RAD_S * 3.6 * WHEEL_RADIUS_M
 
-function encodePacket({ car = CAR_A, timestampMs = 0, rpm = 0, speedKmh = 0, power = 0, gear = 0, throttle = 255, brake = 0, clutch = 0 }) {
+// Unless given, every wheel rolls at road speed without slip.
+function encodePacket({
+  car = CAR_A, timestampMs = 0, rpm = 0, speedKmh = 0, power = 0, gear = 0, throttle = 255, brake = 0, clutch = 0, wheelRotation = null
+}) {
   const buffer = new ArrayBuffer(324)
   const view = new DataView(buffer)
   view.setInt32(0, 1, true)
@@ -25,6 +33,9 @@ function encodePacket({ car = CAR_A, timestampMs = 0, rpm = 0, speedKmh = 0, pow
   view.setFloat32(8, 9200, true)
   view.setFloat32(12, 900, true)
   view.setFloat32(16, rpm, true)
+  const road = roadWheelRadS(speedKmh)
+  const wheels = wheelRotation ?? { fl: road, fr: road, rl: road, rr: road }
+  ;['fl', 'fr', 'rl', 'rr'].forEach((wheel, index) => view.setFloat32(100 + index * 4, wheels[wheel], true))
   view.setFloat32(DASH + 12, speedKmh / 3.6, true)
   view.setFloat32(DASH + 16, power, true)
   view.setUint8(DASH + 71, throttle)
@@ -189,6 +200,93 @@ test('the reference reports at-ceiling when power rises to the ceiling', () => {
   assert.equal(pair.referenceRpm, 9000)
 })
 
+// sweepFrames with wheel rotation: the driven wheels turn the engine through gear ratio 10 in gear 1 and 8.5 in gear 2.
+// spin(rpm) is the driven wheels' slip ratio; the other wheels roll at road speed. driven picks which wheels the engine turns.
+function wheelSweepFrames(powerAt, { drivetrain, driven = ['fl', 'fr', 'rl', 'rr'], spin = () => 0, flat = false }) {
+  return sweepFrames(powerAt).map(frame => {
+    const drivenRadS = frame.rpm * RPM_TO_RAD_S / (frame.gear === 1 ? 10 : 8.5)
+    const slip = spin(frame.rpm)
+    const roadRadS = drivenRadS / (1 + slip)
+    const wheelRotation = {}
+    const slipRatio = {}
+    for (const wheel of ['fl', 'fr', 'rl', 'rr']) {
+      wheelRotation[wheel] = driven.includes(wheel) ? drivenRadS : roadRadS
+      slipRatio[wheel] = driven.includes(wheel) ? slip : 0
+    }
+    const identity = flat ? { drivetrain } : { car: { drivetrain } }
+    return { ...frame, speedKmh: roadRadS * WHEEL_RADIUS_M * 3.6, slipRatio, wheelRotation, ...identity }
+  })
+}
+
+test('the reference takes the gear ratio from the spinning driven wheels where rpm / speed has none', () => {
+  const powerAt = rpm => 500000 - (rpm - 7000) ** 2 * 0.05
+  const options = { drivetrain: 1, driven: ['rl', 'rr'], spin: rpm => 0.2 + (rpm % 400) / 1000 }
+  const spinning = wheelSweepFrames(powerAt, options)
+  const result = referenceModel(spinning, 9000)
+  assert.deepEqual(result.ratios.map(item => [item.gear, item.source]), [[1, 'wheel'], [2, 'wheel']])
+  assert.ok(Math.abs(result.ratios[0].ratio - 10) < 1e-9, `gear 1 ratio ${result.ratios[0].ratio}`)
+  assert.ok(Math.abs(result.ratios[1].ratio - 8.5) < 1e-9, `gear 2 ratio ${result.ratios[1].ratio}`)
+  const [pair] = result.pairs
+  assert.equal(pair.ratioSource, 'wheel')
+  assert.ok(Math.abs(pair.ratioStep - 0.85) < 1e-9)
+  assert.equal(pair.kind, 'crossover')
+  assert.equal(pair.referenceRpm, referenceModel(sweepFrames(powerAt), 9000).pairs[0].referenceRpm)
+
+  // The same frames without wheel rotation fall back to rpm / speed, which every slipping frame fails.
+  const [fallback] = referenceModel(spinning.map(frame => ({ ...frame, wheelRotation: null })), 9000).pairs
+  assert.equal(fallback.kind, 'insufficient-data')
+  assert.equal(fallback.ratioStep, null)
+  assert.equal(fallback.ratioSource, null)
+})
+
+test('the reference uses the front pair for FWD and the rear pair for RWD and AWD', () => {
+  const powerAt = rpm => 500000 - (rpm - 7000) ** 2 * 0.05
+  // The front wheels spin 50% faster than the road while the rear roll at road speed.
+  const frames = flat => wheelSweepFrames(powerAt, { drivetrain: null, driven: ['fl', 'fr'], spin: () => 0.5, flat })
+  const gearOne = (drivetrain, flat = false) =>
+    referenceModel(frames(flat).map(frame => flat ? { ...frame, drivetrain } : { ...frame, car: { drivetrain } }), 9000).ratios[0]
+  assert.ok(Math.abs(gearOne(0).ratio - 10) < 1e-9, `FWD ${gearOne(0).ratio}`)
+  assert.ok(Math.abs(gearOne(1).ratio - 15) < 1e-9, `RWD ${gearOne(1).ratio}`)
+  assert.ok(Math.abs(gearOne(2).ratio - 15) < 1e-9, `AWD ${gearOne(2).ratio}`)
+  // replaySession hands referenceModel frames with a flat drivetrain.
+  assert.ok(Math.abs(gearOne(1, true).ratio - 15) < 1e-9, `flat RWD ${gearOne(1, true).ratio}`)
+  assert.equal(gearOne(2, true).source, 'wheel')
+})
+
+test('the reference falls back to rpm / speed without a known drivetrain and drops wheels slower than 5 rad/s', () => {
+  const powerAt = rpm => 500000 - (rpm - 7000) ** 2 * 0.05
+  const clean = wheelSweepFrames(powerAt, { drivetrain: 7 })
+  const unknown = referenceModel(clean, 9000)
+  assert.deepEqual(unknown.ratios.map(item => item.source), ['speed', 'speed'])
+  assert.equal(unknown.pairs[0].ratioSource, 'speed')
+  assert.ok(Math.abs(unknown.pairs[0].ratioStep - 0.85) < 1e-9)
+  const missing = referenceModel(clean.map(frame => ({ ...frame, car: { drivetrain: 1 }, wheelRotation: null })), 9000)
+  assert.deepEqual(missing.ratios.map(item => item.source), ['speed', 'speed'])
+
+  // Known drivetrain with nearly stopped driven wheels: neither source gives a ratio.
+  const stalled = clean.map(frame => ({ ...frame, car: { drivetrain: 1 }, wheelRotation: { fl: 40, fr: 40, rl: 4.9, rr: -4.9 } }))
+  const result = referenceModel(stalled, 9000)
+  assert.deepEqual(result.ratios, [])
+  assert.equal(result.pairs[0].kind, 'insufficient-data')
+})
+
+test('a reference ratio step never mixes wheel and rpm / speed ratios', () => {
+  const powerAt = rpm => 500000 - (rpm - 7000) ** 2 * 0.05
+  const frames = wheelSweepFrames(powerAt, { drivetrain: 2 })
+  const mixed = frames.map(frame => frame.gear === 2 ? { ...frame, wheelRotation: null } : frame)
+  const result = referenceModel(mixed, 9000)
+  assert.deepEqual(result.ratios.map(item => [item.gear, item.source]), [[1, 'wheel'], [2, 'speed']])
+  assert.equal(result.pairs[0].ratioStep, null)
+  assert.equal(result.pairs[0].ratioSource, null)
+  assert.equal(result.pairs[0].kind, 'insufficient-data')
+
+  // When gear 2 has both sources, the step uses the wheel ratios of both gears.
+  const both = [...frames, ...mixed.filter(frame => frame.gear === 2)]
+  const [pair] = referenceModel(both, 9000).pairs
+  assert.equal(pair.ratioSource, 'wheel')
+  assert.ok(Math.abs(pair.ratioStep - 0.85) < 1e-9)
+})
+
 test('replayLab groups sessions by car and reports shifts, cues and a reference per pair', () => {
   const dir = mkdtempSync(join(tmpdir(), 'shift-lab-'))
   let lab = null
@@ -272,7 +370,9 @@ test('replayLab reads the game config and gear targets from fdc.sqlite', () => {
 
 const KEY_A = 'fh6:3766:1:800:1:10'
 const KEY_B = 'fh6:1234:2:650:2:8'
-const FIXTURE_FIELDS = ['isRaceOn', 'timestampMs', 'rpm', 'rpmMax', 'speedKmh', 'power', 'gear', 'throttle', 'brake', 'clutch', 'handBrake', 'car', 'slipRatio']
+const FIXTURE_FIELDS = [
+  'isRaceOn', 'timestampMs', 'rpm', 'rpmMax', 'speedKmh', 'power', 'gear', 'throttle', 'brake', 'clutch', 'handBrake', 'car', 'slipRatio', 'wheelRotation'
+]
 const SHIFT_LAB = fileURLToPath(new URL('./shift-lab.mjs', import.meta.url))
 
 function decodedSessions(packetSessions) {
@@ -284,7 +384,7 @@ test('toFixture keeps only the fields the learner and the reference read', () =>
   const mixed = [...pullPackets(CAR_A).slice(0, 10), keyless, ...pullPackets(CAR_B).slice(0, 5), ...pullPackets(CAR_A).slice(0, 10)]
   const fixture = toFixture(decodedSessions([mixed, pullPackets(CAR_B).slice(0, 5)]), KEY_A)
   assert.equal(fixture.format, 'fdc-shift-lab-fixture')
-  assert.equal(fixture.formatVersion, 1)
+  assert.equal(fixture.formatVersion, 2)
   assert.equal(fixture.key, KEY_A)
   assert.deepEqual(fixture.sessions.map(session => session.id), [1])
   const { frames } = fixture.sessions[0]
@@ -293,6 +393,7 @@ test('toFixture keeps only the fields the learner and the reference read', () =>
     assert.deepEqual(Object.keys(frame), FIXTURE_FIELDS)
     assert.deepEqual(Object.keys(frame.car), ['ordinal', 'class', 'pi', 'drivetrain', 'cylinders'])
     assert.deepEqual(Object.keys(frame.slipRatio), ['fl', 'fr', 'rl', 'rr'])
+    assert.deepEqual(Object.keys(frame.wheelRotation), ['fl', 'fr', 'rl', 'rr'])
   }
   assert.deepEqual(frames.slice(10, 12).map(frame => frame.car.ordinal), [0, 0])
   assert.equal(frames[0].car.ordinal, CAR_A.ordinal)
@@ -306,8 +407,10 @@ test('a fixture round-trips through a gzip file', () => {
     writeFixture(path, fixture)
     assert.deepEqual(loadFixture(path), fixture)
     const wrong = join(dir, 'wrong.json.gz')
-    writeFileSync(wrong, gzipSync(JSON.stringify({ ...fixture, formatVersion: 2 })))
-    assert.throws(() => loadFixture(wrong), /fdc-shift-lab-fixture v1/)
+    for (const formatVersion of [1, 3]) {
+      writeFileSync(wrong, gzipSync(JSON.stringify({ ...fixture, formatVersion })))
+      assert.throws(() => loadFixture(wrong), /fdc-shift-lab-fixture v2/)
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -491,15 +594,16 @@ test('the reference gear ratio ignores clutch slip right after an upshift', () =
   const packetSessions = [clutchShiftSession(CAR_A, 0, 12), clutchShiftSession(CAR_A, 0, 0), clutchShiftSession(CAR_A, 0, 0)]
   const sessions = decodedSessions(packetSessions)
   const unfiltered = referenceModel(sessions.flatMap(session => session.frames), 9000)
-  assert.ok(unfiltered.ratios.find(ratio => ratio.gear === 3).ratio > 40, 'the scenario must corrupt an unfiltered gear-3 ratio')
+  assert.ok(unfiltered.ratios.find(ratio => ratio.gear === 3).ratio > wheelRatioOf(40), 'the scenario must corrupt an unfiltered gear-3 ratio')
 
   const [car] = replayFrames(sessions).cars
   const gear3 = car.reference.ratios.find(ratio => ratio.gear === 3)
   assert.equal(gear3.frames, 12)
-  assert.ok(Math.abs(gear3.ratio - RPM_PER_KMH[3]) < 0.01, `gear 3 ratio ${gear3.ratio}`)
+  assert.equal(gear3.source, 'wheel')
+  assert.ok(Math.abs(gear3.ratio - wheelRatioOf(RPM_PER_KMH[3])) < 0.001, `gear 3 ratio ${gear3.ratio}`)
   const gear2 = car.reference.ratios.find(ratio => ratio.gear === 2)
   assert.equal(gear2.frames, 3 * 30)
-  assert.ok(Math.abs(gear2.ratio - RPM_PER_KMH[2]) < 0.01, `gear 2 ratio ${gear2.ratio}`)
+  assert.ok(Math.abs(gear2.ratio - wheelRatioOf(RPM_PER_KMH[2])) < 0.001, `gear 2 ratio ${gear2.ratio}`)
   const pair = car.reference.pairs.find(item => item.pair === '2->3')
   assert.ok(Math.abs(pair.ratioStep - RPM_PER_KMH[3] / RPM_PER_KMH[2]) < 0.001, `2->3 step ${pair.ratioStep}`)
 })

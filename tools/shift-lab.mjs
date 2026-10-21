@@ -25,13 +25,20 @@ const RATIO_MIN_FRAMES = 10
 const SCAN_STEP_RPM = 50
 const AT_CEILING_RPM = 200
 const SLIP_LIMIT = 0.15
+// Mirrors the learner: the exact gear ratio needs the driven wheels turning faster than this and the car above WHEEL_MIN_SPEED_KMH.
+const WHEEL_MIN_RAD_S = 5
+const WHEEL_MIN_SPEED_KMH = 5
+const RPM_TO_RAD_S = 2 * Math.PI / 60
+// Wheels locked to the engine per Data Out drivetrain value: 0 FWD, 1 RWD, 2 AWD. Like the learner, AWD uses the
+// rear axle, which keeps the gear ratio through wheelspin while the front axle drifts.
+const DRIVEN_WHEELS = { 0: ['fl', 'fr'], 1: ['rl', 'rr'], 2: ['rl', 'rr'] }
 // Mirrors the learner's PRE_SHIFT_SETTLE_MS: a clean run counts only after this long in one gear.
 const SETTLE_MS = 150
 // Mirrors the learner's MAX_TIMESTAMP_GAP_MS: a larger jump, or time going backwards, starts a new run.
 const MAX_TIMESTAMP_GAP_MS = 1000
 const SHIFT_TABLES = ['shift_light_configs', 'shift_light_gear_targets']
 const FIXTURE_FORMAT = 'fdc-shift-lab-fixture'
-const FIXTURE_VERSION = 1
+const FIXTURE_VERSION = 2
 const USAGE = [
   'Usage: node tools/shift-lab.mjs --lab <fdc-lab.sqlite> [--fdc <fdc.sqlite>] [--session <id>] [--json] [--out <file>]',
   '       node tools/shift-lab.mjs --lab <fdc-lab.sqlite> [--session <id>] [--car <key>] --fixture <file.json.gz>'
@@ -51,21 +58,32 @@ function maxAbsSlip(slip) {
   return Math.max(Math.abs(slip.fl), Math.abs(slip.fr), Math.abs(slip.rl), Math.abs(slip.rr))
 }
 
-// Engine power is the same with or without wheelspin, so the power curve uses every full-throttle frame;
-// rpm / speed only gives a gear ratio while the wheels do not slip.
+// Engine power is the same with or without wheelspin, so the power curve uses every full-throttle frame.
 function isCleanPowerFrame(frame) {
   return frame.isRaceOn && frame.gear >= 1 && frame.gear <= 10 && frame.throttle >= 0.95 && frame.clutch <= 0.05 &&
     frame.brake <= 0.02 && frame.handBrake <= 0.02 && frame.power > 0 && frame.speedKmh > 20
 }
 
-function isCleanRatioFrame(frame) {
-  return isCleanPowerFrame(frame) && maxAbsSlip(frame.slipRatio) < SLIP_LIMIT
+// Like the learner, a gear ratio is engine speed over the mean speed of the driven wheels, which holds through wheelspin.
+// Without wheel rotation or a known drivetrain it falls back to rpm / speed, which holds only while no wheel slips.
+// Returns { source, value }, or null when the frame gives no ratio.
+function frameRatio(frame) {
+  const wheels = DRIVEN_WHEELS[frame.car?.drivetrain ?? frame.drivetrain]
+  const rotation = frame.wheelRotation
+  if (wheels && rotation) {
+    const mean = wheels.reduce((total, wheel) => total + Math.abs(rotation[wheel]), 0) / wheels.length
+    if (!(mean > WHEEL_MIN_RAD_S) || !(frame.speedKmh > WHEEL_MIN_SPEED_KMH)) return null
+    return { source: 'wheel', value: frame.rpm * RPM_TO_RAD_S / mean }
+  }
+  if (maxAbsSlip(frame.slipRatio) >= SLIP_LIMIT) return null
+  return { source: 'speed', value: frame.rpm / frame.speedKmh }
 }
 
 function referenceFrame(frame) {
   return {
     isRaceOn: frame.isRaceOn, gear: frame.gear, rpm: frame.rpm, speedKmh: frame.speedKmh, throttle: frame.throttle,
-    clutch: frame.clutch, brake: frame.brake, handBrake: frame.handBrake, power: frame.power, slipRatio: frame.slipRatio
+    clutch: frame.clutch, brake: frame.brake, handBrake: frame.handBrake, power: frame.power, slipRatio: frame.slipRatio,
+    wheelRotation: frame.wheelRotation ?? null, drivetrain: frame.car?.drivetrain ?? frame.drivetrain
   }
 }
 
@@ -111,13 +129,15 @@ function crossoverPoint(curve, ratioStep, ceilingRpm) {
 }
 
 // Reference shift points from clean full-throttle frames only; replaySession passes only settled frames.
+// Gear ratios come from the driven wheels as the learner's do, or from rpm / speed without wheel data.
 // The learner's own state is passed in to compare against.
 export function referenceModel(frames, ceilingRpm = null, learnerPairs = []) {
   const clean = frames.filter(isCleanPowerFrame)
   // Recordings hold hundreds of thousands of frames, so values are pushed in place and the maximum is found by reduce.
   const ceiling = ceilingRpm ?? (clean.length === 0 ? null : clean.reduce((highest, frame) => Math.max(highest, frame.rpm), 0))
   const binPowers = new Map()
-  const gearRatios = new Map()
+  const wheelRatios = new Map()
+  const speedRatios = new Map()
   const push = (map, key, value) => {
     const values = map.get(key)
     if (values) values.push(value)
@@ -125,23 +145,32 @@ export function referenceModel(frames, ceilingRpm = null, learnerPairs = []) {
   }
   for (const frame of clean) {
     push(binPowers, Math.floor(frame.rpm / CURVE_BIN_RPM), frame.power)
-    if (isCleanRatioFrame(frame)) push(gearRatios, frame.gear, frame.rpm / frame.speedKmh)
+    const ratio = frameRatio(frame)
+    if (ratio) push(ratio.source === 'wheel' ? wheelRatios : speedRatios, frame.gear, ratio.value)
   }
   const curve = new Map()
   for (const [bin, powers] of binPowers) {
     if (powers.length >= CURVE_MIN_FRAMES) curve.set(bin, quantile(powers, 0.9))
   }
+  const usableRatios = values => new Map([...values].filter(([, list]) => list.length >= RATIO_MIN_FRAMES)
+    .map(([gear, list]) => [gear, { ratio: median(list), frames: list.length }]))
+  const sources = { wheel: usableRatios(wheelRatios), speed: usableRatios(speedRatios) }
+  // A ratio step never mixes the two sources, because their units differ; the wheel ratio wins when both gears have it.
+  const stepSource = (sourceGear, destinationGear) => ['wheel', 'speed']
+    .find(source => sources[source].has(sourceGear) && sources[source].has(destinationGear)) ?? null
+  // The listed ratio of a gear is its wheel ratio when it has one.
   const ratios = new Map()
-  for (const [gear, values] of gearRatios) {
-    if (values.length >= RATIO_MIN_FRAMES) ratios.set(gear, { ratio: median(values), frames: values.length })
+  for (const source of ['speed', 'wheel']) {
+    for (const [gear, value] of sources[source]) ratios.set(gear, { ...value, source })
   }
   const observedGears = new Set(clean.map(frame => frame.gear))
   const pairs = []
   for (let sourceGear = 1; sourceGear <= 9; sourceGear++) {
     if (!observedGears.has(sourceGear) || !observedGears.has(sourceGear + 1)) continue
-    const from = ratios.get(sourceGear)
-    const to = ratios.get(sourceGear + 1)
-    const ratioStep = from && to ? to.ratio / from.ratio : null
+    const ratioSource = stepSource(sourceGear, sourceGear + 1)
+    const ratioStep = ratioSource === null
+      ? null
+      : sources[ratioSource].get(sourceGear + 1).ratio / sources[ratioSource].get(sourceGear).ratio
     const point = ratioStep === null || ceiling === null
       ? { kind: 'insufficient-data', referenceRpm: null, coverage: null }
       : crossoverPoint(curve, ratioStep, ceiling)
@@ -153,6 +182,7 @@ export function referenceModel(frames, ceilingRpm = null, learnerPairs = []) {
       sourceGear,
       destinationGear: sourceGear + 1,
       ratioStep,
+      ratioSource,
       referenceRpm: point.referenceRpm,
       kind: point.kind,
       coverage: point.coverage,
@@ -164,7 +194,8 @@ export function referenceModel(frames, ceilingRpm = null, learnerPairs = []) {
   return {
     ceilingRpm: ceiling,
     curveBins: curve.size,
-    ratios: [...ratios].map(([gear, value]) => ({ gear, ratio: value.ratio, frames: value.frames })),
+    ratios: [...ratios].sort(([left], [right]) => left - right)
+      .map(([gear, value]) => ({ gear, ratio: value.ratio, frames: value.frames, source: value.source })),
     pairs
   }
 }
@@ -489,12 +520,13 @@ export function replayLab(db, options = {}) {
 }
 
 function fixtureFrame(frame) {
-  const { car, slipRatio } = frame
+  const { car, slipRatio, wheelRotation } = frame
   return {
     isRaceOn: frame.isRaceOn, timestampMs: frame.timestampMs, rpm: frame.rpm, rpmMax: frame.rpmMax, speedKmh: frame.speedKmh,
     power: frame.power, gear: frame.gear, throttle: frame.throttle, brake: frame.brake, clutch: frame.clutch, handBrake: frame.handBrake,
     car: { ordinal: car.ordinal, class: car.class, pi: car.pi, drivetrain: car.drivetrain, cylinders: car.cylinders },
-    slipRatio: { fl: slipRatio.fl, fr: slipRatio.fr, rl: slipRatio.rl, rr: slipRatio.rr }
+    slipRatio: { fl: slipRatio.fl, fr: slipRatio.fr, rl: slipRatio.rl, rr: slipRatio.rr },
+    wheelRotation: wheelRotation ? { fl: wheelRotation.fl, fr: wheelRotation.fr, rl: wheelRotation.rl, rr: wheelRotation.rr } : null
   }
 }
 
@@ -646,6 +678,8 @@ export function formatReport(result) {
       ? `game ${ceiling.game.usableCeilingRpm ?? '-'} (difference ${formatDifference(ceiling.game.differenceRpm)})`
       : 'game -'
     lines.push(`ceiling: replay usable ${ceiling.usable ?? '-'}, provisional ${ceiling.provisional ?? '-'}, redline ${ceiling.reportedRedlineRpm ?? '-'}, max observed ${ceiling.maxObservedRpm ?? '-'}; ${gameText}; reference uses ${ceiling.usedForReference ?? '-'}`)
+    const ratioText = car.reference.ratios.map(item => `${item.gear} ${item.ratio.toFixed(3)} ${item.source} (${item.frames})`).join(', ')
+    lines.push(`reference ratios: ${ratioText || 'none'}`)
     lines.push('')
     const header = [pad('pair', 8), pad('replay', 22), pad('model', 22), pad('game', 22), pad('reference', 30), pad('diff', 8), 'flags']
     lines.push(header.join(' '))

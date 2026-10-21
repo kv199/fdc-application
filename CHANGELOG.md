@@ -38,6 +38,12 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   be checked against real drives. The file stays on your computer; share a
   copy only if you want to send drives for feedback.
 
+### Improved
+
+- **Shift Light**: shift points now also appear for the low gears of powerful
+  cars. Gear ratios are taken from how fast the driven wheels turn, so
+  wheelspin no longer hides them.
+
 ## 7.37.101 - 2026-10-19
 
 This release lets you edit the HUD over a running game, adds sector results

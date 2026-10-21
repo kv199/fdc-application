@@ -36,6 +36,9 @@ var HudShiftLight = (() => {
   var MIN_RATIO_VALUES = 10;
   var RATIO_MIN_SPEED_KMH = 20;
   var RATIO_MAX_SLIP = 0.15;
+  var WHEEL_RATIO_MIN_SPEED_KMH = 5;
+  var WHEEL_RATIO_MIN_RAD_S = 5;
+  var RPM_TO_RAD_S = 2 * Math.PI / 60;
   var SCAN_STEP_RPM = 50;
   var AT_LIMITER_RPM = 200;
   var MIN_COVERAGE = 0.5;
@@ -80,12 +83,32 @@ var HudShiftLight = (() => {
     if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) return null;
     return Math.max(...values.map(Math.abs));
   }
+  function drivenWheelSpeed(telemetry) {
+    const wheels = telemetry.wheelRotation;
+    if (!wheels || typeof wheels !== "object") return null;
+    const drivetrain = telemetry.car?.drivetrain;
+    const driven = drivetrain === 0 ? [wheels.fl, wheels.fr] : drivetrain === 1 || drivetrain === 2 ? [wheels.rl, wheels.rr] : null;
+    if (!driven || driven.some((value) => typeof value !== "number" || !Number.isFinite(value))) return null;
+    return driven.reduce((sum, value) => sum + Math.abs(value), 0) / driven.length;
+  }
+  function addRatio(windows, gear, value) {
+    let window = windows.get(gear);
+    if (!window) {
+      window = new ValueWindow(MAX_RATIO_VALUES, MIN_RATIO_VALUES, 0.5);
+      windows.set(gear, window);
+    }
+    window.add(value);
+  }
   var PowerModel = class {
     bins = /* @__PURE__ */ new Map();
-    ratios = /* @__PURE__ */ new Map();
+    /** Engine over driven-wheel angular speed: the overall gear ratio, wheelspin or not. */
+    wheelRatios = /* @__PURE__ */ new Map();
+    /** rpm / speed from frames without wheelspin; other units than the wheel ratios, so never mixed with them. */
+    speedRatios = /* @__PURE__ */ new Map();
     /**
      * Adds one settled clean full-throttle frame. Engine power does not depend on wheelspin, so
-     * every such frame feeds the curve; rpm / speed only gives a gear ratio without wheelspin.
+     * every such frame feeds the curve. The driven wheels give the gear ratio even while they
+     * spin; rpm / speed gives one only without wheelspin and is the fallback without wheel data.
      */
     add(telemetry) {
       const bin = Math.floor(telemetry.rpm / BIN_RPM);
@@ -95,25 +118,38 @@ var HudShiftLight = (() => {
         this.bins.set(bin, window);
       }
       window.add(telemetry.power);
+      const wheelSpeed = drivenWheelSpeed(telemetry);
+      if (wheelSpeed !== null && wheelSpeed > WHEEL_RATIO_MIN_RAD_S && telemetry.speedKmh > WHEEL_RATIO_MIN_SPEED_KMH) {
+        const ratio = telemetry.rpm * RPM_TO_RAD_S / wheelSpeed;
+        if (Number.isFinite(ratio) && ratio > 0) addRatio(this.wheelRatios, telemetry.gear, ratio);
+      }
       const slip = maxAbsSlip(telemetry.slipRatio);
       if (telemetry.speedKmh > RATIO_MIN_SPEED_KMH && slip !== null && slip < RATIO_MAX_SLIP) {
-        let ratio = this.ratios.get(telemetry.gear);
-        if (!ratio) {
-          ratio = new ValueWindow(MAX_RATIO_VALUES, MIN_RATIO_VALUES, 0.5);
-          this.ratios.set(telemetry.gear, ratio);
-        }
-        ratio.add(telemetry.rpm / telemetry.speedKmh);
+        addRatio(this.speedRatios, telemetry.gear, telemetry.rpm / telemetry.speedKmh);
       }
     }
     clear() {
       this.bins.clear();
-      this.ratios.clear();
+      this.wheelRatios.clear();
+      this.speedRatios.clear();
     }
     isEmpty() {
-      return this.bins.size === 0 && this.ratios.size === 0;
+      return this.bins.size === 0 && this.wheelRatios.size === 0 && this.speedRatios.size === 0;
     }
+    /** The gear's ratio: from the driven wheels when it has one, else from rpm / speed. */
     getRatio(gear) {
-      return this.ratios.get(gear)?.value() ?? null;
+      return this.wheelRatios.get(gear)?.value() ?? this.speedRatios.get(gear)?.value() ?? null;
+    }
+    /**
+     * Next-gear ratio over current-gear ratio with both ratios from one source: the driven wheels
+     * when both gears have one, else rpm / speed when both have one, else null.
+     */
+    ratioStep(sourceGear) {
+      for (const windows of [this.wheelRatios, this.speedRatios]) {
+        const from = windows.get(sourceGear)?.value() ?? null, to = windows.get(sourceGear + 1)?.value() ?? null;
+        if (from !== null && to !== null) return from > 0 ? to / from : null;
+      }
+      return null;
     }
     /** Current power curve: bin index to its 90th-percentile power, only for bins with enough values. */
     curve() {
@@ -132,9 +168,8 @@ var HudShiftLight = (() => {
      * crossover, known points reaching within 200 RPM of the ceiling put the point at the ceiling.
      */
     modelPoint(sourceGear, ceilingRpm, curve = this.curve()) {
-      const from = this.getRatio(sourceGear), to = this.getRatio(sourceGear + 1);
-      if (from === null || to === null || !(from > 0)) return { ...NO_POINT };
-      const ratioStep = to / from;
+      const ratioStep = this.ratioStep(sourceGear);
+      if (ratioStep === null) return { ...NO_POINT };
       if (ceilingRpm === null || !(ceilingRpm > 0) || !(ratioStep > 0)) return { ...NO_POINT, ratioStep };
       let peakRpm = null, peakValue = -Infinity;
       for (const [bin, value] of curve) {
