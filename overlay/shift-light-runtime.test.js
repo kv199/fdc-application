@@ -37,6 +37,8 @@ function createRuntime({ stored = null, failSave = false, events = [] } = {}) {
 
 test('resolves a six-field configuration and persists compact calibration', async () => {
   const { calls, runtime } = createRuntime()
+  // A clean lead-in: before frames count only after 150 ms of settled power.
+  runtime.update(frame({ timestampMs: -150, rpm: 9100 }))
   runtime.update(frame({ timestampMs: 0, rpm: 9400 }))
   runtime.update(frame({ timestampMs: 16, rpm: 9500 }))
   runtime.update(frame({ timestampMs: 32, gear: 2, rpm: 6500, power: -50 }))

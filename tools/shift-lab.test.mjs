@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
+import { gzipSync } from 'node:zlib'
 import { decodePacket, f32ToJson } from './shift-lab-decoder.mjs'
-import { findUpshifts, formatReport, referenceModel, replayLab } from './shift-lab.mjs'
+import {
+  checkExpectations, findFixtures, findUpshifts, formatReport, loadFixture, referenceModel, replayFrames, replayLab, toFixture, writeFixture
+} from './shift-lab.mjs'
 
 const DASH = 244
 const CAR_A = { ordinal: 3766, class: 1, pi: 800, drivetrain: 1, cylinders: 10 }
@@ -210,6 +215,127 @@ test('replayLab reads the game config and gear targets from fdc.sqlite', () => {
   } finally {
     fdc.close()
     lab?.close()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+const KEY_A = 'fh6:3766:1:800:1:10'
+const KEY_B = 'fh6:1234:2:650:2:8'
+const FIXTURE_FIELDS = ['isRaceOn', 'timestampMs', 'rpm', 'rpmMax', 'speedKmh', 'power', 'gear', 'throttle', 'brake', 'clutch', 'handBrake', 'car', 'slipRatio']
+const SHIFT_LAB = fileURLToPath(new URL('./shift-lab.mjs', import.meta.url))
+
+function decodedSessions(packetSessions) {
+  return packetSessions.map((packets, index) => ({ id: index + 1, frames: packets.map(packet => decodePacket(packet)) }))
+}
+
+test('toFixture keeps only the fields the learner and the reference read', () => {
+  const keyless = encodePacket({ car: { ordinal: 0, class: 0, pi: 0, drivetrain: 0, cylinders: 0 }, timestampMs: 5 })
+  const mixed = [...pullPackets(CAR_A).slice(0, 10), keyless, ...pullPackets(CAR_B).slice(0, 5), ...pullPackets(CAR_A).slice(0, 10)]
+  const fixture = toFixture(decodedSessions([mixed, pullPackets(CAR_B).slice(0, 5)]), KEY_A)
+  assert.equal(fixture.format, 'fdc-shift-lab-fixture')
+  assert.equal(fixture.formatVersion, 1)
+  assert.equal(fixture.key, KEY_A)
+  assert.deepEqual(fixture.sessions.map(session => session.id), [1])
+  const { frames } = fixture.sessions[0]
+  assert.equal(frames.length, 22)
+  for (const frame of frames) {
+    assert.deepEqual(Object.keys(frame), FIXTURE_FIELDS)
+    assert.deepEqual(Object.keys(frame.car), ['ordinal', 'class', 'pi', 'drivetrain', 'cylinders'])
+    assert.deepEqual(Object.keys(frame.slipRatio), ['fl', 'fr', 'rl', 'rr'])
+  }
+  assert.deepEqual(frames.slice(10, 12).map(frame => frame.car.ordinal), [0, 0])
+  assert.equal(frames[0].car.ordinal, CAR_A.ordinal)
+})
+
+test('a fixture round-trips through a gzip file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'shift-lab-'))
+  try {
+    const fixture = toFixture(decodedSessions([pullPackets(CAR_A).slice(0, 50)]), KEY_A)
+    const path = join(dir, 'nested', 'car.json.gz')
+    writeFixture(path, fixture)
+    assert.deepEqual(loadFixture(path), fixture)
+    const wrong = join(dir, 'wrong.json.gz')
+    writeFileSync(wrong, gzipSync(JSON.stringify({ ...fixture, formatVersion: 2 })))
+    assert.throws(() => loadFixture(wrong), /fdc-shift-lab-fixture v1/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('replayFrames on fixture sessions matches replayLab on the same packets', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'shift-lab-'))
+  let lab = null
+  try {
+    const packetSessions = [pullPackets(CAR_A), pullPackets(CAR_A)]
+    lab = labDatabase(join(dir, 'fdc-lab.sqlite'), packetSessions.map(packets => ({ car: CAR_A, packets })))
+    const fromLab = replayLab(lab)
+    const fromFixture = replayFrames(toFixture(decodedSessions(packetSessions), KEY_A).sessions)
+    assert.ok(fromLab.cars[0].summary.acceptedCount > 0)
+    assert.deepEqual(fromFixture.cars, fromLab.cars)
+    assert.equal(fromFixture.keyedFrames, fromLab.keyedFrames)
+  } finally {
+    lab?.close()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('checkExpectations reports each kind of failure and passes a matching expectation', () => {
+  const car = usable => ({
+    ceiling: { usable },
+    learner: {
+      gearTargets: [
+        { sourceGear: 1, destinationGear: 2, status: 'optimal', candidateRpm: 9300, targetRpm: 9350 },
+        { sourceGear: 2, destinationGear: 3, status: 'potential', candidateRpm: 9450, targetRpm: null },
+        { sourceGear: 3, destinationGear: 4, status: 'learning', candidateRpm: 8000, targetRpm: null }
+      ]
+    }
+  })
+  assert.deepEqual(checkExpectations(car(9500), {
+    description: 'matches', usableCeilingRpm: [9450, 9550], minLearnedShiftRpm: 9300, pairs: { '1->2': 'optimal', '3->4': 'learning' }
+  }), [])
+  assert.deepEqual(checkExpectations(car(9500), {}), [])
+  assert.deepEqual(checkExpectations(car(null), { usableCeilingRpm: [9450, 9550] }), ['usable ceiling is null, expected 9450-9550'])
+  assert.deepEqual(checkExpectations(car(9600), { usableCeilingRpm: [9450, 9550] }), ['usable ceiling 9600 is outside 9450-9550'])
+  assert.deepEqual(checkExpectations(car(9500), { minLearnedShiftRpm: 9400 }), ['1->2 optimal at 9350, expected at least 9400'])
+  assert.deepEqual(checkExpectations(car(9500), { pairs: { '2->3': 'optimal', '4->5': 'learning' } }), [
+    '2->3 is potential, expected optimal',
+    '4->5 has no learner state, expected learning'
+  ])
+})
+
+test('findFixtures pairs fixtures with their expectations and tolerates a missing folder', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'shift-lab-'))
+  try {
+    assert.deepEqual(findFixtures(join(dir, 'missing')), { fixtures: [], unmatched: [] })
+    assert.deepEqual(findFixtures(dir), { fixtures: [], unmatched: [] })
+    for (const name of ['a.json.gz', 'a.expect.json', 'b.json.gz', 'notes.txt']) writeFileSync(join(dir, name), '')
+    assert.deepEqual(findFixtures(dir), {
+      fixtures: [{ name: 'a', path: join(dir, 'a.json.gz'), expectPath: join(dir, 'a.expect.json') }],
+      unmatched: ['b']
+    })
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the fixture export refuses a selection with several cars unless --car names one', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'shift-lab-'))
+  try {
+    const labPath = join(dir, 'fdc-lab.sqlite')
+    labDatabase(labPath, [{ car: CAR_A, packets: pullPackets(CAR_A) }, { car: CAR_B, packets: pullPackets(CAR_B) }]).close()
+    const out = join(dir, 'car.json.gz')
+    const refused = spawnSync(process.execPath, [SHIFT_LAB, '--lab', labPath, '--fixture', out], { encoding: 'utf8' })
+    assert.equal(refused.status, 1)
+    assert.match(refused.stderr, new RegExp(KEY_A))
+    assert.match(refused.stderr, new RegExp(KEY_B))
+    assert.equal(existsSync(out), false)
+
+    const chosen = spawnSync(process.execPath, [SHIFT_LAB, '--lab', labPath, '--car', KEY_B, '--fixture', out], { encoding: 'utf8' })
+    assert.equal(chosen.status, 0, chosen.stderr)
+    const fixture = loadFixture(out)
+    assert.equal(fixture.key, KEY_B)
+    assert.deepEqual(fixture.sessions.map(session => session.id), [2])
+  } finally {
     rmSync(dir, { recursive: true, force: true })
   }
 })

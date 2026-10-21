@@ -14,6 +14,8 @@ function frame(overrides = {}) {
 }
 
 function upshift(learner, timestampMs, rpm, afterPower = 420) {
+  // A clean full-throttle lead-in: before frames count only after 150 ms of settled power.
+  learner.update(frame({ timestampMs: timestampMs - 150, rpm: rpm - 300, power: 380 }))
   learner.update(frame({ timestampMs, rpm: rpm - 100, power: 390 }))
   learner.update(frame({ timestampMs: timestampMs + 16, rpm, power: 405 }))
   // The first new-gear frames are torque-cut and must not be used as afterPower.
@@ -220,6 +222,77 @@ test('confirms the median of three clean better real upshifts', () => {
     { status: gear.status, rpm: gear.shiftRpm, confirmations: gear.confirmationCount },
     { status: 'optimal', rpm: 9550, confirmations: 3 }
   )
+})
+
+// A 4th-gear pull into the limiter: steady power, a limiter cut with negative power, then power
+// returns reduced and ramps back. `ramp` lists the [timestampMs, rpm, power] frames after the cut.
+function limiterCutPull(learner, ramp) {
+  for (let t = 0; t <= 160; t += 16) learner.update(frame({ timestampMs: t, gear: 4, rpm: 9000 + t * 3, power: 700 }))
+  learner.update(frame({ timestampMs: 176, gear: 4, rpm: 9355, power: -492 }))
+  learner.update(frame({ timestampMs: 192, gear: 4, rpm: 9182, power: -300 }))
+  for (const [timestampMs, rpm, power] of ramp) learner.update(frame({ timestampMs, gear: 4, rpm, power }))
+}
+// Neutral, then clean 5th-gear frames from POST_SHIFT_DELAY_MS after the transition on.
+function neutralShiftToFifth(learner, neutralMs, afterPower) {
+  learner.update(frame({ timestampMs: neutralMs, gear: 11, rpm: 9302, power: -456 }))
+  learner.update(frame({ timestampMs: neutralMs + 16, gear: 5, rpm: 8005, power: 599 }))
+  for (const offset of [96, 112, 128]) learner.update(frame({ timestampMs: neutralMs + offset, gear: 5, rpm: 8005 + offset, power: afterPower }))
+}
+
+test('a shift while power ramps back after a limiter cut is ignored', () => {
+  // Recorded cases: a shift 31 ms after power returned, and one 94 ms after it while power was still ~5% low.
+  const ramps = [
+    [[208, 9182, 593], [224, 9257, 602], [224, 9314, 610], [224, 9360, 617], [240, 9398, 624]],
+    [[208, 9300, 534], [224, 9330, 551], [240, 9360, 580], [256, 9390, 610], [272, 9420, 640], [288, 9440, 653], [302, 9456, 658]]
+  ]
+  for (const ramp of ramps) {
+    const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+    limiterCutPull(learner, ramp)
+    neutralShiftToFifth(learner, ramp.at(-1)[0], 671)
+    const state = learner.serializeLearningState()
+    assert.deepEqual(state.shiftSamples, [])
+    assert.equal(state.gearTargets.find(item => item.sourceGear === 4)?.status ?? 'learning', 'learning')
+  }
+})
+
+test('a shift after 150 ms of settled power following a limiter cut compares only settled frames', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  limiterCutPull(learner, [[208, 9182, 593], [224, 9257, 602], [240, 9398, 624], [256, 9420, 640], [272, 9440, 660],
+    [288, 9450, 705], [304, 9460, 710], [320, 9470, 708], [336, 9475, 709], [352, 9478, 710],
+    [368, 9480, 712], [384, 9490, 711], [400, 9495, 713]])
+  neutralShiftToFifth(learner, 416, 760)
+  const samples = learner.serializeLearningState().shiftSamples
+  assert.equal(samples.length, 1)
+  // The run restarts at 208 ms, so only the 368, 384 and 400 ms frames are before evidence.
+  assert.deepEqual({ sourceGear: samples[0].sourceGear, beforeTimestampMs: samples[0].beforeTimestampMs, beforeRpm: samples[0].beforeRpm, beforePower: samples[0].beforePower },
+    { sourceGear: 4, beforeTimestampMs: 384, beforeRpm: 9490, beforePower: 712 })
+})
+
+test('a partial-throttle or clutch frame in the source gear restarts the pre-shift settle period', () => {
+  for (const interruption of [{ throttle: 0.5 }, { clutch: 1 }]) {
+    const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+    for (let t = 0; t <= 160; t += 16) learner.update(frame({ timestampMs: t, rpm: 9000 + t * 3, power: 400 }))
+    learner.update(frame({ timestampMs: 176, rpm: 9480, power: 400, ...interruption }))
+    for (const t of [192, 208, 224]) learner.update(frame({ timestampMs: t, rpm: 9500, power: 410 }))
+    learner.update(frame({ timestampMs: 240, gear: 2, rpm: 6500, power: -50 }))
+    learner.update(frame({ timestampMs: 256, gear: 2, rpm: 6600, power: -20 }))
+    for (const t of [320, 336, 352]) learner.update(frame({ timestampMs: t, gear: 2, rpm: 7000, power: 420 }))
+    assert.deepEqual(learner.serializeLearningState().shiftSamples, [], JSON.stringify(interruption))
+  }
+})
+
+test('a neutral upshift after a settled clean run records the comparison', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  for (let t = 0; t <= 240; t += 16) learner.update(frame({ timestampMs: t, gear: 2, rpm: 9000 + t, power: 400 + t / 16 }))
+  learner.update(frame({ timestampMs: 256, gear: 11, rpm: 9100, power: -100 }))
+  learner.update(frame({ timestampMs: 272, gear: 11, rpm: 8500, power: -100 }))
+  learner.update(frame({ timestampMs: 288, gear: 3, rpm: 7000, power: -50 }))
+  for (const t of [368, 384, 400]) learner.update(frame({ timestampMs: t, gear: 3, rpm: 7200, power: 450 }))
+  const samples = learner.serializeLearningState().shiftSamples
+  assert.equal(samples.length, 1)
+  // Frames from 160 ms on are settled; the last five (176-240 ms) are the before evidence.
+  assert.deepEqual({ sourceGear: samples[0].sourceGear, destinationGear: samples[0].destinationGear, beforeTimestampMs: samples[0].beforeTimestampMs, beforePower: samples[0].beforePower },
+    { sourceGear: 2, destinationGear: 3, beforeTimestampMs: 208, beforePower: 413 })
 })
 
 test('uses redline as an operational cue before an earlier candidate exists', () => {

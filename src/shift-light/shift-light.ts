@@ -81,6 +81,9 @@ const MAX_TIMESTAMP_GAP_MS = 1000
 const PRE_SHIFT_WINDOW_MS = 200
 const MAX_PRE_SHIFT_FRAMES = 5
 const POST_SHIFT_DELAY_MS = 80
+// Power ramps back after a limiter cut or any other interruption and was still ~5% low 94 ms
+// after one recorded cut, so the before window starts well after that ramp.
+const PRE_SHIFT_SETTLE_MS = 150
 const POST_SHIFT_WINDOW_MS = 600
 const MAX_NEUTRAL_WINDOW_MS = 400
 const MIN_POST_SHIFT_FRAMES = 3
@@ -125,6 +128,8 @@ export class ShiftLightLearner {
   private readonly estimator = new OptimalShiftEstimator()
   private previous: Telemetry | null = null
   private preShiftFrames: Telemetry[] = []
+  private cleanRunStartMs: number | null = null
+  private cleanRunGear = 0
   private pendingUpshift: PendingUpshift | null = null
   private rpmRate: number | null = null
   private maxObservedGear = 0
@@ -141,8 +146,8 @@ export class ShiftLightLearner {
   exportState(): ShiftLightLearningState { return this.serializeLearningState() }
   importState(state: unknown): void { this.importLearningState(state) }
   mergeState(state: unknown): void { this.mergeLearningState(state) }
-  reset(): void { this.estimator.reset(); this.previous = null; this.preShiftFrames = []; this.pendingUpshift = null; this.rpmRate = null; this.maxObservedGear = 0; this.latestRpmMax = 0; this.publishLearningState() }
-  resetTransient(): void { this.estimator.resetTransient(); this.previous = null; this.preShiftFrames = []; this.pendingUpshift = null; this.rpmRate = null }
+  reset(): void { this.estimator.reset(); this.previous = null; this.preShiftFrames = []; this.cleanRunStartMs = null; this.pendingUpshift = null; this.rpmRate = null; this.maxObservedGear = 0; this.latestRpmMax = 0; this.publishLearningState() }
+  resetTransient(): void { this.estimator.resetTransient(); this.previous = null; this.preShiftFrames = []; this.cleanRunStartMs = null; this.pendingUpshift = null; this.rpmRate = null }
 
   update(telemetry: Telemetry): ShiftLightSnapshot {
     let previous = this.previous
@@ -215,8 +220,16 @@ export class ShiftLightLearner {
       if (previous && isForwardGear(previous.gear) && telemetry.gear === previous.gear + 1) this.startPostShift(previous.gear, telemetry.gear, telemetry.timestampMs, this.preShiftFrames)
     }
     if (forward && clean) {
-      if (!this.pendingUpshift || this.pendingUpshift.sourceGear !== telemetry.gear) this.preShiftFrames = [...this.preShiftFrames.filter(item => telemetry.timestampMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS), telemetry].slice(-MAX_PRE_SHIFT_FRAMES)
-    } else if (telemetry.gear === NEUTRAL_GEAR && this.preShiftFrames.length > 0) {
+      // Before evidence comes only from the settled clean run in this gear that directly precedes the transition.
+      if (this.cleanRunStartMs === null || this.cleanRunGear !== telemetry.gear) { this.cleanRunStartMs = telemetry.timestampMs; this.cleanRunGear = telemetry.gear; this.preShiftFrames = [] }
+      const settled = telemetry.timestampMs - this.cleanRunStartMs >= PRE_SHIFT_SETTLE_MS
+      if (settled && (!this.pendingUpshift || this.pendingUpshift.sourceGear !== telemetry.gear)) this.preShiftFrames = [...this.preShiftFrames.filter(item => telemetry.timestampMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS), telemetry].slice(-MAX_PRE_SHIFT_FRAMES)
+      return
+    }
+    this.cleanRunStartMs = null
+    // A non-clean forward frame interrupts the run; a shift starting on this frame already took its before frames.
+    if (forward) this.preShiftFrames = []
+    else if (telemetry.gear === NEUTRAL_GEAR && this.preShiftFrames.length > 0) {
       const sourceGear = this.preShiftFrames[this.preShiftFrames.length - 1]!.gear
       if (sourceGear >= 1 && sourceGear < 10) this.pendingUpshift = { sourceGear, destinationGear: sourceGear + 1, beforeFrames: [...this.preShiftFrames], transitionTimestampMs: null, firstNeutralTimestampMs: telemetry.timestampMs, postFrames: [] }
     } else if (!forward && telemetry.gear !== NEUTRAL_GEAR) { this.preShiftFrames = []; this.pendingUpshift = null }

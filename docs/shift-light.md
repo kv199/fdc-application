@@ -94,9 +94,16 @@ learner is started. The current safe baseline simply remains the answer.
 ## Comparable shift capture
 
 For a real `G → G+1` upshift, FDC keeps at most five clean source-gear frames
-from the preceding `200 ms`. It waits `80 ms` after the transition to pass the
-initial torque cut, then requires three clean positive-power destination-gear
-frames within a `600 ms` capture window. Median values from the two windows
+from the preceding `200 ms`. A source-gear frame counts only after `150 ms` of
+uninterrupted clean full-throttle power in that gear, and a frame that is not
+clean, or a different gear, starts that period again. After the limiter or any
+other interruption cuts power, it comes back reduced and ramps up; in one
+recorded case it was still about 5% low `94 ms` later. A shift made inside that
+ramp would compare the next gear against too little power and report a
+crossover that does not exist, so it is ignored. FDC waits
+`80 ms` after the transition to pass the initial torque cut, then requires
+three clean positive-power destination-gear frames within a `600 ms` capture
+window. Median values from the two windows
 provide:
 
 ```text

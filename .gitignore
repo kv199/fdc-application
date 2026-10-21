@@ -23,6 +23,7 @@ target/
 /exports/
 /qa/
 /outputs/
+/tools/shift-lab-fixtures/
 /.spreadsheet-work/
 *.export.*
 *.qa.*

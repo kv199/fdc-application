@@ -12,6 +12,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   too low and light the shift cue far too early. Such false readings are now
   dropped once the engine revs well past them. If a car's cue still comes
   early, reset its calibration in the Shift Light tab.
+- **Shift Light**: shifting right after the engine bounced off the rev limiter
+  no longer teaches a shift point below the limiter. Power is reduced for a
+  moment after each limiter cut, which made the next gear look stronger; such
+  shifts are now ignored. Reset the calibration of a car that learned a shift
+  point this way.
 
 ### Added
 

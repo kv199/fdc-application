@@ -478,6 +478,7 @@ var HudShiftLight = (() => {
   var PRE_SHIFT_WINDOW_MS = 200;
   var MAX_PRE_SHIFT_FRAMES = 5;
   var POST_SHIFT_DELAY_MS = 80;
+  var PRE_SHIFT_SETTLE_MS = 150;
   var POST_SHIFT_WINDOW_MS = 600;
   var MAX_NEUTRAL_WINDOW_MS = 400;
   var MIN_POST_SHIFT_FRAMES = 3;
@@ -523,6 +524,8 @@ var HudShiftLight = (() => {
     estimator = new OptimalShiftEstimator();
     previous = null;
     preShiftFrames = [];
+    cleanRunStartMs = null;
+    cleanRunGear = 0;
     pendingUpshift = null;
     rpmRate = null;
     maxObservedGear = 0;
@@ -560,6 +563,7 @@ var HudShiftLight = (() => {
       this.estimator.reset();
       this.previous = null;
       this.preShiftFrames = [];
+      this.cleanRunStartMs = null;
       this.pendingUpshift = null;
       this.rpmRate = null;
       this.maxObservedGear = 0;
@@ -570,6 +574,7 @@ var HudShiftLight = (() => {
       this.estimator.resetTransient();
       this.previous = null;
       this.preShiftFrames = [];
+      this.cleanRunStartMs = null;
       this.pendingUpshift = null;
       this.rpmRate = null;
     }
@@ -674,8 +679,18 @@ var HudShiftLight = (() => {
         if (previous && isForwardGear2(previous.gear) && telemetry.gear === previous.gear + 1) this.startPostShift(previous.gear, telemetry.gear, telemetry.timestampMs, this.preShiftFrames);
       }
       if (forward && clean) {
-        if (!this.pendingUpshift || this.pendingUpshift.sourceGear !== telemetry.gear) this.preShiftFrames = [...this.preShiftFrames.filter((item) => telemetry.timestampMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS), telemetry].slice(-MAX_PRE_SHIFT_FRAMES);
-      } else if (telemetry.gear === NEUTRAL_GEAR && this.preShiftFrames.length > 0) {
+        if (this.cleanRunStartMs === null || this.cleanRunGear !== telemetry.gear) {
+          this.cleanRunStartMs = telemetry.timestampMs;
+          this.cleanRunGear = telemetry.gear;
+          this.preShiftFrames = [];
+        }
+        const settled = telemetry.timestampMs - this.cleanRunStartMs >= PRE_SHIFT_SETTLE_MS;
+        if (settled && (!this.pendingUpshift || this.pendingUpshift.sourceGear !== telemetry.gear)) this.preShiftFrames = [...this.preShiftFrames.filter((item) => telemetry.timestampMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS), telemetry].slice(-MAX_PRE_SHIFT_FRAMES);
+        return;
+      }
+      this.cleanRunStartMs = null;
+      if (forward) this.preShiftFrames = [];
+      else if (telemetry.gear === NEUTRAL_GEAR && this.preShiftFrames.length > 0) {
         const sourceGear = this.preShiftFrames[this.preShiftFrames.length - 1].gear;
         if (sourceGear >= 1 && sourceGear < 10) this.pendingUpshift = { sourceGear, destinationGear: sourceGear + 1, beforeFrames: [...this.preShiftFrames], transitionTimestampMs: null, firstNeutralTimestampMs: telemetry.timestampMs, postFrames: [] };
       } else if (!forward && telemetry.gear !== NEUTRAL_GEAR) {

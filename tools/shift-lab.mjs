@@ -1,11 +1,12 @@
 // Replays raw packets from fdc-lab.sqlite through the Shift Light learner and checks its shift points against a power-curve reference.
-// Opens the lab (and optional fdc.sqlite) read-only; the only file it writes is the --out report.
+// Opens the lab (and optional fdc.sqlite) read-only; the only files it writes are the --out report and the --fixture export.
 import { DatabaseSync } from 'node:sqlite'
-import { writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { gunzipSync, gzipSync } from 'node:zlib'
 import { decodePacket } from './shift-lab-decoder.mjs'
 
 const require = createRequire(import.meta.url)
@@ -24,7 +25,12 @@ const RATIO_MIN_FRAMES = 10
 const SCAN_STEP_RPM = 50
 const SLIP_LIMIT = 0.15
 const SHIFT_TABLES = ['shift_light_configs', 'shift_light_gear_targets']
-const USAGE = 'Usage: node tools/shift-lab.mjs --lab <fdc-lab.sqlite> [--fdc <fdc.sqlite>] [--session <id>] [--json] [--out <file>]'
+const FIXTURE_FORMAT = 'fdc-shift-lab-fixture'
+const FIXTURE_VERSION = 1
+const USAGE = [
+  'Usage: node tools/shift-lab.mjs --lab <fdc-lab.sqlite> [--fdc <fdc.sqlite>] [--session <id>] [--json] [--out <file>]',
+  '       node tools/shift-lab.mjs --lab <fdc-lab.sqlite> [--session <id>] [--car <key>] --fixture <file.json.gz>'
+].join('\n')
 
 function quantile(values, fraction) {
   if (values.length === 0) return null
@@ -366,13 +372,13 @@ function summarizeCar(group, fdcDb) {
   }
 }
 
-export function replayLab(db, options = {}) {
-  const { sessionId = null, fdcDb = null } = options
-  const schemaVersion = db.prepare('SELECT version FROM lab_schema_version').get()?.version ?? null
-  const sessions = db.prepare('SELECT id, started_at_ms, finished_at_ms, app_version, shift_light_model_version FROM lab_sessions ORDER BY started_at_ms, id').all()
+function readLabSessions(db, sessionId) {
+  return db.prepare('SELECT id FROM lab_sessions ORDER BY started_at_ms, id').all()
     .filter(session => sessionId === null || session.id === sessionId)
-  const groups = new Map()
-  const totals = { packets: 0, undecodedPackets: 0, keylessFrames: 0, keyedFrames: 0 }
+}
+
+// Decodes one session at a time so a long recording is never held in memory twice.
+function* decodeLabSessions(db, sessions, totals) {
   for (const session of sessions) {
     const packets = db.prepare('SELECT sequence, packet FROM lab_packets WHERE session_id = ? ORDER BY sequence').all(session.id)
     const frames = []
@@ -382,20 +388,133 @@ export function replayLab(db, options = {}) {
       if (frame) frames.push(frame)
       else totals.undecodedPackets++
     }
-    replaySession(session, frames, groups, totals)
+    yield { id: session.id, frames }
   }
+}
+
+// Replays already-decoded sessions, given in order as { id, frames }, through one learner per car.
+export function replayFrames(sessions, options = {}) {
+  const { fdcDb = null } = options
+  const groups = new Map()
+  const totals = { keylessFrames: 0, keyedFrames: 0 }
+  for (const session of sessions) replaySession(session, session.frames, groups, totals)
   const fdc = fdcDb ? fdcStatus(fdcDb) : null
   const cars = [...groups.values()].map(group => summarizeCar(group, fdc?.available ? fdcDb : null))
+  return { keylessFrames: totals.keylessFrames, keyedFrames: totals.keyedFrames, fdc, cars }
+}
+
+export function replayLab(db, options = {}) {
+  const { sessionId = null, fdcDb = null } = options
+  const schemaVersion = db.prepare('SELECT version FROM lab_schema_version').get()?.version ?? null
+  const sessions = readLabSessions(db, sessionId)
+  const totals = { packets: 0, undecodedPackets: 0 }
+  const replay = replayFrames(decodeLabSessions(db, sessions, totals), { fdcDb })
   return {
     schemaVersion,
     sessions: sessions.length,
     packets: totals.packets,
     undecodedPackets: totals.undecodedPackets,
-    keylessFrames: totals.keylessFrames,
-    keyedFrames: totals.keyedFrames,
-    fdc,
-    cars
+    ...replay
   }
+}
+
+function fixtureFrame(frame) {
+  const { car, slipRatio } = frame
+  return {
+    isRaceOn: frame.isRaceOn, timestampMs: frame.timestampMs, rpm: frame.rpm, rpmMax: frame.rpmMax, speedKmh: frame.speedKmh,
+    power: frame.power, gear: frame.gear, throttle: frame.throttle, brake: frame.brake, clutch: frame.clutch, handBrake: frame.handBrake,
+    car: { ordinal: car.ordinal, class: car.class, pi: car.pi, drivetrain: car.drivetrain, cylinders: car.cylinders },
+    slipRatio: { fl: slipRatio.fl, fr: slipRatio.fr, rl: slipRatio.rl, rr: slipRatio.rr }
+  }
+}
+
+function carKeys(sessions) {
+  const keys = new Set()
+  for (const session of sessions) {
+    for (const frame of session.frames) {
+      const key = getShiftLightCarKey(frame)
+      if (key !== null) keys.add(key)
+    }
+  }
+  return [...keys]
+}
+
+// Keeps the car's frames and keyless frames with only the fields the learner and the reference read.
+// A run of another car's frames becomes one keyless frame, so the learner still resets where the car changed.
+export function toFixture(sessions, key) {
+  const kept = []
+  for (const session of sessions) {
+    const frames = []
+    let foreign = false
+    let hasCar = false
+    for (const frame of session.frames) {
+      const frameKey = getShiftLightCarKey(frame)
+      if (frameKey !== null && frameKey !== key) {
+        if (!foreign) frames.push({ ...fixtureFrame(frame), car: { ordinal: 0, class: 0, pi: 0, drivetrain: 0, cylinders: 0 } })
+        foreign = true
+        continue
+      }
+      foreign = false
+      if (frameKey === key) hasCar = true
+      frames.push(fixtureFrame(frame))
+    }
+    if (hasCar) kept.push({ id: session.id, frames })
+  }
+  return { format: FIXTURE_FORMAT, formatVersion: FIXTURE_VERSION, key, sessions: kept }
+}
+
+export function loadFixture(path) {
+  const fixture = JSON.parse(gunzipSync(readFileSync(path)).toString('utf8'))
+  if (fixture?.format !== FIXTURE_FORMAT || fixture.formatVersion !== FIXTURE_VERSION) {
+    throw new Error(`${path} is not a ${FIXTURE_FORMAT} v${FIXTURE_VERSION} file`)
+  }
+  return fixture
+}
+
+// Fixtures are <name>.json.gz files; only those with a hand-written <name>.expect.json next to them are checked.
+export function findFixtures(dir) {
+  if (!existsSync(dir)) return { fixtures: [], unmatched: [] }
+  const files = readdirSync(dir).sort()
+  const fixtures = []
+  const unmatched = []
+  for (const file of files.filter(name => name.endsWith('.json.gz'))) {
+    const name = file.slice(0, -'.json.gz'.length)
+    if (files.includes(`${name}.expect.json`)) fixtures.push({ name, path: join(dir, file), expectPath: join(dir, `${name}.expect.json`) })
+    else unmatched.push(name)
+  }
+  return { fixtures, unmatched }
+}
+
+export function writeFixture(path, fixture) {
+  mkdirSync(dirname(resolve(path)), { recursive: true })
+  writeFileSync(path, gzipSync(JSON.stringify(fixture), { level: 9 }))
+}
+
+// Compares a replayed car with hand-written expectations; every key is optional and an empty list means it passed.
+export function checkExpectations(carResult, expect) {
+  const failures = []
+  if (expect.usableCeilingRpm !== undefined) {
+    const [min, max] = expect.usableCeilingRpm
+    const usable = carResult.ceiling.usable
+    if (usable === null || usable === undefined) failures.push(`usable ceiling is null, expected ${min}-${max}`)
+    else if (usable < min || usable > max) failures.push(`usable ceiling ${usable} is outside ${min}-${max}`)
+  }
+  const targets = carResult.learner.gearTargets
+  if (expect.minLearnedShiftRpm !== undefined) {
+    for (const target of targets.filter(item => item.status === 'potential' || item.status === 'optimal')) {
+      const rpm = target.targetRpm ?? target.candidateRpm
+      if (rpm === null || rpm === undefined || rpm < expect.minLearnedShiftRpm) {
+        failures.push(`${target.sourceGear}->${target.destinationGear} ${target.status} at ${rpm ?? 'no RPM'}, expected at least ${expect.minLearnedShiftRpm}`)
+      }
+    }
+  }
+  for (const [pair, status] of Object.entries(expect.pairs ?? {})) {
+    const [sourceGear, destinationGear] = pair.split('->').map(Number)
+    const target = targets.find(item => item.sourceGear === sourceGear && item.destinationGear === destinationGear)
+    if (!target) failures.push(`${pair} has no learner state, expected ${status}`)
+    else if (target.status !== status) failures.push(`${pair} is ${target.status}, expected ${status}`)
+  }
+  return failures
 }
 
 function pad(text, width) {
@@ -467,7 +586,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       fdc: { type: 'string' },
       session: { type: 'string' },
       json: { type: 'boolean', default: false },
-      out: { type: 'string' }
+      out: { type: 'string' },
+      fixture: { type: 'string' },
+      car: { type: 'string' }
     }
   })
   if (!values.lab) {
@@ -478,6 +599,27 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (sessionId !== null && !Number.isInteger(sessionId)) {
       console.error(USAGE)
       process.exitCode = 1
+    } else if (values.fixture) {
+      const labDb = new DatabaseSync(values.lab, { readOnly: true })
+      try {
+        const sessions = []
+        for (const session of decodeLabSessions(labDb, readLabSessions(labDb, sessionId), { packets: 0, undecodedPackets: 0 })) {
+          sessions.push({ id: session.id, frames: session.frames.map(fixtureFrame) })
+        }
+        const keys = carKeys(sessions)
+        if (values.car ? !keys.includes(values.car) : keys.length !== 1) {
+          const found = keys.length === 0 ? 'no car keys' : `car keys:\n${keys.map(key => `  ${key}`).join('\n')}`
+          console.error(values.car ? `${values.car} is not in the selection; ${found}` : `Choose one car with --car; the selection has ${found}`)
+          process.exitCode = 1
+        } else {
+          const fixture = toFixture(sessions, values.car ?? keys[0])
+          writeFixture(values.fixture, fixture)
+          const frames = fixture.sessions.reduce((total, session) => total + session.frames.length, 0)
+          console.log(`${values.fixture}: ${fixture.key}, ${fixture.sessions.length} sessions, ${frames} frames`)
+        }
+      } finally {
+        labDb.close()
+      }
     } else {
       const labDb = new DatabaseSync(values.lab, { readOnly: true })
       const fdcDb = values.fdc ? new DatabaseSync(values.fdc, { readOnly: true }) : null

@@ -141,8 +141,38 @@ shows only the replay and the reference.
 `tools/shift-lab-decoder.mjs` turns a raw packet into the payload the HUD
 receives, including its `f32` rounding. A Rust test and a Node test decode the
 synthetic packet in `tools/shift-lab-decoder-golden.json` and must both
-produce its `expected` payload. Recordings and fixtures made from them stay on
-the developer's computer and are never committed.
+produce its `expected` payload.
+
+### Shift Lab fixtures
+
+A fixture is one car's drives from a recording, cut down to the fields Shift
+Light and the reference read, with no map position. It is a regression test
+for drives that once exposed a bug:
+
+```powershell
+node tools/shift-lab.mjs --lab path\to\fdc-lab.sqlite --car fh6:3363:4:800:2:10 --fixture tools\shift-lab-fixtures\skyline-v10-awd-limiter.json.gz
+```
+
+`--car` is required when the selection holds more than one car; `--session`
+narrows it further. Next to the fixture, write `<name>.expect.json` by hand.
+Every key is optional:
+
+```json
+{ "description": "What the drives show",
+  "usableCeilingRpm": [9450, 9550],
+  "minLearnedShiftRpm": 9400,
+  "pairs": { "4->5": "learning" } }
+```
+
+`usableCeilingRpm` bounds the learned ceiling, `minLearnedShiftRpm` is the
+lowest RPM any `POTENTIAL` or `OPTIMAL` pair may have, and `pairs` sets exact
+pair states. `tools/shift-lab-fixtures.test.mjs` replays every fixture that has
+an expectation file through the current bundle as part of the Node suite and
+lists every failed expectation.
+
+`tools/shift-lab-fixtures/` is in `.gitignore`: recordings and fixtures made
+from them stay on the developer's computer and are never committed. Without
+fixtures, as in CI, the test file reports one skipped test.
 
 ## Tests that read source code
 

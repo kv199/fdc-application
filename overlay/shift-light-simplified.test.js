@@ -11,6 +11,8 @@ function frame(overrides = {}) {
     combinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 }, ...overrides }
 }
 function feedShift(learner, start, rpm, afterPower, overrides = {}) {
+  // A clean full-throttle lead-in: before frames count only after 150 ms of settled power.
+  learner.update(frame({ timestampMs: start - 150, rpm: rpm - 300, power: 390, ...overrides }))
   learner.update(frame({ timestampMs: start, rpm: rpm - 100, power: 400, ...overrides }))
   learner.update(frame({ timestampMs: start + 16, rpm, power: 410, ...overrides }))
   learner.update(frame({ timestampMs: start + 32, gear: 2, rpm: 6500, power: -50, ...overrides }))
