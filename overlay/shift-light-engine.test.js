@@ -94,7 +94,8 @@ test('an imported window of more than twelve samples keeps the highest twelve', 
 test('live limiter pulls keep the highest twelve observations', () => {
   const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
   let startMs = 0
-  for (let peak = 7100; peak <= 7111; peak += 1) startMs = limiterPull(learner, startMs, peak)
+  // The lower twelve stay within 400 RPM of the highest clean full-throttle RPM, so none is withdrawn.
+  for (let peak = 9600; peak <= 9611; peak += 1) startMs = limiterPull(learner, startMs, peak)
   for (const peak of [9900, 9901, 9902]) startMs = limiterPull(learner, startMs, peak)
   assert.deepEqual(ceilingOf(learner), { usableCeiling: 9901, sampleCount: 12, clusterCount: 3 })
 })
@@ -102,10 +103,106 @@ test('live limiter pulls keep the highest twelve observations', () => {
 test('live limiter pulls report the Honda progress before and after a tight third sample', () => {
   const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
   let startMs = 0
+  // Reaching 9,196 RPM on clean full throttle withdraws the false 7,106 detection.
   for (const peak of [7106, 9196, 9195]) startMs = limiterPull(learner, startMs, peak)
-  assert.deepEqual(ceilingOf(learner), { usableCeiling: null, sampleCount: 3, clusterCount: 2 })
+  assert.deepEqual(ceilingOf(learner), { usableCeiling: null, sampleCount: 2, clusterCount: 2 })
   startMs = limiterPull(learner, startMs, 9190)
-  assert.deepEqual(ceilingOf(learner), { usableCeiling: 9195, sampleCount: 4, clusterCount: 3 })
+  assert.deepEqual(ceilingOf(learner), { usableCeiling: 9195, sampleCount: 3, clusterCount: 3 })
+})
+
+// A clean full-throttle pull that rises to topRpm without a limiter pattern, then lifts. Returns the next timestamp.
+function wotPull(learner, startMs, topRpm, gear = 1) {
+  const rpms = [topRpm - 1000, topRpm - 500, topRpm]
+  rpms.forEach((rpm, index) => learner.update(frame({ timestampMs: startMs + index * 16, gear, rpm, rpmMax: 10000 })))
+  learner.update(frame({ timestampMs: startMs + rpms.length * 16, gear, rpm: topRpm - 200, throttle: 0, rpmMax: 10000 }))
+  return startMs + (rpms.length + 1) * 16 + 200
+}
+
+function ceilingDetails(learner) {
+  const snapshot = learner.snapshot(frame({ rpm: 5000, rpmMax: 10000 }))
+  return { samples: learner.serializeLearningState().ceilingSamples, usableCeiling: snapshot.usableCeiling, provisionalCeiling: snapshot.provisionalCeiling }
+}
+
+test('a wheelspin limiter pattern far below a higher clean full-throttle RPM is withdrawn', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  let startMs = limiterPull(learner, 0, 8600)
+  assert.deepEqual(ceilingDetails(learner), { samples: [8600], usableCeiling: null, provisionalCeiling: 8600 })
+  startMs = wotPull(learner, startMs, 9187, 5)
+  const details = ceilingDetails(learner)
+  assert.equal(details.samples.some(sample => sample < 9187 - 400), false)
+  assert.deepEqual(details, { samples: [], usableCeiling: null, provisionalCeiling: null })
+})
+
+test('a low limiter pattern after a higher clean full-throttle RPM is not recorded', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  const startMs = wotPull(learner, 0, 9187, 3)
+  limiterPull(learner, startMs, 8600)
+  assert.deepEqual(ceilingDetails(learner), { samples: [], usableCeiling: null, provisionalCeiling: null })
+})
+
+test('the highest clean full-throttle RPM raises a provisional ceiling but never creates one', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  // Without a limiter observation the cue keeps the reported redline instead of following the climbing RPM.
+  let startMs = wotPull(learner, 0, 9187, 4)
+  assert.deepEqual(ceilingDetails(learner), { samples: [], usableCeiling: null, provisionalCeiling: null })
+  startMs = limiterPull(learner, startMs, 8900)
+  assert.deepEqual(ceilingDetails(learner), { samples: [8900], usableCeiling: null, provisionalCeiling: 9187 })
+})
+
+test('real limiter hits within 400 RPM below the highest clean full-throttle RPM are kept', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  let startMs = wotPull(learner, 0, 9187, 4)
+  for (const peak of [8787, 8786, 9100, 9105, 9102]) startMs = limiterPull(learner, startMs, peak)
+  assert.deepEqual(ceilingDetails(learner), { samples: [8787, 9100, 9102, 9105], usableCeiling: 9102, provisionalCeiling: null })
+})
+
+test('a trusted ceiling is withdrawn when clean full throttle later exceeds it by more than 400 RPM', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  let startMs = 0
+  for (const peak of [8700, 8710, 8720]) startMs = limiterPull(learner, startMs, peak)
+  assert.deepEqual(ceilingDetails(learner), { samples: [8700, 8710, 8720], usableCeiling: 8710, provisionalCeiling: null })
+  startMs = wotPull(learner, startMs, 9050, 6)
+  assert.equal(ceilingDetails(learner).usableCeiling, 8710)
+  wotPull(learner, startMs, 9187, 6)
+  const state = learner.serializeLearningState()
+  assert.deepEqual({ samples: state.ceilingSamples, usableCeiling: state.usableCeiling }, { samples: [], usableCeiling: null })
+  assert.deepEqual(ceilingDetails(learner), { samples: [], usableCeiling: null, provisionalCeiling: null })
+})
+
+test('the highest clean full-throttle RPM survives a transient reset but not a full reset', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  let startMs = wotPull(learner, 0, 9187, 2)
+  learner.resetTransient()
+  startMs = limiterPull(learner, startMs, 8600)
+  assert.deepEqual(ceilingDetails(learner), { samples: [], usableCeiling: null, provisionalCeiling: null })
+  learner.reset()
+  assert.equal(ceilingDetails(learner).provisionalCeiling, null)
+  limiterPull(learner, startMs, 8600)
+  assert.deepEqual(ceilingDetails(learner), { samples: [8600], usableCeiling: null, provisionalCeiling: 8600 })
+})
+
+test('imported ceiling samples stay until this run reaches a higher clean full-throttle RPM', () => {
+  const learner = ceilingLearner([8600, 8610, 8620])
+  let startMs = wotPull(learner, 0, 8900, 2)
+  assert.deepEqual(ceilingDetails(learner), { samples: [8600, 8610, 8620], usableCeiling: 8610, provisionalCeiling: null })
+  wotPull(learner, startMs, 9187, 2)
+  assert.deepEqual(ceilingDetails(learner), { samples: [], usableCeiling: null, provisionalCeiling: null })
+})
+
+test('importing or merging a calibration keeps the highest clean full-throttle RPM of the run', () => {
+  const key = getShiftLightCarKey(frame())
+  const stored = { modelVersion: 4, version: 4, key, reportedRedlineRpm: 10000, ceilingSamples: [9100, 9105, 9102],
+    usableCeiling: null, gearTargets: [], shiftSamples: [] }
+  const imported = new ShiftLightLearner(key)
+  let startMs = wotPull(imported, 0, 9187, 2)
+  imported.importState(stored)
+  limiterPull(imported, startMs, 8600)
+  assert.deepEqual(ceilingDetails(imported).samples, [9100, 9102, 9105])
+  const merged = new ShiftLightLearner(key)
+  startMs = wotPull(merged, 0, 9187, 2)
+  merged.mergeLearningState(stored)
+  limiterPull(merged, startMs, 8600)
+  assert.deepEqual(ceilingDetails(merged).samples, [9100, 9102, 9105])
 })
 
 test('uses only the stable vehicle configuration fields for the learner key', () => {

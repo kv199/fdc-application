@@ -5,9 +5,17 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+### Fixed
+
+- **Shift Light**: wheelspin on full throttle is no longer mistaken for the
+  rev limiter. On powerful cars it could set the learned limit hundreds of RPM
+  too low and light the shift cue far too early. Such false readings are now
+  dropped once the engine revs well past them. If a car's cue still comes
+  early, reset its calibration in the Shift Light tab.
+
 ### Added
 
-- **Shift Light**: FDC now keeps your last drives, about three hours and at
+- **Shift Light**: FDC now keeps your last drives, about one hour and at
   most 200 MB, in `fdc-lab.sqlite` next to its other data, so Shift Light can
   be checked against real drives. The file stays on your computer; share a
   copy only if you want to send drives for feedback.

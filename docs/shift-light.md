@@ -41,14 +41,18 @@ compatibility, but that suffix is not part of configuration identity.
 ## Safe baseline and usable ceiling
 
 The usable engine ceiling is the safe baseline target for every unlearned gear
-pair. Until the limiter has been measured reliably, the highest limiter
-observation at or above 85% of the reported redline stands in for it as the
-provisional ceiling, from the first such hit on: a first hit is usually within
-about 2% below the real limiter, and the value only rises with later hits. The
-Configuration shows it as `LEARNING · 1/3 · ~9,195 RPM`.
+pair. Until the limiter has been measured reliably, the provisional ceiling
+stands in for it. It is the highest limiter observation at or above 85% of the
+reported redline, raised to the highest RPM the engine has reached on clean
+full throttle in this run, because the engine cannot run above its limiter. A
+first limiter hit is usually within about 2% below the real limiter, and the
+value only rises during a run. Without such an observation there is no
+provisional ceiling, even after high RPM: following the climbing RPM alone
+would light the cue on every pull.
+The Configuration shows it as `LEARNING · 1/3 · ~9,195 RPM`.
 
-The learner's fallback effective target is the provisional ceiling. Before any
-such hit, it is the current positive game-reported redline. The learner's
+The learner's fallback effective target is the provisional ceiling. Before one
+exists, it is the current positive game-reported redline. The learner's
 comparison baseline is the usable ceiling or, before one exists, the reported
 redline; the provisional ceiling is not used there. This means `LEARNING` still
 has a usable purple cue; it does not mean "no guidance".
@@ -64,7 +68,15 @@ comes from a continuous same-gear full-throttle pull that rises by at least
 to within `60 RPM` of that peak. FDC keeps the highest 12 observations; lower
 observations are discarded. When the reported redline is known, only observations
 at or above 85% of it are considered, because the limiter is the highest RPM the
-engine holds and lower detections are false. A group is one considered
+engine holds and lower detections are false. For the same reason, an
+observation more than `400 RPM` below the highest RPM the engine has reached on
+clean full throttle in this run is not a limiter hit: it is not recorded, and
+existing observations are removed, and the usable ceiling derived again, as
+soon as the engine passes them by that margin. Wheelspin on full throttle can
+make RPM rise, dip, and recover well below the limiter; without this rule such
+peaks became the provisional ceiling and moved the cue hundreds of RPM early.
+That highest RPM is kept in memory only and starts again after a restart or a
+reset. A group is one considered
 observation together with the considered observations within `100 RPM` below it.
 Scanning from the highest considered observation down, the usable ceiling is the
 median of the first group that holds at least three observations; for an
@@ -337,8 +349,10 @@ lab_packets          id, session_id, sequence, received_at_ms,
 Times are wall-clock UNIX milliseconds of reception. A new session starts when
 the car identity (ordinal, class, PI, drivetrain, cylinders) changes or when
 more than `2000 ms` passes between packets. Packets are written in one
-transaction at least every `500 ms`. The database is limited to 200 MB, about
-three hours of driving: when it is larger, the oldest sessions are deleted
+transaction at least every `500 ms`. FH6 sends about 130 packets a second, two
+different packets per game timestamp, and both are stored. The database is
+limited to 200 MB, about one hour of driving: when it is larger, the oldest
+sessions are deleted
 first, and if only the current session remains, its oldest packets are. The
 file uses the default rollback journal, so it is complete after every commit.
 

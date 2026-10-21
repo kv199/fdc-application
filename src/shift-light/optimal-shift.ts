@@ -90,6 +90,10 @@ const CEILING_WAIT_ABOVE_RPM = 400
 // A cluster this large is accepted even with samples just above it, so one stray high
 // observation kept among the highest samples cannot block the ceiling forever.
 const CEILING_WAIT_RELEASE_SAMPLES = 6
+// The engine reaching a higher RPM on clean full throttle proves that a lower observation
+// was not a limiter hit. A real first hit sits within about 2% below the limiter, while
+// wheelspin peaks that mimic the limiter pattern were 500+ RPM below it.
+const FALSE_LIMITER_BELOW_PEAK_RPM = 400
 const MIN_LIMITER_RISE_RPM = 100
 const MIN_LIMITER_DROP_RPM = 40
 const LIMITER_RECOVERY_TOLERANCE_RPM = 60
@@ -180,10 +184,14 @@ export class OptimalShiftEstimator {
   private limiterTracker: LimiterTracker | null = null
   private lastCleanTelemetry: Telemetry | null = null
   private limiterRearmed = true
+  /** Highest clean full-throttle RPM of this run; in memory only, cleared by reset(). */
+  private peakWotRpm = 0
 
   ingest(telemetry: Telemetry): void {
     if (Number.isFinite(telemetry.rpmMax) && telemetry.rpmMax > 0) this.reportedRedlineRpm = roundRpm(telemetry.rpmMax)
-    if (cleanWotMotionTelemetry(telemetry) && telemetry.gear < FORWARD_GEAR_MAX) this.getOrCreate(telemetry.gear)
+    const cleanWot = cleanWotMotionTelemetry(telemetry)
+    if (cleanWot && telemetry.gear < FORWARD_GEAR_MAX) this.getOrCreate(telemetry.gear)
+    if (cleanWot && telemetry.rpm > this.peakWotRpm) this.raisePeakWotRpm(telemetry.rpm)
     this.observeLimiter(telemetry)
   }
 
@@ -294,20 +302,23 @@ export class OptimalShiftEstimator {
       status: state?.status ?? 'learning', confirmationCount: state?.confirmationCount ?? 0,
       lastReason: state?.lastReason ?? null, evidenceCount: state?.evidence.length ?? 0 }
   }
-  reset(): void { this.gears.clear(); this.shiftSamples = []; this.ceilingSamples = []; this.usableCeiling = null; this.reportedRedlineRpm = null; this.resetTransient() }
+  reset(): void { this.gears.clear(); this.shiftSamples = []; this.ceilingSamples = []; this.usableCeiling = null; this.reportedRedlineRpm = null; this.peakWotRpm = 0; this.resetTransient() }
   resetTransient(): void { this.limiterTracker = null; this.lastCleanTelemetry = null; this.limiterRearmed = true }
   getUsableCeiling(): number | null { return this.usableCeiling }
   /**
    * Until the usable ceiling is trusted, the highest observation at or above
-   * CEILING_MIN_REDLINE_FRACTION of the redline stands in for the limiter. A first limiter
-   * hit is usually within about 2% below the real limiter, and the value only rises with
-   * later hits. It is a presentation fallback only; learning still uses the trusted ceiling.
+   * CEILING_MIN_REDLINE_FRACTION of the redline stands in for the limiter, raised to the
+   * highest clean full-throttle RPM of this run because the engine cannot exceed its limiter.
+   * A first limiter hit is usually within about 2% below the real limiter, and the value only
+   * rises during a run. Without an observation there is no provisional ceiling: following
+   * the climbing RPM alone would light the cue at every pull. It is a presentation fallback
+   * only; learning still uses the trusted ceiling.
    */
   getProvisionalCeiling(fallbackRedlineRpm: number | null = null): number | null {
     const redline = this.reportedRedlineRpm ?? fallbackRedlineRpm
     if (redline === null || !(redline > 0)) return null
     const considered = this.ceilingSamples.filter(sample => sample / redline >= CEILING_MIN_REDLINE_FRACTION)
-    return considered.length ? Math.max(...considered) : null
+    return considered.length ? Math.max(...considered, roundRpm(this.peakWotRpm)) : null
   }
   getCeilingSampleCount(): number { return this.ceilingSamples.length }
   /** Size of the highest qualifying cluster, or the largest non-qualifying cluster while no ceiling exists. */
@@ -404,7 +415,17 @@ export class OptimalShiftEstimator {
     if (telemetry.rpm >= tracker.peakRpm - LIMITER_RECOVERY_TOLERANCE_RPM) { this.recordCeilingSample(tracker.peakRpm); this.limiterRearmed = false; this.limiterTracker = null }
   }
   private recordCeilingSample(sample: number): void {
+    if (this.isBelowPeakWotRpm(sample)) return
     this.ceilingSamples = keepHighestCeilingSamples([...this.ceilingSamples, roundRpm(sample)])
+    this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples)
+  }
+  private isBelowPeakWotRpm(sample: number): boolean { return sample < this.peakWotRpm - FALSE_LIMITER_BELOW_PEAK_RPM }
+  /** A higher clean full-throttle RPM withdraws every observation it proves was not a limiter hit. */
+  private raisePeakWotRpm(rpm: number): void {
+    this.peakWotRpm = rpm
+    const kept = this.ceilingSamples.filter(sample => !this.isBelowPeakWotRpm(sample))
+    if (kept.length === this.ceilingSamples.length) return
+    this.ceilingSamples = kept
     this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples)
   }
 }

@@ -124,6 +124,22 @@ test('loads up to twelve stored ceiling samples, keeps the highest and reports t
   assert.deepEqual(saves[saves.length - 1].args.request.ceilingSamples, keptHighest)
 })
 
+test('saves the ceiling samples withdrawn by a higher clean full-throttle RPM', async () => {
+  const stored = { modelVersion: 4, reportedRedlineRpm: 10000, usableCeiling: 8610,
+    ceilingSamples: [8600, 8610, 8620], gearTargets: [], shiftSamples: [] }
+  const { calls, runtime } = createRuntime({ stored })
+  runtime.update(frame({ timestampMs: 0, rpm: 8000, rpmMax: 10000 }))
+  await flush(); await flush(); await flush(); await flush(); await flush()
+  assert.equal(runtime.update(frame({ timestampMs: 16, rpm: 8100, rpmMax: 10000 })).usableCeiling, 8610)
+  const state = runtime.update(frame({ timestampMs: 32, rpm: 9187, rpmMax: 10000 }))
+  assert.equal(state.usableCeiling, null)
+  assert.equal(state.ceilingSampleCount, 0)
+  await flush(); await flush(); await flush()
+  const saves = calls.filter(call => call.command === 'save_shift_light_calibration')
+  assert.deepEqual(saves[saves.length - 1].args.request.ceilingSamples, [])
+  assert.equal(saves[saves.length - 1].args.request.usableCeiling, null)
+})
+
 test('exposes a zero ceiling cluster count before any configuration is resolved', () => {
   const { runtime } = createRuntime()
   const empty = runtime.update(null)
