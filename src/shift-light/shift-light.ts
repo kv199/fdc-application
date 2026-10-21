@@ -226,13 +226,15 @@ export class ShiftLightLearner {
       if (settled && (!this.pendingUpshift || this.pendingUpshift.sourceGear !== telemetry.gear)) this.preShiftFrames = [...this.preShiftFrames.filter(item => telemetry.timestampMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS), telemetry].slice(-MAX_PRE_SHIFT_FRAMES)
       return
     }
+    // A non-clean frame ends the clean run. Frames collected before it stay usable within the
+    // before window, because a clutch press or a lift is the start of the shift itself; frames
+    // after an interruption are protected by the settle rule, since a new clean run clears them.
     this.cleanRunStartMs = null
-    // A non-clean forward frame interrupts the run; a shift starting on this frame already took its before frames.
-    if (forward) this.preShiftFrames = []
-    else if (telemetry.gear === NEUTRAL_GEAR && this.preShiftFrames.length > 0) {
+    if (forward) return
+    if (telemetry.gear === NEUTRAL_GEAR && this.preShiftFrames.length > 0) {
       const sourceGear = this.preShiftFrames[this.preShiftFrames.length - 1]!.gear
       if (sourceGear >= 1 && sourceGear < 10) this.pendingUpshift = { sourceGear, destinationGear: sourceGear + 1, beforeFrames: [...this.preShiftFrames], transitionTimestampMs: null, firstNeutralTimestampMs: telemetry.timestampMs, postFrames: [] }
-    } else if (!forward && telemetry.gear !== NEUTRAL_GEAR) { this.preShiftFrames = []; this.pendingUpshift = null }
+    } else if (telemetry.gear !== NEUTRAL_GEAR) { this.preShiftFrames = []; this.pendingUpshift = null }
   }
 
   private startPostShift(sourceGear: number, destinationGear: number, timestampMs: number, beforeFrames: Telemetry[]): void {

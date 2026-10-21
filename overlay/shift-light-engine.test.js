@@ -295,6 +295,61 @@ test('a neutral upshift after a settled clean run records the comparison', () =>
     { sourceGear: 2, destinationGear: 3, beforeTimestampMs: 208, beforePower: 413 })
 })
 
+// Settled clean full-throttle frames in 2nd gear: frames from 160 ms on are settled and the
+// last five (176-240 ms, power 241-245) are kept as before evidence.
+function settledSecondGear(learner) {
+  for (let t = 0; t <= 240; t += 16) learner.update(frame({ timestampMs: t, gear: 2, rpm: 8600 + t, power: 230 + t / 16 }))
+}
+function beforeOf(sample) {
+  return { sourceGear: sample.sourceGear, destinationGear: sample.destinationGear, beforeTimestampMs: sample.beforeTimestampMs, beforeRpm: sample.beforeRpm, beforePower: sample.beforePower }
+}
+
+test('an upshift made with the clutch compares the settled frames before the clutch press', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  settledSecondGear(learner)
+  // Recorded pattern: full throttle is held, the clutch is pressed in the source gear, the
+  // gearbox sits in neutral while the engine revs, then 3rd gear engages with negative power.
+  learner.update(frame({ timestampMs: 252, gear: 2, rpm: 8850, power: 239, clutch: 1 }))
+  learner.update(frame({ timestampMs: 252, gear: 2, rpm: 8853, power: -199, clutch: 1 }))
+  learner.update(frame({ timestampMs: 268, gear: 2, rpm: 8710, power: -182, clutch: 1 }))
+  learner.update(frame({ timestampMs: 284, gear: 11, rpm: 8530, power: -163, clutch: 1 }))
+  learner.update(frame({ timestampMs: 300, gear: 11, rpm: 8700, power: -180, clutch: 1 }))
+  learner.update(frame({ timestampMs: 332, gear: 11, rpm: 8900, power: -195, clutch: 0 }))
+  learner.update(frame({ timestampMs: 356, gear: 11, rpm: 8866, power: -200, clutch: 0 }))
+  // The transition is 196 ms after the oldest before frame, so all five stay in the window.
+  learner.update(frame({ timestampMs: 372, gear: 3, rpm: 8570, power: -167 }))
+  learner.update(frame({ timestampMs: 388, gear: 3, rpm: 7400, power: -40 }))
+  for (const t of [452, 468, 484]) learner.update(frame({ timestampMs: t, gear: 3, rpm: 7300, power: 250 }))
+  const samples = learner.serializeLearningState().shiftSamples
+  assert.equal(samples.length, 1)
+  assert.deepEqual(beforeOf(samples[0]), { sourceGear: 2, destinationGear: 3, beforeTimestampMs: 208, beforeRpm: 8808, beforePower: 243 })
+})
+
+test('a direct clutch upshift without neutral compares the settled frames before the clutch press', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  settledSecondGear(learner)
+  learner.update(frame({ timestampMs: 252, gear: 2, rpm: 8850, power: 239, clutch: 1 }))
+  learner.update(frame({ timestampMs: 268, gear: 2, rpm: 8710, power: -182, clutch: 1 }))
+  learner.update(frame({ timestampMs: 284, gear: 3, rpm: 7400, power: -167, clutch: 1 }))
+  for (const t of [364, 380, 396]) learner.update(frame({ timestampMs: t, gear: 3, rpm: 7300, power: 250 }))
+  const samples = learner.serializeLearningState().shiftSamples
+  assert.equal(samples.length, 1)
+  assert.deepEqual(beforeOf(samples[0]), { sourceGear: 2, destinationGear: 3, beforeTimestampMs: 208, beforeRpm: 8808, beforePower: 243 })
+})
+
+test('a shift made directly after a limiter cut compares the settled frames before the cut', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  for (let t = 0; t <= 240; t += 16) learner.update(frame({ timestampMs: t, gear: 4, rpm: 9000 + t, power: 700 }))
+  // The cut is followed by neutral without any clean frame, so no reduced ramp power is compared.
+  learner.update(frame({ timestampMs: 256, gear: 4, rpm: 9355, power: -492 }))
+  learner.update(frame({ timestampMs: 272, gear: 4, rpm: 9182, power: -300 }))
+  neutralShiftToFifth(learner, 288, 671)
+  const samples = learner.serializeLearningState().shiftSamples
+  assert.equal(samples.length, 1)
+  assert.deepEqual({ sourceGear: samples[0].sourceGear, beforeTimestampMs: samples[0].beforeTimestampMs, beforeRpm: samples[0].beforeRpm, beforePower: samples[0].beforePower },
+    { sourceGear: 4, beforeTimestampMs: 208, beforeRpm: 9208, beforePower: 700 })
+})
+
 test('uses redline as an operational cue before an earlier candidate exists', () => {
   const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
   const state = learner.update(frame({ rpm: 11000 }))

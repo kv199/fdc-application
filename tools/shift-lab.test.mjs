@@ -130,6 +130,56 @@ test('the reference finds a crossover between the power peak and the ceiling', (
   assert.equal(pair.kind, 'crossover')
   assert.ok(pair.referenceRpm > 7000 && pair.referenceRpm < 9000, `crossover at ${pair.referenceRpm}`)
   assert.ok(Math.abs(pair.ratioStep - 0.85) < 1e-9)
+  assert.equal(pair.coverage, 1)
+})
+
+test('the reference skips a gap between the power peak and the crossover', () => {
+  const powerAt = rpm => 500000 - (rpm - 7000) ** 2 * 0.05
+  const [full] = referenceModel(sweepFrames(powerAt), 9000).pairs
+  const gapped = sweepFrames(powerAt).filter(frame => frame.rpm < 7200 || frame.rpm >= 7400)
+  const [pair] = referenceModel(gapped, 9000).pairs
+  assert.equal(pair.kind, 'crossover')
+  assert.equal(pair.referenceRpm, full.referenceRpm)
+  assert.ok(pair.coverage > 0.5 && pair.coverage < 1, `coverage ${pair.coverage}`)
+})
+
+test('the reference reports at-or-below when the next gear already wins at the first known point', () => {
+  // The crossover of this curve is near 7,570 RPM, but without power below 6,600 the first comparable point is about 7,800.
+  const frames = sweepFrames(rpm => 500000 - (rpm - 7000) ** 2 * 0.05).filter(frame => frame.rpm >= 6600)
+  const [pair] = referenceModel(frames, 9000).pairs
+  assert.equal(pair.kind, 'at-or-below')
+  assert.ok(pair.referenceRpm > 7568 && pair.referenceRpm < 8000, `upper bound ${pair.referenceRpm}`)
+})
+
+test('the power curve keeps wheelspin frames while gear ratios skip them', () => {
+  const powerAt = rpm => 500000 - (rpm - 7000) ** 2 * 0.05
+  const spinning = sweepFrames(powerAt).map(frame => frame.gear === 1 ? { ...frame, slipRatio: { fl: 0.5, fr: 0.5, rl: 0.5, rr: 0.5 } } : frame)
+  const result = referenceModel(spinning, 9000)
+  assert.equal(result.curveBins, referenceModel(sweepFrames(powerAt), 9000).curveBins)
+  assert.deepEqual(result.ratios.map(ratio => ratio.gear), [2])
+  assert.equal(result.pairs[0].kind, 'insufficient-data')
+  assert.equal(result.pairs[0].ratioStep, null)
+})
+
+// Power climbs steeply to 7,000 RPM and then fades slowly, so with a 0.85 ratio step the crossover is only near 8,170 RPM.
+function peakThenFade(rpm) {
+  return rpm <= 7000 ? 700000 - (7000 - rpm) * 200 : 700000 - (rpm - 7000) * 10
+}
+
+test('the reference reports insufficient-data when coverage stops far below the ceiling without a crossover', () => {
+  const frames = sweepFrames(peakThenFade).filter(frame => frame.rpm <= 8000)
+  const [pair] = referenceModel(frames, 9000).pairs
+  assert.equal(pair.kind, 'insufficient-data')
+  assert.equal(pair.referenceRpm, null)
+  assert.ok(pair.coverage > 0 && pair.coverage < 0.5, `coverage ${pair.coverage}`)
+})
+
+test('the reference reports at-ceiling when coverage reaches within 200 RPM of the ceiling without a crossover', () => {
+  const frames = sweepFrames(peakThenFade).filter(frame => frame.rpm <= 8000)
+  const [pair] = referenceModel(frames, 8100).pairs
+  assert.equal(pair.kind, 'at-ceiling')
+  assert.equal(pair.referenceRpm, 8100)
+  assert.equal(referenceModel(frames, 8150).pairs[0].kind, 'insufficient-data')
 })
 
 test('the reference reports at-ceiling when power rises to the ceiling', () => {
@@ -160,13 +210,14 @@ test('replayLab groups sessions by car and reports shifts, cues and a reference 
     assert.ok(carA.summary.acceptedCount >= 3, `accepted ${carA.summary.acceptedCount}`)
     assert.ok(carA.cues.length > 0)
     assert.deepEqual(carA.reference.pairs.map(pair => pair.pair), ['1->2', '2->3', '3->4'])
-    assert.ok(carA.reference.pairs.every(pair => ['crossover', 'at-ceiling', 'insufficient-data'].includes(pair.kind)))
+    assert.ok(carA.reference.pairs.every(pair => ['crossover', 'at-or-below', 'at-ceiling', 'insufficient-data'].includes(pair.kind)))
     assert.equal(result.cars.find(car => car.identity.carOrdinal === CAR_B.ordinal).sessionIds.length, 1)
 
     const report = formatReport({ ...result, source: { lab: 'fdc-lab.sqlite', fdc: null } })
     assert.match(report, /## Car fh6:3766:1:800:1:10/)
     assert.match(report, /1->2/)
     assert.match(report, /turbo boost/)
+    assert.match(report, /\(cov \d\.\d\d\)/)
   } finally {
     lab?.close()
     rmSync(dir, { recursive: true, force: true })
@@ -300,6 +351,27 @@ test('checkExpectations reports each kind of failure and passes a matching expec
   assert.deepEqual(checkExpectations(car(9500), { pairs: { '2->3': 'optimal', '4->5': 'learning' } }), [
     '2->3 is potential, expected optimal',
     '4->5 has no learner state, expected learning'
+  ])
+})
+
+test('checkExpectations checks accepted shifts and reference crossovers', () => {
+  const car = {
+    ceiling: { usable: null },
+    learner: { gearTargets: [] },
+    summary: { acceptedCount: 4 },
+    reference: {
+      pairs: [
+        { pair: '2->3', kind: 'crossover', referenceRpm: 7450 },
+        { pair: '3->4', kind: 'at-ceiling', referenceRpm: 9010 }
+      ]
+    }
+  }
+  assert.deepEqual(checkExpectations(car, { minAcceptedShifts: 4, referenceRpm: { '2->3': [7200, 7700] } }), [])
+  assert.deepEqual(checkExpectations(car, { minAcceptedShifts: 5 }), ['4 accepted shifts, expected at least 5'])
+  assert.deepEqual(checkExpectations(car, { referenceRpm: { '2->3': [7500, 7700], '3->4': [6800, 7300], '4->5': [6000, 6500] } }), [
+    '2->3 reference crossover 7450 is outside 7500-7700',
+    '3->4 reference is at-ceiling, expected a crossover at 6800-7300',
+    '4->5 has no reference, expected a crossover at 6000-6500'
   ])
 })
 

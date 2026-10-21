@@ -100,7 +100,13 @@ clean, or a different gear, starts that period again. After the limiter or any
 other interruption cuts power, it comes back reduced and ramps up; in one
 recorded case it was still about 5% low `94 ms` later. A shift made inside that
 ramp would compare the next gear against too little power and report a
-crossover that does not exist, so it is ignored. FDC waits
+crossover that does not exist, so it is ignored: the first clean frame after
+an interruption starts a new period and discards the frames collected before
+it. A frame that is not clean only ends the period. Frames collected before it
+stay usable within the `200 ms` window, because pressing the clutch or lifting
+off is how a shift starts; a driver who presses the clutch at full throttle
+still gets the shift compared against the settled power before the press.
+FDC waits
 `80 ms` after the transition to pass the initial torque cut, then requires
 three clean positive-power destination-gear frames within a `600 ms` capture
 window. Median values from the two windows
@@ -371,10 +377,19 @@ fresh Shift Light learner from the checked-in bundle, and reports per car:
 - each purple cue, each real upshift, whether the learner accepted it, the
   tool's own guess at why not (`partial-throttle`, `clutch`, `brake`,
   `no-power`, `capture-incomplete`), and the time from the cue to the shift;
-- an independent reference shift point per pair from a power curve and gear
-  ratios built from clean full-throttle frames, flagged when it differs from
-  the learner by more than `150 RPM`. The reference ignores the boost drop
-  after a shift, so turbocharged cars can show an earlier reference point;
+- an independent reference shift point per pair, flagged when it differs from
+  the learner by more than `150 RPM`. The power curve uses full-throttle
+  frames in 100-RPM bins, including frames with wheelspin, because engine
+  power does not depend on it; gear ratios use only frames without wheelspin.
+  From the power peak to the ceiling, every 50 RPM where both the current gear
+  and the next gear's RPM are known is compared, and gaps are skipped. The
+  first point where the next gear has at least as much power is a `crossover`;
+  if the next gear already wins at the first known point, the result is
+  `at-or-below` that RPM. Without a crossover, the result is `at-ceiling` when
+  the known points reach within `200 RPM` of the ceiling, otherwise
+  `insufficient-data`. `cov` is the share of points that were known. The
+  reference ignores the boost drop after a shift, so turbocharged cars can show
+  an earlier reference point;
 - with `--fdc`, the ceiling and pair states stored in a copy of `fdc.sqlite`
   next to the replay result.
 

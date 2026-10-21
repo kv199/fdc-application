@@ -689,11 +689,11 @@ var HudShiftLight = (() => {
         return;
       }
       this.cleanRunStartMs = null;
-      if (forward) this.preShiftFrames = [];
-      else if (telemetry.gear === NEUTRAL_GEAR && this.preShiftFrames.length > 0) {
+      if (forward) return;
+      if (telemetry.gear === NEUTRAL_GEAR && this.preShiftFrames.length > 0) {
         const sourceGear = this.preShiftFrames[this.preShiftFrames.length - 1].gear;
         if (sourceGear >= 1 && sourceGear < 10) this.pendingUpshift = { sourceGear, destinationGear: sourceGear + 1, beforeFrames: [...this.preShiftFrames], transitionTimestampMs: null, firstNeutralTimestampMs: telemetry.timestampMs, postFrames: [] };
-      } else if (!forward && telemetry.gear !== NEUTRAL_GEAR) {
+      } else if (telemetry.gear !== NEUTRAL_GEAR) {
         this.preShiftFrames = [];
         this.pendingUpshift = null;
       }

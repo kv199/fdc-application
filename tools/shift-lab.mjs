@@ -23,6 +23,7 @@ const CURVE_BIN_RPM = 100
 const CURVE_MIN_FRAMES = 3
 const RATIO_MIN_FRAMES = 10
 const SCAN_STEP_RPM = 50
+const AT_CEILING_RPM = 200
 const SLIP_LIMIT = 0.15
 const SHIFT_TABLES = ['shift_light_configs', 'shift_light_gear_targets']
 const FIXTURE_FORMAT = 'fdc-shift-lab-fixture'
@@ -46,9 +47,15 @@ function maxAbsSlip(slip) {
   return Math.max(Math.abs(slip.fl), Math.abs(slip.fr), Math.abs(slip.rl), Math.abs(slip.rr))
 }
 
-function isCleanFrame(frame) {
+// Engine power is the same with or without wheelspin, so the power curve uses every full-throttle frame;
+// rpm / speed only gives a gear ratio while the wheels do not slip.
+function isCleanPowerFrame(frame) {
   return frame.isRaceOn && frame.gear >= 1 && frame.gear <= 10 && frame.throttle >= 0.95 && frame.clutch <= 0.05 &&
-    frame.brake <= 0.02 && frame.handBrake <= 0.02 && frame.power > 0 && frame.speedKmh > 20 && maxAbsSlip(frame.slipRatio) < SLIP_LIMIT
+    frame.brake <= 0.02 && frame.handBrake <= 0.02 && frame.power > 0 && frame.speedKmh > 20
+}
+
+function isCleanRatioFrame(frame) {
+  return isCleanPowerFrame(frame) && maxAbsSlip(frame.slipRatio) < SLIP_LIMIT
 }
 
 function referenceFrame(frame) {
@@ -68,25 +75,40 @@ function curveValue(curve, rpm) {
   return lowValue + (highValue - lowValue) * (position - low)
 }
 
+// Scans every 50-RPM point from the power peak to the ceiling and skips points where either power is unknown.
+// Coverage is the share of those points that could be evaluated, so a crossover found on thin data stays visible.
 function crossoverPoint(curve, ratioStep, ceilingRpm) {
   let peak = null
   for (const bin of [...curve.keys()].sort((left, right) => left - right)) {
     const rpm = bin * CURVE_BIN_RPM + CURVE_BIN_RPM / 2
     if (rpm <= ceilingRpm && (peak === null || curve.get(bin) > peak.value)) peak = { rpm, value: curve.get(bin) }
   }
-  if (peak === null) return { kind: 'insufficient-data', referenceRpm: null }
+  if (peak === null) return { kind: 'insufficient-data', referenceRpm: null, coverage: null }
+  let steps = 0
+  let evaluable = 0
+  let highest = null
+  let crossover = null
+  let sawLower = false
   for (let rpm = peak.rpm; rpm <= ceilingRpm; rpm += SCAN_STEP_RPM) {
+    steps++
     const here = curveValue(curve, rpm)
     const shifted = curveValue(curve, rpm * ratioStep)
-    if (here === null || shifted === null) return { kind: 'insufficient-data', referenceRpm: null }
-    if (shifted >= here) return { kind: 'crossover', referenceRpm: rpm }
+    if (here === null || shifted === null) continue
+    evaluable++
+    highest = rpm
+    if (crossover === null && shifted >= here) crossover = { rpm, bounded: sawLower }
+    if (crossover === null) sawLower = true
   }
-  return { kind: 'at-ceiling', referenceRpm: ceilingRpm }
+  const coverage = Math.round(evaluable / steps * 100) / 100
+  // Without a known point where the current gear was still stronger, the crossover may lie in the gap before it.
+  if (crossover !== null) return { kind: crossover.bounded ? 'crossover' : 'at-or-below', referenceRpm: crossover.rpm, coverage }
+  if (highest !== null && ceilingRpm - highest <= AT_CEILING_RPM) return { kind: 'at-ceiling', referenceRpm: ceilingRpm, coverage }
+  return { kind: 'insufficient-data', referenceRpm: null, coverage }
 }
 
 // Reference shift points from clean full-throttle frames only; the learner's own state is passed in to compare against.
 export function referenceModel(frames, ceilingRpm = null, learnerPairs = []) {
-  const clean = frames.filter(isCleanFrame)
+  const clean = frames.filter(isCleanPowerFrame)
   // Recordings hold hundreds of thousands of frames, so values are pushed in place and the maximum is found by reduce.
   const ceiling = ceilingRpm ?? (clean.length === 0 ? null : clean.reduce((highest, frame) => Math.max(highest, frame.rpm), 0))
   const binPowers = new Map()
@@ -98,7 +120,7 @@ export function referenceModel(frames, ceilingRpm = null, learnerPairs = []) {
   }
   for (const frame of clean) {
     push(binPowers, Math.floor(frame.rpm / CURVE_BIN_RPM), frame.power)
-    push(gearRatios, frame.gear, frame.rpm / frame.speedKmh)
+    if (isCleanRatioFrame(frame)) push(gearRatios, frame.gear, frame.rpm / frame.speedKmh)
   }
   const curve = new Map()
   for (const [bin, powers] of binPowers) {
@@ -116,7 +138,7 @@ export function referenceModel(frames, ceilingRpm = null, learnerPairs = []) {
     const to = ratios.get(sourceGear + 1)
     const ratioStep = from && to ? to.ratio / from.ratio : null
     const point = ratioStep === null || ceiling === null
-      ? { kind: 'insufficient-data', referenceRpm: null }
+      ? { kind: 'insufficient-data', referenceRpm: null, coverage: null }
       : crossoverPoint(curve, ratioStep, ceiling)
     const learner = learnerPairs.find(pair => pair.sourceGear === sourceGear && pair.destinationGear === sourceGear + 1)
     const learnerRpm = ceiling === null ? null : learner?.targetRpm ?? learner?.candidateRpm ?? ceiling
@@ -128,6 +150,7 @@ export function referenceModel(frames, ceilingRpm = null, learnerPairs = []) {
       ratioStep,
       referenceRpm: point.referenceRpm,
       kind: point.kind,
+      coverage: point.coverage,
       learnerRpm,
       differenceRpm,
       flagged: differenceRpm !== null && Math.abs(differenceRpm) > FLAG_RPM
@@ -227,7 +250,7 @@ function replaySession(session, frames, groups, totals) {
     group.frameCount++
     totals.keyedFrames++
     if (frame.gear >= 1 && frame.gear <= 10) group.maxRpm = Math.max(group.maxRpm ?? 0, frame.rpm)
-    if (isCleanFrame(frame)) group.referenceFrames.push(referenceFrame(frame))
+    if (isCleanPowerFrame(frame)) group.referenceFrames.push(referenceFrame(frame))
 
     const detected = upshiftAt.get(index)
     if (detected) {
@@ -333,7 +356,9 @@ function summarizeCar(group, fdcDb) {
       destinationGear: sourceGear + 1,
       replay: learner ? { status: learner.status, rpm: replayRpm } : null,
       game: gamePair ? { status: gamePair.status, rpm: gameRpm } : null,
-      reference: referencePair ? { kind: referencePair.kind, rpm: referencePair.referenceRpm, ratioStep: referencePair.ratioStep } : null,
+      reference: referencePair
+        ? { kind: referencePair.kind, rpm: referencePair.referenceRpm, ratioStep: referencePair.ratioStep, coverage: referencePair.coverage }
+        : null,
       differenceRpm: referencePair?.differenceRpm ?? null,
       flags
     }
@@ -514,6 +539,17 @@ export function checkExpectations(carResult, expect) {
     if (!target) failures.push(`${pair} has no learner state, expected ${status}`)
     else if (target.status !== status) failures.push(`${pair} is ${target.status}, expected ${status}`)
   }
+  if (expect.minAcceptedShifts !== undefined && carResult.summary.acceptedCount < expect.minAcceptedShifts) {
+    failures.push(`${carResult.summary.acceptedCount} accepted shifts, expected at least ${expect.minAcceptedShifts}`)
+  }
+  for (const [pair, [min, max]] of Object.entries(expect.referenceRpm ?? {})) {
+    const reference = carResult.reference.pairs.find(item => item.pair === pair)
+    if (!reference) failures.push(`${pair} has no reference, expected a crossover at ${min}-${max}`)
+    else if (reference.kind !== 'crossover') failures.push(`${pair} reference is ${reference.kind}, expected a crossover at ${min}-${max}`)
+    else if (reference.referenceRpm < min || reference.referenceRpm > max) {
+      failures.push(`${pair} reference crossover ${reference.referenceRpm} is outside ${min}-${max}`)
+    }
+  }
   return failures
 }
 
@@ -553,15 +589,18 @@ export function formatReport(result) {
       : 'game -'
     lines.push(`ceiling: replay usable ${ceiling.usable ?? '-'}, provisional ${ceiling.provisional ?? '-'}, redline ${ceiling.reportedRedlineRpm ?? '-'}, max observed ${ceiling.maxObservedRpm ?? '-'}; ${gameText}; reference uses ${ceiling.usedForReference ?? '-'}`)
     lines.push('')
-    const header = [pad('pair', 8), pad('replay', 22), pad('game', 22), pad('reference', 24), pad('diff', 8), 'flags']
+    const header = [pad('pair', 8), pad('replay', 22), pad('game', 22), pad('reference', 30), pad('diff', 8), 'flags']
     lines.push(header.join(' '))
     for (const row of car.comparison) {
-      const reference = row.reference ? `${row.reference.kind}${row.reference.rpm === null ? '' : ` ${Math.round(row.reference.rpm)}`}` : '-'
+      const reference = row.reference
+        ? `${row.reference.kind}${row.reference.rpm === null ? '' : ` ${Math.round(row.reference.rpm)}`}` +
+          `${row.reference.coverage === null ? '' : ` (cov ${row.reference.coverage.toFixed(2)})`}`
+        : '-'
       lines.push([
         pad(row.pair, 8),
         pad(formatPoint(row.replay), 22),
         pad(formatPoint(row.game), 22),
-        pad(reference, 24),
+        pad(reference, 30),
         pad(formatDifference(row.differenceRpm), 8),
         row.flags.join(', ')
       ].join(' ').trimEnd())
@@ -574,7 +613,8 @@ export function formatReport(result) {
     lines.push(`not accepted: ${rejected || 'none'}`)
     const delay = summary.medianCueDelayMs === null ? '-' : `${Math.round(summary.medianCueDelayMs)} ms over ${summary.cueDelayCount} shifts with a cue`
     lines.push(`median cue-to-shift delay: ${delay}`)
-    lines.push('note: the reference ignores the turbo boost drop after a shift; it compares clean full-throttle power only.')
+    lines.push('note: the reference ignores the turbo boost drop after a shift; it compares clean full-throttle power only. ' +
+      'cov is the share of 50-RPM points from the power peak to the ceiling where both powers were known.')
   }
   return `${lines.join('\n')}\n`
 }
