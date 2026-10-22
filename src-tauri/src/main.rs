@@ -15,6 +15,7 @@ mod garage;
 mod hotkeys;
 mod hud_commands;
 mod shift_lab;
+mod shift_lab_export;
 mod shift_light;
 mod telemetry;
 #[cfg(test)]
@@ -85,6 +86,7 @@ fn main() {
             discard_driver_analysis_session,
             discard_driver_analysis_recording,
             export_driver_analysis_recording,
+            shift_lab_export::export_shift_lab_drives,
             sync_route_status,
             sync_shift_light_status,
             get_app_version,

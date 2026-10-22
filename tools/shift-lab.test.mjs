@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import { decodePacket, f32ToJson } from './shift-lab-decoder.mjs'
 import {
-  checkExpectations, findFixtures, findUpshifts, formatReport, loadFixture, referenceModel, replayFrames, replayLab, toFixture, writeFixture
+  checkExpectations, findFixtures, findUpshifts, formatReport, loadFixture, openLab, referenceModel, replayFrames, replayLab, toFixture, writeFixture
 } from './shift-lab.mjs'
 
 const DASH = 244
@@ -643,6 +643,43 @@ test('the fixture export refuses a selection with several cars unless --car name
     const fixture = loadFixture(out)
     assert.equal(fixture.key, KEY_B)
     assert.deepEqual(fixture.sessions.map(session => session.id), [2])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+function labTempFolders() {
+  return readdirSync(tmpdir()).filter(name => name.startsWith('fdc-shift-lab-')).sort()
+}
+
+test('--lab accepts a .sqlite.gz export and removes the inflated copy again', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'shift-lab-'))
+  const tempBefore = labTempFolders()
+  try {
+    const labPath = join(dir, 'fdc-lab.sqlite')
+    labDatabase(labPath, [{ car: CAR_A, packets: pullPackets(CAR_A) }, { car: CAR_B, packets: pullPackets(CAR_B) }]).close()
+    const exported = join(dir, 'fdc-shift-lab-20261002-1830.sqlite.gz')
+    writeFileSync(exported, gzipSync(readFileSync(labPath)))
+
+    const out = join(dir, 'car.json.gz')
+    const chosen = spawnSync(process.execPath, [SHIFT_LAB, '--lab', exported, '--car', KEY_B, '--fixture', out], { encoding: 'utf8' })
+    assert.equal(chosen.status, 0, chosen.stderr)
+    assert.equal(loadFixture(out).key, KEY_B)
+    assert.deepEqual(labTempFolders(), tempBefore)
+
+    const lab = openLab(exported)
+    try {
+      assert.deepEqual(lab.db.prepare('SELECT id FROM lab_sessions ORDER BY id').all().map(row => row.id), [1, 2])
+    } finally {
+      lab.close()
+    }
+    assert.deepEqual(labTempFolders(), tempBefore)
+
+    // Input that is not gzip fails, and the folder made for it is removed.
+    const broken = join(dir, 'broken.sqlite.gz')
+    writeFileSync(broken, 'not a gzip file')
+    assert.throws(() => openLab(broken))
+    assert.deepEqual(labTempFolders(), tempBefore)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

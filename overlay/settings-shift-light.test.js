@@ -80,3 +80,15 @@ test('a snapshot from a learner without model points shows OPTIMAL pairs as READ
   ])
   assert.deepEqual(shiftLight.currentGearView(state), { target: 'READY · 8,700 RPM', state: 'READY · GEAR 3' })
 })
+
+test('the Shift Lab export name carries the local time it was made', () => {
+  assert.equal(shiftLight.exportFileName(new Date(2026, 9, 2, 8, 5).getTime()), 'fdc-shift-lab-20261002-0805.sqlite.gz')
+  assert.equal(shiftLight.exportFileName(new Date(2026, 0, 31, 23, 59).getTime()), 'fdc-shift-lab-20260131-2359.sqlite.gz')
+})
+
+test('the Shift Lab export size rounds like the Driver Analysis export', () => {
+  assert.equal(shiftLight.formatExportSize(0), '0 B')
+  assert.equal(shiftLight.formatExportSize(1023), '1023 B')
+  assert.equal(shiftLight.formatExportSize(2560), '2.5 KB')
+  assert.equal(shiftLight.formatExportSize(12 * 1024 * 1024), '12 MB')
+})

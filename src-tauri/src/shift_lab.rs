@@ -23,7 +23,7 @@ const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 // Mirrors SHIFT_LIGHT_LEARNING_VERSION in src/shift-light/optimal-shift.ts.
 const SHIFT_LIGHT_MODEL_VERSION: i64 = 4;
 
-const LAB_SCHEMA_SQL: &str = r#"
+pub(crate) const LAB_SCHEMA_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS lab_schema_version (version INTEGER NOT NULL);
 INSERT INTO lab_schema_version (version)
   SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM lab_schema_version);

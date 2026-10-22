@@ -48,6 +48,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   most 200 MB, in `fdc-lab.sqlite` next to its other data, so Shift Light can
   be checked against real drives. The file stays on your computer; share a
   copy only if you want to send drives for feedback.
+- **Shift Light**: **EXPORT DRIVES** in the Shift Light tab saves the current
+  car's recorded drives to one compressed file. Attach it to a bug report when
+  Shift Light gets a car wrong.
 
 ### Improved
 

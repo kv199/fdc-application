@@ -482,9 +482,23 @@ sessions are deleted
 first, and if only the current session remains, its oldest packets are. The
 file uses the default rollback journal, so it is complete after every commit.
 
-`tools/shift-lab.mjs` replays a copy of the file. It decodes each packet into
-the same payload the HUD receives, feeds every car's sessions in order into one
-fresh Shift Light learner from the checked-in bundle, and reports per car:
+`EXPORT DRIVES` in the Shift Light tab exports the drives of the current car.
+The button sits next to `RESET CURRENT CALIBRATION` and is shown and enabled
+only while Shift Light has a current car. It opens a save dialog with the
+suggested name `fdc-shift-lab-YYYYMMDD-HHMM.sqlite.gz` and writes a
+gzip-compressed SQLite file with the same lab schema. The file contains only
+the sessions of the current car configuration (same ordinal, class, PI,
+drivetrain and cylinders) and their packets. If no drives of that car are
+recorded, it reports `No Shift Lab drives are recorded for this car` and writes
+nothing. On success the status line reads `SHIFT LAB DRIVES EXPORTED · <size>`.
+The exported file stays on the computer until the user shares it. It contains
+raw Data Out packets of that car, including map positions, but no names,
+accounts or paths.
+
+`tools/shift-lab.mjs` replays a copy of the file or an exported `.sqlite.gz`
+file. It decodes each packet into the same payload the HUD receives, feeds
+every car's sessions in order into one fresh Shift Light learner from the
+checked-in bundle, and reports per car:
 
 - the learned ceiling, and every gear pair's state and shift point, including
   the model shift point with READY or LEARNING, and whether real shifts

@@ -136,7 +136,8 @@ node tools/shift-lab.mjs --lab path\to\fdc-lab.sqlite --session 4 --json --out s
 
 Without `--session`, every session is replayed. `--json` prints the full
 result instead of the text report. `--fdc` is optional; without it the report
-shows only the replay and the reference.
+shows only the replay and the reference. `--lab` also accepts a `.sqlite.gz`
+file made with EXPORT DRIVES in the Shift Light tab.
 
 `tools/shift-lab-decoder.mjs` turns a raw packet into the payload the HUD
 receives, including its `f32` rounding. A Rust test and a Node test decode the

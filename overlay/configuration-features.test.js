@@ -63,6 +63,7 @@ test('Shift Light exposes separate redline and FDC cue controls in the Shift Lig
 test('Shift Light calibration card uses the design book title, table, and reset placement', () => {
   const profileIndex = settingsHtml.indexOf('id="shift-light-profile"')
   const gearRowsIndex = settingsHtml.indexOf('id="shift-light-gear-rows"')
+  const exportIndex = settingsHtml.indexOf('id="shift-light-export"')
   const resetIndex = settingsHtml.indexOf('id="shift-light-reset"')
 
   assert.ok(profileIndex >= 0)
@@ -74,8 +75,12 @@ test('Shift Light calibration card uses the design book title, table, and reset 
   assert.doesNotMatch(settingsHtml, /calibration-table/)
   assert.ok(gearRowsIndex > profileIndex)
   assert.ok(resetIndex > gearRowsIndex)
-  assert.match(settingsHtml, /<\/table>\s*<\/div>\s*<\/div>\s*<button id="shift-light-reset"[^>]*\bdisabled hidden>/)
+  // EXPORT DRIVES sits directly before the reset button and is a plain (not danger) button.
+  assert.match(settingsHtml, /<\/table>\s*<\/div>\s*<\/div>\s*<button id="shift-light-export" class="settings-button" type="button" disabled hidden>\s*EXPORT DRIVES\s*<\/button>\s*<button id="shift-light-reset"[^>]*\bdisabled hidden>/)
+  assert.ok(exportIndex > gearRowsIndex && exportIndex < resetIndex)
   assert.match(settingsJs, /'shift-light-profile'/)
+  assert.match(settingsJs, /'shift-light-export'/)
+  assert.match(settingsJs, /'export_shift_lab_drives'/)
   assert.match(settingsJs, /'shift-light-reset'/)
   assert.match(settingsJs, /\.hidden = !hasProfile/)
   assert.match(settingsJs, /\.scope = 'row'/)

@@ -32,6 +32,22 @@
     }
   }
 
+  // The suggested export file name carries the local time of the export.
+  function exportFileName(now = Date.now()) {
+    const date = new Date(now)
+    const pad = value => String(value).padStart(2, '0')
+    const day = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`
+    return `fdc-shift-lab-${day}-${pad(date.getHours())}${pad(date.getMinutes())}.sqlite.gz`
+  }
+
+  // Same rounding as the Driver Analysis export: bytes, then KB and MB with one decimal under 10 units.
+  function formatExportSize(value) {
+    const bytes = Math.max(0, Number(value) || 0)
+    if (bytes < 1024) return `${Math.round(bytes)} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`
+  }
+
   // CURRENT TARGET and STATE describe the pair of the gear the car is in.
   function currentGearView(state) {
     const activeGear = state.gears.find(gear => gear.gear === state.currentGear)
@@ -69,9 +85,11 @@
     const shiftLightCurrentTarget = document.getElementById('shift-light-current-target')
     const shiftLightState = document.getElementById('shift-light-state')
     const shiftLightGearRows = document.getElementById('shift-light-gear-rows')
+    const shiftLightExport = document.getElementById('shift-light-export')
     const shiftLightReset = document.getElementById('shift-light-reset')
     const shiftLightHelp = document.getElementById('shift-light-help')
     const shiftLightHelpPanel = document.getElementById('shift-light-help-panel')
+    let shiftLightExportPending = false
     let shiftLightResetPending = false
 
   // The Shift Light car key is fh6:<ordinal>:<class>:<pi>:..., so the class
@@ -99,6 +117,8 @@
     const hasProfile = Boolean(state?.carKey && state?.carOrdinal)
     shiftLightEmpty.hidden = hasProfile
     shiftLightProfile.hidden = !hasProfile
+    shiftLightExport.hidden = !hasProfile
+    shiftLightExport.disabled = !hasProfile || shiftLightExportPending
     shiftLightReset.hidden = !hasProfile
     shiftLightReset.disabled = !hasProfile || shiftLightResetPending
     if (!hasProfile) return
@@ -150,6 +170,24 @@
 
     if (state.persistenceError) {
       setStatus(`SHIFT LIGHT SAVE ERROR · ${state.persistenceError}`, true)
+    }
+  }
+
+  // The save dialog runs in the backend; a cancelled dialog changes nothing and reports no status.
+  async function requestShiftLightExport() {
+    const carKey = getLatestShiftLightState()?.carKey
+    if (shiftLightExportPending || !carKey) return
+    shiftLightExportPending = true
+    shiftLightExport.disabled = true
+    try {
+      const outcome = await call('export_shift_lab_drives', { carKey, fileName: exportFileName() })
+      if (outcome?.cancelled) return
+      setStatus(`SHIFT LAB DRIVES EXPORTED · ${formatExportSize(outcome?.bytes)}`)
+    } catch (error) {
+      setStatus(error?.message || (typeof error === 'string' && error) || 'Unable to export Shift Lab drives', true)
+    } finally {
+      shiftLightExportPending = false
+      shiftLightExport.disabled = !getLatestShiftLightState()?.carKey
     }
   }
 
@@ -207,12 +245,16 @@
       shiftLightHelp.setAttribute('aria-expanded', String(!expanded))
       if (shiftLightHelpPanel) shiftLightHelpPanel.hidden = expanded
     })
+    shiftLightExport.addEventListener('click', () => {
+      void requestShiftLightExport()
+    })
     shiftLightReset.addEventListener('click', () => {
       void requestShiftLightReset()
     })
 
     return {
       renderShiftLightState,
+      requestShiftLightExport,
       requestShiftLightReset,
       listenShiftLightEvents
     }
@@ -223,6 +265,8 @@
     formatRpm,
     fallbackShiftRpm,
     gearRowView,
-    currentGearView
+    currentGearView,
+    exportFileName,
+    formatExportSize
   }
 }))

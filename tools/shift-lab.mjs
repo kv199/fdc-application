@@ -1,8 +1,9 @@
 // Replays raw packets from fdc-lab.sqlite through the Shift Light learner and checks its shift points against a power-curve reference.
 // Opens the lab (and optional fdc.sqlite) read-only; the only files it writes are the --out report and the --fixture export.
 import { DatabaseSync } from 'node:sqlite'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
@@ -854,6 +855,31 @@ export function formatReport(result) {
   return `${lines.join('\n')}\n`
 }
 
+// Opens a lab read-only. A .gz lab (the file EXPORT DRIVES writes) is inflated to a temp folder first;
+// close() closes the database and removes that folder, and the folder is removed when opening fails.
+export function openLab(path) {
+  if (!/\.gz$/i.test(path)) {
+    const db = new DatabaseSync(path, { readOnly: true })
+    return { db, close: () => db.close() }
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'fdc-shift-lab-'))
+  try {
+    const file = join(dir, 'fdc-lab.sqlite')
+    writeFileSync(file, gunzipSync(readFileSync(path)))
+    const db = new DatabaseSync(file, { readOnly: true })
+    return {
+      db,
+      close: () => {
+        db.close()
+        rmSync(dir, { recursive: true, force: true })
+      }
+    }
+  } catch (error) {
+    rmSync(dir, { recursive: true, force: true })
+    throw error
+  }
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { values } = parseArgs({
     options: {
@@ -875,7 +901,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       console.error(USAGE)
       process.exitCode = 1
     } else if (values.fixture) {
-      const labDb = new DatabaseSync(values.lab, { readOnly: true })
+      const { db: labDb, close: closeLab } = openLab(values.lab)
       try {
         const sessions = []
         for (const session of decodeLabSessions(labDb, readLabSessions(labDb, sessionId), { packets: 0, undecodedPackets: 0 })) {
@@ -893,10 +919,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
           console.log(`${values.fixture}: ${fixture.key}, ${fixture.sessions.length} sessions, ${frames} frames`)
         }
       } finally {
-        labDb.close()
+        closeLab()
       }
     } else {
-      const labDb = new DatabaseSync(values.lab, { readOnly: true })
+      const { db: labDb, close: closeLab } = openLab(values.lab)
       const fdcDb = values.fdc ? new DatabaseSync(values.fdc, { readOnly: true }) : null
       try {
         const result = replayLab(labDb, { sessionId, fdcDb })
@@ -905,7 +931,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         if (values.out) writeFileSync(values.out, text)
         else process.stdout.write(text)
       } finally {
-        labDb.close()
+        closeLab()
         fdcDb?.close()
       }
     }
