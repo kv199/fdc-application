@@ -381,7 +381,29 @@ test('two later shifts where the next gear was weaker reject the model point', (
   learner.importLearningState(stateWith(6800, [sample(2, 8900, -4, 1), sample(2, 8800, -3, 2)]))
   assert.equal(learner.serializeLearningState().gearTargets.find(item => item.sourceGear === 2).modelRpm, null)
   // An earlier shift where the next gear was stronger also contradicts it.
-  assert.equal(modelOf(importedSnapshot(stateWith(6800, [sample(2, 6500, 2, 1), sample(2, 8900, -4, 2)])), 2).rejected, true)
+  assert.equal(modelOf(importedSnapshot(stateWith(6800, [sample(2, 6500, 5, 1), sample(2, 8900, -4, 2)])), 2).rejected, true)
+  // Clearly weaker later shifts, as after turbo lag, still reject it.
+  assert.equal(modelOf(importedSnapshot(stateWith(6800, [sample(2, 8900, -4, 1), sample(2, 8800, -5, 2)])), 2).rejected, true)
+})
+
+test('comparisons within the power noise near a flat crossover are neutral', () => {
+  // A Camaro ZL1 V10 pair with an almost flat power curve between 6,900 and 7,100 RPM.
+  const flat = [sample(2, 7092, -2.9, 1), sample(2, 7016, 1.2, 2), sample(2, 6948, 0.1, 3),
+    sample(2, 7087, -1.5, 4), sample(2, 6907, -1.0, 5), sample(2, 6992, 0.5, 6)]
+  for (const modelRpm of [6900, 7000]) {
+    const snapshot = importedSnapshot(stateWith(modelRpm, flat))
+    const model = modelOf(snapshot, 2)
+    assert.deepEqual({ agree: model.agree, contradict: model.contradict, rejected: model.rejected },
+      { agree: 0, contradict: 0, rejected: false }, String(modelRpm))
+    assert.deepEqual({ modelRpm: gearOf(snapshot, 2).modelRpm, ready: gearOf(snapshot, 2).ready }, { modelRpm, ready: true })
+  }
+})
+
+test('clearly weaker earlier shifts agree with the model point', () => {
+  // An automatic box shifting well below the point loses power in the next gear.
+  const model = modelOf(importedSnapshot(stateWith(6950, [sample(2, 6386, -8, 1), sample(2, 6386, -8, 2)])), 2)
+  assert.deepEqual({ agree: model.agree, contradict: model.contradict, rejected: model.rejected },
+    { agree: 2, contradict: 0, rejected: false })
 })
 
 test('agreeing comparisons, a single contradiction or nearby shifts keep the model point', () => {
@@ -389,7 +411,7 @@ test('agreeing comparisons, a single contradiction or nearby shifts keep the mod
     [sample(2, 8900, 3, 1), sample(2, 8800, 5, 2)],
     [sample(2, 6400, -2, 1), sample(2, 6500, -1, 2)],
     [sample(2, 8900, -4, 1)],
-    [sample(2, 8900, -4, 1), sample(2, 8800, -3, 2), sample(2, 8700, 2, 3), sample(2, 6300, -2, 4)],
+    [sample(2, 8900, -4, 1), sample(2, 8800, -3, 2), sample(2, 8700, 5, 3), sample(2, 6300, -5, 4)],
     [sample(2, 6900, -4, 1), sample(2, 6700, 3, 2), sample(2, 6950, -3, 3)]
   ]
   for (const samples of kept) {

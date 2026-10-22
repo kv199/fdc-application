@@ -117,6 +117,70 @@ test('reconstructs confirmation RPMs from samples across a restart', () => {
   assert.equal(target.targetRpm, 9550)
 })
 
+// The database keeps a pair's candidate and confirmation count but not its confirmation RPMs.
+function restartLikeDatabase(learner, restore) {
+  const saved = learner.serializeLearningState()
+  for (const target of saved.gearTargets) delete target.confirmationRpms
+  const restarted = new ShiftLightLearner(key)
+  if (restore === 'merge') restarted.mergeLearningState(saved)
+  else restarted.importLearningState(saved)
+  return restarted
+}
+function pairOne(learner) {
+  const target = learner.serializeLearningState().gearTargets.find(item => item.sourceGear === 1)
+  return { status: target.status, targetRpm: target.targetRpm, count: target.confirmationCount, rpms: target.confirmationRpms }
+}
+
+for (const restore of ['import', 'merge']) {
+  test(`a restart by ${restore} does not revive comparisons of a series that already restarted`, () => {
+    const continuous = new ShiftLightLearner(key)
+    let restarted = new ShiftLightLearner(key)
+    // 8779 is more than 100 RPM from the 8886 candidate, so it starts a new series.
+    ;[8886, 8856, 8779].forEach((rpm, index) => {
+      feedShift(continuous, index * 1000, rpm, 420)
+      feedShift(restarted, index * 1000, rpm, 420)
+    })
+    restarted = restartLikeDatabase(restarted, restore)
+    assert.deepEqual(pairOne(restarted), pairOne(continuous))
+    feedShift(continuous, 3000, 8826, 420)
+    feedShift(restarted, 3000, 8826, 420)
+    assert.deepEqual(pairOne(restarted), { status: 'potential', targetRpm: null, count: 2, rpms: [8779, 8826] })
+    feedShift(continuous, 4000, 8783, 420)
+    feedShift(restarted, 4000, 8783, 420)
+    assert.deepEqual(pairOne(restarted), pairOne(continuous))
+    assert.deepEqual(pairOne(restarted), { status: 'optimal', targetRpm: 8783, count: 3, rpms: [8779, 8826, 8783] })
+  })
+
+  test(`a restart by ${restore} in the middle of an unbroken series keeps its confirmations`, () => {
+    const continuous = new ShiftLightLearner(key)
+    let restarted = new ShiftLightLearner(key)
+    // 9420 and 9480 form an earlier series; 9530 is 110 RPM from 9420 and starts the current one.
+    ;[9420, 9480, 9530, 9560].forEach((rpm, index) => {
+      feedShift(continuous, index * 1000, rpm, 420)
+      feedShift(restarted, index * 1000, rpm, 420)
+    })
+    restarted = restartLikeDatabase(restarted, restore)
+    assert.deepEqual(pairOne(restarted), { status: 'potential', targetRpm: null, count: 2, rpms: [9530, 9560] })
+    assert.deepEqual(pairOne(restarted), pairOne(continuous))
+    feedShift(continuous, 4000, 9600, 420)
+    feedShift(restarted, 4000, 9600, 420)
+    assert.deepEqual(pairOne(restarted), pairOne(continuous))
+    assert.equal(pairOne(restarted).targetRpm, 9560)
+  })
+}
+
+test('a restored count is kept when the bounded journal dropped its comparisons', () => {
+  const learner = new ShiftLightLearner(key)
+  const state = learner.serializeLearningState()
+  state.gearTargets = [{ sourceGear: 1, destinationGear: 2, status: 'potential', targetRpm: null, candidateRpm: 9500, confirmationCount: 2, lastReason: null, evidence: [] }]
+  state.shiftSamples = []
+  const restored = new ShiftLightLearner(key)
+  restored.importLearningState(state)
+  assert.deepEqual(pairOne(restored), { status: 'potential', targetRpm: null, count: 2, rpms: [9500, 9500] })
+  feedShift(restored, 0, 9550, 420)
+  assert.deepEqual(pairOne(restored), { status: 'optimal', targetRpm: 9500, count: 3, rpms: [9500, 9500, 9550] })
+})
+
 test('a crossover at the reported redline cannot create an earlier potential', () => {
   const learner = new ShiftLightLearner(key)
   feedShift(learner, 0, 11000, 420)

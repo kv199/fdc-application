@@ -23,6 +23,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Shift Light**: the shift cue comes on at a steady point that follows how
   fast the engine revs, instead of switching between two lead values on every
   other telemetry frame.
+- **Shift Light**: restarting FDC no longer counts an older shift again
+  towards confirming a gear's shift point, so a point is confirmed by three
+  real shifts as intended.
 
 ### Added
 

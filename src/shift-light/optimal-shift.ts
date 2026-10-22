@@ -123,6 +123,8 @@ const MAX_CLEAN_TIMESTAMP_GAP_MS = 1000
 const MODEL_REFRESH_MS = 250
 // A real comparison this far from the model point checks it; closer ones are neutral.
 const MODEL_CHECK_RPM = 150
+// A smaller power difference is within the noise of a comparable shift and near a flat crossover.
+const MODEL_CHECK_MIN_DELTA_PCT = 3
 const MODEL_REJECT_CONTRADICTIONS = 2
 
 interface LimiterTracker { gear: number, startRpm: number, peakRpm: number, phase: 'rising' | 'falling' }
@@ -192,6 +194,34 @@ function normalizeRpmList(value: unknown): number[] {
   return Array.isArray(value) ? value.map(item => finiteInRange(item, 0, 100_000))
     .filter((item): item is number => item !== null).map(roundRpm).slice(-MAX_CONFIRMATIONS) : []
 }
+/**
+ * Comparisons of the current series that a non-optimal row describes. A live series starts at its
+ * candidate and grows only while each better comparison stays within CONFIRMATION_STABILITY_RPM of
+ * it, so it is the newest run of such comparisons: walking the pair's better comparisons back from
+ * the newest, it ends at the first one outside the window, where the series started. At most
+ * `count` comparisons are taken, so the journal never raises the recorded count.
+ */
+function currentSeries(evidence: ShiftEvidenceState[], candidateRpm: number | null, count: number): ShiftEvidenceState[] {
+  const series: ShiftEvidenceState[] = []
+  if (candidateRpm === null) return series
+  for (let index = evidence.length - 1; index >= 0 && series.length < count; index--) {
+    const item = evidence[index]!
+    if (item.outcome !== 'better') continue
+    if (Math.abs(item.beforeRpm - candidateRpm) > CONFIRMATION_STABILITY_RPM) break
+    series.unshift(item)
+  }
+  return series
+}
+/**
+ * Confirmation RPMs for `count` confirmations. The bounded journal drops the oldest comparisons
+ * first, and the oldest comparison of a series is its candidate, so missing ones are filled with the
+ * candidate. The list then always holds `count` values and the next comparison continues the count.
+ */
+function seriesRpms(series: ShiftEvidenceState[], candidateRpm: number | null, count: number): number[] {
+  const rpms = series.map(item => item.beforeRpm)
+  while (candidateRpm !== null && rpms.length < count) rpms.unshift(roundRpm(candidateRpm))
+  return rpms.slice(-MAX_CONFIRMATIONS)
+}
 /** Keeps the highest observations, stored in ascending RPM order for determinism. */
 function keepHighestCeilingSamples(values: number[]): number[] {
   return [...values].sort((a, b) => b - a).slice(0, MAX_CEILING_SAMPLES).sort((a, b) => a - b)
@@ -210,7 +240,10 @@ export class OptimalShiftEstimator {
   private limiterTracker: LimiterTracker | null = null
   private lastCleanTelemetry: Telemetry | null = null
   private limiterRearmed = true
-  /** Highest clean full-throttle RPM of this run; in memory only, cleared by reset(). */
+  /**
+   * Highest clean full-throttle RPM of this run reached with positive power; in memory only, cleared by
+   * reset(). Frames where the wheels drive the engine (an over-rev after a downshift or kickdown) do not count.
+   */
   private peakWotRpm = 0
   /** Power curve and gear ratios of this run; in memory only, cleared by reset(). */
   private readonly powerModel = new PowerModel()
@@ -225,7 +258,7 @@ export class OptimalShiftEstimator {
     if (Number.isFinite(telemetry.rpmMax) && telemetry.rpmMax > 0) this.reportedRedlineRpm = roundRpm(telemetry.rpmMax)
     const cleanWot = cleanWotMotionTelemetry(telemetry)
     if (cleanWot && telemetry.gear < FORWARD_GEAR_MAX) this.getOrCreate(telemetry.gear)
-    if (cleanWot && telemetry.rpm > this.peakWotRpm) this.raisePeakWotRpm(telemetry.rpm)
+    if (cleanPowerTelemetry(telemetry) && telemetry.rpm > this.peakWotRpm) this.raisePeakWotRpm(telemetry.rpm)
     this.observeLimiter(telemetry)
   }
 
@@ -295,9 +328,15 @@ export class OptimalShiftEstimator {
       const explicitRpms = normalizeRpmList(item.confirmationRpms)
       const seed = finiteInRange(item.candidateRpm ?? item.targetRpm, 0, 100_000)
       const candidateRpm = seed ?? targetSamples[targetSamples.length - 1]?.beforeRpm ?? null
-      const derivedRpms = candidateRpm === null ? [] : targetSamples.map(sample => sample.beforeRpm).filter(rpm => Math.abs(rpm - candidateRpm) <= CONFIRMATION_STABILITY_RPM).slice(-MAX_CONFIRMATIONS)
-      target.confirmationRpms = (explicitRpms.length > 0 ? explicitRpms : derivedRpms).slice(-MAX_CONFIRMATIONS)
-      target.confirmationCount = Math.min(MAX_CONFIRMATIONS, Math.max(persistedCount, target.confirmationRpms.length))
+      if (explicitRpms.length > 0 || target.status === 'optimal') {
+        const derivedRpms = candidateRpm === null ? [] : targetSamples.map(sample => sample.beforeRpm).filter(rpm => Math.abs(rpm - candidateRpm) <= CONFIRMATION_STABILITY_RPM).slice(-MAX_CONFIRMATIONS)
+        target.confirmationRpms = (explicitRpms.length > 0 ? explicitRpms : derivedRpms).slice(-MAX_CONFIRMATIONS)
+        target.confirmationCount = Math.min(MAX_CONFIRMATIONS, Math.max(persistedCount, target.confirmationRpms.length))
+      } else {
+        // Only the series the row describes: older comparisons near the candidate belong to an earlier series.
+        target.confirmationRpms = seriesRpms(currentSeries(targetSamples, candidateRpm, persistedCount), candidateRpm, persistedCount)
+        target.confirmationCount = persistedCount
+      }
       target.lastReason = typeof item.lastReason === 'string' ? item.lastReason.slice(0, 160) : null
       target.evidence = samples.filter(sample => sample.sourceGear === target.sourceGear && sample.destinationGear === target.destinationGear)
       const modelRpm = finiteInRange(item.modelRpm, 1, 100_000)
@@ -439,15 +478,26 @@ export class OptimalShiftEstimator {
     return sorted.length % 2 === 1 ? sorted[middle]! : Math.round((sorted[middle - 1]! + sorted[middle]!) / 2)
   }
   private mergeSameRank(current: GearLearningState, incoming: GearLearningState): void {
-    const seen = new Set(current.evidence.map(item => `${item.beforeTimestampMs}:${item.afterTimestampMs}`))
-    current.evidence = [...current.evidence, ...incoming.evidence.filter(item => !seen.has(`${item.beforeTimestampMs}:${item.afterTimestampMs}`))].slice(-MAX_SHIFT_SAMPLES)
+    const sampleKey = (item: ShiftEvidenceState) => `${item.beforeTimestampMs}:${item.afterTimestampMs}`
+    const ownSeries = currentSeries(current.evidence, current.candidateRpm, current.confirmationCount)
+    const seen = new Set(current.evidence.map(sampleKey))
+    current.evidence = [...current.evidence, ...incoming.evidence.filter(item => !seen.has(sampleKey(item)))].slice(-MAX_SHIFT_SAMPLES)
     const anchor = current.targetRpm ?? current.candidateRpm ?? incoming.targetRpm ?? incoming.candidateRpm
-    const confirmations = anchor === null
-      ? []
-      : current.evidence
+    let confirmations: number[]
+    if (anchor === null) confirmations = []
+    else if (current.status === 'optimal') {
+      confirmations = current.evidence
         .filter(item => item.outcome === 'better' && Math.abs(item.beforeRpm - anchor) <= CONFIRMATION_STABILITY_RPM)
         .map(item => item.beforeRpm)
         .slice(-MAX_CONFIRMATIONS)
+    } else {
+      // Distinct comparisons of both current series; older comparisons near the anchor belong to earlier series.
+      const ownKeys = new Set(ownSeries.map(sampleKey))
+      const otherSeries = currentSeries(incoming.evidence, incoming.candidateRpm, incoming.confirmationCount).filter(item => !ownKeys.has(sampleKey(item)))
+      const joined = [...ownSeries, ...otherSeries].filter(item => Math.abs(item.beforeRpm - anchor) <= CONFIRMATION_STABILITY_RPM)
+      const count = Math.min(MAX_CONFIRMATIONS, Math.max(current.confirmationCount, incoming.confirmationCount, joined.length))
+      confirmations = seriesRpms(joined.slice(-MAX_CONFIRMATIONS), anchor, count)
+    }
     current.confirmationRpms = confirmations
     current.confirmationCount = Math.max(current.confirmationCount, incoming.confirmationCount, confirmations.length)
     if (current.confirmationCount >= MAX_CONFIRMATIONS && current.status !== 'learning') {
@@ -466,8 +516,8 @@ export class OptimalShiftEstimator {
   }
   /**
    * A comparison well above the model point agrees when the next gear was at least as strong,
-   * and one well below agrees when it was weaker; comparisons within MODEL_CHECK_RPM are
-   * neutral. Two or more contradictions that outnumber the agreements reject the point.
+   * and one well below agrees when it was weaker; comparisons within MODEL_CHECK_RPM, or with
+   * a power difference below MODEL_CHECK_MIN_DELTA_PCT, are neutral. Two or more contradictions that outnumber the agreements reject the point.
    */
   private modelInfo(gear: number): ShiftModelInfo {
     const cached = this.modelInfoCache.get(gear)
@@ -478,6 +528,7 @@ export class OptimalShiftEstimator {
     let agree = 0, contradict = 0
     if (state && rpm !== null) {
       for (const sample of state.evidence) {
+        if (Math.abs(sample.powerDeltaPct) < MODEL_CHECK_MIN_DELTA_PCT) continue
         if (sample.beforeRpm > rpm + MODEL_CHECK_RPM) { if (sample.powerDeltaPct >= 0) agree++; else contradict++ }
         else if (sample.beforeRpm < rpm - MODEL_CHECK_RPM) { if (sample.powerDeltaPct < 0) agree++; else contradict++ }
       }
@@ -545,7 +596,10 @@ export class OptimalShiftEstimator {
     this.usableCeiling = this.deriveUsableCeiling(this.ceilingSamples)
   }
   private isBelowPeakWotRpm(sample: number): boolean { return sample < this.peakWotRpm - FALSE_LIMITER_BELOW_PEAK_RPM }
-  /** A higher clean full-throttle RPM withdraws every observation it proves was not a limiter hit. */
+  /**
+   * A higher clean full-throttle RPM reached with positive power withdraws every observation it proves was
+   * not a limiter hit; an over-rev driven by the wheels proves nothing about the limiter.
+   */
   private raisePeakWotRpm(rpm: number): void {
     this.peakWotRpm = rpm
     const kept = this.ceilingSamples.filter(sample => !this.isBelowPeakWotRpm(sample))

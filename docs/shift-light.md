@@ -77,8 +77,10 @@ existing observations are removed, and the usable ceiling derived again, as
 soon as the engine passes them by that margin. Wheelspin on full throttle can
 make RPM rise, dip, and recover well below the limiter; without this rule such
 peaks became the provisional ceiling and moved the cue hundreds of RPM early.
-That highest RPM is kept in memory only and starts again after a restart or a
-reset. A group is one considered
+That highest RPM counts only frames where the engine drives the car (positive
+power): after a full-throttle downshift the wheels can over-rev the engine with
+negative power, which must not erase the real limiter. It is kept in memory
+only and starts again after a restart or a reset. A group is one considered
 observation together with the considered observations within `100 RPM` below it.
 Scanning from the highest considered observation down, the usable ceiling is the
 median of the first group that holds at least three observations; for an
@@ -211,7 +213,9 @@ limit changes, at most every `250 ms` of telemetry time.
 Real comparable shifts check the point. A shift more than `150 RPM` above it
 agrees when the next gear had at least as much power and contradicts it
 otherwise; a shift more than `150 RPM` below it agrees when the next gear had
-less power and contradicts it otherwise; shifts within `150 RPM` are neutral.
+less power and contradicts it otherwise; shifts within `150 RPM` are neutral,
+and so are comparisons that differ by less than `3%`, because near a flat part
+of the curve such a difference is within the noise of a comparable shift.
 With at least two contradictions that outnumber the agreements, the point is
 rejected for that pair, and the pair uses the learning states above. A turbo
 lag after a shift, which the steady power curve cannot show, appears this way.
@@ -357,7 +361,11 @@ facts collected while that load was in flight. A persistence failure appears
 in Configuration as `SHIFT LIGHT SAVE ERROR` instead of being silently hidden.
 Potential confirmation progress survives restart: the candidate and count are
 stored directly, while the individual confirmation RPMs are reconstructed from
-the bounded crossover journal.
+the bounded crossover journal. Only the current series is rebuilt: the newest
+crossovers of the pair within `100 RPM` of the candidate, up to the stored count
+and ending at the first older crossover outside that window. The stored count
+is never raised from the journal; when the journal no longer holds a
+confirmation, the candidate RPM stands in for it.
 
 ## Known limitations
 

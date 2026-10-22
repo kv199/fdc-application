@@ -171,6 +171,32 @@ test('a trusted ceiling is withdrawn when clean full throttle later exceeds it b
   assert.deepEqual(ceilingDetails(learner), { samples: [], usableCeiling: null, provisionalCeiling: null })
 })
 
+// A full-throttle downshift whose frames over-rev to topRpm with the given power, then lifts. Returns the next timestamp.
+function downshiftOverRev(learner, startMs, topRpm, power, gear = 8) {
+  const rpms = [topRpm - 700, topRpm - 300, topRpm]
+  rpms.forEach((rpm, index) => learner.update(frame({ timestampMs: startMs + index * 16, gear, rpm, power, speedKmh: 321, rpmMax: 10000 })))
+  learner.update(frame({ timestampMs: startMs + rpms.length * 16, gear, rpm: topRpm - 200, throttle: 0, power, speedKmh: 321, rpmMax: 10000 }))
+  return startMs + (rpms.length + 1) * 16 + 200
+}
+
+test('a full-throttle over-rev with negative power keeps the real limiter hits', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  let startMs = 0
+  for (const peak of [9100, 9105, 9102]) startMs = limiterPull(learner, startMs, peak)
+  assert.deepEqual(ceilingDetails(learner), { samples: [9100, 9102, 9105], usableCeiling: 9102, provisionalCeiling: null })
+  // The wheels drive the engine past the limiter after a downshift: that proves nothing about the limiter.
+  downshiftOverRev(learner, startMs, 9702, -954)
+  assert.deepEqual(ceilingDetails(learner), { samples: [9100, 9102, 9105], usableCeiling: 9102, provisionalCeiling: null })
+})
+
+test('a full-throttle over-rev with positive power still withdraws lower limiter hits', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  let startMs = 0
+  for (const peak of [9100, 9105, 9102]) startMs = limiterPull(learner, startMs, peak)
+  downshiftOverRev(learner, startMs, 9702, 400)
+  assert.deepEqual(ceilingDetails(learner), { samples: [], usableCeiling: null, provisionalCeiling: null })
+})
+
 test('the highest clean full-throttle RPM survives a transient reset but not a full reset', () => {
   const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
   let startMs = wotPull(learner, 0, 9187, 2)
