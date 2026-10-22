@@ -25,11 +25,12 @@ function frame(overrides = {}) {
  * limiter, bounces on it once (a limiter observation), then shifts directly into the next gear
  * with one torque-cut frame. With `comparable: false` the driver lifts for 300 ms before each
  * shift, so no power comparison is captured. `skip(rpm, gear)` makes a frame unusable.
+ * `topRpm` is where each gear stops climbing (the limiter by default).
  * Ends with a lifted frame 300 ms later so the throttled model refresh sees the whole pull.
  */
 function pull(learner, options = {}) {
   const { startMs = 0, gears = [1, 2, 3, 4], startRpm = 3000, powerAt = peakAtSixThousand, comparable = true,
-    slipFor = () => NO_SLIP, skip = () => false, limiter = true, extraFor = () => ({}) } = options
+    slipFor = () => NO_SLIP, skip = () => false, limiter = true, extraFor = () => ({}), topRpm = LIMITER_RPM } = options
   let timestampMs = startMs
   let rpm = startRpm
   const update = (gear, overrides) => {
@@ -39,12 +40,12 @@ function pull(learner, options = {}) {
   }
   gears.forEach((gear, index) => {
     if (index > 0) update(gear, { rpm, power: -50000 })
-    for (; rpm < LIMITER_RPM; rpm += 20) update(gear, skip(rpm, gear) ? { rpm, power: 0 } : { rpm, power: powerAt(rpm) })
-    const top = limiter ? [LIMITER_RPM, LIMITER_RPM - 60, LIMITER_RPM - 5] : [LIMITER_RPM - 5]
+    for (; rpm < topRpm; rpm += 20) update(gear, skip(rpm, gear) ? { rpm, power: 0 } : { rpm, power: powerAt(rpm) })
+    const top = limiter ? [topRpm, topRpm - 60, topRpm - 5] : [topRpm - 5]
     for (const value of top) update(gear, { rpm: value, power: powerAt(value) })
-    if (!comparable) for (let lift = 0; lift < 20; lift++) update(gear, { rpm: LIMITER_RPM - 100, throttle: 0, power: 0 })
+    if (!comparable) for (let lift = 0; lift < 20; lift++) update(gear, { rpm: topRpm - 100, throttle: 0, power: 0 })
     const next = gears[index + 1]
-    if (next !== undefined) rpm = Math.round(LIMITER_RPM * RATIOS[next] / RATIOS[gear])
+    if (next !== undefined) rpm = Math.round(topRpm * RATIOS[next] / RATIOS[gear])
   })
   timestampMs += 300
   update(gears.at(-1), { rpm: 5000, throttle: 0, power: 0 })
@@ -112,9 +113,34 @@ test('power rising to the limiter puts the model point at the ceiling', () => {
   assert.equal(snapshot.effectiveTargetRpm, LIMITER_RPM)
 })
 
-test('without a ceiling there is no model point and the cue keeps the redline fallback', () => {
+test('without a ceiling a crossover below the highest full-throttle RPM places the model point', () => {
   const learner = new ShiftLightLearner(KEY)
+  // The driver never bounces off the limiter but pulls each gear past its crossover.
   pull(learner, { limiter: false, comparable: false })
+  const snapshot = learner.snapshot(frame({ gear: 2, rpm: 5000 }))
+  assert.equal(snapshot.usableCeiling, null)
+  assert.equal(snapshot.provisionalCeiling, null)
+  for (const sourceGear of [1, 2, 3]) {
+    const gear = gearOf(snapshot, sourceGear), model = modelOf(snapshot, sourceGear)
+    const expected = analyticCrossover(sourceGear)
+    assert.ok(Math.abs(gear.modelRpm - expected) <= 50, `${sourceGear}->${sourceGear + 1} model ${gear.modelRpm}, analytic ${expected}`)
+    assert.equal(gear.ready, true)
+    assert.equal(gear.shiftAtRpm, gear.modelRpm)
+    assert.equal(model.rpm, gear.modelRpm)
+    assert.equal(model.kind, 'crossover')
+    assert.ok(model.coverage >= 0.5)
+  }
+  assert.equal(snapshot.effectiveTargetRpm, gearOf(snapshot, 2).modelRpm)
+  assert.equal(snapshot.status, 'calibrated')
+  assert.equal(snapshot.method, 'optimal')
+  // The point persists like any other model point.
+  const targets = learner.serializeLearningState().gearTargets
+  for (const sourceGear of [1, 2, 3]) assert.equal(targets.find(item => item.sourceGear === sourceGear).modelRpm, gearOf(snapshot, sourceGear).modelRpm)
+})
+
+test('without a ceiling power rising to the highest RPM reached gives no at-limiter point', () => {
+  const learner = new ShiftLightLearner(KEY)
+  const endMs = pull(learner, { powerAt: rpm => rpm * 30, limiter: false, comparable: false })
   const snapshot = learner.snapshot(frame({ gear: 2, rpm: 5000 }))
   assert.equal(snapshot.usableCeiling, null)
   assert.equal(snapshot.provisionalCeiling, null)
@@ -130,6 +156,37 @@ test('without a ceiling there is no model point and the cue keeps the redline fa
   assert.equal(snapshot.effectiveTargetRpm, 10000)
   assert.equal(snapshot.status, 'learning')
   assert.equal(snapshot.method, null)
+  // Once limiter hits give a ceiling, the same curve puts the point at the ceiling.
+  pull(learner, { powerAt: rpm => rpm * 30, comparable: false, startMs: endMs + 1000 })
+  const withCeiling = learner.snapshot(frame({ gear: 2, rpm: 5000 }))
+  assert.equal(withCeiling.usableCeiling, LIMITER_RPM)
+  for (const sourceGear of [1, 2, 3]) {
+    assert.equal(gearOf(withCeiling, sourceGear).modelRpm, LIMITER_RPM)
+    assert.equal(modelOf(withCeiling, sourceGear).kind, 'at-limiter')
+  }
+})
+
+test('without a ceiling a pull that stops before the crossover places no point until a later pull passes it', () => {
+  const learner = new ShiftLightLearner(KEY)
+  // Every crossover is above 6,600 RPM.
+  const endMs = pull(learner, { limiter: false, comparable: false, topRpm: 6500 })
+  const short = learner.snapshot(frame({ gear: 2, rpm: 5000 }))
+  assert.equal(short.provisionalCeiling, null)
+  for (const sourceGear of [1, 2, 3]) {
+    assert.ok(analyticCrossover(sourceGear) > 6600)
+    assert.equal(gearOf(short, sourceGear)?.modelRpm ?? null, null, `${sourceGear}->${sourceGear + 1}`)
+    assert.equal(modelOf(short, sourceGear).kind, null)
+    assert.ok(modelOf(short, sourceGear).ratioStep > 0)
+  }
+  assert.equal(short.status, 'learning')
+  pull(learner, { limiter: false, comparable: false, startMs: endMs + 1000 })
+  const long = learner.snapshot(frame({ gear: 2, rpm: 5000 }))
+  assert.equal(long.provisionalCeiling, null)
+  for (const sourceGear of [1, 2, 3]) {
+    assert.ok(Math.abs(gearOf(long, sourceGear).modelRpm - analyticCrossover(sourceGear)) <= 50, `${sourceGear}->${sourceGear + 1}`)
+    assert.equal(modelOf(long, sourceGear).kind, 'crossover')
+  }
+  assert.equal(long.status, 'calibrated')
 })
 
 test('wheelspin frames feed the power curve but not the gear ratios', () => {

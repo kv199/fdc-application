@@ -191,18 +191,22 @@ reset.
   compares two gears measured the same way. A gear keeps its latest 64 values,
   needs at least 10, and its ratio is the median.
 
-For a pair `G → G+1` with both ratios and a known ceiling (the usable ceiling,
-else the provisional ceiling), the step is `ratio(G+1) / ratio(G)`. From the
-power-peak bin up to the ceiling, every `50 RPM` where the power at that RPM
+For a pair `G → G+1` with both ratios, the step is `ratio(G+1) / ratio(G)`.
+The scan limit is the ceiling (the usable ceiling, else the provisional
+ceiling) or, while neither exists, the highest RPM the engine has reached on
+clean full throttle in this run. From the power-peak bin up to the scan limit,
+every `50 RPM` where the power at that RPM
 and at that RPM times the step are both known is compared, with linear
 interpolation between bin centres; unknown points are skipped. The model point
 is the first RPM where the next gear has at least as much power, but only
 after a known point where the current gear was still stronger, because
-otherwise the crossover may lie in a gap. Without a crossover, the model point
-is the ceiling when the known points reach within `200 RPM` of it. The known
+otherwise the crossover may lie in a gap. A crossover below RPM the engine has
+already reached needs no known limiter. Without a crossover, the model point
+is the ceiling when the known points reach within `200 RPM` of it; without a
+known ceiling there is no model point. The known
 points must be at least half of the points scanned up to the result; otherwise
-there is no model point. The model is recomputed when its data or the ceiling
-changes, at most every `250 ms` of telemetry time.
+there is no model point. The model is recomputed when its data or the scan
+limit changes, at most every `250 ms` of telemetry time.
 
 Real comparable shifts check the point. A shift more than `150 RPM` above it
 agrees when the next gear had at least as much power and contradicts it

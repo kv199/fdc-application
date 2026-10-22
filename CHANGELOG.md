@@ -43,6 +43,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Shift Light**: shift points now also appear for the low gears of powerful
   cars. Gear ratios are taken from how fast the driven wheels turn, so
   wheelspin no longer hides them.
+- **Shift Light**: a car whose power falls before the limiter gets its shift
+  points even if you never hit the limiter at full throttle.
 
 ## 7.37.101 - 2026-10-19
 

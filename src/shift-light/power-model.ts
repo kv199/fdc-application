@@ -16,6 +16,16 @@ export interface ShiftModelPoint {
   ratioStep: number | null
 }
 
+/**
+ * Upper end of a model scan. With a known ceiling the scan runs to it and may answer "at the
+ * limiter"; without one it runs to the highest RPM the engine already reached and only a
+ * crossover below it counts.
+ */
+export interface ShiftModelScan {
+  limitRpm: number | null
+  ceilingKnown: boolean
+}
+
 const BIN_RPM = 100
 const MAX_BIN_VALUES = 32
 const MIN_BIN_VALUES = 3
@@ -142,23 +152,26 @@ export class PowerModel {
 
   /**
    * The pair's model point from a curve snapshot: scan every 50 RPM from the power peak to the
-   * ceiling and skip points where either power is unknown. The first point where the next gear
+   * scan limit and skip points where either power is unknown. The first point where the next gear
    * has at least as much power is the crossover, but only after a known point where the current
    * gear was still stronger; otherwise the crossover may lie in a gap before it. Without a
-   * crossover, known points reaching within 200 RPM of the ceiling put the point at the ceiling.
+   * crossover, known points reaching within 200 RPM of the limit put the point at the limit, but
+   * only when the limit is a known ceiling: below RPMs the engine already reached, a crossover
+   * needs no limiter, while the at-limiter answer does.
    */
-  modelPoint(sourceGear: number, ceilingRpm: number | null, curve: Map<number, number> = this.curve()): ShiftModelPoint {
+  modelPoint(sourceGear: number, scan: ShiftModelScan, curve: Map<number, number> = this.curve()): ShiftModelPoint {
     const ratioStep = this.ratioStep(sourceGear)
     if (ratioStep === null) return { ...NO_POINT }
-    if (ceilingRpm === null || !(ceilingRpm > 0) || !(ratioStep > 0)) return { ...NO_POINT, ratioStep }
+    const limitRpm = scan.limitRpm
+    if (limitRpm === null || !(limitRpm > 0) || !(ratioStep > 0)) return { ...NO_POINT, ratioStep }
     let peakRpm: number | null = null, peakValue = -Infinity
     for (const [bin, value] of curve) {
       const rpm = bin * BIN_RPM + BIN_RPM / 2
-      if (rpm <= ceilingRpm && (value > peakValue || (value === peakValue && peakRpm !== null && rpm < peakRpm))) { peakRpm = rpm; peakValue = value }
+      if (rpm <= limitRpm && (value > peakValue || (value === peakValue && peakRpm !== null && rpm < peakRpm))) { peakRpm = rpm; peakValue = value }
     }
     if (peakRpm === null) return { ...NO_POINT, ratioStep }
     let steps = 0, evaluable = 0, highest: number | null = null, sawLower = false
-    for (let rpm = peakRpm; rpm <= ceilingRpm; rpm += SCAN_STEP_RPM) {
+    for (let rpm = peakRpm; rpm <= limitRpm; rpm += SCAN_STEP_RPM) {
       steps++
       const here = curveValue(curve, rpm), shifted = curveValue(curve, rpm * ratioStep)
       if (here === null || shifted === null) continue
@@ -172,8 +185,8 @@ export class PowerModel {
       sawLower = true
     }
     const coverage = steps === 0 ? 0 : evaluable / steps
-    if (highest !== null && ceilingRpm - highest <= AT_LIMITER_RPM && coverage >= MIN_COVERAGE) {
-      return { rpm: Math.round(ceilingRpm), kind: 'at-limiter', coverage, ratioStep }
+    if (scan.ceilingKnown && highest !== null && limitRpm - highest <= AT_LIMITER_RPM && coverage >= MIN_COVERAGE) {
+      return { rpm: Math.round(limitRpm), kind: 'at-limiter', coverage, ratioStep }
     }
     return { ...NO_POINT, ratioStep, coverage }
   }

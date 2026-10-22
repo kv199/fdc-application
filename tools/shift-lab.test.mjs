@@ -200,6 +200,34 @@ test('the reference reports at-ceiling when power rises to the ceiling', () => {
   assert.equal(pair.referenceRpm, 9000)
 })
 
+test('without a known limiter the reference still finds a crossover below the scan limit', () => {
+  const frames = sweepFrames(rpm => 500000 - (rpm - 7000) ** 2 * 0.05)
+  const known = referenceModel(frames, 9000)
+  const unknown = referenceModel(frames, 9000, [], { ceilingKnown: false })
+  assert.equal(known.ceilingKnown, true)
+  assert.equal(unknown.ceilingKnown, false)
+  assert.equal(unknown.pairs[0].kind, 'crossover')
+  assert.equal(unknown.pairs[0].referenceRpm, known.pairs[0].referenceRpm)
+  assert.equal(unknown.pairs[0].coverage, known.pairs[0].coverage)
+})
+
+test('without a known limiter power rising to the scan limit is insufficient-data, never at-ceiling', () => {
+  const frames = sweepFrames(rpm => rpm * 100)
+  assert.equal(referenceModel(frames, 9000, [], { ceilingKnown: true }).pairs[0].kind, 'at-ceiling')
+  const [pair] = referenceModel(frames, 9000, [], { ceilingKnown: false }).pairs
+  assert.equal(pair.kind, 'insufficient-data')
+  assert.equal(pair.referenceRpm, null)
+  assert.equal(pair.coverage, 1)
+  // Without a learner target there is nothing to compare: the scan limit is not a shift point.
+  assert.equal(pair.learnerRpm, null)
+  assert.equal(pair.differenceRpm, null)
+  // The highest clean frame is the scan limit when none is given.
+  const [derived] = referenceModel(frames, null, [], { ceilingKnown: false }).pairs
+  assert.equal(derived.kind, 'insufficient-data')
+  const learner = referenceModel(frames, 9000, [{ sourceGear: 1, destinationGear: 2, candidateRpm: 8800, targetRpm: null }], { ceilingKnown: false })
+  assert.equal(learner.pairs[0].learnerRpm, 8800)
+})
+
 // sweepFrames with wheel rotation: the driven wheels turn the engine through gear ratio 10 in gear 1 and 8.5 in gear 2.
 // spin(rpm) is the driven wheels' slip ratio; the other wheels roll at road speed. driven picks which wheels the engine turns.
 function wheelSweepFrames(powerAt, { drivetrain, driven = ['fl', 'fr', 'rl', 'rr'], spin = () => 0, flat = false }) {
@@ -316,10 +344,51 @@ test('replayLab groups sessions by car and reports shifts, cues and a reference 
     assert.match(report, /1->2/)
     assert.match(report, /turbo boost/)
     assert.match(report, /\(cov \d\.\d\d\)/)
+    assert.doesNotMatch(report, /limiter unknown/)
   } finally {
     lab?.close()
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+// Full-throttle pulls through gears 1-3 to 7,000 RPM, short of the limiter, with power peaking at 6,200 RPM, and an
+// off-throttle over-rev to 8,000 RPM at the end that is no limiter.
+function noLimiterPackets(car) {
+  const packets = []
+  let timestampMs = 0
+  let speedKmh = 50
+  const powerAt = rpm => 500000 - (rpm - 6200) ** 2 * 0.05
+  for (const gear of [1, 2, 3]) {
+    const ratio = RPM_PER_KMH[gear]
+    const startRpm = Math.round(speedKmh * ratio)
+    for (let step = 0; step <= 300; step++) {
+      const rpm = startRpm + (7000 - startRpm) * step / 300
+      packets.push(encodePacket({ car, timestampMs, rpm, speedKmh: rpm / ratio, power: powerAt(rpm), gear }))
+      timestampMs += 16
+    }
+    speedKmh = 7000 / ratio
+  }
+  for (let step = 0; step < 20; step++) {
+    packets.push(encodePacket({ car, timestampMs, rpm: 8000, speedKmh, power: 0, gear: 3, throttle: 0 }))
+    timestampMs += 16
+  }
+  return packets
+}
+
+test('without a known limiter the reference scans to the highest full-throttle RPM and the report says so', () => {
+  const [session] = decodedSessions([noLimiterPackets(CAR_A)])
+  const result = replayFrames([session])
+  const [car] = result.cars
+  assert.equal(car.ceiling.usable, null)
+  assert.equal(car.ceiling.provisional, null)
+  assert.equal(Math.round(car.ceiling.maxObservedRpm), 8000)
+  assert.equal(Math.round(car.ceiling.usedForReference), 7000)
+  assert.equal(car.ceiling.usedForReferenceKind, 'full-throttle')
+  assert.equal(car.reference.ceilingKnown, false)
+  assert.ok(car.reference.pairs.length > 0)
+  assert.ok(car.reference.pairs.every(pair => pair.kind !== 'at-ceiling'), car.reference.pairs.map(pair => pair.kind).join(', '))
+  const report = formatReport({ ...result, schemaVersion: 1, sessions: 1, packets: 0, undecodedPackets: 0 })
+  assert.match(report, /max observed 8000; game -; reference uses 7000 \(highest full-throttle RPM, limiter unknown\)$/m)
 })
 
 test('replayLab reports missing Shift Light tables in the game comparison', () => {

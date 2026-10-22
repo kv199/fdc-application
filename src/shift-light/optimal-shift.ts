@@ -1,5 +1,5 @@
 import type { Telemetry } from './telemetry'
-import { PowerModel, type ShiftModelKind, type ShiftModelPoint } from './power-model'
+import { PowerModel, type ShiftModelKind, type ShiftModelPoint, type ShiftModelScan } from './power-model'
 
 /** Persisted facts are intentionally small and incompatible with the old curve learner. */
 export const SHIFT_LIGHT_LEARNING_VERSION = 4
@@ -217,7 +217,7 @@ export class OptimalShiftEstimator {
   /** Latest live model result per source gear. */
   private readonly liveModel = new Map<number, ShiftModelPoint>()
   private modelDataChanged = false
-  private modelCeiling: number | null = null
+  private modelScan: ShiftModelScan = { limitRpm: null, ceilingKnown: false }
   private lastModelRefreshMs: number | null = null
   private readonly modelInfoCache = new Map<number, ShiftModelInfo>()
 
@@ -352,7 +352,7 @@ export class OptimalShiftEstimator {
   }
   reset(): void {
     this.gears.clear(); this.shiftSamples = []; this.ceilingSamples = []; this.usableCeiling = null; this.reportedRedlineRpm = null; this.peakWotRpm = 0
-    this.powerModel.clear(); this.liveModel.clear(); this.modelInfoCache.clear(); this.modelDataChanged = false; this.modelCeiling = null; this.lastModelRefreshMs = null
+    this.powerModel.clear(); this.liveModel.clear(); this.modelInfoCache.clear(); this.modelDataChanged = false; this.modelScan = { limitRpm: null, ceilingKnown: false }; this.lastModelRefreshMs = null
     this.resetTransient()
   }
   resetTransient(): void { this.limiterTracker = null; this.lastCleanTelemetry = null; this.limiterRearmed = true }
@@ -364,24 +364,28 @@ export class OptimalShiftEstimator {
     this.modelDataChanged = true
   }
   /**
-   * Recomputes the model points when the curve, the ratios or the ceiling changed, at most every
-   * MODEL_REFRESH_MS of telemetry time. A pair whose live model places a point gets a gear row,
-   * and that point replaces any persisted one.
+   * Recomputes the model points when the curve, the ratios or the scan limit changed, at most every
+   * MODEL_REFRESH_MS of telemetry time. The scan runs to the ceiling (usable, else provisional);
+   * without one it runs to the highest clean full-throttle RPM of this run and only a crossover
+   * below it places a point. A pair whose live model places a point gets a gear row, and that
+   * point replaces any persisted one.
    */
   refreshModel(timestampMs: number): void {
     const ceiling = this.usableCeiling ?? this.getProvisionalCeiling()
-    if (!this.modelDataChanged && ceiling === this.modelCeiling) return
+    const scan: ShiftModelScan = ceiling !== null ? { limitRpm: ceiling, ceilingKnown: true }
+      : { limitRpm: this.peakWotRpm > 0 ? roundRpm(this.peakWotRpm) : null, ceilingKnown: false }
+    if (!this.modelDataChanged && scan.limitRpm === this.modelScan.limitRpm && scan.ceilingKnown === this.modelScan.ceilingKnown) return
     const last = this.lastModelRefreshMs
     if (last !== null && timestampMs >= last && timestampMs - last < MODEL_REFRESH_MS) return
     this.lastModelRefreshMs = timestampMs
     this.modelDataChanged = false
-    this.modelCeiling = ceiling
+    this.modelScan = scan
     this.liveModel.clear()
     if (!this.powerModel.isEmpty()) {
       const curve = this.powerModel.curve()
       for (let sourceGear = FORWARD_GEAR_MIN; sourceGear < FORWARD_GEAR_MAX; sourceGear++) {
         if (this.powerModel.getRatio(sourceGear) === null || this.powerModel.getRatio(sourceGear + 1) === null) continue
-        this.liveModel.set(sourceGear, this.powerModel.modelPoint(sourceGear, ceiling, curve))
+        this.liveModel.set(sourceGear, this.powerModel.modelPoint(sourceGear, scan, curve))
       }
     }
     this.applyLiveModel()

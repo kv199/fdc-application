@@ -162,26 +162,29 @@ var HudShiftLight = (() => {
     }
     /**
      * The pair's model point from a curve snapshot: scan every 50 RPM from the power peak to the
-     * ceiling and skip points where either power is unknown. The first point where the next gear
+     * scan limit and skip points where either power is unknown. The first point where the next gear
      * has at least as much power is the crossover, but only after a known point where the current
      * gear was still stronger; otherwise the crossover may lie in a gap before it. Without a
-     * crossover, known points reaching within 200 RPM of the ceiling put the point at the ceiling.
+     * crossover, known points reaching within 200 RPM of the limit put the point at the limit, but
+     * only when the limit is a known ceiling: below RPMs the engine already reached, a crossover
+     * needs no limiter, while the at-limiter answer does.
      */
-    modelPoint(sourceGear, ceilingRpm, curve = this.curve()) {
+    modelPoint(sourceGear, scan, curve = this.curve()) {
       const ratioStep = this.ratioStep(sourceGear);
       if (ratioStep === null) return { ...NO_POINT };
-      if (ceilingRpm === null || !(ceilingRpm > 0) || !(ratioStep > 0)) return { ...NO_POINT, ratioStep };
+      const limitRpm = scan.limitRpm;
+      if (limitRpm === null || !(limitRpm > 0) || !(ratioStep > 0)) return { ...NO_POINT, ratioStep };
       let peakRpm = null, peakValue = -Infinity;
       for (const [bin, value] of curve) {
         const rpm = bin * BIN_RPM + BIN_RPM / 2;
-        if (rpm <= ceilingRpm && (value > peakValue || value === peakValue && peakRpm !== null && rpm < peakRpm)) {
+        if (rpm <= limitRpm && (value > peakValue || value === peakValue && peakRpm !== null && rpm < peakRpm)) {
           peakRpm = rpm;
           peakValue = value;
         }
       }
       if (peakRpm === null) return { ...NO_POINT, ratioStep };
       let steps = 0, evaluable = 0, highest = null, sawLower = false;
-      for (let rpm = peakRpm; rpm <= ceilingRpm; rpm += SCAN_STEP_RPM) {
+      for (let rpm = peakRpm; rpm <= limitRpm; rpm += SCAN_STEP_RPM) {
         steps++;
         const here = curveValue(curve, rpm), shifted = curveValue(curve, rpm * ratioStep);
         if (here === null || shifted === null) continue;
@@ -195,8 +198,8 @@ var HudShiftLight = (() => {
         sawLower = true;
       }
       const coverage = steps === 0 ? 0 : evaluable / steps;
-      if (highest !== null && ceilingRpm - highest <= AT_LIMITER_RPM && coverage >= MIN_COVERAGE) {
-        return { rpm: Math.round(ceilingRpm), kind: "at-limiter", coverage, ratioStep };
+      if (scan.ceilingKnown && highest !== null && limitRpm - highest <= AT_LIMITER_RPM && coverage >= MIN_COVERAGE) {
+        return { rpm: Math.round(limitRpm), kind: "at-limiter", coverage, ratioStep };
       }
       return { ...NO_POINT, ratioStep, coverage };
     }
@@ -344,7 +347,7 @@ var HudShiftLight = (() => {
     /** Latest live model result per source gear. */
     liveModel = /* @__PURE__ */ new Map();
     modelDataChanged = false;
-    modelCeiling = null;
+    modelScan = { limitRpm: null, ceilingKnown: false };
     lastModelRefreshMs = null;
     modelInfoCache = /* @__PURE__ */ new Map();
     ingest(telemetry) {
@@ -519,7 +522,7 @@ var HudShiftLight = (() => {
       this.liveModel.clear();
       this.modelInfoCache.clear();
       this.modelDataChanged = false;
-      this.modelCeiling = null;
+      this.modelScan = { limitRpm: null, ceilingKnown: false };
       this.lastModelRefreshMs = null;
       this.resetTransient();
     }
@@ -535,24 +538,27 @@ var HudShiftLight = (() => {
       this.modelDataChanged = true;
     }
     /**
-     * Recomputes the model points when the curve, the ratios or the ceiling changed, at most every
-     * MODEL_REFRESH_MS of telemetry time. A pair whose live model places a point gets a gear row,
-     * and that point replaces any persisted one.
+     * Recomputes the model points when the curve, the ratios or the scan limit changed, at most every
+     * MODEL_REFRESH_MS of telemetry time. The scan runs to the ceiling (usable, else provisional);
+     * without one it runs to the highest clean full-throttle RPM of this run and only a crossover
+     * below it places a point. A pair whose live model places a point gets a gear row, and that
+     * point replaces any persisted one.
      */
     refreshModel(timestampMs) {
       const ceiling = this.usableCeiling ?? this.getProvisionalCeiling();
-      if (!this.modelDataChanged && ceiling === this.modelCeiling) return;
+      const scan = ceiling !== null ? { limitRpm: ceiling, ceilingKnown: true } : { limitRpm: this.peakWotRpm > 0 ? roundRpm(this.peakWotRpm) : null, ceilingKnown: false };
+      if (!this.modelDataChanged && scan.limitRpm === this.modelScan.limitRpm && scan.ceilingKnown === this.modelScan.ceilingKnown) return;
       const last = this.lastModelRefreshMs;
       if (last !== null && timestampMs >= last && timestampMs - last < MODEL_REFRESH_MS) return;
       this.lastModelRefreshMs = timestampMs;
       this.modelDataChanged = false;
-      this.modelCeiling = ceiling;
+      this.modelScan = scan;
       this.liveModel.clear();
       if (!this.powerModel.isEmpty()) {
         const curve = this.powerModel.curve();
         for (let sourceGear = FORWARD_GEAR_MIN; sourceGear < FORWARD_GEAR_MAX; sourceGear++) {
           if (this.powerModel.getRatio(sourceGear) === null || this.powerModel.getRatio(sourceGear + 1) === null) continue;
-          this.liveModel.set(sourceGear, this.powerModel.modelPoint(sourceGear, ceiling, curve));
+          this.liveModel.set(sourceGear, this.powerModel.modelPoint(sourceGear, scan, curve));
         }
       }
       this.applyLiveModel();

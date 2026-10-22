@@ -99,7 +99,8 @@ function curveValue(curve, rpm) {
 
 // Scans every 50-RPM point from the power peak to the ceiling and skips points where either power is unknown.
 // Coverage is the share of those points that could be evaluated, so a crossover found on thin data stays visible.
-function crossoverPoint(curve, ratioStep, ceilingRpm) {
+// Like the learner, a scan limit that is not a known limiter never puts the point at the ceiling.
+function crossoverPoint(curve, ratioStep, ceilingRpm, ceilingKnown = true) {
   let peak = null
   for (const bin of [...curve.keys()].sort((left, right) => left - right)) {
     const rpm = bin * CURVE_BIN_RPM + CURVE_BIN_RPM / 2
@@ -124,14 +125,15 @@ function crossoverPoint(curve, ratioStep, ceilingRpm) {
   const coverage = Math.round(evaluable / steps * 100) / 100
   // Without a known point where the current gear was still stronger, the crossover may lie in the gap before it.
   if (crossover !== null) return { kind: crossover.bounded ? 'crossover' : 'at-or-below', referenceRpm: crossover.rpm, coverage }
-  if (highest !== null && ceilingRpm - highest <= AT_CEILING_RPM) return { kind: 'at-ceiling', referenceRpm: ceilingRpm, coverage }
+  if (ceilingKnown && highest !== null && ceilingRpm - highest <= AT_CEILING_RPM) return { kind: 'at-ceiling', referenceRpm: ceilingRpm, coverage }
   return { kind: 'insufficient-data', referenceRpm: null, coverage }
 }
 
 // Reference shift points from clean full-throttle frames only; replaySession passes only settled frames.
 // Gear ratios come from the driven wheels as the learner's do, or from rpm / speed without wheel data.
-// The learner's own state is passed in to compare against.
-export function referenceModel(frames, ceilingRpm = null, learnerPairs = []) {
+// The learner's own state is passed in to compare against. ceilingKnown false marks ceilingRpm as only a scan limit,
+// such as the highest full-throttle RPM without a known limiter: the reference then never answers at-ceiling.
+export function referenceModel(frames, ceilingRpm = null, learnerPairs = [], { ceilingKnown = true } = {}) {
   const clean = frames.filter(isCleanPowerFrame)
   // Recordings hold hundreds of thousands of frames, so values are pushed in place and the maximum is found by reduce.
   const ceiling = ceilingRpm ?? (clean.length === 0 ? null : clean.reduce((highest, frame) => Math.max(highest, frame.rpm), 0))
@@ -173,9 +175,10 @@ export function referenceModel(frames, ceilingRpm = null, learnerPairs = []) {
       : sources[ratioSource].get(sourceGear + 1).ratio / sources[ratioSource].get(sourceGear).ratio
     const point = ratioStep === null || ceiling === null
       ? { kind: 'insufficient-data', referenceRpm: null, coverage: null }
-      : crossoverPoint(curve, ratioStep, ceiling)
+      : crossoverPoint(curve, ratioStep, ceiling, ceilingKnown)
     const learner = learnerPairs.find(pair => pair.sourceGear === sourceGear && pair.destinationGear === sourceGear + 1)
-    const learnerRpm = ceiling === null ? null : learner?.targetRpm ?? learner?.candidateRpm ?? ceiling
+    // Without a known limiter the learner has no ceiling to fall back to, so only its own targets are compared.
+    const learnerRpm = ceiling === null ? null : learner?.targetRpm ?? learner?.candidateRpm ?? (ceilingKnown ? ceiling : null)
     const differenceRpm = point.referenceRpm === null || learnerRpm === null ? null : learnerRpm - point.referenceRpm
     pairs.push({
       pair: `${sourceGear}->${sourceGear + 1}`,
@@ -193,6 +196,7 @@ export function referenceModel(frames, ceilingRpm = null, learnerPairs = []) {
   }
   return {
     ceilingRpm: ceiling,
+    ceilingKnown,
     curveBins: curve.size,
     ratios: [...ratios].sort(([left], [right]) => left - right)
       .map(([gear, value]) => ({ gear, ratio: value.ratio, frames: value.frames, source: value.source })),
@@ -393,7 +397,13 @@ function summarizeCar(group, fdcDb) {
   const state = group.learner.serializeLearningState()
   const usableCeiling = state.usableCeiling ?? null
   const provisionalCeiling = group.lastSnapshot?.provisionalCeiling ?? null
-  const ceilingRpm = usableCeiling ?? provisionalCeiling ?? group.maxRpm
+  // Like the learner, without a usable or provisional limiter the reference scans up to the highest settled clean
+  // full-throttle RPM. group.maxRpm also counts off-throttle over-revs, which are no limiter.
+  const ceilingKnown = usableCeiling !== null || provisionalCeiling !== null
+  const fullThrottleRpm = group.referenceFrames.length === 0
+    ? null
+    : group.referenceFrames.reduce((highest, frame) => Math.max(highest, frame.rpm), 0)
+  const ceilingRpm = usableCeiling ?? provisionalCeiling ?? fullThrottleRpm
   const learnerPairs = state.gearTargets.map(target => ({
     sourceGear: target.sourceGear,
     destinationGear: target.destinationGear,
@@ -402,7 +412,7 @@ function summarizeCar(group, fdcDb) {
     targetRpm: target.targetRpm,
     confirmationCount: target.confirmationCount
   }))
-  const reference = referenceModel(group.referenceFrames, ceilingRpm, learnerPairs)
+  const reference = referenceModel(group.referenceFrames, ceilingRpm, learnerPairs, { ceilingKnown })
   const game = fdcDb ? readGameConfig(fdcDb, identity) : null
   const shifts = group.shifts
   const accepted = shifts.filter(shift => shift.accepted)
@@ -452,6 +462,7 @@ function summarizeCar(group, fdcDb) {
       reportedRedlineRpm: state.reportedRedlineRpm,
       maxObservedRpm: group.maxRpm,
       usedForReference: ceilingRpm,
+      usedForReferenceKind: usableCeiling !== null ? 'usable' : provisionalCeiling !== null ? 'provisional' : ceilingRpm === null ? null : 'full-throttle',
       samples: state.ceilingSamples,
       game: game ? { usableCeilingRpm: game.usableCeilingRpm, differenceRpm: usableCeiling === null || game.usableCeilingRpm === null ? null : usableCeiling - game.usableCeilingRpm } : null
     },
@@ -658,6 +669,13 @@ function formatDifference(value) {
   return `${value >= 0 ? '+' : ''}${Math.round(value)}`
 }
 
+// The reference ceiling, and when no limiter is known, that it is only the highest full-throttle RPM.
+function formatReferenceCeiling(ceiling) {
+  if (ceiling.usedForReference === null || ceiling.usedForReference === undefined) return '-'
+  const rpm = Math.round(ceiling.usedForReference)
+  return ceiling.usedForReferenceKind === 'full-throttle' ? `${rpm} (highest full-throttle RPM, limiter unknown)` : String(rpm)
+}
+
 function formatSeconds(ms) {
   return `${(ms / 1000).toFixed(1)} s`
 }
@@ -677,7 +695,7 @@ export function formatReport(result) {
     const gameText = ceiling.game
       ? `game ${ceiling.game.usableCeilingRpm ?? '-'} (difference ${formatDifference(ceiling.game.differenceRpm)})`
       : 'game -'
-    lines.push(`ceiling: replay usable ${ceiling.usable ?? '-'}, provisional ${ceiling.provisional ?? '-'}, redline ${ceiling.reportedRedlineRpm ?? '-'}, max observed ${ceiling.maxObservedRpm ?? '-'}; ${gameText}; reference uses ${ceiling.usedForReference ?? '-'}`)
+    lines.push(`ceiling: replay usable ${ceiling.usable ?? '-'}, provisional ${ceiling.provisional ?? '-'}, redline ${ceiling.reportedRedlineRpm ?? '-'}, max observed ${ceiling.maxObservedRpm ?? '-'}; ${gameText}; reference uses ${formatReferenceCeiling(ceiling)}`)
     const ratioText = car.reference.ratios.map(item => `${item.gear} ${item.ratio.toFixed(3)} ${item.source} (${item.frames})`).join(', ')
     lines.push(`reference ratios: ${ratioText || 'none'}`)
     lines.push('')
