@@ -83,13 +83,19 @@ var HudShiftLight = (() => {
     if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) return null;
     return Math.max(...values.map(Math.abs));
   }
-  function drivenWheelSpeed(telemetry) {
-    const wheels = telemetry.wheelRotation;
+  function drivenWheelValues(wheels, drivetrain) {
     if (!wheels || typeof wheels !== "object") return null;
-    const drivetrain = telemetry.car?.drivetrain;
     const driven = drivetrain === 0 ? [wheels.fl, wheels.fr] : drivetrain === 1 || drivetrain === 2 ? [wheels.rl, wheels.rr] : null;
     if (!driven || driven.some((value) => typeof value !== "number" || !Number.isFinite(value))) return null;
-    return driven.reduce((sum, value) => sum + Math.abs(value), 0) / driven.length;
+    return driven;
+  }
+  function drivenWheelSpeed(telemetry) {
+    const driven = drivenWheelValues(telemetry.wheelRotation, telemetry.car?.drivetrain);
+    return driven === null ? null : driven.reduce((sum, value) => sum + Math.abs(value), 0) / driven.length;
+  }
+  function drivenWheelSlip(telemetry) {
+    const driven = drivenWheelValues(telemetry.slipRatio, telemetry.car?.drivetrain);
+    return driven === null ? null : Math.max(...driven.map(Math.abs));
   }
   function addRatio(windows, gear, value) {
     let window = windows.get(gear);
@@ -234,6 +240,7 @@ var HudShiftLight = (() => {
   var MODEL_CHECK_RPM = 150;
   var MODEL_CHECK_MIN_DELTA_PCT = 3;
   var MODEL_REJECT_CONTRADICTIONS = 2;
+  var MAX_COMPARISON_DRIVEN_SLIP = 4;
   function isForwardGear(gear) {
     return Number.isInteger(gear) && gear >= FORWARD_GEAR_MIN && gear <= FORWARD_GEAR_MAX;
   }
@@ -263,6 +270,10 @@ var HudShiftLight = (() => {
   }
   function isCleanShiftEvidence(telemetry) {
     return cleanPowerTelemetry(telemetry);
+  }
+  function isComparisonWheelspin(telemetry) {
+    const slip = drivenWheelSlip(telemetry);
+    return slip !== null && slip > MAX_COMPARISON_DRIVEN_SLIP;
   }
   function emptyGear(sourceGear, destinationGear = sourceGear + 1) {
     return {
@@ -382,6 +393,7 @@ var HudShiftLight = (() => {
       const { sourceGear, destinationGear, before, after } = observation;
       if (!isForwardGear(sourceGear) || destinationGear !== sourceGear + 1) return null;
       if (!cleanPowerTelemetry(before) || !cleanPowerTelemetry(after) || before.timestampMs > after.timestampMs) return null;
+      if (isComparisonWheelspin(before) || isComparisonWheelspin(after)) return null;
       const powerDeltaPct = (after.power - before.power) / before.power * 100;
       if (!Number.isFinite(powerDeltaPct)) return null;
       const evidence = {
@@ -1059,6 +1071,7 @@ var HudShiftLight = (() => {
       this.options.onProgress?.({ key: this.key, gear: pending.sourceGear, shiftRpm: state?.targetRpm ?? null, sampleCount: state?.evidence.length ?? 0, status: state?.status ?? "learning", method: "optimal" });
       if (state?.status === "optimal") this.options.onCalibrated?.({ key: this.key, gear: pending.sourceGear, shiftRpm: state.targetRpm, sampleCount: state.evidence.length, status: "optimal", method: "optimal" });
     }
+    /** Median timestamp, RPM, power and per-wheel slip ratio of a window; other fields come from its middle frame. */
     medianTelemetry(frames) {
       if (frames.length === 0) return null;
       const median = (values) => {
@@ -1066,7 +1079,9 @@ var HudShiftLight = (() => {
         return sorted[Math.floor(sorted.length / 2)];
       };
       const pivot = frames[Math.floor(frames.length / 2)];
-      return { ...pivot, timestampMs: median(frames.map((item) => item.timestampMs)), rpm: median(frames.map((item) => item.rpm)), power: median(frames.map((item) => item.power)) };
+      const slips = frames.map((item) => item.slipRatio);
+      const slipRatio = slips.every((slip) => slip && typeof slip === "object") ? { fl: median(slips.map((slip) => slip.fl)), fr: median(slips.map((slip) => slip.fr)), rl: median(slips.map((slip) => slip.rl)), rr: median(slips.map((slip) => slip.rr)) } : pivot.slipRatio;
+      return { ...pivot, timestampMs: median(frames.map((item) => item.timestampMs)), rpm: median(frames.map((item) => item.rpm)), power: median(frames.map((item) => item.power)), slipRatio };
     }
     getLeadRpm() {
       const raw = (this.rpmRate ?? 0) * REACTION_TIME_S;

@@ -32,6 +32,12 @@ const RPM_TO_RAD_S = 2 * Math.PI / 60
 // Wheels locked to the engine per Data Out drivetrain value: 0 FWD, 1 RWD, 2 AWD. Like the learner, AWD uses the
 // rear axle, which keeps the gear ratio through wheelspin while the front axle drifts.
 const DRIVEN_WHEELS = { 0: ['fl', 'fr'], 1: ['rl', 'rr'], 2: ['rl', 'rr'] }
+// Mirror the learner: a comparison is not made when the median driven-wheel slip ratio of the frames before the shift,
+// or of the first clean destination-gear frames from POST_SHIFT_DELAY_MS to POST_SHIFT_WINDOW_MS after it, is above this.
+const MAX_COMPARISON_DRIVEN_SLIP = 4
+const POST_SHIFT_DELAY_MS = 80
+const POST_SHIFT_WINDOW_MS = 600
+const POST_SHIFT_FRAMES = 3
 // Mirrors the learner's PRE_SHIFT_SETTLE_MS: a clean run counts only after this long in one gear.
 const SETTLE_MS = 150
 // Mirrors the learner's MAX_TIMESTAMP_GAP_MS: a larger jump, or time going backwards, starts a new run.
@@ -243,6 +249,63 @@ function rejectionReason(window) {
   return 'capture-incomplete'
 }
 
+// Median over the frames of the largest absolute driven-wheel slip ratio, or null without a known drivetrain or slip.
+function drivenSlip(frames) {
+  const values = []
+  for (const frame of frames) {
+    const wheels = DRIVEN_WHEELS[frame.car?.drivetrain ?? frame.drivetrain]
+    const slip = wheels && frame.slipRatio ? Math.max(...wheels.map(wheel => Math.abs(frame.slipRatio[wheel]))) : NaN
+    if (!Number.isFinite(slip)) return null
+    values.push(slip)
+  }
+  return median(values)
+}
+
+function isComparableFrame(frame) {
+  return frame.throttle >= 0.95 && frame.clutch <= 0.05 && frame.brake <= 0.02 && frame.handBrake <= 0.02 && frame.power > 0
+}
+
+// The frames the learner compares before a shift: clean source-gear frames at least SETTLE_MS into their clean run and
+// within PRE_SHIFT_WINDOW_MS of the destination frame. A new clean run drops frames of an earlier one.
+function settledBeforeFrames(frames, shift) {
+  const end = frames[shift.index].timestampMs
+  let first = shift.source
+  while (first > 0 && frames[first - 1].gear === shift.sourceGear) first--
+  let settled = []
+  let runStart = null
+  for (let index = first; index <= shift.source; index++) {
+    const frame = frames[index]
+    if (!isComparableFrame(frame) || !(frame.speedKmh > 0)) {
+      runStart = null
+      continue
+    }
+    if (runStart === null) {
+      runStart = frame.timestampMs
+      settled = []
+    }
+    if (frame.timestampMs - runStart >= SETTLE_MS) settled.push(frame)
+  }
+  return settled.filter(frame => end - frame.timestampMs <= PRE_SHIFT_WINDOW_MS).slice(-MAX_SOURCE_FRAMES)
+}
+
+// Like the learner, a shift with settled clean frames before it and a complete capture after it is still not compared
+// when the driven wheels spin in either window; the tool then names wheelspin instead of its guess from the frames
+// before the shift.
+function shiftReason(frames, shift) {
+  const before = settledBeforeFrames(frames, shift)
+  const start = frames[shift.index].timestampMs
+  const after = []
+  for (let index = shift.index; index < frames.length && after.length < POST_SHIFT_FRAMES; index++) {
+    const frame = frames[index]
+    const elapsed = frame.timestampMs - start
+    if (frame.gear !== shift.destinationGear || elapsed > POST_SHIFT_WINDOW_MS) break
+    if (elapsed >= POST_SHIFT_DELAY_MS && isComparableFrame(frame)) after.push(frame)
+  }
+  const spinning = window => (drivenSlip(window) ?? 0) > MAX_COMPARISON_DRIVEN_SLIP
+  const wheelspin = before.length > 0 && after.length === POST_SHIFT_FRAMES && (spinning(before) || spinning(after))
+  return wheelspin ? 'wheelspin' : rejectionReason(shift.window)
+}
+
 function createGroup(key) {
   const group = {
     key, sessionIds: [], spans: new Map(), frameCount: 0, cues: [], shifts: [],
@@ -326,7 +389,7 @@ function replaySession(session, frames, groups, totals) {
         rpmBefore: frames[detected.source].rpm,
         cueDelayMs: cue ? frame.timestampMs - cue.timestampMs : null,
         accepted: false,
-        reason: rejectionReason(detected.window),
+        reason: shiftReason(frames, detected),
         powerDeltaPct: null
       })
     }
@@ -611,6 +674,10 @@ export function checkExpectations(carResult, expect) {
     const usable = carResult.ceiling.usable
     if (usable === null || usable === undefined) failures.push(`usable ceiling is null, expected ${min}-${max}`)
     else if (usable < min || usable > max) failures.push(`usable ceiling ${usable} is outside ${min}-${max}`)
+  }
+  if (expect.minCeilingSampleRpm !== undefined) {
+    const low = (carResult.ceiling.samples ?? []).filter(sample => sample < expect.minCeilingSampleRpm)
+    if (low.length > 0) failures.push(`limiter observations ${low.join(', ')} are below ${expect.minCeilingSampleRpm}`)
   }
   const targets = carResult.learner.gearTargets
   if (expect.minLearnedShiftRpm !== undefined) {

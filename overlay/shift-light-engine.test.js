@@ -478,3 +478,47 @@ test('a first limiter hit gives a provisional ceiling that the cue and fallback 
   assert.equal(trusted.provisionalCeiling, null)
   assert.equal(trusted.fallbackShiftRpm, 9195)
 })
+
+// Slip ratios with `front` on both front wheels and `rear` on both rear wheels.
+function slip(front, rear) { return { fl: front, fr: front, rl: rear, rr: rear } }
+// One clean 1 -> 2 upshift whose source-gear frames carry the slip ratios `before` and whose three
+// compared destination-gear frames carry `after`, or `after[i]` per frame. Returns the learning state.
+function slipUpshift(drivetrain, before, after) {
+  const shiftCar = { ...car, drivetrain }
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame({ car: shiftCar })))
+  const at = (overrides, slipRatio) => learner.update(frame({ car: shiftCar, slipRatio, ...overrides }))
+  const afterAt = index => Array.isArray(after) ? after[index] : after
+  at({ timestampMs: 0, rpm: 9200, power: 380 }, before)
+  at({ timestampMs: 150, rpm: 9400, power: 390 }, before)
+  at({ timestampMs: 166, rpm: 9500, power: 405 }, before)
+  at({ timestampMs: 182, gear: 2, rpm: 6500, power: -50 }, afterAt(0))
+  ;[262, 278, 294].forEach((timestampMs, index) => at({ timestampMs, gear: 2, rpm: 7000 + index * 20, power: 420 }, afterAt(index)))
+  return learner.serializeLearningState()
+}
+
+test('an upshift with driven-wheel wheelspin before or after it is not compared', () => {
+  // Recorded drifting upshifts of a RWD car spun the rear wheels at slip ratio 5.8-19 and RPM barely dropped.
+  for (const [before, after] of [[slip(0.05, 8), slip(0.05, 0.3)], [slip(0.05, 0.3), slip(0.05, 8)]]) {
+    const state = slipUpshift(1, before, after)
+    assert.deepEqual(state.shiftSamples, [])
+    assert.equal(state.gearTargets.find(item => item.sourceGear === 1)?.status ?? 'learning', 'learning')
+  }
+  assert.equal(slipUpshift(0, slip(6, 0.02), slip(0.3, 0.02)).shiftSamples.length, 0)
+  assert.equal(slipUpshift(2, slip(0.3, 5), slip(0.3, 0.3)).shiftSamples.length, 0)
+})
+
+test('an upshift with the usual wheelspin of a hard launch is still compared', () => {
+  // Accepted recorded comparisons reached a window median of 2.4 while RPM still followed the gear step.
+  assert.equal(slipUpshift(2, slip(1.2, 1.5), slip(1.5, 2.4)).shiftSamples.length, 1)
+  assert.equal(slipUpshift(1, slip(0.05, 1), slip(0.05, 0.9)).shiftSamples.length, 1)
+  assert.equal(slipUpshift(0, slip(1.5, 0.02), slip(0.6, 0.02)).shiftSamples.length, 1)
+  // The window median counts, so one spiking frame does not block the comparison.
+  assert.equal(slipUpshift(1, slip(0, 0.5), [slip(0, 9), slip(0, 0.4), slip(0, 0.4)]).shiftSamples.length, 1)
+})
+
+test('slip of wheels that are not driven does not block a comparison', () => {
+  // RWD and AWD (rear axle) ignore the front wheels; FWD ignores the rear wheels.
+  assert.equal(slipUpshift(1, slip(9, 0.2), slip(9, 0.2)).shiftSamples.length, 1)
+  assert.equal(slipUpshift(2, slip(9, 0.2), slip(9, 0.2)).shiftSamples.length, 1)
+  assert.equal(slipUpshift(0, slip(0.2, 9), slip(0.2, 9)).shiftSamples.length, 1)
+})

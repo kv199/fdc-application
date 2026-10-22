@@ -1,5 +1,5 @@
 import type { Telemetry } from './telemetry'
-import { PowerModel, type ShiftModelKind, type ShiftModelPoint, type ShiftModelScan } from './power-model'
+import { PowerModel, drivenWheelSlip, type ShiftModelKind, type ShiftModelPoint, type ShiftModelScan } from './power-model'
 
 /** Persisted facts are intentionally small and incompatible with the old curve learner. */
 export const SHIFT_LIGHT_LEARNING_VERSION = 4
@@ -126,6 +126,12 @@ const MODEL_CHECK_RPM = 150
 // A smaller power difference is within the noise of a comparable shift and near a flat crossover.
 const MODEL_CHECK_MIN_DELTA_PCT = 3
 const MODEL_REJECT_CONTRADICTIONS = 2
+// Driven-wheel slip ratio above which a comparison window is wheelspin. On recorded full-throttle
+// upshifts of seven AWD and RWD cars, 301 comparisons had a window median of at most 2.4 (after an
+// R34 1 -> 2 shift) while RPM still followed the gear step; the power model's 0.15 would have dropped
+// most of them. Every drifting upshift of a RWD Mazda was at 5.8 and above, its RPM barely dropped
+// after the shift, and the power difference was noise. 4 lies between the two.
+const MAX_COMPARISON_DRIVEN_SLIP = 4
 
 interface LimiterTracker { gear: number, startRpm: number, peakRpm: number, phase: 'rising' | 'falling' }
 
@@ -157,6 +163,17 @@ function cleanPowerTelemetry(telemetry: Telemetry): boolean {
 
 /** Public filter used by capture code and integrations. */
 export function isCleanShiftEvidence(telemetry: Telemetry): boolean { return cleanPowerTelemetry(telemetry) }
+
+/**
+ * True when the driven wheels spin so much that the engine is not tied to the road: RPM then barely
+ * drops after an upshift and before and after power are measured at nearly the same RPM. Only shift
+ * comparisons use it; the power curve, gear ratios and limiter keep such frames. Unknown slip or
+ * drivetrain does not block.
+ */
+function isComparisonWheelspin(telemetry: Telemetry): boolean {
+  const slip = drivenWheelSlip(telemetry)
+  return slip !== null && slip > MAX_COMPARISON_DRIVEN_SLIP
+}
 
 function emptyGear(sourceGear: number, destinationGear = sourceGear + 1): GearLearningState {
   return { sourceGear, destinationGear, status: 'learning', targetRpm: null, candidateRpm: null,
@@ -267,6 +284,7 @@ export class OptimalShiftEstimator {
     const { sourceGear, destinationGear, before, after } = observation
     if (!isForwardGear(sourceGear) || destinationGear !== sourceGear + 1) return null
     if (!cleanPowerTelemetry(before) || !cleanPowerTelemetry(after) || before.timestampMs > after.timestampMs) return null
+    if (isComparisonWheelspin(before) || isComparisonWheelspin(after)) return null
     const powerDeltaPct = ((after.power - before.power) / before.power) * 100
     if (!Number.isFinite(powerDeltaPct)) return null
     const evidence: ShiftEvidenceState = { sourceGear, destinationGear, beforeTimestampMs: before.timestampMs,

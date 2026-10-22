@@ -262,11 +262,16 @@ export class ShiftLightLearner {
     this.options.onProgress?.({ key: this.key, gear: pending.sourceGear, shiftRpm: state?.targetRpm ?? null, sampleCount: state?.evidence.length ?? 0, status: state?.status ?? 'learning', method: 'optimal' })
     if (state?.status === 'optimal') this.options.onCalibrated?.({ key: this.key, gear: pending.sourceGear, shiftRpm: state.targetRpm, sampleCount: state.evidence.length, status: 'optimal', method: 'optimal' })
   }
+  /** Median timestamp, RPM, power and per-wheel slip ratio of a window; other fields come from its middle frame. */
   private medianTelemetry(frames: Telemetry[]): Telemetry | null {
     if (frames.length === 0) return null
     const median = (values: number[]) => { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor(sorted.length / 2)]! }
     const pivot = frames[Math.floor(frames.length / 2)]!
-    return { ...pivot, timestampMs: median(frames.map(item => item.timestampMs)), rpm: median(frames.map(item => item.rpm)), power: median(frames.map(item => item.power)) }
+    const slips = frames.map(item => item.slipRatio)
+    const slipRatio = slips.every(slip => slip && typeof slip === 'object')
+      ? { fl: median(slips.map(slip => slip.fl)), fr: median(slips.map(slip => slip.fr)), rl: median(slips.map(slip => slip.rl)), rr: median(slips.map(slip => slip.rr)) }
+      : pivot.slipRatio
+    return { ...pivot, timestampMs: median(frames.map(item => item.timestampMs)), rpm: median(frames.map(item => item.rpm)), power: median(frames.map(item => item.power)), slipRatio }
   }
   private getLeadRpm(): number { const raw = (this.rpmRate ?? 0) * REACTION_TIME_S; return Math.round(Math.max(MIN_LEAD_RPM, Math.min(MAX_LEAD_RPM, Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_LEAD_RPM))) }
   private getGearStates(fallbackShiftRpm: number | null): ShiftLightGearState[] {

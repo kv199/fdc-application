@@ -138,14 +138,28 @@ least `0.95`, clutch no greater than `0.05`, brake and handbrake no greater than
 `0.02`, positive RPM, power, and vehicle speed. The temporary shift interval
 itself may contain zero or negative power; those torque-cut frames are skipped
 rather than treated as the destination gear's power.
-Partial-throttle, incomplete, stale or otherwise uncapturable shifts are
-ignored silently. They are not labelled bad or too early.
+
+A shift is also not compared when either window shows driven-wheel wheelspin:
+the median slip ratio of each driven wheel over the window is taken, and the
+shift is ignored when the larger of them is above `4`. The driven wheels are the
+same as for the gear ratios: the front pair for front-wheel drive, the rear
+pair for rear-wheel and all-wheel drive. With that much wheelspin the engine is
+not tied to the road: on recorded drifting upshifts with rear slip ratios of
+5.8 and above, RPM barely dropped after the shift, so both powers were measured
+at nearly the same RPM and their difference was noise. Accepted comparisons of
+the other recorded cars stayed at or below `2.4` while their RPM still followed
+the gear step. A missing slip ratio or an unknown drivetrain does not block a
+comparison. This rule applies only to the comparison; the power curve, the
+gear ratios and limiter detection still use such frames.
+
+Partial-throttle, incomplete, stale, wheelspin or otherwise uncapturable
+shifts are ignored silently. They are not labelled bad or too early.
 
 A timestamp gap longer than `1000 ms` clears only in-progress capture, limiter,
 and RPM-rate evidence. It does not erase completed learning or persisted state.
 
-Torque, wheel speed, slip and a reconstructed `power / speed` force proxy are
-not inputs to this decision.
+Torque, wheel speed and a reconstructed `power / speed` force proxy are not
+inputs to this decision, and slip only decides whether a shift is compared.
 
 ## Per-pair learning states
 
@@ -462,7 +476,10 @@ fresh Shift Light learner from the checked-in bundle, and reports per car:
   rejected it;
 - each purple cue, each real upshift, whether the learner accepted it, the
   tool's own guess at why not (`partial-throttle`, `clutch`, `brake`,
-  `no-power`, `capture-incomplete`), and the time from the cue to the shift;
+  `no-power`, `capture-incomplete`, `wheelspin`), and the time from the cue to
+  the shift. `wheelspin` is named when the shift has settled clean frames
+  before it and three clean destination-gear frames after it, as the learner
+  needs, but either window is over the learner's wheelspin limit;
 - an independent reference shift point per pair, flagged when it differs from
   the learner by more than `150 RPM`. Like the learner, it uses only
   full-throttle frames at least `150 ms` into an uninterrupted clean run in

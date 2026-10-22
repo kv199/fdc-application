@@ -701,3 +701,42 @@ test('the reference uses no frame from the first 150 ms of a clean run', () => {
   assert.equal(frames(4), 5 * 5)
   assert.equal(frames(3), 2 * 5)
 })
+
+// One full-throttle 1 -> 2 upshift of the RWD CAR_A, 16 ms per frame, with rear slip ratio `beforeSlip` in gear 1 and
+// `afterSlip` in gear 2; gear-1 frames from index `liftFrom` on are at half throttle.
+function slipShiftSession(beforeSlip, afterSlip, liftFrom = 20) {
+  const frames = []
+  const push = (gear, rpm, rearSlip, overrides = {}) => frames.push({
+    isRaceOn: true, timestampMs: frames.length * 16, rpm, rpmMax: 9200, speedKmh: rpm / RPM_PER_KMH[gear], power: 400000, gear,
+    throttle: 1, brake: 0, clutch: 0, handBrake: 0, car: CAR_A, slipRatio: { fl: 0.02, fr: 0.02, rl: rearSlip, rr: rearSlip },
+    wheelRotation: null, ...overrides
+  })
+  for (let index = 0; index < 20; index++) push(1, 7000 + index * 50, beforeSlip, index >= liftFrom ? { throttle: 0.5 } : {})
+  for (let index = 0; index < 12; index++) push(2, 6200 + index * 30, afterSlip, index === 0 ? { power: -20000 } : {})
+  return [{ id: 1, frames }]
+}
+
+test('a shift the learner does not compare because of driven-wheel wheelspin is reported as wheelspin', () => {
+  const shiftOf = sessions => replayFrames(sessions).cars[0].shifts[0]
+  assert.deepEqual([shiftOf(slipShiftSession(0.3, 0.3)).accepted, shiftOf(slipShiftSession(0.3, 0.3)).reason], [true, null])
+  for (const [before, after] of [[8, 0.3], [0.3, 8]]) {
+    const shift = shiftOf(slipShiftSession(before, after))
+    assert.deepEqual([shift.accepted, shift.reason], [false, 'wheelspin'], `${before} / ${after}`)
+  }
+  // A lift is how a shift starts, so settled frames before it are still compared and wheelspin is the reason.
+  assert.equal(shiftOf(slipShiftSession(0.3, 0.3, 17)).accepted, true)
+  const lifted = shiftOf(slipShiftSession(8, 8, 17))
+  assert.deepEqual([lifted.accepted, lifted.reason], [false, 'wheelspin'])
+  // Without settled clean frames before the shift the learner never gets to compare it, so the other reason stays.
+  const unsettled = shiftOf(slipShiftSession(8, 8, 8))
+  assert.deepEqual([unsettled.accepted, unsettled.reason], [false, 'partial-throttle'])
+  const car = replayFrames(slipShiftSession(8, 8)).cars[0]
+  assert.deepEqual(car.summary.rejections, { wheelspin: 1 })
+  assert.match(formatReport({ ...{ schemaVersion: 1, sessions: 1, packets: 0, undecodedPackets: 0, keylessFrames: 0, fdc: null }, cars: [car] }), /not accepted: wheelspin 1/)
+})
+
+test('checkExpectations checks that no limiter observation lies below a floor', () => {
+  const car = samples => ({ ceiling: { usable: null, samples }, learner: { gearTargets: [] } })
+  assert.deepEqual(checkExpectations(car([10220, 10243]), { minCeilingSampleRpm: 10000 }), [])
+  assert.deepEqual(checkExpectations(car([9100, 9650, 10243]), { minCeilingSampleRpm: 10000 }), ['limiter observations 9100, 9650 are below 10000'])
+})

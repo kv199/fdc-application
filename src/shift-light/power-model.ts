@@ -1,4 +1,4 @@
-import type { Telemetry } from './telemetry'
+import type { Quad, Telemetry } from './telemetry'
 
 /**
  * In-memory power curve and gear ratios of one configuration, built from settled clean
@@ -75,18 +75,28 @@ function maxAbsSlip(slip: Telemetry['slipRatio'] | undefined | null): number | n
 }
 
 /**
- * Mean absolute angular speed (rad/s) of the wheels locked to the engine: front for FWD (0), rear
- * for RWD (1) and AWD (2). On FH6 recordings the AWD rear axle keeps the gear ratio through wheelspin
- * while the front axle drifts by up to 12%. Null for an unknown drivetrain or missing or non-finite wheel data.
+ * Values of the wheels locked to the engine: front for FWD (0), rear for RWD (1) and AWD (2). On FH6
+ * recordings the AWD rear axle keeps the gear ratio through wheelspin while the front axle drifts by
+ * up to 12%. Null for an unknown drivetrain or missing or non-finite wheel data.
  */
-function drivenWheelSpeed(telemetry: Telemetry): number | null {
-  const wheels = telemetry.wheelRotation
+function drivenWheelValues(wheels: Quad | null | undefined, drivetrain: number | undefined): number[] | null {
   if (!wheels || typeof wheels !== 'object') return null
-  const drivetrain = telemetry.car?.drivetrain
   const driven = drivetrain === 0 ? [wheels.fl, wheels.fr]
     : drivetrain === 1 || drivetrain === 2 ? [wheels.rl, wheels.rr] : null
   if (!driven || driven.some(value => typeof value !== 'number' || !Number.isFinite(value))) return null
-  return driven.reduce((sum, value) => sum + Math.abs(value), 0) / driven.length
+  return driven
+}
+
+/** Mean absolute angular speed (rad/s) of the driven wheels, or null without them. */
+function drivenWheelSpeed(telemetry: Telemetry): number | null {
+  const driven = drivenWheelValues(telemetry.wheelRotation, telemetry.car?.drivetrain)
+  return driven === null ? null : driven.reduce((sum, value) => sum + Math.abs(value), 0) / driven.length
+}
+
+/** Largest absolute slip ratio of the driven wheels, or null without them. */
+export function drivenWheelSlip(telemetry: Telemetry): number | null {
+  const driven = drivenWheelValues(telemetry.slipRatio, telemetry.car?.drivetrain)
+  return driven === null ? null : Math.max(...driven.map(Math.abs))
 }
 
 function addRatio(windows: Map<number, ValueWindow>, gear: number, value: number): void {

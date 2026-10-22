@@ -26,6 +26,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Shift Light**: restarting FDC no longer counts an older shift again
   towards confirming a gear's shift point, so a point is confirmed by three
   real shifts as intended.
+- **Shift Light**: shifts made while the driven wheels spin hard, such as
+  when drifting, no longer teach a shift point. With the tyres spinning the
+  revs barely drop after a shift, so such shifts said nothing about the next
+  gear and could set an early point.
 
 ### Added
 
