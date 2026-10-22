@@ -15,7 +15,9 @@
   const COLUMN_WIDTHS = HudWidgets.COLUMN_WIDTHS
   const HUD_BASE_WIDTH = Object.values(COLUMN_WIDTHS).reduce((total, width) => total + width, 0)
   const HUD_BASE_HEIGHT = 69
-  const SHIFT_BAR_BASE_HEIGHT = 48
+  // Base height at the 736 px base width: 16 units of padding plus 1.5 times the segment width,
+  // which is 59.8 px, rounded to 60. overlay.css uses the same value.
+  const SHIFT_BAR_BASE_HEIGHT = 60
   // Gap between stacked blocks: Delta above the Shift Bar, the Shift Bar above the HUD.
   const STACK_GAP = 10
   // Target names whose DOM ids differ from the target name (camelCase in code, kebab-case in markup).

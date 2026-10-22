@@ -255,15 +255,15 @@ test('a visible Shift Bar joins the window-shrink rectangle, and a hidden one do
     flushFrames()
 
     setRect(elements.get('hud-frame'), 500, 900, 920, 69)
-    setRect(elements.get('shift-bar'), 500, 800, 920, 48)
+    setRect(elements.get('shift-bar'), 500, 800, 920, 60)
     HudLayout.refreshLayout()
     flushFrames()
-    // Union of the HUD (900 to 969) and the bar (800 to 848), padded by 8 px.
+    // Union of the HUD (900 to 969) and the bar (800 to 860), padded by 8 px.
     assert.deepEqual(sent().at(-1).args, { bounds: { left: 492, top: 792, width: 936, height: 185 } })
 
     setRect(elements.get('hud-frame'), 0, 0, 0, 0)
     HudLayout.refreshLayout()
     flushFrames()
-    assert.deepEqual(sent().at(-1).args, { bounds: { left: 492, top: 792, width: 936, height: 64 } }, 'the bar alone')
+    assert.deepEqual(sent().at(-1).args, { bounds: { left: 492, top: 792, width: 936, height: 76 } }, 'the bar alone')
   })
 })

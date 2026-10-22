@@ -26,7 +26,7 @@ panel or place and resize each one freely, hide what you don't need, and set
 the overlay opacity. Press the edit hotkey in Forza to move the HUD over the
 running game without pausing it, with an alignment grid to line blocks up.
 The HUD stays click-through and hides in the pause menu and garage. An
-optional **Shift Bar** is a row of triangles, by default above the HUD, that
+optional **Shift Bar** is a row of slanted segments, by default above the HUD, that
 fills toward the shift point and shows the same red and purple signal as the
 gear block. It is off until you switch it on in **WIDGETS**, starts at its
 smallest size, and can only be enlarged.

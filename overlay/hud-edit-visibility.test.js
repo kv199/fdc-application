@@ -437,16 +437,16 @@ test('Shift Bar defaults above the HUD, and Delta sits above the bar only while 
   withOverlayRuntime(({ element }) => {
     // HUD scale is 2 here: the HUD is 1472 x 138 at the bottom, 28 px above the edge.
     element('hud-frame').getBoundingClientRect = () => rect(224, 914, 1472, 138)
-    // The default Shift Bar size is 0.5: 736 x 48 at HUD scale 2.
-    element('shift-bar').getBoundingClientRect = () => rect(592, 856, 736, 48)
+    // The default Shift Bar size is 0.5: 736 x 60 at HUD scale 2.
+    element('shift-bar').getBoundingClientRect = () => rect(592, 844, 736, 60)
     element('delta-strip').getBoundingClientRect = () => rect(224, 786, 1472, 60)
     // Delta is hidden without an Event reference, so its place is only applied with one.
     HudPreferences.setDeltaReferenceActive(true)
 
     HudPreferences.setOverlayVisibility('shiftBar', true)
     assert.equal(element('shift-bar').style.left, '592px', 'centered on the HUD: 224 + 736 - 368')
-    assert.equal(element('shift-bar').style.top, '856px', 'a 10 px gap above the HUD: 914 - 10 - 48')
-    assert.equal(element('delta-strip').style.top, '786px', 'Delta 10 px above the bar: 914 - 10 - 48 - 10 - 60')
+    assert.equal(element('shift-bar').style.top, '844px', 'a 10 px gap above the HUD: 914 - 10 - 60')
+    assert.equal(element('delta-strip').style.top, '774px', 'Delta 10 px above the bar: 914 - 10 - 60 - 10 - 60')
 
     // Turning the bar off moves an unsaved Delta back above the HUD, because defaults are not stored.
     HudPreferences.setOverlayVisibility('shiftBar', false)

@@ -59,6 +59,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   wheelspin no longer hides them.
 - **Shift Light**: a car whose power falls before the limiter gets its shift
   points even if you never hit the limiter at full throttle.
+- **HUD**: the Shift Bar is a row of 36 evenly slanted segments with black
+  empty segments, replacing the alternating triangles. It fills and flashes
+  as before.
 
 ## 7.37.101 - 2026-10-19
 

@@ -41,7 +41,7 @@ The telemetry HUD has six blocks. A separate Delta strip belongs to Events.
 | Input Graph | The last eight seconds of throttle (green) and brake (red) input. |
 
 **Shift Bar** is an optional block, off by default, above the telemetry HUD. It
-shows the Gear block's shift signal as a row of triangles that fills with RPM,
+shows the Gear block's shift signal as a row of slanted segments that fills with RPM,
 which is described under [Shift cue](#shift-cue). It has its own switch in
 **WIDGETS** and is positioned, moved, resized, and reset independently, like
 Delta. It shows no text.
@@ -108,8 +108,8 @@ the Redline Brightness setting, and purple follows the FDC Shift Light
 Brightness setting. The Gear block's red text is unchanged. How targets are
 learned is described in [Shift Light](shift-light.md).
 
-The **Shift Bar** widget shows the same signal as a row of 36 alternating
-triangles. Its green fill rises from idle RPM to the signal point: the Shift
+The **Shift Bar** widget shows the same signal as a row of 36 identical,
+right-leaning parallelogram segments, none rotated. Its green fill rises from idle RPM to the signal point: the Shift
 Light cue RPM when purple can show, which falls back to Shift Light's target
 RPM if the cue RPM is missing, and otherwise the point where red starts; the
 bar is never filled later than red starts. Filled segments are whole, so the
@@ -179,7 +179,7 @@ the Shift Bar to its default place and size in both arrangements.
 
 By default the Shift Bar sits directly above the telemetry HUD, centered on it
 with a 10 px gap. Its default size is 0.5× the Grouped HUD: at 1× HUD scale it is
-368 px wide and 24 px high. The default is also its smallest size, so the Shift
+368 px wide and 30 px high. The default is also its smallest size, so the Shift
 Bar can only be made larger, up to 2×; a never-resized bar and RESET LAYOUT both
 return it to 0.5×. Delta sits 10 px above the Shift Bar while the bar is on, and
 10 px above the HUD while it is off. A saved position always wins over these

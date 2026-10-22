@@ -13,8 +13,9 @@ const {
   filledSegments,
   limiterRpm,
   resolveSignal,
-  resolveThresholdRpm,
-  segmentTransform
+  PARALLELOGRAM_PATH,
+  SEGMENT_VIEW_BOX,
+  resolveThresholdRpm
 } = require('./shift-bar.js')
 
 // Minimal DOM: elements, attributes, a classList, and a count of every
@@ -320,11 +321,9 @@ test('filledSegments floors the fraction to whole segments', () => {
   assert.equal(filledSegments(10 / 36), 10)
 })
 
-test('segments alternate apex up and apex down', () => {
-  assert.equal(segmentTransform(0), null)
-  assert.equal(segmentTransform(1), 'rotate(180 24 16)')
-  assert.equal(segmentTransform(34), null)
-  assert.equal(segmentTransform(35), 'rotate(180 24 16)')
+test('every segment is the same unrotated right-leaning parallelogram', () => {
+  assert.equal(SEGMENT_VIEW_BOX, '0 0 24 32')
+  assert.equal(PARALLELOGRAM_PATH, 'M8 0 H24 L16 32 H0 Z')
 })
 
 test('overlay.js no longer uses the steady 85 percent redline threshold', () => {
@@ -343,19 +342,23 @@ test('the HUD page scripts drive the Gear block and the Shift Bar from the share
   assert.match(overlay, /latestShiftLight\.lastKnownGear !== true/)
 })
 
-test('createShiftBar builds 36 triangle segments once in the segment container', () => {
+test('createShiftBar builds 36 parallelogram segments once in the segment container', () => {
   withFakeDocument(doc => {
     const { segments } = mountBar(doc)
     createShiftBar()
     assert.equal(segments.children.length, SEGMENT_COUNT)
     for (const segment of segments.children) {
       assert.equal(segment.getAttribute('class'), 'shift-bar__segment')
+      assert.equal(segment.getAttribute('viewBox'), '0 0 24 32')
       assert.equal(segment.getAttribute('aria-hidden'), 'true')
-      assert.equal(segment.children[0].children[0].getAttribute('class'), 'shift-bar__empty')
-      assert.equal(segment.children[0].children[1].getAttribute('class'), 'shift-bar__fill')
+      assert.equal(segment.getAttribute('transform'), null)
+      assert.equal(segment.children.length, 2)
+      assert.equal(segment.children[0].getAttribute('class'), 'shift-bar__empty')
+      assert.equal(segment.children[0].getAttribute('d'), PARALLELOGRAM_PATH)
+      assert.equal(segment.children[0].getAttribute('transform'), null)
+      assert.equal(segment.children[1].getAttribute('class'), 'shift-bar__fill')
+      assert.equal(segment.children[1].getAttribute('d'), PARALLELOGRAM_PATH)
     }
-    assert.equal(segments.children[1].children[0].getAttribute('transform'), 'rotate(180 24 16)')
-    assert.equal(segments.children[0].children[0].getAttribute('transform'), null)
   })
 })
 
@@ -455,4 +458,24 @@ test('a provisional ceiling sets red and the fill until the usable ceiling is tr
   assert.equal(resolveThresholdRpm({ rpmMax: 10000, provisionalCeiling: 9195 }), 9195 * LIMITER_RPM_FRACTION)
   // A trusted ceiling wins over the provisional one.
   assert.equal(resolveThresholdRpm({ rpmMax: 10000, usableCeiling: 9000, provisionalCeiling: 9195 }), 9000 * LIMITER_RPM_FRACTION)
+})
+
+test('the Shift Bar CSS and layout share the 434 px design geometry at the 736 px base', () => {
+  const css = fs.readFileSync(path.join(__dirname, 'overlay.css'), 'utf8')
+  const layout = fs.readFileSync(path.join(__dirname, 'hud-layout.js'), 'utf8')
+  // Design units (px at 434 wide): 12 px side padding leaves 410 for the row, and 36 boxes overlap by 1.5.
+  const unitsPerDesignPx = 736 / 434
+  const segmentWidth = (410 + 35 * 1.5) / 36
+  const baseHeight = (16 + 1.5 * segmentWidth) * unitsPerDesignPx
+  assert.ok(Math.abs(baseHeight - 60) < 0.25, `base height ${baseHeight} rounds to 60`)
+  // The segments fit inside the vertical padding.
+  assert.ok(1.5 * segmentWidth * unitsPerDesignPx <= 60 - 16 * unitsPerDesignPx)
+  assert.match(layout, /const SHIFT_BAR_BASE_HEIGHT = 60\n/)
+  assert.match(css, /--shift-bar-unit: calc\(736px \/ 434 \* var\(--shift-bar-scale\)\);/)
+  assert.match(css, /padding: calc\(8 \* var\(--shift-bar-unit\)\) calc\(12 \* var\(--shift-bar-unit\)\);/)
+  assert.match(css, /flex: 0 0 calc\(\(100% \+ 52\.5 \* var\(--shift-bar-unit\)\) \/ 36\);/)
+  assert.match(css, /aspect-ratio: 2 \/ 3;/)
+  assert.match(css, /margin-left: calc\(-1\.5 \* var\(--shift-bar-unit\)\);/)
+  assert.match(css, /height: calc\(60px \* var\(--hud-scale\) \* var\(--shift-bar-user-scale, 0\.5\)\);/)
+  assert.match(css, /\.shift-bar__empty \{\s*fill: var\(--hud-shift-empty\);\s*stroke: none;\s*\}/)
 })

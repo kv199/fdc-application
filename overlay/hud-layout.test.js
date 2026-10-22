@@ -48,7 +48,7 @@ test('every other widget still defaults to 1 and keeps the 0.5 to 2 limits', () 
 
 test('the editor never resizes the Shift Bar below 0.5 and keeps the 2x maximum', () => {
   const viewport = { width: 1920, height: 1080 }
-  const baseSize = { width: 736, height: 48 }
+  const baseSize = { width: 736, height: 60 }
   assert.equal(layout.clampResizedWidgetSize('shiftBar', 0.2, viewport, baseSize), 0.5)
   assert.equal(layout.clampResizedWidgetSize('shiftBar', 0.5, viewport, baseSize), 0.5)
   assert.equal(layout.clampResizedWidgetSize('shiftBar', 1.5, viewport, baseSize), 1.5)
@@ -208,13 +208,13 @@ test('Shift Bar is an independent shared target with its own markup, handles and
 })
 
 test('Shift Bar positioning: absolute, sized from the HUD scale and the user scale, edit state visible', () => {
-  assert.match(css, /\.shift-bar \{[^}]*position: absolute;[^}]*width: calc\(736px \* var\(--hud-scale\) \* var\(--shift-bar-user-scale, 0\.5\)\);[^}]*height: calc\(48px \* var\(--hud-scale\) \* var\(--shift-bar-user-scale, 0\.5\)\);/s)
+  assert.match(css, /\.shift-bar \{[^}]*position: absolute;[^}]*width: calc\(736px \* var\(--hud-scale\) \* var\(--shift-bar-user-scale, 0\.5\)\);[^}]*height: calc\(60px \* var\(--hud-scale\) \* var\(--shift-bar-user-scale, 0\.5\)\);/s)
   // The CSS fallback is the Shift Bar default (0.5), so the first paint matches the layout script.
   assert.doesNotMatch(css, /--shift-bar-user-scale, 1\)/)
   assert.equal((css.match(/--shift-bar-user-scale, 0\.5\)/g) || []).length, 3)
   assert.match(css, /\.shift-bar\.is-editing \{[^}]*pointer-events: auto;/s)
   assert.match(css, /\.shift-bar\.is-editing\.is-selected \.layout-resize-handle \{\s*display: block;\s*\}/)
-  assert.match(source, /const SHIFT_BAR_BASE_HEIGHT = 48/)
+  assert.match(source, /const SHIFT_BAR_BASE_HEIGHT = 60/)
   assert.match(source, /const STACK_GAP = 10/)
 })
 

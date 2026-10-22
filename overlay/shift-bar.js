@@ -11,9 +11,9 @@
   // limiters sit at 87-97% of it, so red then shows on the first pull for every recorded car,
   // usually about 0.15 s before the limiter in first gear.
   const LIMITER_ESTIMATE_FRACTION = 0.89
-  const SEGMENT_VIEW_BOX = '0 0 48 32'
-  const TRIANGLE_PATH = 'M19.2 6.4 Q24 0 28.8 6.4 L42 24 Q48 32 38 32 H10 Q0 32 6 24 Z'
-  const ROTATED_TRIANGLE_TRANSFORM = 'rotate(180 24 16)'
+  // Every segment is the same right-leaning parallelogram, unrotated.
+  const SEGMENT_VIEW_BOX = '0 0 24 32'
+  const PARALLELOGRAM_PATH = 'M8 0 H24 L16 32 H0 Z'
   const SIGNALS = Object.freeze(['normal', 'redline', 'shift'])
   const SVG_NAMESPACE = 'http://www.w3.org/2000/svg'
   // Float error such as 10 / 36 * 36 < 10 must not drop a segment.
@@ -120,11 +120,6 @@
     return Math.min(count, Math.floor(clamp01(value) * count + FILL_EPSILON))
   }
 
-  /** Alternate apex-up and apex-down triangles. */
-  function segmentTransform(index) {
-    return index % 2 === 1 ? ROTATED_TRIANGLE_TRANSFORM : null
-  }
-
   function normalizeSignal(signal) {
     return SIGNALS.includes(signal) ? signal : 'normal'
   }
@@ -141,30 +136,26 @@
     let filledCount = 0
     let writtenSignal = null
 
-    function createSegment(index) {
+    function createSegment() {
       const svg = doc.createElementNS(SVG_NAMESPACE, 'svg')
       svg.setAttribute('class', 'shift-bar__segment')
       svg.setAttribute('viewBox', SEGMENT_VIEW_BOX)
       svg.setAttribute('preserveAspectRatio', 'xMidYMid meet')
       svg.setAttribute('aria-hidden', 'true')
-      const group = doc.createElementNS(SVG_NAMESPACE, 'g')
-      const transform = segmentTransform(index)
-      if (transform) group.setAttribute('transform', transform)
       const empty = doc.createElementNS(SVG_NAMESPACE, 'path')
       empty.setAttribute('class', 'shift-bar__empty')
-      empty.setAttribute('d', TRIANGLE_PATH)
+      empty.setAttribute('d', PARALLELOGRAM_PATH)
       const fill = doc.createElementNS(SVG_NAMESPACE, 'path')
       fill.setAttribute('class', 'shift-bar__fill')
-      fill.setAttribute('d', TRIANGLE_PATH)
-      group.appendChild(empty)
-      group.appendChild(fill)
-      svg.appendChild(group)
+      fill.setAttribute('d', PARALLELOGRAM_PATH)
+      svg.appendChild(empty)
+      svg.appendChild(fill)
       return svg
     }
 
     if (container && doc) {
       for (let index = 0; index < SEGMENT_COUNT; index += 1) {
-        const segment = createSegment(index)
+        const segment = createSegment()
         container.appendChild(segment)
         segments.push(segment)
       }
@@ -211,15 +202,15 @@
   return {
     LIMITER_RPM_FRACTION,
     LIMITER_ESTIMATE_FRACTION,
+    PARALLELOGRAM_PATH,
     SEGMENT_COUNT,
-    TRIANGLE_PATH,
+    SEGMENT_VIEW_BOX,
     createShiftBar,
     fillFraction,
     filledSegments,
     limiterRpm,
     redlineRpm,
     resolveSignal,
-    resolveThresholdRpm,
-    segmentTransform
+    resolveThresholdRpm
   }
 }))

@@ -182,6 +182,8 @@
   --hud-redline-background: rgb(217 42 37 / 96%);
   --hud-shift-alert: rgb(168 85 247 / 96%);
   --hud-shift-alert-flash: rgb(185 118 248 / 98%);
+  /* Empty Shift Bar segments: solid black, no outline. */
+  --hud-shift-empty: #000;
 
   /* In-game HUD geometry: cut corners at base scale. Grouped cuts only the
      outer top-left and bottom-right of the whole strip; Freeform cuts each
