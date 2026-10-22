@@ -30,6 +30,10 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   when drifting, no longer teach a shift point. With the tyres spinning the
   revs barely drop after a shift, so such shifts said nothing about the next
   gear and could set an early point.
+- **Shift Light**: upshifts with the clutch and the throttle held now help
+  learn shift points on cars with a slow gear change, such as classic cars.
+  Before, such a shift was ignored when the gear change took longer than
+  0.2 seconds.
 
 ### Added
 

@@ -835,6 +835,7 @@ var HudShiftLight = (() => {
   var PRE_SHIFT_SETTLE_MS = 150;
   var POST_SHIFT_WINDOW_MS = 600;
   var MAX_NEUTRAL_WINDOW_MS = 400;
+  var MAX_CLUTCH_SHIFT_GAP_MS = 400;
   var MIN_POST_SHIFT_FRAMES = 3;
   var MAX_POST_SHIFT_FRAMES = 5;
   var REACTION_TIME_S = 0.15;
@@ -845,6 +846,14 @@ var HudShiftLight = (() => {
   var RPM_RATE_ALPHA = 0.25;
   function isForwardGear2(gear) {
     return Number.isInteger(gear) && gear >= 1 && gear <= 10;
+  }
+  function isThrottleHeld(telemetry) {
+    if (telemetry.isRaceOn === false || !Number.isFinite(telemetry.throttle) || telemetry.throttle < 0.95) return false;
+    if (Number.isFinite(telemetry.brake) && telemetry.brake > 0.02) return false;
+    return !(Number.isFinite(telemetry.handBrake) && telemetry.handBrake > 0.02);
+  }
+  function isClutchPressed(telemetry) {
+    return Number.isFinite(telemetry.clutch) && telemetry.clutch > 0.05;
   }
   function roundRpm2(value) {
     return Math.max(0, Math.round(value));
@@ -880,6 +889,10 @@ var HudShiftLight = (() => {
     preShiftFrames = [];
     cleanRunStartMs = null;
     cleanRunGear = 0;
+    // The last clean frame and what followed it: whether the throttle stayed held and the clutch was pressed.
+    cleanRunEndMs = null;
+    heldSinceCleanRun = false;
+    clutchSinceCleanRun = false;
     pendingUpshift = null;
     rpmRate = null;
     maxObservedGear = 0;
@@ -918,6 +931,7 @@ var HudShiftLight = (() => {
       this.previous = null;
       this.preShiftFrames = [];
       this.cleanRunStartMs = null;
+      this.resetCleanRunEnd();
       this.pendingUpshift = null;
       this.rpmRate = null;
       this.maxObservedGear = 0;
@@ -929,6 +943,7 @@ var HudShiftLight = (() => {
       this.previous = null;
       this.preShiftFrames = [];
       this.cleanRunStartMs = null;
+      this.resetCleanRunEnd();
       this.pendingUpshift = null;
       this.rpmRate = null;
     }
@@ -1015,7 +1030,10 @@ var HudShiftLight = (() => {
         if (pending.transitionTimestampMs === null) {
           if (pending.firstNeutralTimestampMs !== null && telemetry.timestampMs - pending.firstNeutralTimestampMs > MAX_NEUTRAL_WINDOW_MS) this.pendingUpshift = null;
           else if (forward && telemetry.gear === pending.destinationGear) {
-            const fresh = pending.beforeFrames.filter((item) => telemetry.timestampMs - item.timestampMs >= 0 && telemetry.timestampMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS);
+            const runEndMs = this.cleanRunEndMs;
+            const clutchShift = runEndMs !== null && this.heldSinceCleanRun && this.clutchSinceCleanRun && isThrottleHeld(telemetry);
+            const referenceMs = clutchShift ? runEndMs : telemetry.timestampMs;
+            const fresh = clutchShift && telemetry.timestampMs - runEndMs > MAX_CLUTCH_SHIFT_GAP_MS ? [] : pending.beforeFrames.filter((item) => referenceMs - item.timestampMs >= 0 && referenceMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS);
             if (fresh.length === 0) this.pendingUpshift = null;
             else {
               pending.beforeFrames = fresh;
@@ -1036,6 +1054,9 @@ var HudShiftLight = (() => {
         if (previous && isForwardGear2(previous.gear) && telemetry.gear === previous.gear + 1) this.startPostShift(previous.gear, telemetry.gear, telemetry.timestampMs, this.preShiftFrames);
       }
       if (forward && clean) {
+        this.cleanRunEndMs = telemetry.timestampMs;
+        this.heldSinceCleanRun = true;
+        this.clutchSinceCleanRun = false;
         if (this.cleanRunStartMs === null || this.cleanRunGear !== telemetry.gear) {
           this.cleanRunStartMs = telemetry.timestampMs;
           this.cleanRunGear = telemetry.gear;
@@ -1047,6 +1068,8 @@ var HudShiftLight = (() => {
         return;
       }
       this.cleanRunStartMs = null;
+      this.heldSinceCleanRun = this.heldSinceCleanRun && isThrottleHeld(telemetry);
+      if (isClutchPressed(telemetry)) this.clutchSinceCleanRun = true;
       if (forward) return;
       if (telemetry.gear === NEUTRAL_GEAR && this.preShiftFrames.length > 0) {
         const sourceGear = this.preShiftFrames[this.preShiftFrames.length - 1].gear;
@@ -1055,6 +1078,11 @@ var HudShiftLight = (() => {
         this.preShiftFrames = [];
         this.pendingUpshift = null;
       }
+    }
+    resetCleanRunEnd() {
+      this.cleanRunEndMs = null;
+      this.heldSinceCleanRun = false;
+      this.clutchSinceCleanRun = false;
     }
     startPostShift(sourceGear, destinationGear, timestampMs, beforeFrames) {
       const fresh = beforeFrames.filter((item) => timestampMs - item.timestampMs >= 0 && timestampMs - item.timestampMs <= PRE_SHIFT_WINDOW_MS);

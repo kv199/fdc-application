@@ -161,6 +161,7 @@ Every key is optional:
 { "description": "What the drives show",
   "usableCeilingRpm": [9450, 9550],
   "minCeilingSampleRpm": 9000,
+  "provisionalCeilingRpm": [6950, 7100],
   "minLearnedShiftRpm": 9400,
   "pairs": { "4->5": "learning" },
   "minAcceptedShifts": 5,
@@ -168,7 +169,8 @@ Every key is optional:
   "shiftAtRpm": { "2->3": [7200, 7700] } }
 ```
 
-`usableCeilingRpm` bounds the learned ceiling, `minCeilingSampleRpm` is the
+`usableCeilingRpm` bounds the learned ceiling, `provisionalCeilingRpm` bounds
+the provisional ceiling the replay ends with, `minCeilingSampleRpm` is the
 lowest RPM any kept limiter observation may have, `minLearnedShiftRpm` is the
 lowest RPM any `POTENTIAL` or `OPTIMAL` pair may have, `pairs` sets exact
 pair states, `minAcceptedShifts` is the fewest compared upshifts, and

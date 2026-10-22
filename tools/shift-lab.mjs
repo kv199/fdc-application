@@ -15,6 +15,9 @@ const { getShiftLightCarKey, ShiftLightLearner } = require('../overlay/shift-lig
 const NEUTRAL_GEAR = 11
 const NEUTRAL_WINDOW_MS = 400
 const PRE_SHIFT_WINDOW_MS = 200
+// Mirrors the learner's MAX_CLUTCH_SHIFT_GAP_MS: the longest gap from the last clean frame to the new gear in a clutch
+// shift made with the throttle held.
+const MAX_CLUTCH_SHIFT_GAP_MS = 400
 const MAX_SOURCE_FRAMES = 5
 const CUE_WINDOW_MS = 3000
 const ACCEPT_WINDOW_MS = 1000
@@ -210,7 +213,50 @@ export function referenceModel(frames, ceilingRpm = null, learnerPairs = [], { c
   }
 }
 
+// The learner's clean frame: full throttle with no clutch, brake or handbrake, and positive RPM, speed and power.
+function isLearnerCleanFrame(frame) {
+  return frame.isRaceOn !== false && frame.gear >= 1 && frame.gear <= 10 && frame.throttle >= 0.95 && !(frame.clutch > 0.05) &&
+    !(frame.brake > 0.02) && !(frame.handBrake > 0.02) && frame.rpm > 0 && frame.speedKmh > 0 && frame.power > 0
+}
+
+// Like the learner: full throttle and no brake, so only the clutch, a power cut or the gear change keeps it from being clean.
+function isThrottleHeldFrame(frame) {
+  return frame.isRaceOn !== false && frame.throttle >= 0.95 && !(frame.brake > 0.02) && !(frame.handBrake > 0.02)
+}
+
+// Like the learner, a shift through neutral counts as a clutch shift when the throttle stays held on every frame from the
+// last clean source-gear frame up to and including the new gear, and the clutch is pressed before the new gear.
+// Returns the index of that last clean frame, or null.
+function clutchShiftEnd(frames, source, index) {
+  const sourceGear = frames[source].gear
+  let end = source
+  while (end >= 0 && frames[end].gear === sourceGear && !isLearnerCleanFrame(frames[end])) end--
+  if (end < 0 || frames[end].gear !== sourceGear) return null
+  let clutch = false
+  for (let next = end + 1; next <= index; next++) {
+    if (!isThrottleHeldFrame(frames[next])) return null
+    if (next < index && frames[next].clutch > 0.05) clutch = true
+  }
+  return clutch ? end : null
+}
+
+// Source-gear frames from `from` backwards, at most MAX_SOURCE_FRAMES and PRE_SHIFT_WINDOW_MS before `referenceMs`.
+function sourceWindow(frames, from, referenceMs) {
+  const sourceGear = frames[from].gear
+  const window = []
+  for (let back = from; back >= 0 && window.length < MAX_SOURCE_FRAMES; back--) {
+    const candidate = frames[back]
+    if (candidate.gear !== sourceGear || referenceMs - candidate.timestampMs > PRE_SHIFT_WINDOW_MS) break
+    window.push(candidate)
+  }
+  return window
+}
+
 // An upshift is G -> G+1 directly, or through neutral when the destination appears within 400 ms of the first neutral frame.
+// Its window holds the source-gear frames the learner could compare: those within 200 ms before the new gear, or for a clutch
+// shift through neutral with the throttle held, those within 200 ms before the last clean frame, which must itself lie no
+// more than 400 ms before the new gear (clutchGapMs). clutchEndsRun tells whether the clutch, rather than a power cut, ended
+// that clean run.
 export function findUpshifts(frames) {
   const shifts = []
   let source = null
@@ -221,13 +267,11 @@ export function findUpshifts(frames) {
       if (source !== null && frames[source].gear <= 9 && gear === frames[source].gear + 1 &&
         (neutral === null || frame.timestampMs - frames[neutral].timestampMs <= NEUTRAL_WINDOW_MS)) {
         const sourceGear = frames[source].gear
-        const window = []
-        for (let back = source; back >= 0 && window.length < MAX_SOURCE_FRAMES; back--) {
-          const candidate = frames[back]
-          if (candidate.gear !== sourceGear || frame.timestampMs - candidate.timestampMs > PRE_SHIFT_WINDOW_MS) break
-          window.push(candidate)
-        }
-        shifts.push({ index, source, sourceGear, destinationGear: gear, via: neutral === null ? 'direct' : 'neutral', window })
+        const end = neutral === null ? null : clutchShiftEnd(frames, source, index)
+        const window = end === null ? sourceWindow(frames, source, frame.timestampMs) : sourceWindow(frames, end, frames[end].timestampMs)
+        const clutchGapMs = end === null ? null : frame.timestampMs - frames[end].timestampMs
+        const clutchEndsRun = end !== null && frames[end + 1].clutch > 0.05
+        shifts.push({ index, source, sourceGear, destinationGear: gear, via: neutral === null ? 'direct' : 'neutral', window, clutchGapMs, clutchEndsRun })
       }
       source = index
       neutral = null
@@ -241,7 +285,10 @@ export function findUpshifts(frames) {
   return shifts
 }
 
-function rejectionReason(window) {
+function rejectionReason(shift) {
+  // A clutch shift whose gap was too long: the clutch took too long, or a power cut ended the clean run before it.
+  if (shift.clutchGapMs !== null && shift.clutchGapMs > MAX_CLUTCH_SHIFT_GAP_MS) return shift.clutchEndsRun ? 'slow-shift' : 'no-power'
+  const { window } = shift
   if (window.some(frame => frame.throttle < 0.95)) return 'partial-throttle'
   if (window.some(frame => frame.clutch > 0.05)) return 'clutch'
   if (window.some(frame => frame.brake > 0.02 || frame.handBrake > 0.02)) return 'brake'
@@ -266,9 +313,12 @@ function isComparableFrame(frame) {
 }
 
 // The frames the learner compares before a shift: clean source-gear frames at least SETTLE_MS into their clean run and
-// within PRE_SHIFT_WINDOW_MS of the destination frame. A new clean run drops frames of an earlier one.
+// within PRE_SHIFT_WINDOW_MS of the destination frame, or for a clutch shift with the throttle held, of its last clean
+// frame; none when that frame lies more than MAX_CLUTCH_SHIFT_GAP_MS before the new gear. A new clean run drops frames
+// of an earlier one.
 function settledBeforeFrames(frames, shift) {
-  const end = frames[shift.index].timestampMs
+  if (shift.clutchGapMs !== null && shift.clutchGapMs > MAX_CLUTCH_SHIFT_GAP_MS) return []
+  const end = frames[shift.index].timestampMs - (shift.clutchGapMs ?? 0)
   let first = shift.source
   while (first > 0 && frames[first - 1].gear === shift.sourceGear) first--
   let settled = []
@@ -303,7 +353,7 @@ function shiftReason(frames, shift) {
   }
   const spinning = window => (drivenSlip(window) ?? 0) > MAX_COMPARISON_DRIVEN_SLIP
   const wheelspin = before.length > 0 && after.length === POST_SHIFT_FRAMES && (spinning(before) || spinning(after))
-  return wheelspin ? 'wheelspin' : rejectionReason(shift.window)
+  return wheelspin ? 'wheelspin' : rejectionReason(shift)
 }
 
 function createGroup(key) {
@@ -678,6 +728,12 @@ export function checkExpectations(carResult, expect) {
   if (expect.minCeilingSampleRpm !== undefined) {
     const low = (carResult.ceiling.samples ?? []).filter(sample => sample < expect.minCeilingSampleRpm)
     if (low.length > 0) failures.push(`limiter observations ${low.join(', ')} are below ${expect.minCeilingSampleRpm}`)
+  }
+  if (expect.provisionalCeilingRpm !== undefined) {
+    const [min, max] = expect.provisionalCeilingRpm
+    const provisional = carResult.ceiling.provisional
+    if (provisional === null || provisional === undefined) failures.push(`provisional ceiling is null, expected ${min}-${max}`)
+    else if (provisional < min || provisional > max) failures.push(`provisional ceiling ${provisional} is outside ${min}-${max}`)
   }
   const targets = carResult.learner.gearTargets
   if (expect.minLearnedShiftRpm !== undefined) {

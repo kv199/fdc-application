@@ -363,6 +363,71 @@ test('a direct clutch upshift without neutral compares the settled frames before
   assert.deepEqual(beforeOf(samples[0]), { sourceGear: 2, destinationGear: 3, beforeTimestampMs: 208, beforeRpm: 8808, beforePower: 243 })
 })
 
+// A slow clutch upshift after settledSecondGear, whose last clean frame is at 240 ms: the clutch is pressed at 256 ms,
+// neutral follows from 304 ms, and 3rd gear engages at gearMs. `during` applies from the clutch press to the new gear.
+function slowClutchUpshift(learner, gearMs, during = {}) {
+  settledSecondGear(learner)
+  learner.update(frame({ timestampMs: 256, gear: 2, rpm: 8850, power: 239, clutch: 1, ...during }))
+  learner.update(frame({ timestampMs: 272, gear: 2, rpm: 8710, power: -182, clutch: 1, ...during }))
+  learner.update(frame({ timestampMs: 288, gear: 2, rpm: 8600, power: -170, clutch: 1, ...during }))
+  for (let t = 304; t < gearMs; t += 16) learner.update(frame({ timestampMs: t, gear: 11, rpm: 8700, power: -180, clutch: t < 400 ? 1 : 0, ...during }))
+  learner.update(frame({ timestampMs: gearMs, gear: 3, rpm: 8570, power: -167, ...during }))
+  for (const offset of [80, 96, 112]) learner.update(frame({ timestampMs: gearMs + offset, gear: 3, rpm: 7300, power: 250 }))
+  return learner.serializeLearningState().shiftSamples
+}
+
+test('a slow clutch upshift with the throttle held measures the before window from the last clean frame', () => {
+  // Recorded on a manual car with a clutch: 3rd gear engages 265-281 ms after the last clean frame, so no
+  // before frame lies within 200 ms of the new gear.
+  const samples = slowClutchUpshift(new ShiftLightLearner(getShiftLightCarKey(frame())), 520)
+  assert.equal(samples.length, 1)
+  assert.deepEqual(beforeOf(samples[0]), { sourceGear: 2, destinationGear: 3, beforeTimestampMs: 208, beforeRpm: 8808, beforePower: 243 })
+  assert.equal(samples[0].afterPower, 250)
+})
+
+test('a clutch upshift is compared only up to 400 ms after the last clean frame', () => {
+  assert.equal(slowClutchUpshift(new ShiftLightLearner(getShiftLightCarKey(frame())), 640).length, 1)
+  assert.deepEqual(slowClutchUpshift(new ShiftLightLearner(getShiftLightCarKey(frame())), 656), [])
+})
+
+test('a slow clutch upshift with a lift is still not compared', () => {
+  // A lift lets turbo boost fall, so the next gear would report too little power.
+  for (const during of [{ throttle: 0.3 }, { throttle: 0.9 }]) {
+    assert.deepEqual(slowClutchUpshift(new ShiftLightLearner(getShiftLightCarKey(frame())), 520, during), [], JSON.stringify(during))
+  }
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  settledSecondGear(learner)
+  learner.update(frame({ timestampMs: 256, gear: 2, rpm: 8850, power: 239, clutch: 1 }))
+  for (let t = 272; t < 520; t += 16) learner.update(frame({ timestampMs: t, gear: 11, rpm: 8700, power: -180, throttle: t < 400 ? 1 : 0 }))
+  learner.update(frame({ timestampMs: 520, gear: 3, rpm: 8570, power: -167 }))
+  for (const t of [600, 616, 632]) learner.update(frame({ timestampMs: t, gear: 3, rpm: 7300, power: 250 }))
+  assert.deepEqual(learner.serializeLearningState().shiftSamples, [])
+})
+
+test('a slow clutch upshift right after a limiter cut compares the settled frames before the cut', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  settledSecondGear(learner)
+  // Recorded pattern: the limiter cuts power, then the clutch is pressed with the throttle still held.
+  learner.update(frame({ timestampMs: 256, gear: 2, rpm: 8900, power: -150 }))
+  learner.update(frame({ timestampMs: 272, gear: 2, rpm: 8750, power: -140 }))
+  learner.update(frame({ timestampMs: 288, gear: 2, rpm: 8800, power: 240, clutch: 1 }))
+  for (let t = 304; t < 560; t += 16) learner.update(frame({ timestampMs: t, gear: 11, rpm: 8700, power: -180, clutch: t < 400 ? 1 : 0 }))
+  learner.update(frame({ timestampMs: 560, gear: 3, rpm: 8570, power: 240 }))
+  for (const t of [640, 656, 672]) learner.update(frame({ timestampMs: t, gear: 3, rpm: 7300, power: 250 }))
+  const samples = learner.serializeLearningState().shiftSamples
+  assert.equal(samples.length, 1)
+  assert.deepEqual(beforeOf(samples[0]), { sourceGear: 2, destinationGear: 3, beforeTimestampMs: 208, beforeRpm: 8808, beforePower: 243 })
+})
+
+test('a slow upshift through neutral without the clutch keeps the window measured from the new gear', () => {
+  const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
+  settledSecondGear(learner)
+  for (let t = 256; t < 520; t += 16) learner.update(frame({ timestampMs: t, gear: 11, rpm: 8700, power: -180 }))
+  learner.update(frame({ timestampMs: 520, gear: 3, rpm: 8570, power: -167 }))
+  for (const t of [600, 616, 632]) learner.update(frame({ timestampMs: t, gear: 3, rpm: 7300, power: 250 }))
+  assert.deepEqual(learner.serializeLearningState().shiftSamples, [])
+})
+
 test('a shift made directly after a limiter cut compares the settled frames before the cut', () => {
   const learner = new ShiftLightLearner(getShiftLightCarKey(frame()))
   for (let t = 0; t <= 240; t += 16) learner.update(frame({ timestampMs: t, gear: 4, rpm: 9000 + t, power: 700 }))

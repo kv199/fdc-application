@@ -132,7 +132,22 @@ PowerDeltaPercent = (powerAfter - powerBefore) / powerBefore × 100
 ```
 
 A direct adjacent-gear transition is accepted, as is a transition through FH6
-neutral gear `11` when the destination gear appears within `400 ms`. A
+neutral gear `11` when the destination gear appears within `400 ms`.
+
+A slow clutch can take longer than the `200 ms` window: a manual car with a
+clutch may need about `280 ms` from the last clean frame through the clutch
+press and neutral to the new gear. A transition through neutral is therefore
+treated as a clutch shift when the clutch is pressed after the last clean
+source-gear frame and before the new gear, and every frame from that last
+clean frame up to and including the first destination-gear frame keeps
+throttle of at least `0.95` with brake and handbrake no greater than `0.02`. A
+power cut such as a limiter hit may end the clean run before the clutch press.
+For a clutch shift, the five-frame `200 ms` window is measured back from the
+last clean frame instead of the transition, and the whole gap from that frame
+to the first destination-gear frame must not exceed `400 ms`. Any other shift,
+including one where the throttle drops during the shift, keeps the window
+measured from the transition: power after a lift can be far below the curve,
+for example while turbo boost rebuilds, so such shifts stay uncompared. A
 comparable sample requires an active or unknown race state, throttle of at
 least `0.95`, clutch no greater than `0.05`, brake and handbrake no greater than
 `0.02`, positive RPM, power, and vehicle speed. The temporary shift interval
@@ -476,8 +491,11 @@ fresh Shift Light learner from the checked-in bundle, and reports per car:
   rejected it;
 - each purple cue, each real upshift, whether the learner accepted it, the
   tool's own guess at why not (`partial-throttle`, `clutch`, `brake`,
-  `no-power`, `capture-incomplete`, `wheelspin`), and the time from the cue to
-  the shift. `wheelspin` is named when the shift has settled clean frames
+  `no-power`, `slow-shift`, `capture-incomplete`, `wheelspin`), and the time
+  from the cue to the shift. Like the learner, the guess for a clutch shift with
+  the throttle held looks at the frames before the last clean frame;
+  `slow-shift` means the clutch ended the clean run more than `400 ms` before
+  the new gear. `wheelspin` is named when the shift has settled clean frames
   before it and three clean destination-gear frames after it, as the learner
   needs, but either window is over the learner's wheelspin limit;
 - an independent reference shift point per pair, flagged when it differs from

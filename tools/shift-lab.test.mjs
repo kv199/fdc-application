@@ -133,6 +133,19 @@ test('an upshift through neutral is found only inside the 400 ms window', () => 
   assert.deepEqual(findUpshifts(late), [])
 })
 
+test('a clutch upshift with the throttle held takes its window from the last clean frame', () => {
+  const frame = (gear, timestampMs, overrides = {}) => ({ gear, timestampMs, throttle: 1, clutch: 0, brake: 0, handBrake: 0, power: 1, rpm: 1, speedKmh: 1, ...overrides })
+  const shift = during => [frame(1, 0), frame(1, 16), frame(1, 32), frame(1, 48, { clutch: 1, ...during }),
+    frame(11, 64, { clutch: 1, power: -1, ...during }), frame(11, 200, { power: -1, ...during }), frame(2, 320, during)]
+  const [held] = findUpshifts(shift({}))
+  assert.equal(held.clutchGapMs, 288)
+  assert.equal(held.clutchEndsRun, true)
+  assert.deepEqual(held.window.map(item => item.timestampMs), [32, 16, 0])
+  const [lift] = findUpshifts(shift({ throttle: 0.5 }))
+  assert.equal(lift.clutchGapMs, null)
+  assert.deepEqual(lift.window, [])
+})
+
 test('the reference finds a crossover between the power peak and the ceiling', () => {
   const frames = sweepFrames(rpm => 500000 - (rpm - 7000) ** 2 * 0.05)
   const result = referenceModel(frames, 9000)
@@ -519,6 +532,10 @@ test('checkExpectations reports each kind of failure and passes a matching expec
   assert.deepEqual(checkExpectations(car(9500), {}), [])
   assert.deepEqual(checkExpectations(car(null), { usableCeilingRpm: [9450, 9550] }), ['usable ceiling is null, expected 9450-9550'])
   assert.deepEqual(checkExpectations(car(9600), { usableCeilingRpm: [9450, 9550] }), ['usable ceiling 9600 is outside 9450-9550'])
+  const provisional = value => ({ ...car(null), ceiling: { usable: null, provisional: value } })
+  assert.deepEqual(checkExpectations(provisional(7008), { provisionalCeilingRpm: [6950, 7100] }), [])
+  assert.deepEqual(checkExpectations(provisional(null), { provisionalCeilingRpm: [6950, 7100] }), ['provisional ceiling is null, expected 6950-7100'])
+  assert.deepEqual(checkExpectations(provisional(7200), { provisionalCeilingRpm: [6950, 7100] }), ['provisional ceiling 7200 is outside 6950-7100'])
   assert.deepEqual(checkExpectations(car(9500), { minLearnedShiftRpm: 9400 }), ['1->2 optimal at 9350, expected at least 9400'])
   assert.deepEqual(checkExpectations(car(9500), { pairs: { '2->3': 'optimal', '4->5': 'learning' } }), [
     '2->3 is potential, expected optimal',
