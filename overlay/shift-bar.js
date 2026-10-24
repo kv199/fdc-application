@@ -11,9 +11,10 @@
   // limiters sit at 87-97% of it, so red then shows on the first pull for every recorded car,
   // usually about 0.15 s before the limiter in first gear.
   const LIMITER_ESTIMATE_FRACTION = 0.89
-  // Every segment is the same right-leaning parallelogram, unrotated.
-  const SEGMENT_VIEW_BOX = '0 0 24 32'
-  const PARALLELOGRAM_PATH = 'M8 0 H24 L16 32 H0 Z'
+  // Segment geometry is drawn in design px (434 px wide with 12 px side padding
+  // leaves 410 px for the row). Neighboring segment boxes overlap by 1.5 design px.
+  const DESIGN_ROW_WIDTH = 410
+  const DESIGN_OVERLAP = 1.5
   const SIGNALS = Object.freeze(['normal', 'redline', 'shift'])
   const SVG_NAMESPACE = 'http://www.w3.org/2000/svg'
   // Float error such as 10 / 36 * 36 < 10 must not drop a segment.
@@ -124,42 +125,125 @@
     return SIGNALS.includes(signal) ? signal : 'normal'
   }
 
+  /** Rounds to 3 decimals and drops trailing zeros, for SVG path data. */
+  function roundForPath(value) {
+    return Number(value.toFixed(3))
+  }
+
   /**
-   * Builds the segment row once and renders fill and signal. Each call writes
-   * only the segments whose lit state changes and the signal when it changes.
+   * Geometry of the whole row in device pixels, so one SVG user unit is one
+   * device pixel. Each segment starts at a whole-pixel step, so the gaps are
+   * equal. width and height are the segments container's content box. Null
+   * unless both are finite and above zero.
+   */
+  function segmentGeometry(width, height) {
+    const w = finitePositive(width)
+    const h = finitePositive(height)
+    if (w === null || h === null) return null
+    const unit = w / DESIGN_ROW_WIDTH
+    // Segment box width: the row plus the overlaps of the 35 neighboring pairs, split over 36 boxes.
+    const box = (w + (SEGMENT_COUNT - 1) * DESIGN_OVERLAP * unit) / SEGMENT_COUNT
+    const step = Math.max(1, Math.round(box - DESIGN_OVERLAP * unit))
+    const shapeWidth = box * 2 / 3
+    const slant = box / 3
+    const shapeHeight = Math.min(h, Math.round(box * 4 / 3))
+    const extent = (SEGMENT_COUNT - 1) * step + box
+    const left = Math.round((w - extent) / 2)
+    const top = Math.round((h - shapeHeight) / 2)
+    // The same right-leaning parallelogram in every segment, unrotated.
+    const path = `M${roundForPath(slant)} 0 H${roundForPath(box)} L${roundForPath(shapeWidth)} ${shapeHeight} H0 Z`
+    return { width: w, height: h, step, left, top, path }
+  }
+
+  /**
+   * Builds the segment row once and renders fill and signal. The row is one
+   * SVG in device pixels, so every segment starts on a whole pixel and the gaps
+   * are equal. Each render call writes only the segments whose lit state
+   * changes and the signal when it changes.
    */
   function createShiftBar(options = {}) {
     const doc = typeof document !== 'undefined' ? document : null
     const root = options.root || doc?.getElementById('shift-bar') || null
     const container = options.segments || doc?.getElementById('shift-bar-segments') || null
     const segments = []
+    let row = null
+    let appliedWidth = null
+    let appliedHeight = null
+    let appliedPixelRatio = null
     let filledCount = 0
     let writtenSignal = null
 
     function createSegment() {
-      const svg = doc.createElementNS(SVG_NAMESPACE, 'svg')
-      svg.setAttribute('class', 'shift-bar__segment')
-      svg.setAttribute('viewBox', SEGMENT_VIEW_BOX)
-      svg.setAttribute('preserveAspectRatio', 'xMidYMid meet')
-      svg.setAttribute('aria-hidden', 'true')
+      const group = doc.createElementNS(SVG_NAMESPACE, 'g')
+      group.setAttribute('class', 'shift-bar__segment')
       const empty = doc.createElementNS(SVG_NAMESPACE, 'path')
       empty.setAttribute('class', 'shift-bar__empty')
-      empty.setAttribute('d', PARALLELOGRAM_PATH)
       const fill = doc.createElementNS(SVG_NAMESPACE, 'path')
       fill.setAttribute('class', 'shift-bar__fill')
-      fill.setAttribute('d', PARALLELOGRAM_PATH)
-      svg.appendChild(empty)
-      svg.appendChild(fill)
-      return svg
+      group.appendChild(empty)
+      group.appendChild(fill)
+      return group
     }
 
     if (container && doc) {
+      row = doc.createElementNS(SVG_NAMESPACE, 'svg')
+      row.setAttribute('class', 'shift-bar__row')
+      row.setAttribute('aria-hidden', 'true')
+      row.setAttribute('preserveAspectRatio', 'none')
       for (let index = 0; index < SEGMENT_COUNT; index += 1) {
         const segment = createSegment()
-        container.appendChild(segment)
+        row.appendChild(segment)
         segments.push(segment)
       }
+      container.appendChild(row)
     }
+
+    /**
+     * Applies the geometry for a device-pixel size: the row viewBox and CSS
+     * size, then each segment's position and path. The CSS size is the same
+     * whole device pixels, so the SVG is not stretched and every step stays
+     * whole. Skips every write when the size is unchanged.
+     */
+    function layout(width, height) {
+      const geometry = segmentGeometry(width, height)
+      if (geometry === null) return null
+      const pixelRatio = globalThis.devicePixelRatio || 1
+      if (geometry.width === appliedWidth && geometry.height === appliedHeight && pixelRatio === appliedPixelRatio) return geometry
+      appliedWidth = geometry.width
+      appliedHeight = geometry.height
+      appliedPixelRatio = pixelRatio
+      row?.setAttribute('viewBox', `0 0 ${geometry.width} ${geometry.height}`)
+      row?.style?.setProperty('width', `${geometry.width / pixelRatio}px`)
+      row?.style?.setProperty('height', `${geometry.height / pixelRatio}px`)
+      segments.forEach((segment, index) => {
+        segment.setAttribute('transform', `translate(${geometry.left + index * geometry.step} ${geometry.top})`)
+        for (const path of segment.children) path.setAttribute('d', geometry.path)
+      })
+      return geometry
+    }
+
+    // Measures the container in device pixels. Without ResizeObserver nothing is measured.
+    function observeSize() {
+      if (typeof ResizeObserver !== 'function' || !container) return
+      const observer = new ResizeObserver(entries => {
+        const entry = entries[entries.length - 1]
+        if (!entry) return
+        const size = entry.devicePixelContentBoxSize?.[0]
+        if (size) {
+          layout(size.inlineSize, size.blockSize)
+          return
+        }
+        const dpr = globalThis.devicePixelRatio || 1
+        layout(Math.round(entry.contentRect.width * dpr), Math.round(entry.contentRect.height * dpr))
+      })
+      try {
+        observer.observe(container, { box: 'device-pixel-content-box' })
+      } catch {
+        observer.observe(container)
+      }
+    }
+
+    observeSize()
 
     function setFilled(count) {
       const from = filledCount
@@ -196,21 +280,20 @@
       }
     }
 
-    return { getState, render }
+    return { getState, layout, render }
   }
 
   return {
     LIMITER_RPM_FRACTION,
     LIMITER_ESTIMATE_FRACTION,
-    PARALLELOGRAM_PATH,
     SEGMENT_COUNT,
-    SEGMENT_VIEW_BOX,
     createShiftBar,
     fillFraction,
     filledSegments,
     limiterRpm,
     redlineRpm,
     resolveSignal,
-    resolveThresholdRpm
+    resolveThresholdRpm,
+    segmentGeometry
   }
 }))

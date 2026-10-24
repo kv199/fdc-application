@@ -13,9 +13,8 @@ const {
   filledSegments,
   limiterRpm,
   resolveSignal,
-  PARALLELOGRAM_PATH,
-  SEGMENT_VIEW_BOX,
-  resolveThresholdRpm
+  resolveThresholdRpm,
+  segmentGeometry
 } = require('./shift-bar.js')
 
 // Minimal DOM: elements, attributes, a classList, and a count of every
@@ -59,6 +58,16 @@ function createFakeDocument() {
       this.attributes = new Map()
       this.children = []
       this.classList = new FakeClassList(this)
+      const values = new Map()
+      this.style = {
+        setProperty(name, value) {
+          counter.writes += 1
+          values.set(name, String(value))
+        },
+        getPropertyValue(name) {
+          return values.get(name) ?? ''
+        }
+      }
     }
 
     setAttribute(name, value) {
@@ -116,8 +125,11 @@ function mountBar(doc) {
   return { root, segments }
 }
 
+// Segments are <g> elements inside the single row svg in the container.
 function litCount(segments) {
-  return segments.children.filter(segment => segment.classList.contains('is-filled')).length
+  return segments.children
+    .flatMap(row => row.children)
+    .filter(segment => segment.classList.contains('is-filled')).length
 }
 
 test('fillFraction is 0 at idle and 1 at the threshold', () => {
@@ -321,9 +333,60 @@ test('filledSegments floors the fraction to whole segments', () => {
   assert.equal(filledSegments(10 / 36), 10)
 })
 
-test('every segment is the same unrotated right-leaning parallelogram', () => {
-  assert.equal(SEGMENT_VIEW_BOX, '0 0 24 32')
-  assert.equal(PARALLELOGRAM_PATH, 'M8 0 H24 L16 32 H0 Z')
+// The segment box and path as the formulas give them, for a row of this width in device pixels.
+function expectedSegment(width, height) {
+  const unit = width / 410
+  const box = (width + 35 * 1.5 * unit) / 36
+  const shapeWidth = box * 2 / 3
+  const shapeHeight = Math.min(height, Math.round(box * 4 / 3))
+  const round3 = value => Number(value.toFixed(3))
+  return {
+    box,
+    shapeWidth,
+    path: `M${round3(box / 3)} 0 H${round3(box)} L${round3(shapeWidth)} ${shapeHeight} H0 Z`
+  }
+}
+
+test('segmentGeometry places 36 equal parallelograms at whole device-pixel steps', () => {
+  const geometry = segmentGeometry(695, 33)
+  const expected = expectedSegment(695, 33)
+  // 0.5 bar at HUD scale 2: step 19 device px, 2 px top margin.
+  assert.equal(geometry.step, 19)
+  assert.equal(geometry.left, 4)
+  assert.equal(geometry.top, 2)
+  assert.equal(geometry.path, 'M7.259 0 H21.778 L14.518 29 H0 Z')
+  assert.equal(geometry.path, expected.path)
+  for (let index = 0; index < SEGMENT_COUNT; index += 1) {
+    assert.ok(Number.isInteger(geometry.left + index * geometry.step))
+  }
+  // The horizontal gap between a segment's bottom-right corner and the next segment's start is the same everywhere.
+  const gaps = []
+  for (let index = 0; index < SEGMENT_COUNT - 1; index += 1) {
+    const end = geometry.left + index * geometry.step + expected.shapeWidth
+    gaps.push(geometry.left + (index + 1) * geometry.step - end)
+  }
+  for (const gap of gaps) assert.ok(Math.abs(gap - (geometry.step - expected.shapeWidth)) < 1e-9)
+})
+
+test('segmentGeometry steps 29 device px at the 0.75 bar and 38 at 1390 px', () => {
+  const geometry = segmentGeometry(1043, 33)
+  const expected = expectedSegment(1043, 33)
+  assert.equal(geometry.step, 29)
+  assert.equal(geometry.path, 'M10.894 0 H32.682 L21.788 33 H0 Z')
+  assert.equal(geometry.path, expected.path)
+  assert.equal(segmentGeometry(1390, 66).step, 38)
+  assert.equal(segmentGeometry(1390, 66).path, 'M14.518 0 H43.555 L29.037 58 H0 Z')
+})
+
+test('segmentGeometry is null unless width and height are finite and above zero', () => {
+  assert.equal(segmentGeometry(0, 33), null)
+  assert.equal(segmentGeometry(-5, 33), null)
+  assert.equal(segmentGeometry(Number.NaN, 33), null)
+  assert.equal(segmentGeometry(Number.POSITIVE_INFINITY, 33), null)
+  assert.equal(segmentGeometry(695, 0), null)
+  assert.equal(segmentGeometry(695, -1), null)
+  assert.equal(segmentGeometry(695, Number.NaN), null)
+  assert.equal(segmentGeometry(), null)
 })
 
 test('overlay.js no longer uses the steady 85 percent redline threshold', () => {
@@ -342,23 +405,85 @@ test('the HUD page scripts drive the Gear block and the Shift Bar from the share
   assert.match(overlay, /latestShiftLight\.lastKnownGear !== true/)
 })
 
-test('createShiftBar builds 36 parallelogram segments once in the segment container', () => {
+test('createShiftBar builds one row svg of 36 segment groups in the segment container', () => {
   withFakeDocument(doc => {
     const { segments } = mountBar(doc)
     createShiftBar()
-    assert.equal(segments.children.length, SEGMENT_COUNT)
-    for (const segment of segments.children) {
+    assert.equal(segments.children.length, 1)
+    const row = segments.children[0]
+    assert.equal(row.tagName, 'svg')
+    assert.equal(row.getAttribute('class'), 'shift-bar__row')
+    assert.equal(row.getAttribute('aria-hidden'), 'true')
+    assert.equal(row.getAttribute('preserveAspectRatio'), 'none')
+    assert.equal(row.children.length, SEGMENT_COUNT)
+    for (const segment of row.children) {
+      assert.equal(segment.tagName, 'g')
       assert.equal(segment.getAttribute('class'), 'shift-bar__segment')
-      assert.equal(segment.getAttribute('viewBox'), '0 0 24 32')
-      assert.equal(segment.getAttribute('aria-hidden'), 'true')
-      assert.equal(segment.getAttribute('transform'), null)
       assert.equal(segment.children.length, 2)
+      assert.equal(segment.children[0].tagName, 'path')
       assert.equal(segment.children[0].getAttribute('class'), 'shift-bar__empty')
-      assert.equal(segment.children[0].getAttribute('d'), PARALLELOGRAM_PATH)
-      assert.equal(segment.children[0].getAttribute('transform'), null)
+      assert.equal(segment.children[1].tagName, 'path')
       assert.equal(segment.children[1].getAttribute('class'), 'shift-bar__fill')
-      assert.equal(segment.children[1].getAttribute('d'), PARALLELOGRAM_PATH)
     }
+  })
+})
+
+test('layout sets the row viewBox and places each segment at its integer step', () => {
+  withFakeDocument(doc => {
+    const { segments } = mountBar(doc)
+    const bar = createShiftBar()
+    const row = segments.children[0]
+    const geometry = bar.layout(695, 33)
+    assert.equal(geometry.step, 19)
+    assert.equal(row.getAttribute('viewBox'), '0 0 695 33')
+    // Without a device pixel ratio the CSS size is the device size, so the SVG is not stretched.
+    assert.equal(row.style.getPropertyValue('width'), '695px')
+    assert.equal(row.style.getPropertyValue('height'), '33px')
+    row.children.forEach((segment, index) => {
+      assert.equal(segment.getAttribute('transform'), `translate(${geometry.left + 19 * index} ${geometry.top})`)
+      assert.equal(segment.children[0].getAttribute('d'), geometry.path)
+      assert.equal(segment.children[1].getAttribute('d'), geometry.path)
+    })
+  })
+})
+
+test('layout sizes the row in CSS px from device px at the display scale', () => {
+  const previous = globalThis.devicePixelRatio
+  globalThis.devicePixelRatio = 1.25
+  try {
+    withFakeDocument(doc => {
+      const { segments } = mountBar(doc)
+      const bar = createShiftBar()
+      const row = segments.children[0]
+      bar.layout(870, 41)
+      assert.equal(row.getAttribute('viewBox'), '0 0 870 41')
+      assert.equal(row.style.getPropertyValue('width'), '696px')
+      assert.equal(row.style.getPropertyValue('height'), '32.8px')
+      // The same device size at another display scale is written again.
+      const before = doc.counter.writes
+      globalThis.devicePixelRatio = 1.5
+      bar.layout(870, 41)
+      assert.equal(row.style.getPropertyValue('width'), '580px')
+      assert.ok(doc.counter.writes > before)
+    })
+  } finally {
+    if (previous === undefined) delete globalThis.devicePixelRatio
+    else globalThis.devicePixelRatio = previous
+  }
+})
+
+test('layout writes nothing for an unchanged size and returns null for an empty box', () => {
+  withFakeDocument(doc => {
+    mountBar(doc)
+    const bar = createShiftBar()
+    bar.layout(695, 33)
+    const before = doc.counter.writes
+    bar.layout(695, 33)
+    assert.equal(doc.counter.writes, before)
+    assert.equal(bar.layout(0, 33), null)
+    assert.equal(doc.counter.writes, before)
+    bar.layout(1043, 33)
+    assert.ok(doc.counter.writes > before)
   })
 })
 
@@ -473,9 +598,10 @@ test('the Shift Bar CSS and layout share the 434 px design geometry at the 736 p
   assert.match(layout, /const SHIFT_BAR_BASE_HEIGHT = 60\n/)
   assert.match(css, /--shift-bar-unit: calc\(736px \/ 434 \* var\(--shift-bar-scale\)\);/)
   assert.match(css, /padding: calc\(8 \* var\(--shift-bar-unit\)\) calc\(12 \* var\(--shift-bar-unit\)\);/)
-  assert.match(css, /flex: 0 0 calc\(\(100% \+ 52\.5 \* var\(--shift-bar-unit\)\) \/ 36\);/)
-  assert.match(css, /aspect-ratio: 2 \/ 3;/)
-  assert.match(css, /margin-left: calc\(-1\.5 \* var\(--shift-bar-unit\)\);/)
   assert.match(css, /height: calc\(60px \* var\(--hud-scale\) \* var\(--shift-bar-user-scale, 0\.5\)\);/)
   assert.match(css, /\.shift-bar__empty \{\s*fill: var\(--hud-shift-empty\);\s*stroke: none;\s*\}/)
+  // The row is one SVG sized to the container; segments are positioned in script, not by CSS flex.
+  assert.match(css, /\.shift-bar__row \{\s*display: block;\s*width: 100%;\s*height: 100%;\s*overflow: visible;\s*\}/)
+  assert.doesNotMatch(css, /\.shift-bar__segment \{/)
+  assert.doesNotMatch(css, /\.shift-bar__segment \+ \.shift-bar__segment/)
 })

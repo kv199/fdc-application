@@ -319,8 +319,8 @@ body {
    The surface is a cut layer behind the row, as for Delta, so edit tools stay
    visible. The design is drawn at 434 px wide; --shift-bar-unit is one of its
    px at the bar's current size (736 px base, times the HUD and user scales),
-   so padding, the segment spacing, and the cut all scale with the bar's width
-   and height. */
+   so padding and the cut scale with the bar's width and height. shift-bar.js
+   sets the segment spacing. */
 .shift-bar {
   --shift-bar-scale: calc(var(--hud-scale, 1) * var(--shift-bar-user-scale, 0.5));
   --shift-bar-unit: calc(736px / 434 * var(--shift-bar-scale));
@@ -349,27 +349,20 @@ body {
 }
 
 .shift-bar__segments {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-width: 0;
-}
-
-/* 36 segments, each 2 wide by 3 tall. A segment box is (inner width + 35 gaps
-   of 1.5 units) / 36 wide, so neighbors overlap their boxes by 1.5 units; the
-   slanted shapes inside keep a visible gap. */
-.shift-bar__segment {
   display: block;
-  flex: 0 0 calc((100% + 52.5 * var(--shift-bar-unit)) / 36);
-  width: calc((100% + 52.5 * var(--shift-bar-unit)) / 36);
+  width: 100%;
+  height: 100%;
   min-width: 0;
-  height: auto;
-  aspect-ratio: 2 / 3;
-  overflow: visible;
 }
 
-.shift-bar__segment + .shift-bar__segment {
-  margin-left: calc(-1.5 * var(--shift-bar-unit));
+/* One SVG draws the whole row. shift-bar.js sets its viewBox to the row's size
+   in device pixels and places each segment a whole number of pixels after the
+   previous one, so every gap is the same width. */
+.shift-bar__row {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
 .shift-bar__empty {

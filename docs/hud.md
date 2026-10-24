@@ -109,13 +109,15 @@ Brightness setting. The Gear block's red text is unchanged. How targets are
 learned is described in [Shift Light](shift-light.md).
 
 The **Shift Bar** widget shows the same signal as a row of 36 identical,
-right-leaning parallelogram segments, none rotated. Its green fill rises from idle RPM to the signal point: the Shift
-Light cue RPM when purple can show, which falls back to Shift Light's target
-RPM if the cue RPM is missing, and otherwise the point where red starts; the
-bar is never filled later than red starts. Filled segments are whole, so the
-bar is full only at the signal point. While red or purple is
-showing, every segment lights in that color and flashes in step with the Gear
-block. The bar shows no text.
+right-leaning parallelogram segments, none rotated. The segments are evenly
+spaced: each one starts a whole number of screen pixels after the previous one,
+so every gap is the same width at any size and display scaling. Its green fill
+rises from idle RPM to the signal point: the Shift Light cue RPM when purple can
+show, which falls back to Shift Light's target RPM if the cue RPM is missing,
+and otherwise the point where red starts; the bar is never filled later than
+red starts. Filled segments are whole, so the bar is full only at the signal
+point. While red or purple is showing, every segment lights in that color and
+flashes in step with the Gear block. The bar shows no text.
 
 ## Visibility
 

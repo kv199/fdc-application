@@ -34,6 +34,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   learn shift points on cars with a slow gear change, such as classic cars.
   Before, such a shift was ignored when the gear change took longer than
   0.2 seconds.
+- **HUD**: the Shift Bar's segments are now evenly spaced. Every gap between
+  them is the same width; before, some gaps were a pixel wider than others.
 
 ### Added
 
