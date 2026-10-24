@@ -53,6 +53,11 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **Shift Light**: **EXPORT DRIVES** in the Shift Light tab saves the current
   car's recorded drives to one compressed file. Attach it to a bug report when
   Shift Light gets a car wrong.
+- **HUD**: the brake bar can show a brake target, a thin line at a chosen
+  brake level from 5% to 100%, which also appears as a dashed line on the Input
+  Graph. Set it in Configuration → **HUD** → **BRAKE TARGET**; it is off by
+  default. An optional **PEAK MARKER** draws a yellow line on the brake bar at
+  the highest brake level of your latest stop.
 
 ### Improved
 

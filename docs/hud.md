@@ -34,7 +34,7 @@ The telemetry HUD has six blocks. A separate Delta strip belongs to Events.
 | Block | Shows |
 | --- | --- |
 | Tires | Front and rear tire temperatures in °C with a colored tire shape: blue below 70°, green from 70° to below 82°, yellow from 82° to below 92°, red from 92°. |
-| Throttle & Brake | Vertical brake and throttle input meters. |
+| Throttle & Brake | Vertical brake and throttle input meters. With the brake target on, a thin line across the brake meter marks its level; with the peak marker on, a yellow line marks the highest brake level of the latest stop. See [Brake target](#brake-target). |
 | Steering | A steering wheel that rotates with steering input, up to 90° at full lock. |
 | Gear / Speed / RPM | Speed in the selected unit, the gear (`R`, `N`, or `1`–`10`), and engine RPM. This block also carries the shift cue. |
 | Engine / Boost | Boost in bar, power in HP, and torque in N·m. Negative values show as zero, and all three show zero while the throttle is released. |
@@ -119,6 +119,33 @@ red starts. Filled segments are whole, so the bar is full only at the signal
 point. While red or purple is showing, every segment lights in that color and
 flashes in step with the Gear block. The bar shows no text.
 
+### Brake target
+
+The brake target is an optional reference line for braking, set in
+Configuration → **HUD** → **BRAKE TARGET**. Both of its switches are off by
+default:
+
+- **TARGET** (switch and slider): one target mark at the chosen level, from 5%
+  to 100% in 5% steps, default 70%. It is a thin line across the brake bar of
+  the Throttle & Brake block and a dashed line at the same level on the Input
+  Graph.
+- **PEAK MARKER** (switch): a yellow line on the brake bar showing the highest
+  brake level of the latest stop. It is a plain level: it is not compared with
+  the target and is not colored as good or bad. It is shown only on the brake
+  bar.
+
+A stop is a period in which the brake pedal is at 5% or more. A dip below 5%
+shorter than 0.3 s belongs to the same stop. A stop counts once it has lasted
+0.2 s:
+
+- until then, the previous peak stays;
+- after that, the marker follows the highest level of the new stop as it rises;
+- a stop shorter than 0.2 s leaves the previous peak in place.
+
+The peak is cleared in the pause menu and other non-driving screens (when
+racing is not on), and when the car changes. Changes in Configuration apply at
+once and are saved locally, like HUD OPACITY.
+
 ## Visibility
 
 - With **Show HUD with telemetry** enabled (the default), the HUD, Delta, and
@@ -160,6 +187,10 @@ below HUD OPACITY, the same in both arrangements:
    Graph, Delta, Shift Bar), and **ALL** in the block header. Clicking anywhere
    on a row toggles its widget. The Shift Bar row starts off. **ALL** is on only
    while every widget is on, the Shift Bar included.
+
+Below WIDGETS, the **BRAKE TARGET** card has a **TARGET** row with a switch and
+a slider showing the target percentage, and a **PEAK MARKER** row with a switch.
+Both are described under [Brake target](#brake-target).
 
 Below 560 px of window width the arrangement choice moves under its
 description, and each editor row stacks its controls under its text.
@@ -300,8 +331,9 @@ km/h and meters, and changing a unit immediately redraws the open views.
 
 ## Persistence
 
-HUD layout, block and overlay visibility, opacity, the HUD edit hotkey, the
-GRID choice, speed and distance units, and brightness preferences are stored
+HUD layout, block and overlay visibility, opacity, the brake target and peak
+marker settings, the HUD edit hotkey, the GRID choice, speed and distance units,
+and brightness preferences are stored
 in the local application webview storage. They are not written to
 `fdc.sqlite`. The **HUD DISPLAY** monitor is stored in
 `hud-display.json` in the FDC application-data directory, because FDC places the

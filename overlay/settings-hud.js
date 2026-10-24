@@ -487,6 +487,78 @@
       })()
     }
 
+    // BRAKE TARGET: the brake bar's target line and peak marker. BrakeMarks owns the stored
+    // preferences. Without it the card is hidden rather than showing controls that do nothing.
+    const brakeTargetCard = document.getElementById('brake-target-card')
+    const brakeTargetEnabled = document.getElementById('brake-target-enabled')
+    const brakeTargetLevel = document.getElementById('brake-target-level')
+    const brakeTargetValue = document.getElementById('brake-target-value')
+    const brakePeakEnabled = document.getElementById('brake-peak-enabled')
+    const brakeMarks = globalScope.BrakeMarks
+    let brakeMarkPreferences = brakeMarks ? brakeMarks.read() : null
+
+    function renderBrakeTargetLevel(percent) {
+      const minimum = Number(brakeTargetLevel.min)
+      const maximum = Number(brakeTargetLevel.max)
+      const progress = ((percent - minimum) / (maximum - minimum)) * 100
+      brakeTargetLevel.value = String(percent)
+      brakeTargetLevel.style.setProperty('--brightness-fill', `${Math.max(0, Math.min(100, progress))}%`)
+      brakeTargetLevel.setAttribute('aria-valuetext', `${percent}% brake level`)
+      brakeTargetValue.textContent = `${percent}%`
+    }
+
+    function renderBrakeMarks(preferences) {
+      updateOverlayToggle(brakeTargetEnabled, preferences.targetEnabled)
+      updateOverlayToggle(brakePeakEnabled, preferences.peakEnabled)
+      renderBrakeTargetLevel(preferences.targetPercent)
+    }
+
+    async function updateBrakeMarks(changes, message) {
+      const previous = brakeMarkPreferences
+      const next = brakeMarks.write({ ...previous, ...changes })
+      brakeMarkPreferences = next
+      renderBrakeMarks(next)
+      try {
+        await call('set_brake_marks', {
+          targetEnabled: next.targetEnabled,
+          targetPercent: next.targetPercent,
+          peakEnabled: next.peakEnabled
+        })
+        setStatus(message(next))
+      } catch (error) {
+        brakeMarkPreferences = brakeMarks.write(previous)
+        renderBrakeMarks(brakeMarkPreferences)
+        setStatus(error.message || 'Unable to update the brake target', true)
+      }
+    }
+
+    if (brakeMarks) {
+      renderBrakeMarks(brakeMarkPreferences)
+      brakeTargetEnabled?.addEventListener('click', () => {
+        void updateBrakeMarks(
+          { targetEnabled: !brakeMarkPreferences.targetEnabled },
+          next => `BRAKE TARGET ${next.targetEnabled ? 'ENABLED' : 'HIDDEN'}`
+        )
+      })
+      brakeTargetLevel?.addEventListener('input', () => {
+        renderBrakeTargetLevel(Number(brakeTargetLevel.value))
+      })
+      brakeTargetLevel?.addEventListener('change', () => {
+        void updateBrakeMarks(
+          { targetPercent: Number(brakeTargetLevel.value) },
+          next => `BRAKE TARGET SET TO ${next.targetPercent}%`
+        )
+      })
+      brakePeakEnabled?.addEventListener('click', () => {
+        void updateBrakeMarks(
+          { peakEnabled: !brakeMarkPreferences.peakEnabled },
+          next => `PEAK MARKER ${next.peakEnabled ? 'ENABLED' : 'HIDDEN'}`
+        )
+      })
+    } else if (brakeTargetCard) {
+      brakeTargetCard.hidden = true
+    }
+
     hudDisplay?.addEventListener('change', async () => {
       try {
         await call('set_hud_display', { name: hudDisplay.value })

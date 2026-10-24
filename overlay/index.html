@@ -74,6 +74,8 @@
             <div class="pedal pedal--brake">
               <div id="brake-track" class="pedal__track" role="meter" aria-label="Brake input" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                 <div id="brake-fill" class="pedal__fill"></div>
+                <div id="brake-target" class="pedal__mark pedal__mark--target" aria-hidden="true" hidden></div>
+                <div id="brake-peak" class="pedal__mark pedal__mark--peak" aria-hidden="true" hidden></div>
               </div>
             </div>
 
@@ -132,6 +134,7 @@
   <script src="units.js"></script>
   <script src="telemetry-route.js"></script>
   <script src="display-preferences.js"></script>
+  <script src="brake-marks.js"></script>
   <script src="engine-presentation.js"></script>
   <script src="driver-analysis-state.js"></script>
   <script src="driver-analysis-opportunities.js"></script>

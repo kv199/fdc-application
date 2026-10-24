@@ -165,6 +165,32 @@ body {
   background: var(--brake);
 }
 
+/* Marks sit on the track at a level set by --mark-level. The shift by the same
+   fraction of the mark's own height keeps a mark at 0% or 100% fully inside the track. */
+.pedal__mark {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  bottom: calc(var(--mark-level, 0) * 100%);
+  transform: translateY(calc(var(--mark-level, 0) * 100%));
+  pointer-events: none;
+}
+
+.pedal__mark[hidden] {
+  display: none;
+}
+
+.pedal__mark--target {
+  height: 1px;
+  background: var(--hud-text);
+}
+
+.pedal__mark--peak {
+  height: 2px;
+  background: var(--warning);
+}
+
 .steering {
   display: grid;
   place-items: center;

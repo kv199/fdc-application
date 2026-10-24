@@ -3,6 +3,8 @@ const throttleFill = document.getElementById('throttle-fill')
 const throttleTrack = document.getElementById('throttle-track')
 const brakeFill = document.getElementById('brake-fill')
 const brakeTrack = document.getElementById('brake-track')
+const brakeTarget = document.getElementById('brake-target')
+const brakePeak = document.getElementById('brake-peak')
 const speedValue = document.getElementById('speed-value')
 const gearValue = document.getElementById('gear-value')
 const rpmValue = document.getElementById('rpm-value')
@@ -28,6 +30,9 @@ const tireVisualElements = {
 }
 
 let displayPreferences = window.DisplayPreferences.read()
+let brakeMarks = window.BrakeMarks.read()
+// Fed per packet in queueTelemetry, because rendering is coalesced per frame.
+const peakTracker = window.BrakeMarks.createPeakTracker()
 const STEERING_WHEEL_ASSET = 'assets/steering-wheels/default.svg'
 const STEERING_WHEEL_RANGE_DEGREES = 90
 const HISTORY_MS = 8000
@@ -220,6 +225,17 @@ function setDisplayPreferences(preferences) {
   return { ...displayPreferences }
 }
 
+function setBrakeMarks(preferences) {
+  brakeMarks = window.BrakeMarks.write({
+    ...window.BrakeMarks.read(),
+    ...(preferences && typeof preferences === 'object' ? preferences : {})
+  })
+  renderBrakeMarks()
+  scheduleTelemetryRender()
+  drawHistory()
+  return { ...brakeMarks }
+}
+
 function setRpmSignal(signal) {
   if (signal === activeRpmSignal) return
 
@@ -345,6 +361,22 @@ function setStyleValue(element, property, value) {
 
 function setAttributeValue(element, name, value) {
   if (hasDomValueChanged(element, name, value)) element.setAttribute(name, value)
+}
+
+function setCssProperty(element, name, value) {
+  if (hasDomValueChanged(element, name, value)) element.style.setProperty(name, value)
+}
+
+// The target and the peak sit on the brake track at their level. The peak also
+// needs a confirmed stop, so it stays hidden until one is shown.
+function renderBrakeMarks() {
+  const peak = peakTracker.peak()
+  const targetHidden = !brakeMarks.targetEnabled
+  const peakHidden = !brakeMarks.peakEnabled || peak === null
+  if (hasDomValueChanged(brakeTarget, 'hidden', targetHidden)) brakeTarget.hidden = targetHidden
+  if (hasDomValueChanged(brakePeak, 'hidden', peakHidden)) brakePeak.hidden = peakHidden
+  setCssProperty(brakeTarget, '--mark-level', String(brakeMarks.targetPercent / 100))
+  if (peak !== null) setCssProperty(brakePeak, '--mark-level', String(peak))
 }
 
 function updateTires(tires = {}) {
@@ -497,6 +529,21 @@ function drawHistory() {
     context.stroke()
   }
 
+  // The brake target is a dashed guide at the same level as the brake bar mark.
+  // It is drawn before the series so the traces stay on top.
+  if (brakeMarks.targetEnabled) {
+    const targetY = Math.round(height - (brakeMarks.targetPercent / 100) * (height - 4) - 2) + 0.5
+    context.save()
+    context.setLineDash([6, 4])
+    context.strokeStyle = 'rgba(255, 49, 43, 0.75)'
+    context.lineWidth = 1
+    context.beginPath()
+    context.moveTo(0, targetY)
+    context.lineTo(width, targetY)
+    context.stroke()
+    context.restore()
+  }
+
   const now = historySamples.length > historyStart ? historySamples.at(-1).timestamp : performance.now()
   drawSeries(context, historySamples, historyStart, 'throttle', '#69e83f', width, height, now)
   drawSeries(context, historySamples, historyStart, 'brake', '#ff312b', width, height, now)
@@ -525,6 +572,7 @@ function renderTelemetry() {
 
   setStyleValue(brakeFill, 'transform', `scaleY(${brake})`)
   setAttributeValue(brakeTrack, 'aria-valuenow', String(brakePercent))
+  renderBrakeMarks()
 
   drawSteering(steer)
   updateTires(telemetry.tireTempC)
@@ -552,6 +600,12 @@ function queueTelemetry(telemetry) {
   lapTimingState = window.HudLapTiming.update(lapTimingState, telemetry)
   driverAnalysisRecorder?.update?.(telemetry)
 
+  peakTracker.update({
+    brake: clamp01(telemetry.brake),
+    timestampMs: performance.now(),
+    isRaceOn: telemetry.isRaceOn === true,
+    carKey: telemetry.car?.ordinal ?? null
+  })
   latestTelemetry = telemetry
   forzaConnected = true
   if (telemetry.isRaceOn === true) lastLiveTelemetryAt = performance.now()
@@ -578,6 +632,7 @@ function resetDirectPresentation() {
   latestSteer = 0
   historySamples = []
   historyStart = 0
+  peakTracker.reset()
   latestShiftLight = {
     status: 'fallback',
     phase: 'normal',
@@ -598,6 +653,7 @@ function resetDirectPresentation() {
   window.HudShiftLightRuntime?.update?.(null)
   setRpmSignal('normal')
   shiftBar?.render({ fraction: 0, signal: 'normal' })
+  renderBrakeMarks()
   scheduleTelemetryRender()
 }
 
@@ -908,6 +964,7 @@ window.addEventListener('resize', () => {
 window.HudOverlay = {
   refresh: scheduleTelemetryRender,
   setDisplayPreferences,
+  setBrakeMarks,
   retryDirectSource,
   resetShiftLight: async () => {
     try {

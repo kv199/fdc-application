@@ -66,6 +66,7 @@ fn main() {
             set_hud_visibility,
             set_overlay_visibility,
             set_display_preferences,
+            set_brake_marks,
             set_configuration_always_on_top,
             set_settings_window_context,
             set_driver_analysis_hotkey,

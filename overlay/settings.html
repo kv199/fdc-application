@@ -192,6 +192,36 @@
           </label>
         </div>
       </section>
+
+      <section id="brake-target-card" class="shift-light-brightness-card brake-target-card" aria-labelledby="brake-target-title">
+        <div class="shift-light-brightness-card__heading">
+          <div>
+            <h3 id="brake-target-title">BRAKE TARGET</h3>
+            <p class="hud-display-card__description">A line on the brake bar and the Input Graph at the brake level you practice.</p>
+          </div>
+        </div>
+        <div class="brake-target-row">
+          <span id="brake-target-level-name" class="brake-target-row__name">TARGET</span>
+          <div class="brake-target-row__actions">
+            <output id="brake-target-value" for="brake-target-level" aria-live="polite">70%</output>
+            <button id="brake-target-enabled" class="visibility-toggle" type="button" aria-label="Show the brake target line" aria-pressed="false">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
+          </div>
+        </div>
+        <div class="brightness-control">
+          <input id="brake-target-level" type="range" min="5" max="100" step="5" value="70" aria-labelledby="brake-target-level-name">
+        </div>
+        <div class="brake-target-row">
+          <div class="brake-target-row__copy">
+            <span id="brake-peak-name" class="brake-target-row__name">PEAK MARKER</span>
+            <p class="hud-display-card__description">Shows the highest brake level of the last stop until the next one.</p>
+          </div>
+          <button id="brake-peak-enabled" class="visibility-toggle" type="button" aria-label="Show the peak brake marker" aria-pressed="false">
+            <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+          </button>
+        </div>
+      </section>
     </section>
 
     <section id="driver-analysis-panel" class="settings-tab-panel driver-analysis-panel" role="tabpanel" aria-labelledby="driver-analysis-tab" data-settings-panel="driver-analysis" hidden>
@@ -745,6 +775,7 @@
   <script src="settings-garage.js"></script>
   <script src="settings-shift-light.js"></script>
   <script src="hud-widgets.js"></script>
+  <script src="brake-marks.js"></script>
   <script src="settings-hud.js"></script>
   <section id="connect-guide" class="connect-guide" role="dialog" aria-modal="true" aria-labelledby="connect-guide-title" aria-describedby="connect-guide-intro" data-stage="waiting" hidden>
     <div class="connect-guide__content">

@@ -216,3 +216,33 @@ test('the Shift Bar is a WIDGETS row with its own switch that defaults off and A
   assert.match(settingsHtml, /Show the HUD, Delta and Shift Bar only while live telemetry is received\./)
   assert.match(settingsJs, /Every HUD block, Delta and the Shift Bar goes back to its default place/)
 })
+
+test('BRAKE TARGET card sits directly below WIDGETS with a target slider and a peak marker, both off by default', () => {
+  assert.match(settingsHtml, /<section class="layout-list" aria-labelledby="hud-widgets-title">[\s\S]*?<\/section>\s*<section id="brake-target-card" class="shift-light-brightness-card brake-target-card" aria-labelledby="brake-target-title">/)
+  assert.match(settingsHtml, /<h3 id="brake-target-title">BRAKE TARGET<\/h3>/)
+  assert.match(settingsHtml, /A line on the brake bar and the Input Graph at the brake level you practice\./)
+  assert.match(settingsHtml, /<span id="brake-target-level-name" class="brake-target-row__name">TARGET<\/span>/)
+  assert.match(settingsHtml, /<output id="brake-target-value" for="brake-target-level" aria-live="polite">70%<\/output>/)
+  assert.match(settingsHtml, /<button id="brake-target-enabled" class="visibility-toggle" type="button" aria-label="Show the brake target line" aria-pressed="false">/)
+  assert.match(settingsHtml, /<input id="brake-target-level" type="range" min="5" max="100" step="5" value="70" aria-labelledby="brake-target-level-name">/)
+  assert.match(settingsHtml, /<span id="brake-peak-name" class="brake-target-row__name">PEAK MARKER<\/span>/)
+  assert.match(settingsHtml, /Shows the highest brake level of the last stop until the next one\./)
+  assert.match(settingsHtml, /<button id="brake-peak-enabled" class="visibility-toggle" type="button" aria-label="Show the peak brake marker" aria-pressed="false">/)
+  assert.ok(settingsHtml.indexOf('src="brake-marks.js"') < settingsHtml.indexOf('src="settings-hud.js"'))
+  assert.match(settingsStyles, /\.brake-target-row\s*\{[^}]*border-top:\s*1px solid var\(--line-subtle\)/)
+})
+
+test('BRAKE TARGET saves through set_brake_marks with the three fields and hides itself without BrakeMarks', () => {
+  const hudJs = fs.readFileSync(path.join(__dirname, 'settings-hud.js'), 'utf8')
+  assert.match(hudJs, /const brakeMarks = globalScope\.BrakeMarks/)
+  assert.match(hudJs, /brakeMarks \? brakeMarks\.read\(\) : null/)
+  assert.match(hudJs, /call\('set_brake_marks', \{\s*targetEnabled: next\.targetEnabled,\s*targetPercent: next\.targetPercent,\s*peakEnabled: next\.peakEnabled\s*\}\)/)
+  // The slider updates its label on input and saves on change; each switch click saves at once.
+  assert.match(hudJs, /brakeTargetLevel\?\.addEventListener\('input'/)
+  assert.match(hudJs, /brakeTargetLevel\?\.addEventListener\('change'/)
+  assert.match(hudJs, /brakeTargetEnabled\?\.addEventListener\('click'/)
+  assert.match(hudJs, /brakePeakEnabled\?\.addEventListener\('click'/)
+  assert.match(hudJs, /brakeMarks\.write\(\{ \.\.\.previous, \.\.\.changes \}\)/)
+  assert.match(hudJs, /setStatus\(error\.message \|\| 'Unable to update the brake target', true\)/)
+  assert.match(hudJs, /brakeTargetCard\.hidden = true/)
+})

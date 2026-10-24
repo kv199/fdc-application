@@ -1,6 +1,6 @@
 [package]
 name = "fdc-application"
-version = "7.40.112"
+version = "7.41.112"
 description = "Feedback-Driven Companion – a local-first driving companion for Forza Horizon 6. Live telemetry, adaptive shift cues, run analysis and driver feedback."
 license = "MIT"
 edition = "2024"

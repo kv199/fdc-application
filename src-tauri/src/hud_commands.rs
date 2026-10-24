@@ -195,6 +195,39 @@ pub(crate) fn set_display_preferences(
     eval_main(&app, &script)
 }
 
+const BRAKE_TARGET_MIN_PERCENT: u8 = 5;
+const BRAKE_TARGET_MAX_PERCENT: u8 = 100;
+const BRAKE_TARGET_STEP_PERCENT: u8 = 5;
+
+// Builds the HUD script for the brake target and peak marker settings.
+fn brake_marks_script(
+    target_enabled: bool,
+    target_percent: u8,
+    peak_enabled: bool,
+) -> Result<String, String> {
+    let is_step = target_percent % BRAKE_TARGET_STEP_PERCENT == 0;
+    if !(BRAKE_TARGET_MIN_PERCENT..=BRAKE_TARGET_MAX_PERCENT).contains(&target_percent) || !is_step
+    {
+        return Err("Brake target must be a multiple of 5 between 5 and 100".to_string());
+    }
+
+    Ok(format!(
+        "window.HudOverlay?.setBrakeMarks?.({{ targetEnabled: {}, targetPercent: {}, peakEnabled: {} }})",
+        target_enabled, target_percent, peak_enabled
+    ))
+}
+
+#[tauri::command]
+pub(crate) fn set_brake_marks(
+    app: AppHandle,
+    target_enabled: bool,
+    target_percent: u8,
+    peak_enabled: bool,
+) -> Result<(), String> {
+    let script = brake_marks_script(target_enabled, target_percent, peak_enabled)?;
+    eval_main(&app, &script)
+}
+
 #[tauri::command]
 pub(crate) fn set_configuration_always_on_top(
     app: AppHandle,
@@ -425,6 +458,38 @@ mod tests {
         assert_eq!(feedback_url("https://example.com", "1.0.0"), None);
         assert_eq!(feedback_url("", "1.0.0"), None);
         assert_eq!(feedback_url("BUG", "1.0.0"), None);
+    }
+
+    #[test]
+    fn brake_target_accepts_every_five_percent_step_from_five_to_hundred() {
+        for percent in (5..=100).step_by(5) {
+            assert!(
+                brake_marks_script(true, percent, false).is_ok(),
+                "rejected brake target {percent}"
+            );
+        }
+    }
+
+    #[test]
+    fn brake_target_rejects_values_off_the_step_or_outside_the_range() {
+        for percent in [0, 1, 3, 4, 7, 72, 99, 101, 255] {
+            assert!(
+                brake_marks_script(true, percent, true).is_err(),
+                "accepted invalid brake target {percent}"
+            );
+        }
+    }
+
+    #[test]
+    fn brake_marks_script_passes_both_switches_and_the_target() {
+        assert_eq!(
+            brake_marks_script(true, 70, false).unwrap(),
+            "window.HudOverlay?.setBrakeMarks?.({ targetEnabled: true, targetPercent: 70, peakEnabled: false })"
+        );
+        assert_eq!(
+            brake_marks_script(false, 5, true).unwrap(),
+            "window.HudOverlay?.setBrakeMarks?.({ targetEnabled: false, targetPercent: 5, peakEnabled: true })"
+        );
     }
 
     #[test]

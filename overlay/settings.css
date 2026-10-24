@@ -4106,6 +4106,48 @@ h1 {
   line-height: 1.3;
 }
 
+/* BRAKE TARGET: each setting is a row with its name, readout and switch; the target slider sits under its row. */
+/* WIDGETS above has no bottom margin, so the card keeps the 18px gap of the other HUD cards itself. */
+.brake-target-card {
+  margin-top: 18px;
+}
+
+.brake-target-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 10px 0;
+  border-top: 1px solid var(--line-subtle);
+}
+
+.brake-target-row__copy {
+  min-width: 0;
+}
+
+.brake-target-row__name {
+  display: block;
+  color: var(--text);
+  font-size: var(--type-body);
+  font-weight: 600;
+}
+
+.brake-target-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brake-target-row__actions output {
+  min-width: 56px;
+  color: var(--accent-ink);
+  font-family: var(--font-readout);
+  font-size: 20px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 @media (max-width: 620px) {
   .settings-header__topline {
     align-items: stretch;
