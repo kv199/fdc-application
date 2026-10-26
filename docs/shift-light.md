@@ -8,7 +8,7 @@ from the engine's power curve and the gear ratios seen in telemetry, checks it
 against real shifts, and otherwise learns it from the shifts themselves. See
 [Model shift points](#model-shift-points).
 
-The red game redline and the purple FDC cue are separate displays. The purple
+The red limiter flash and the purple FDC cue are separate displays. The purple
 cue is timed before the desired shift RPM so the driver reaches the target
 instead of reacting after it. Disabling the purple display does not stop
 learning or persistence.
@@ -17,9 +17,13 @@ learning or persistence.
 
 ```text
 FH6 Data Out → UDP 127.0.0.1:5301 → native decoder → direct_telemetry
-  → queueTelemetry → HudShiftLightRuntime.update
-  → ShiftLightLearner.update → hud_shift_light → HUD render
+  → queueTelemetry → HudShiftLightRuntime.update → ShiftLightLearner.update
+  → snapshot → HUD render, every frame
+             → hud_shift_light → Configuration, only when its view changes
 ```
+
+The HUD uses the snapshot that `HudShiftLightRuntime.update` returns. The
+`hud_shift_light` event only feeds the Shift Light tab in Configuration.
 
 Shift Light uses the existing normalized telemetry path and local
 `fdc.sqlite`. It does not add another transport or external dependency.
@@ -211,7 +215,8 @@ reset.
   keeps its latest 32 values, needs at least 3, and its value is the 90th
   percentile. Frames with wheelspin count, because engine power does not
   depend on it.
-- **Gear ratios.** The same frames above `5 km/h` add the engine's angular
+- **Gear ratios.** The same frames above `5 km/h`, with the driven wheels
+  turning faster than `5 rad/s`, add the engine's angular
   speed divided by the mean angular speed of the wheels locked to the engine:
   the front pair for front-wheel drive, the rear pair for rear-wheel and
   all-wheel drive. This is the overall gear ratio even with wheelspin. In
@@ -421,7 +426,9 @@ The Shift Light tab in Configuration opens with a short intro. Once a car has a
 profile, a `CURRENT CAR PROFILE` card shows the car, its class, the reported
 RPM limit, learned ceiling progress, current target and state. CURRENT TARGET
 reads `READY · 7,500 RPM` or `LEARNING · 9,001 RPM` for the current gear's
-pair, and STATE reads `READY · GEAR 2` or `LEARNING · GEAR 2`. Reported and
+pair, and STATE reads `READY · GEAR 2` or `LEARNING · GEAR 2`. While the pair
+has no shift point and no ceiling, redline or maximum RPM is known yet,
+CURRENT TARGET reads `WAITING FOR RPM LIMIT`. Reported and
 learned RPM values use thousands separators, for example `9,360 RPM`, matching
 the in-game HUD. The LEARNED CEILING row shows `9,195 RPM · 3/3` once a ceiling
 exists, where the trailing count is the size of the accepted group, capped at
@@ -447,7 +454,9 @@ preferences. Redline uses five explicit 96%-opaque background-color anchors:
 `#FF312B` at 100%; intermediate values are linearly interpolated per RGB
 channel, so the 80% default is `#D92A25`. FDC Shift Light keeps its animated
 purple background and maps 80% to `filter: brightness(1)`. Its toggle defaults
-to ON and affects only cue visibility. Existing saved redline brightness
+to ON. Turning it off hides the purple cue; red then no longer waits for a
+learned point, and the Shift Bar fills to where red starts. Learning and
+persistence continue. Existing saved redline brightness
 values remain unchanged.
 
 The Shift Light tab shows both brightness controls in one `SHIFT CUE` card,
@@ -484,7 +493,7 @@ lab_packets          id, session_id, sequence, received_at_ms,
 Times are wall-clock UNIX milliseconds of reception. A new session starts when
 the car identity (ordinal, class, PI, drivetrain, cylinders) changes or when
 more than `2000 ms` passes between packets. Packets are written in one
-transaction at least every `500 ms`. FH6 sends about 130 packets a second, two
+transaction every `500 ms`, or sooner once 256 packets are waiting. FH6 sends about 130 packets a second, two
 different packets per game timestamp, and both are stored. The database is
 limited to 200 MB, about one hour of driving: when it is larger, the oldest
 sessions are deleted
