@@ -8,34 +8,20 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 ### Fixed
 
 - **Shift Light**: wheelspin on full throttle is no longer mistaken for the
-  rev limiter. On powerful cars it could set the learned limit hundreds of RPM
-  too low and light the shift cue far too early. Such false readings are now
-  dropped once the engine revs well past them. If a car's cue still comes
-  early, reset its calibration in the Shift Light tab.
+  rev limiter.
 - **Shift Light**: shifting right after the engine bounced off the rev limiter
-  no longer teaches a shift point below the limiter. Power is reduced for a
-  moment after each limiter cut, which made the next gear look stronger; such
-  shifts are now ignored. Reset the calibration of a car that learned a shift
-  point this way.
-- **HUD**: the purple shift cue is no longer hidden by the red limiter flash
-  when Shift Light has learned a shift point for the gear but not yet the
-  car's limiter; red now waits until RPM passes that shift point.
+  no longer teaches a shift point below the limiter.
 - **Shift Light**: the shift cue comes on at a steady point that follows how
   fast the engine revs, instead of switching between two lead values on every
   other telemetry frame.
 - **Shift Light**: restarting FDC no longer counts an older shift again
   towards confirming a gear's shift point, so a point is confirmed by three
   real shifts as intended.
-- **Shift Light**: shifts made while the driven wheels spin hard, such as
-  when drifting, no longer teach a shift point. With the tyres spinning the
-  revs barely drop after a shift, so such shifts said nothing about the next
-  gear and could set an early point.
 - **Shift Light**: upshifts with the clutch and the throttle held now help
   learn shift points on cars with a slow gear change, such as classic cars.
-  Before, such a shift was ignored when the gear change took longer than
-  0.2 seconds.
-- **HUD**: the Shift Bar's segments are now evenly spaced. Every gap between
-  them is the same width; before, some gaps were a pixel wider than others.
+  - **HUD**: the purple shift cue is no longer hidden by the red limiter flash
+  when Shift Light has learned a shift point for the gear but not yet the
+  car's limiter; red now waits until RPM passes that shift point.
 
 ### Added
 
@@ -48,11 +34,9 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   and **READY** or **LEARNING**.
 - **Shift Light**: FDC now keeps your last drives, about one hour and at
   most 200 MB, in `fdc-lab.sqlite` next to its other data, so Shift Light can
-  be checked against real drives. The file stays on your computer; share a
-  copy only if you want to send drives for feedback.
-- **Shift Light**: **EXPORT DRIVES** in the Shift Light tab saves the current
-  car's recorded drives to one compressed file. Attach it to a bug report when
-  Shift Light gets a car wrong.
+  be checked against real drives. The file stays on your computer; do **EXPORT DRIVES** to share a
+  copy only if you want to send drives for feedback or use it as a bug report when
+  Shift Light gets a car wrong
 - **HUD**: the brake bar can show a brake target, a thin line at a chosen
   brake level from 5% to 100%, which also appears as a dashed line on the Input
   Graph. Set it under **Throttle & Brake** in Configuration → **HUD** →

@@ -10,9 +10,9 @@ has no other data source.
 
 - The HUD window is transparent, always on top, frameless, and never takes
   focus. It lives on the monitor chosen in **HUD DISPLAY**. Outside a layout
-  edit the window shrinks to the rectangle around the visible blocks and
-  Delta, and the Shift Bar, with an 8 px margin, so Windows composes less of the screen; blocks
-  stay where the layout puts them on the monitor. A layout edit expands the
+  edit the window shrinks to the rectangle around the visible blocks, Delta,
+  and the Shift Bar, with an 8 px margin, so Windows composes less of the
+  screen; blocks stay where the layout puts them on the monitor. A layout edit expands the
   window to the whole monitor, and saving or cancelling shrinks it again.
   While no block is visible, for example without live telemetry, the window
   keeps its last size.
@@ -90,8 +90,9 @@ both:
   before the limiter. Red takes priority over purple. When purple can show,
   the gear's Shift Light target lies above 97% of the limiter, and either the
   limiter has been hit or the target is a shift point Shift Light found for
-  this gear (a model point, `POTENTIAL` or `OPTIMAL`), red starts only once RPM reaches that
-  target (at most the limiter), so purple shows first. Without that rule, a
+  this gear (a model point, or a point Shift Light has learned, internally
+  `POTENTIAL` or `OPTIMAL`; see [Shift Light](shift-light.md)), red starts only
+  once RPM reaches that target (at most the limiter), so purple shows first. Without that rule, a
   learned point just below an estimated limiter would always be covered by
   red. An unlearned target before any limiter hit is the game's maximum RPM,
   so red does not wait for it. There is no red below 97%, and red never stays
@@ -99,13 +100,14 @@ both:
 - **Flashing purple** at the Shift Light cue, the RPM where Shift Light turns on
   for the current gear, when the **FDC Shift Light** option is enabled. There
   is no purple in the last known gear, the gear the car has never been upshifted
-  from. The approach phase of Shift Light shows nothing.
+  from. The approach phase of Shift Light shows nothing. Once on, purple stays
+  for at least 250 ms, so a brief RPM dip does not cut it short.
 
 With **FDC Shift Light** off, only the red limiter flash appears. Both colors
 alternate every 440 ms between the full color and a dimmer tone, and the Gear
 block and the Shift Bar use the same timing, so they flash together. Red follows
-the REDLINE brightness and purple follows the FDC SHIFT LIGHT brightness in the
-SHIFT CUE card on the Shift Light tab. The Gear block's red text is unchanged.
+the REDLINE brightness and purple follows **BRIGHTNESS** under **FDC SHIFT
+LIGHT** in the SHIFT CUE card on the Shift Light tab. The Gear block's red text is unchanged.
 How targets are learned is described in [Shift Light](shift-light.md).
 
 The **Shift Bar** widget shows the same signal as a row of 36 identical,
@@ -174,10 +176,9 @@ once and are saved locally, like HUD OPACITY.
   keeps showing with the Gear / Speed / RPM block switched off.
 - In Configuration, each widget in the **WIDGETS** list has its own switch,
   and **ALL** turns every widget, Delta and the Shift Bar included, on or off at
-  once. When
-  every block is hidden, the telemetry HUD is not shown. Versions before
-  7.28 had one switch for the whole telemetry HUD; if it was off, FDC turns
-  every block off on its first start after the update, so the HUD stays
+  once. When every block is hidden, the telemetry HUD is not shown. Versions
+  before 7.28 had one switch for the whole telemetry HUD; if it was off, FDC
+  turns every block off on its first start after the update, so the HUD stays
   hidden.
 
 ## Layout
@@ -300,7 +301,8 @@ display number and resolution, and marks the primary monitor. Choosing one
 moves the HUD to that monitor immediately, and FDC remembers the choice.
 Until a monitor is chosen, the HUD uses the primary monitor. If the saved
 monitor is not connected at startup, the HUD uses the primary monitor and the
-card says so. The list is unavailable while a layout edit is active.
+card says so. The list is unavailable while a layout edit is active or when
+only one monitor is connected.
 
 When Windows moves the HUD to another monitor, for example with
 Win+Shift+Arrow, FDC places it on that monitor, shrinks it again around the
