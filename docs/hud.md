@@ -4,7 +4,7 @@ The HUD is FDC's in-game telemetry overlay. It renders the normalized Direct
 Data Out telemetry that the native layer delivers through `queueTelemetry`; it
 has no other data source.
 
-![Grouped HUD while driving](images/hud-in-game.png)
+![Grouped HUD while braking, with the brake target and peak marker](images/hud-in-game.png)
 
 ## Overlay window
 

@@ -41,7 +41,7 @@ smallest size, and can only be enlarged.
 
 ### Shift Light
 
-![Gear block and Shift Bar flashing red at the rev limiter](docs/images/hud-shift-light.png)
+![Gear block and Shift Bar flashing purple at the Shift Light cue](docs/images/hud-shift-light.png)
 
 Shift Light learns per-gear shift points for each car and tune from live
 telemetry. The gear block flashes red near the rev limiter, from 97% of the
