@@ -450,6 +450,15 @@ purple background and maps 80% to `filter: brightness(1)`. Its toggle defaults
 to ON and affects only cue visibility. Existing saved redline brightness
 values remain unchanged.
 
+The Shift Light tab shows both brightness controls in one `SHIFT CUE` card,
+described as "Flashes on the Gear block and the Shift Bar." The `REDLINE` row
+comes first. The `FDC SHIFT LIGHT` switch comes next, and its `BRIGHTNESS`
+slider and `RESET` sit directly under it as a nested row. While the switch is
+off, that slider and its `RESET` stay visible but disabled, and the hint
+`Turn on FDC SHIFT LIGHT to change its brightness.` is shown. The stored FDC
+brightness is kept and applies again when the switch is turned on. Each
+`RESET` returns its brightness to 80%.
+
 ## Shift Lab recording
 
 Shift Lab keeps real drives so the learner can be replayed and checked against

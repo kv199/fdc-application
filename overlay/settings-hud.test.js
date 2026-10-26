@@ -6,7 +6,7 @@ const assert = require('node:assert/strict')
 require('./hud-widgets.js')
 const SettingsHud = require('./settings-hud.js')
 
-const { create, normalizeLayoutMode, allWidgetsOn, anyWidgetOn } = SettingsHud
+const { create, normalizeLayoutMode, allWidgetsOn, anyWidgetOn, brakeMarkDependencies } = SettingsHud
 
 const WIDGETS = ['tires', 'pedals', 'steering', 'gear', 'engine', 'history']
 
@@ -58,6 +58,33 @@ test('ANY is on when a widget, Delta or the Shift Bar is on, and the removed who
   assert.equal(anyWidgetOn(visibility, { ...overlay, shiftBar: true }), true)
   assert.equal(anyWidgetOn(visibility, { ...overlay, shiftBar: undefined }), false)
   assert.equal(anyWidgetOn(visibility, { ...overlay, hud: true }), false)
+})
+
+test('brake target: the TARGET switch needs Throttle & Brake or Input Graph, and its level needs TARGET on', () => {
+  const on = { pedals: true, history: true }
+  const off = { pedals: false, history: false }
+  const target = { targetEnabled: true }
+  const noTarget = { targetEnabled: false }
+
+  // Both widgets on: the switch works; the level works only while TARGET is on.
+  assert.deepEqual(brakeMarkDependencies(on, target), { targetSwitchDisabled: false, targetLevelDisabled: false, targetSwitchHint: false, targetLevelHint: false, peakDisabled: false })
+  assert.deepEqual(brakeMarkDependencies(on, noTarget), { targetSwitchDisabled: false, targetLevelDisabled: true, targetSwitchHint: false, targetLevelHint: true, peakDisabled: false })
+  // One of the two widgets is enough for the target switch.
+  assert.equal(brakeMarkDependencies({ pedals: false, history: true }, target).targetSwitchDisabled, false)
+  assert.equal(brakeMarkDependencies({ pedals: true, history: false }, target).targetSwitchDisabled, false)
+  // Both off: the switch and the level are disabled, and the widget hint shows instead of the level hint.
+  assert.deepEqual(brakeMarkDependencies(off, target), { targetSwitchDisabled: true, targetLevelDisabled: true, targetSwitchHint: true, targetLevelHint: false, peakDisabled: true })
+  assert.deepEqual(brakeMarkDependencies(off, noTarget), { targetSwitchDisabled: true, targetLevelDisabled: true, targetSwitchHint: true, targetLevelHint: false, peakDisabled: true })
+})
+
+test('brake peak marker: it is disabled only while Throttle & Brake is off', () => {
+  assert.equal(brakeMarkDependencies({ pedals: false, history: true }, {}).peakDisabled, true)
+  assert.equal(brakeMarkDependencies({ pedals: true, history: false }, {}).peakDisabled, false)
+  assert.equal(brakeMarkDependencies({}, {}).peakDisabled, false)
+})
+
+test('brake dependencies read a missing widget key as on, and missing preferences as off', () => {
+  assert.deepEqual(brakeMarkDependencies({}, undefined), { targetSwitchDisabled: false, targetLevelDisabled: true, targetSwitchHint: false, targetLevelHint: true, peakDisabled: false })
 })
 
 test('ALL being on always means ANY is on', () => {

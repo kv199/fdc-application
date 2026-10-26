@@ -38,10 +38,9 @@ test('Engine visibility is part of the safe HUD component contract', () => {
 })
 
 test('HUD layout exposes grouped and freeform modes with unified widgets and layout editing', () => {
-  // The layout plate has three sections in order: ARRANGEMENT, LAYOUT, WIDGETS.
-  // Three blocks in order: the ARRANGEMENT card, the layout editor (an action panel like the
-  // Driver Analysis recorder), and the WIDGETS card.
-  assert.match(settingsHtml, /<section class="shift-light-brightness-card layout-arrangement" aria-labelledby="hud-layout-arrangement-title">[\s\S]*?<h3 id="hud-layout-arrangement-title">ARRANGEMENT<\/h3>[\s\S]*?class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title"[\s\S]*?<\/section>\s*<section class="action-panel"[^>]*data-layout-edit-row>[\s\S]*?<h3 id="hud-layout-edit-title">EDIT THE LAYOUT<\/h3>[\s\S]*?<strong>IN-GAME EDIT HOTKEY<\/strong>[\s\S]*?<\/section>\s*<section class="layout-list" aria-labelledby="hud-widgets-title">[\s\S]*?id="hud-widgets-title" class="layout-section__title">WIDGETS</)
+  // The HUD tab has three cards in order: DISPLAY, LAYOUT and WIDGETS. The LAYOUT card holds one
+  // raised plate whose rows are ARRANGEMENT, EDIT THE LAYOUT and IN-GAME EDIT HOTKEY.
+  assert.match(settingsHtml, /<section class="hud-group" aria-labelledby="hud-layout-title">\s*<div class="hud-group__head">\s*<h3 id="hud-layout-title" class="layout-section__title">LAYOUT<\/h3>[\s\S]*?<section class="action-panel" aria-label="HUD layout editing" data-layout-edit-row>[\s\S]*?<div class="action-panel__row layout-arrangement">[\s\S]*?<h3 id="hud-layout-arrangement-title">ARRANGEMENT<\/h3>[\s\S]*?class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title"[\s\S]*?<h3 id="hud-layout-edit-title">EDIT THE LAYOUT<\/h3>[\s\S]*?<strong>IN-GAME EDIT HOTKEY<\/strong>[\s\S]*?<\/section>\s*<\/section>\s*<section class="layout-list hud-group" aria-labelledby="hud-widgets-title">[\s\S]*?id="hud-widgets-title" class="layout-section__title">WIDGETS</)
   // The editor shows EDITING while an edit runs, like READY on the Driver Analysis recorder.
   assert.match(settingsHtml, /id="hud-layout-status" class="action-panel__status" data-state="editing" role="status" aria-live="polite" hidden>EDITING</)
   assert.match(settingsJs, /getElementById\('hud-layout-status'\)/)
@@ -89,7 +88,7 @@ test('the Configuration page writes the layout mode under the key and modes the 
 
 test('HUD opacity appears before HUD controls and resets to its 80 percent default', () => {
   const hudOpacityIndex = settingsHtml.indexOf('id="hud-opacity"')
-  const layoutListIndex = settingsHtml.indexOf('class="shift-light-brightness-card layout-arrangement"')
+  const layoutListIndex = settingsHtml.indexOf('class="action-panel__row layout-arrangement"')
 
   assert.ok(hudOpacityIndex >= 0)
   assert.ok(hudOpacityIndex < layoutListIndex)
@@ -150,11 +149,18 @@ test('HUD heading has no redundant position and visibility label, and status use
 
 test('HUD DISPLAY card allows selecting which monitor the HUD covers', () => {
   const hudPanel = settingsHtml.slice(settingsHtml.indexOf('id="hud-panel"'), settingsHtml.indexOf('id="hud-panel"') + 4000)
-  assert.match(hudPanel, /id="hud-display-title">HUD DISPLAY/)
+  assert.match(settingsHtml, /<section class="hud-group" aria-labelledby="hud-screen-title">\s*<div class="hud-group__head">\s*<h3 id="hud-screen-title" class="layout-section__title">DISPLAY<\/h3>/)
+  assert.match(hudPanel, /id="hud-display-title" class="hud-row__title">HUD DISPLAY/)
   assert.match(hudPanel, /Monitor the HUD is shown on/)
   assert.match(hudPanel, /id="hud-display"[^>]*><\/select>/)
   assert.match(hudPanel, /id="hud-display-missing"[^>]*hidden/)
   assert.ok(hudPanel.indexOf('HUD DISPLAY') < hudPanel.indexOf('HUD OPACITY'))
+  // The DISPLAY card holds the monitor, the opacity and SHOW HUD WITH TELEMETRY, in that order.
+  const displayCard = settingsHtml.slice(settingsHtml.indexOf('aria-labelledby="hud-screen-title"'), settingsHtml.indexOf('aria-labelledby="hud-layout-title"'))
+  assert.ok(displayCard.indexOf('id="hud-display"') < displayCard.indexOf('id="hud-opacity"'))
+  assert.ok(displayCard.indexOf('id="hud-opacity"') < displayCard.indexOf('id="show-hud-with-telemetry"'))
+  assert.match(displayCard, /<div class="display-setting-row" data-display-preference>\s*<div class="display-setting-row__copy">\s*<strong>SHOW HUD WITH TELEMETRY<\/strong>/)
+  assert.match(displayCard, /<button id="show-hud-with-telemetry" class="visibility-toggle" type="button" aria-label="Show the HUD, Delta and Shift Bar only with live telemetry" aria-pressed="true">/)
   assert.match(settingsJs, /call\('list_hud_displays'\)/)
   assert.match(settingsJs, /call\('set_hud_display'/)
   // The monitor list is disabled with one monitor, and while a layout edit runs.
@@ -217,19 +223,45 @@ test('the Shift Bar is a WIDGETS row with its own switch that defaults off and A
   assert.match(settingsJs, /Every HUD block, Delta and the Shift Bar goes back to its default place/)
 })
 
-test('BRAKE TARGET card sits directly below WIDGETS with a target slider and a peak marker, both off by default', () => {
-  assert.match(settingsHtml, /<section class="layout-list" aria-labelledby="hud-widgets-title">[\s\S]*?<\/section>\s*<section id="brake-target-card" class="shift-light-brightness-card brake-target-card" aria-labelledby="brake-target-title">/)
-  assert.match(settingsHtml, /<h3 id="brake-target-title">BRAKE TARGET<\/h3>/)
+test('BRAKE TARGET options nest under the Throttle & Brake row, outside its label, with a target slider and a peak marker', () => {
+  // The options are a sibling after the Throttle label, so clicking them never toggles the widget.
+  const throttleRow = settingsHtml.match(/<label class="widget-row">\s*<span class="widget-row__name">Throttle &amp; Brake<\/span>[\s\S]*?<\/label>\s*(<div id="brake-target-card" class="widget-options brake-target-card" aria-labelledby="brake-target-title">)/)
+  assert.ok(throttleRow, 'BRAKE TARGET options directly after the Throttle & Brake row')
+  const steeringIndex = settingsHtml.indexOf('<span class="widget-row__name">Steering</span>')
+  assert.ok(settingsHtml.indexOf('id="brake-target-card"') < steeringIndex, 'the options come before Steering')
+  assert.match(settingsHtml, /<h4 id="brake-target-title" class="widget-options__title">BRAKE TARGET<\/h4>/)
   assert.match(settingsHtml, /A line on the brake bar and the Input Graph at the brake level you practice\./)
   assert.match(settingsHtml, /<span id="brake-target-level-name" class="brake-target-row__name">TARGET<\/span>/)
   assert.match(settingsHtml, /<output id="brake-target-value" for="brake-target-level" aria-live="polite">70%<\/output>/)
-  assert.match(settingsHtml, /<button id="brake-target-enabled" class="visibility-toggle" type="button" aria-label="Show the brake target line" aria-pressed="false">/)
-  assert.match(settingsHtml, /<input id="brake-target-level" type="range" min="5" max="100" step="5" value="70" aria-labelledby="brake-target-level-name">/)
+  assert.match(settingsHtml, /<button id="brake-target-enabled" class="visibility-toggle" type="button" aria-label="Show the brake target line" aria-pressed="false" aria-describedby="brake-target-widget-hint">/)
+  assert.match(settingsHtml, /<input id="brake-target-level" type="range" min="5" max="100" step="5" value="70" aria-labelledby="brake-target-level-name" aria-describedby="brake-target-level-hint">/)
   assert.match(settingsHtml, /<span id="brake-peak-name" class="brake-target-row__name">PEAK MARKER<\/span>/)
   assert.match(settingsHtml, /Shows the highest brake level of the last stop until the next one\./)
-  assert.match(settingsHtml, /<button id="brake-peak-enabled" class="visibility-toggle" type="button" aria-label="Show the peak brake marker" aria-pressed="false">/)
+  assert.match(settingsHtml, /<button id="brake-peak-enabled" class="visibility-toggle" type="button" aria-label="Show the peak brake marker" aria-pressed="false" aria-describedby="brake-peak-hint">/)
   assert.ok(settingsHtml.indexOf('src="brake-marks.js"') < settingsHtml.indexOf('src="settings-hud.js"'))
   assert.match(settingsStyles, /\.brake-target-row\s*\{[^}]*border-top:\s*1px solid var\(--line-subtle\)/)
+  assert.match(settingsStyles, /\.widget-options\s*\{[^}]*border-left:\s*1px solid var\(--line-strong\)/)
+  assert.match(settingsStyles, /\.widget-options \+ \.widget-row\s*\{[^}]*border-top:/)
+})
+
+test('BRAKE TARGET hints are hidden by default and the dependent controls are named by their hint', () => {
+  const hint = id => settingsHtml.match(new RegExp(`<p id="${id}" class="brake-target-hint" hidden>([^<]+)</p>`))
+  assert.equal(hint('brake-target-widget-hint')?.[1], 'Turn on Throttle &amp; Brake or Input Graph to see the target.')
+  assert.equal(hint('brake-target-level-hint')?.[1], 'Turn on TARGET to choose the level.')
+  assert.equal(hint('brake-peak-hint')?.[1], 'Turn on Throttle &amp; Brake to see the peak marker.')
+  // The dependency rules are applied in settings-hud.js; the hints are shown and hidden only from there.
+  const hudJs = fs.readFileSync(path.join(__dirname, 'settings-hud.js'), 'utf8')
+  assert.match(hudJs, /brakeTargetWidgetHint\.hidden = !state\.targetSwitchHint/)
+  assert.match(hudJs, /brakeTargetLevelHint\.hidden = !state\.targetLevelHint/)
+  assert.match(hudJs, /brakePeakHint\.hidden = !state\.peakDisabled/)
+  assert.match(hudJs, /brakeTargetEnabled\.disabled = state\.targetSwitchDisabled/)
+  assert.match(hudJs, /brakeTargetLevel\.disabled = state\.targetLevelDisabled/)
+  assert.match(hudJs, /brakePeakEnabled\.disabled = state\.peakDisabled/)
+  // Every widget change and every brake render recomputes the dependent state.
+  assert.match(hudJs, /function renderAllToggle\(\) \{\s*syncBrakeDependencies\(\)/)
+  assert.match(hudJs, /renderBrakeTargetLevel\(preferences\.targetPercent\)\s*syncBrakeDependencies\(\)/)
+  assert.match(settingsStyles, /\.brake-target-row\.is-disabled \.brake-target-row__name\s*\{\s*color:\s*var\(--text-faint\)/)
+  assert.match(settingsStyles, /\.brake-target-hint\s*\{[^}]*color:\s*var\(--notice\)/)
 })
 
 test('BRAKE TARGET saves through set_brake_marks with the three fields and hides itself without BrakeMarks', () => {

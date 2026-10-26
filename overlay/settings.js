@@ -40,6 +40,7 @@
     connected: 'FDC is receiving data from Forza Horizon 6.'
   })
   const DEFAULT_REDLINE_BRIGHTNESS = displayPreferencesApi?.DEFAULTS?.redlineBrightness ?? 80
+  const DEFAULT_SHIFT_LIGHT_BRIGHTNESS = displayPreferencesApi?.DEFAULTS?.shiftLightBrightness ?? 80
   const DEFAULT_HUD_OPACITY = displayPreferencesApi?.DEFAULTS?.hudOpacity ?? 80
   const SETTINGS_WINDOW_CONTEXTS = Object.freeze({
     hud: 'HUD',
@@ -64,6 +65,9 @@
   const redlineBrightnessReset = document.getElementById('redline-brightness-reset')
   const shiftLightBrightness = document.getElementById('shift-light-brightness')
   const shiftLightBrightnessValue = document.getElementById('shift-light-brightness-value')
+  const shiftLightBrightnessReset = document.getElementById('shift-light-brightness-reset')
+  const shiftLightBrightnessGroup = document.getElementById('shift-light-brightness-group')
+  const shiftLightBrightnessHint = document.getElementById('shift-light-brightness-hint')
   const hudOpacity = document.getElementById('hud-opacity')
   const hudOpacityValue = document.getElementById('hud-opacity-value')
   const hudOpacityReset = document.getElementById('hud-opacity-reset')
@@ -533,7 +537,7 @@
     }
     applyConfigurationTheme(preferences.theme)
     renderRedlineBrightness(preferences.redlineBrightness)
-    renderShiftLightBrightness(preferences.shiftLightBrightness)
+    renderShiftLightBrightness(preferences.shiftLightBrightness, preferences.fdcShiftLightEnabled !== false)
     renderHudOpacity(preferences.hudOpacity)
     if (configurationAlwaysOnTop) updateOverlayToggle(configurationAlwaysOnTop, preferences.configurationAlwaysOnTop === true)
     if (showHudWithTelemetry) updateOverlayToggle(showHudWithTelemetry, preferences.showHudWithTelemetry !== false)
@@ -554,8 +558,10 @@
     redlineBrightnessReset.classList.toggle('is-dirty', !isDefault)
   }
 
-  function renderShiftLightBrightness(value) {
+  // FDC SHIFT LIGHT brightness has no effect while the cue is off, so its controls stay visible but disabled.
+  function renderShiftLightBrightness(value, cueOn = displayPreferences.fdcShiftLightEnabled !== false) {
     const brightness = Number(value)
+    const isDefault = brightness === DEFAULT_SHIFT_LIGHT_BRIGHTNESS
     const minimum = Number(shiftLightBrightness.min)
     const maximum = Number(shiftLightBrightness.max)
     const progress = ((brightness - minimum) / (maximum - minimum)) * 100
@@ -563,6 +569,11 @@
     shiftLightBrightness.style.setProperty('--brightness-fill', `${Math.max(0, Math.min(100, progress))}%`)
     shiftLightBrightness.setAttribute('aria-valuetext', `${brightness}% brightness`)
     shiftLightBrightnessValue.textContent = `${brightness}%`
+    shiftLightBrightness.disabled = displayPreferencesPending || !cueOn
+    shiftLightBrightnessReset.disabled = displayPreferencesPending || !cueOn || isDefault
+    shiftLightBrightnessReset.classList.toggle('is-dirty', !isDefault)
+    shiftLightBrightnessGroup.classList.toggle('is-inactive', !cueOn)
+    shiftLightBrightnessHint.hidden = cueOn
   }
 
   function renderHudOpacity(value) {
@@ -589,7 +600,9 @@
     if (fdcShiftLightEnabled) fdcShiftLightEnabled.disabled = pending
     redlineBrightness.disabled = pending
     redlineBrightnessReset.disabled = pending || displayPreferences.redlineBrightness === DEFAULT_REDLINE_BRIGHTNESS
-    shiftLightBrightness.disabled = pending
+    const shiftLightCueOff = displayPreferences.fdcShiftLightEnabled === false
+    shiftLightBrightness.disabled = pending || shiftLightCueOff
+    shiftLightBrightnessReset.disabled = pending || shiftLightCueOff || displayPreferences.shiftLightBrightness === DEFAULT_SHIFT_LIGHT_BRIGHTNESS
     hudOpacity.disabled = pending
     hudOpacityReset.disabled = pending || displayPreferences.hudOpacity === DEFAULT_HUD_OPACITY
     for (const row of displayPreferenceRows) row.classList.toggle('is-pending', pending)
@@ -804,6 +817,12 @@
     void updateDisplayPreferences(
       { shiftLightBrightness: Number(shiftLightBrightness.value) },
       next => `SHIFT LIGHT BRIGHTNESS SET TO ${next.shiftLightBrightness}%`
+    )
+  })
+  shiftLightBrightnessReset.addEventListener('click', () => {
+    void updateDisplayPreferences(
+      { shiftLightBrightness: DEFAULT_SHIFT_LIGHT_BRIGHTNESS },
+      next => `SHIFT LIGHT BRIGHTNESS RESET TO ${next.shiftLightBrightness}%`
     )
   })
 

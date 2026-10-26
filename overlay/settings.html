@@ -62,76 +62,90 @@
         <h2 id="hud-title" class="settings-page-title">HUD</h2>
       </div>
 
-      <section class="shift-light-brightness-card hud-display-card" aria-labelledby="hud-display-title">
-        <div class="shift-light-brightness-card__heading">
-          <div>
-            <h3 id="hud-display-title">HUD DISPLAY</h3>
+      <section class="hud-group" aria-labelledby="hud-screen-title">
+        <div class="hud-group__head">
+          <h3 id="hud-screen-title" class="layout-section__title">DISPLAY</h3>
+        </div>
+        <div class="hud-row hud-display-card" aria-labelledby="hud-display-title">
+          <div class="hud-row__copy">
+            <h4 id="hud-display-title" class="hud-row__title">HUD DISPLAY</h4>
             <p class="hud-display-card__description">Monitor the HUD is shown on.</p>
           </div>
+          <select id="hud-display" aria-labelledby="hud-display-title"></select>
+          <p id="hud-display-missing" class="hud-display-card__missing" hidden>The saved monitor is not connected. The HUD is on the primary monitor.</p>
         </div>
-        <select id="hud-display" aria-labelledby="hud-display-title"></select>
-        <p id="hud-display-missing" class="hud-display-card__missing" hidden>The saved monitor is not connected. The HUD is on the primary monitor.</p>
-      </section>
 
-      <section class="shift-light-brightness-card hud-opacity-card" data-display-preference aria-labelledby="hud-opacity-title">
-        <div class="shift-light-brightness-card__heading">
-          <div>
-            <h3 id="hud-opacity-title">HUD OPACITY</h3>
+        <div class="hud-row hud-opacity-card" data-display-preference aria-labelledby="hud-opacity-title">
+          <div class="hud-row__head">
+            <h4 id="hud-opacity-title" class="hud-row__title">HUD OPACITY</h4>
+            <div class="hud-opacity-card__actions">
+              <output id="hud-opacity-value" for="hud-opacity" aria-live="polite">80%</output>
+              <button id="hud-opacity-reset" class="settings-button hud-opacity-reset" type="button" disabled>RESET</button>
+            </div>
           </div>
-          <div class="hud-opacity-card__actions">
-            <output id="hud-opacity-value" for="hud-opacity" aria-live="polite">80%</output>
-            <button id="hud-opacity-reset" class="settings-button hud-opacity-reset" type="button" disabled>RESET</button>
+          <div class="brightness-control">
+            <input id="hud-opacity" type="range" min="1" max="100" step="1" value="80" aria-labelledby="hud-opacity-title">
           </div>
         </div>
-        <div class="brightness-control">
-          <input id="hud-opacity" type="range" min="1" max="100" step="1" value="80" aria-labelledby="hud-opacity-title">
-        </div>
-      </section>
-
-      <section class="shift-light-brightness-card layout-arrangement" aria-labelledby="hud-layout-arrangement-title">
-        <div class="layout-arrangement__copy">
-          <h3 id="hud-layout-arrangement-title">ARRANGEMENT</h3>
-          <p>Grouped moves the HUD as one block. Freeform moves each block.</p>
-        </div>
-        <div class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title">
-          <label class="unit-option">
-            <input type="radio" name="hud-layout-mode" value="grouped" data-layout-mode="grouped" checked>
-            <span>GROUPED</span>
-          </label>
-          <label class="unit-option">
-            <input type="radio" name="hud-layout-mode" value="freeform" data-layout-mode="freeform">
-            <span>FREEFORM</span>
-          </label>
+        <div class="display-setting-row" data-display-preference>
+          <div class="display-setting-row__copy">
+            <strong>SHOW HUD WITH TELEMETRY</strong>
+            <small>Show the HUD, Delta and Shift Bar only while live telemetry is received.</small>
+          </div>
+          <button id="show-hud-with-telemetry" class="visibility-toggle" type="button" aria-label="Show the HUD, Delta and Shift Bar only with live telemetry" aria-pressed="true">
+            <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+          </button>
         </div>
       </section>
 
-      <section class="action-panel" aria-label="HUD layout editing" data-layout-edit-row>
-        <div class="action-panel__row">
-          <div>
-            <h3 id="hud-layout-edit-title">EDIT THE LAYOUT</h3>
-            <p id="hud-layout-edit-hint">Move and resize the HUD blocks right on the screen.</p>
-          </div>
-          <div class="action-panel__actions">
-            <span id="hud-layout-status" class="action-panel__status" data-state="editing" role="status" aria-live="polite" hidden>EDITING</span>
-            <button id="hud-layout-reset" class="settings-button settings-button--caution" type="button">RESET LAYOUT</button>
-            <button id="hud-layout-edit" class="settings-button settings-button--ready" type="button" aria-describedby="hud-layout-edit-hint">EDIT LAYOUT</button>
-            <button id="hud-layout-cancel" class="settings-button" type="button" hidden>CANCEL</button>
-            <button id="hud-layout-save" class="settings-button settings-button--ready" type="button" hidden>SAVE</button>
-          </div>
+      <section class="hud-group" aria-labelledby="hud-layout-title">
+        <div class="hud-group__head">
+          <h3 id="hud-layout-title" class="layout-section__title">LAYOUT</h3>
         </div>
-        <div class="action-panel__row">
-          <div>
-            <strong>IN-GAME EDIT HOTKEY</strong>
-            <small id="hud-edit-hotkey-help">Works while Forza is in focus: press it to edit over the game, press it again to save. Don't use Windows-key combinations or buttons the game uses.</small>
+        <section class="action-panel" aria-label="HUD layout editing" data-layout-edit-row>
+          <div class="action-panel__row layout-arrangement">
+            <div class="layout-arrangement__copy">
+              <h3 id="hud-layout-arrangement-title">ARRANGEMENT</h3>
+              <p>Grouped moves the HUD as one block. Freeform moves each block.</p>
+            </div>
+            <div class="unit-options" role="radiogroup" aria-labelledby="hud-layout-arrangement-title">
+              <label class="unit-option">
+                <input type="radio" name="hud-layout-mode" value="grouped" data-layout-mode="grouped" checked>
+                <span>GROUPED</span>
+              </label>
+              <label class="unit-option">
+                <input type="radio" name="hud-layout-mode" value="freeform" data-layout-mode="freeform">
+                <span>FREEFORM</span>
+              </label>
+            </div>
           </div>
-          <div class="action-panel__actions">
-            <output id="hud-edit-hotkey-value" aria-live="polite">Ctrl + Shift + F8</output>
-            <button id="hud-edit-hotkey-change" class="settings-button" type="button" aria-describedby="hud-edit-hotkey-help">CHANGE</button>
+          <div class="action-panel__row">
+            <div>
+              <h3 id="hud-layout-edit-title">EDIT THE LAYOUT</h3>
+              <p id="hud-layout-edit-hint">Move and resize the HUD blocks right on the screen.</p>
+            </div>
+            <div class="action-panel__actions">
+              <span id="hud-layout-status" class="action-panel__status" data-state="editing" role="status" aria-live="polite" hidden>EDITING</span>
+              <button id="hud-layout-reset" class="settings-button settings-button--caution" type="button">RESET LAYOUT</button>
+              <button id="hud-layout-edit" class="settings-button settings-button--ready" type="button" aria-describedby="hud-layout-edit-hint">EDIT LAYOUT</button>
+              <button id="hud-layout-cancel" class="settings-button" type="button" hidden>CANCEL</button>
+              <button id="hud-layout-save" class="settings-button settings-button--ready" type="button" hidden>SAVE</button>
+            </div>
           </div>
-        </div>
+          <div class="action-panel__row">
+            <div>
+              <strong>IN-GAME EDIT HOTKEY</strong>
+              <small id="hud-edit-hotkey-help">Works while Forza is in focus: press it to edit over the game, press it again to save. Don't use Windows-key combinations or buttons the game uses.</small>
+            </div>
+            <div class="action-panel__actions">
+              <output id="hud-edit-hotkey-value" aria-live="polite">Ctrl + Shift + F8</output>
+              <button id="hud-edit-hotkey-change" class="settings-button" type="button" aria-describedby="hud-edit-hotkey-help">CHANGE</button>
+            </div>
+          </div>
+        </section>
       </section>
 
-      <section class="layout-list" aria-labelledby="hud-widgets-title">
+      <section class="layout-list hud-group" aria-labelledby="hud-widgets-title">
         <div class="layout-section__header">
           <h3 id="hud-widgets-title" class="layout-section__title">WIDGETS</h3>
           <div class="widget-list__all">
@@ -154,6 +168,34 @@
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
           </label>
+          <div id="brake-target-card" class="widget-options brake-target-card" aria-labelledby="brake-target-title">
+            <h4 id="brake-target-title" class="widget-options__title">BRAKE TARGET</h4>
+            <p class="hud-display-card__description">A line on the brake bar and the Input Graph at the brake level you practice.</p>
+            <div class="brake-target-row" id="brake-target-row">
+              <span id="brake-target-level-name" class="brake-target-row__name">TARGET</span>
+              <div class="brake-target-row__actions">
+                <output id="brake-target-value" for="brake-target-level" aria-live="polite">70%</output>
+                <button id="brake-target-enabled" class="visibility-toggle" type="button" aria-label="Show the brake target line" aria-pressed="false" aria-describedby="brake-target-widget-hint">
+                  <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+                </button>
+              </div>
+            </div>
+            <p id="brake-target-widget-hint" class="brake-target-hint" hidden>Turn on Throttle &amp; Brake or Input Graph to see the target.</p>
+            <div class="brightness-control">
+              <input id="brake-target-level" type="range" min="5" max="100" step="5" value="70" aria-labelledby="brake-target-level-name" aria-describedby="brake-target-level-hint">
+            </div>
+            <p id="brake-target-level-hint" class="brake-target-hint" hidden>Turn on TARGET to choose the level.</p>
+            <div class="brake-target-row" id="brake-peak-row">
+              <div class="brake-target-row__copy">
+                <span id="brake-peak-name" class="brake-target-row__name">PEAK MARKER</span>
+                <p class="hud-display-card__description">Shows the highest brake level of the last stop until the next one.</p>
+              </div>
+              <button id="brake-peak-enabled" class="visibility-toggle" type="button" aria-label="Show the peak brake marker" aria-pressed="false" aria-describedby="brake-peak-hint">
+                <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+              </button>
+            </div>
+            <p id="brake-peak-hint" class="brake-target-hint" hidden>Turn on Throttle &amp; Brake to see the peak marker.</p>
+          </div>
           <label class="widget-row">
             <span class="widget-row__name">Steering</span>
             <button class="visibility-toggle" type="button" data-hud-toggle="steering" aria-label="Toggle Steering" aria-pressed="true">
@@ -190,36 +232,6 @@
               <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
             </button>
           </label>
-        </div>
-      </section>
-
-      <section id="brake-target-card" class="shift-light-brightness-card brake-target-card" aria-labelledby="brake-target-title">
-        <div class="shift-light-brightness-card__heading">
-          <div>
-            <h3 id="brake-target-title">BRAKE TARGET</h3>
-            <p class="hud-display-card__description">A line on the brake bar and the Input Graph at the brake level you practice.</p>
-          </div>
-        </div>
-        <div class="brake-target-row">
-          <span id="brake-target-level-name" class="brake-target-row__name">TARGET</span>
-          <div class="brake-target-row__actions">
-            <output id="brake-target-value" for="brake-target-level" aria-live="polite">70%</output>
-            <button id="brake-target-enabled" class="visibility-toggle" type="button" aria-label="Show the brake target line" aria-pressed="false">
-              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
-            </button>
-          </div>
-        </div>
-        <div class="brightness-control">
-          <input id="brake-target-level" type="range" min="5" max="100" step="5" value="70" aria-labelledby="brake-target-level-name">
-        </div>
-        <div class="brake-target-row">
-          <div class="brake-target-row__copy">
-            <span id="brake-peak-name" class="brake-target-row__name">PEAK MARKER</span>
-            <p class="hud-display-card__description">Shows the highest brake level of the last stop until the next one.</p>
-          </div>
-          <button id="brake-peak-enabled" class="visibility-toggle" type="button" aria-label="Show the peak brake marker" aria-pressed="false">
-            <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
-          </button>
         </div>
       </section>
     </section>
@@ -525,39 +537,54 @@
         </div>
       </div>
 
-      <section class="shift-light-brightness-card shift-light-brightness-card--redline" data-display-preference aria-labelledby="redline-brightness-title">
-        <div class="shift-light-brightness-card__heading">
-          <div>
-            <h3 id="redline-brightness-title">REDLINE BRIGHTNESS</h3>
-          </div>
-          <div class="hud-opacity-card__actions">
-            <output id="redline-brightness-value" for="redline-brightness" aria-live="polite">80%</output>
-            <button id="redline-brightness-reset" class="settings-button hud-opacity-reset" type="button" disabled>RESET</button>
-          </div>
+      <section id="shift-cue-card" class="shift-light-brightness-card shift-cue-card" data-display-preference aria-labelledby="shift-cue-title">
+        <div class="shift-cue-card__heading">
+          <h3 id="shift-cue-title">SHIFT CUE</h3>
+          <p class="hud-display-card__description">Flashes on the Gear block and the Shift Bar.</p>
         </div>
-        <div class="brightness-control">
-          <input id="redline-brightness" type="range" min="0" max="100" step="5" value="80" aria-labelledby="redline-brightness-title">
-        </div>
-      </section>
 
-      <div class="display-setting-row shift-light-cue-toggle" data-display-preference>
-        <div class="display-setting-row__copy">
-          <strong>FDC SHIFT LIGHT</strong>
-        </div>
-        <button id="fdc-shift-light-enabled" class="visibility-toggle" type="button" aria-label="Show the purple FDC shift cue" aria-pressed="true">
-          <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
-        </button>
-      </div>
-
-      <section class="shift-light-brightness-card" data-display-preference aria-labelledby="shift-light-brightness-title">
-        <div class="shift-light-brightness-card__heading">
-          <div>
-            <h3 id="shift-light-brightness-title">FDC SHIFT LIGHT BRIGHTNESS</h3>
+        <div class="shift-cue-row shift-cue-row--redline">
+          <div class="shift-light-brightness-card__heading">
+            <div class="shift-cue-row__name">
+              <span class="shift-cue-dot shift-cue-dot--redline" aria-hidden="true"></span>
+              <strong id="redline-brightness-title">REDLINE</strong>
+            </div>
+            <div class="hud-opacity-card__actions">
+              <output id="redline-brightness-value" for="redline-brightness" aria-live="polite">80%</output>
+              <button id="redline-brightness-reset" class="settings-button hud-opacity-reset" type="button" disabled>RESET</button>
+            </div>
           </div>
-          <output id="shift-light-brightness-value" for="shift-light-brightness" aria-live="polite">80%</output>
+          <div class="brightness-control">
+            <input id="redline-brightness" type="range" min="0" max="100" step="5" value="80" aria-labelledby="redline-brightness-title">
+          </div>
         </div>
-        <div class="brightness-control">
-          <input id="shift-light-brightness" type="range" min="0" max="100" step="5" value="80" aria-labelledby="shift-light-brightness-title">
+
+        <div class="shift-cue-row shift-cue-row--fdc">
+          <div class="shift-cue-switch">
+            <div class="shift-cue-row__name">
+              <span class="shift-cue-dot shift-cue-dot--fdc" aria-hidden="true"></span>
+              <strong>FDC SHIFT LIGHT</strong>
+            </div>
+            <button id="fdc-shift-light-enabled" class="visibility-toggle" type="button" aria-label="Show the purple FDC shift cue" aria-pressed="true">
+              <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
+            </button>
+          </div>
+
+          <div id="shift-light-brightness-group" class="shift-cue-sub">
+            <div class="shift-light-brightness-card__heading">
+              <div class="shift-cue-row__name">
+                <strong id="shift-light-brightness-title">BRIGHTNESS</strong>
+              </div>
+              <div class="hud-opacity-card__actions">
+                <output id="shift-light-brightness-value" for="shift-light-brightness" aria-live="polite">80%</output>
+                <button id="shift-light-brightness-reset" class="settings-button hud-opacity-reset" type="button" disabled>RESET</button>
+              </div>
+            </div>
+            <div class="brightness-control">
+              <input id="shift-light-brightness" type="range" min="0" max="100" step="5" value="80" aria-labelledby="shift-light-brightness-title" aria-describedby="shift-light-brightness-hint">
+            </div>
+            <p id="shift-light-brightness-hint" class="shift-cue-hint" hidden>Turn on FDC SHIFT LIGHT to change its brightness.</p>
+          </div>
         </div>
       </section>
 
@@ -673,16 +700,7 @@
             </div>
           </section>
           <section class="settings-group" aria-labelledby="settings-hud-title">
-            <header class="settings-group__head"><h3 id="settings-hud-title">HUD BEHAVIOR</h3></header>
-            <div class="display-setting-row" data-display-preference>
-              <div class="display-setting-row__copy">
-                <strong>SHOW HUD WITH TELEMETRY</strong>
-                <small>Show the HUD, Delta and Shift Bar only while live telemetry is received.</small>
-              </div>
-              <button id="show-hud-with-telemetry" class="visibility-toggle" type="button" aria-label="Show the HUD, Delta and Shift Bar only with live telemetry" aria-pressed="true">
-                <span class="visibility-toggle__track" aria-hidden="true"><span class="visibility-toggle__thumb"></span></span>
-              </button>
-            </div>
+            <header class="settings-group__head"><h3 id="settings-hud-title">PERFORMANCE</h3></header>
             <div class="display-setting-row" role="group" aria-labelledby="hud-rendering-title">
               <div class="display-setting-row__copy">
                 <strong id="hud-rendering-title">HUD RENDERING</strong>

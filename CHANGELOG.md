@@ -55,8 +55,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
   Shift Light gets a car wrong.
 - **HUD**: the brake bar can show a brake target, a thin line at a chosen
   brake level from 5% to 100%, which also appears as a dashed line on the Input
-  Graph. Set it in Configuration → **HUD** → **BRAKE TARGET**; it is off by
-  default. An optional **PEAK MARKER** draws a yellow line on the brake bar at
+  Graph. Set it under **Throttle & Brake** in Configuration → **HUD** →
+  **WIDGETS**; it is off by default. An optional **PEAK MARKER** draws a yellow line on the brake bar at
   the highest brake level of your latest stop.
 
 ### Improved
@@ -69,6 +69,12 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 - **HUD**: the Shift Bar is a row of 36 evenly slanted segments with black
   empty segments, replacing the alternating triangles. It fills and flashes
   as before.
+- **Configuration**: the HUD tab is grouped into **DISPLAY**, **LAYOUT**, and
+  **WIDGETS**, and **SHOW HUD WITH TELEMETRY** moved there from Settings. The
+  brake target options sit under **Throttle & Brake**. The Shift Light tab
+  shows the red and purple cue in one **SHIFT CUE** card, and the purple
+  brightness has its own **RESET**. An option that needs another switch stays
+  visible but greyed out, with a hint saying what to turn on.
 
 ## 7.37.101 - 2026-10-19
 

@@ -43,6 +43,23 @@
       overlayVisibility.shiftBar === true
   }
 
+  // The brake target draws on the Throttle & Brake block and on the Input Graph; the peak marker
+  // draws only on the brake bar. A disabled control keeps its stored value, so it returns when its
+  // widget is turned back on.
+  function brakeMarkDependencies(visibility, preferences) {
+    const pedalsOn = visibility.pedals !== false
+    const historyOn = visibility.history !== false
+    const targetSwitchDisabled = !pedalsOn && !historyOn
+    const targetOn = preferences?.targetEnabled === true
+    return {
+      targetSwitchDisabled,
+      targetLevelDisabled: targetSwitchDisabled || !targetOn,
+      targetSwitchHint: targetSwitchDisabled,
+      targetLevelHint: !targetSwitchDisabled && !targetOn,
+      peakDisabled: !pedalsOn
+    }
+  }
+
   // The HUD tab: the monitor list, the HUD edit hotkey, the layout mode and edit row, and the widget
   // switches. ctx carries the shell functions and the settings.js state this tab reads. The Driver
   // Analysis hotkey functions are created after this module, so they are reached through lambdas.
@@ -66,6 +83,21 @@
     const hudEditHotkeyChange = document.getElementById('hud-edit-hotkey-change')
     const hudDisplay = document.getElementById('hud-display')
     const hudDisplayMissing = document.getElementById('hud-display-missing')
+    // BRAKE TARGET: the brake bar's target line and peak marker. BrakeMarks owns the stored
+    // preferences. Without it the card is hidden rather than showing controls that do nothing.
+    // These references are made here, before the widget switches render, which read them.
+    const brakeTargetCard = document.getElementById('brake-target-card')
+    const brakeTargetRow = document.getElementById('brake-target-row')
+    const brakeTargetEnabled = document.getElementById('brake-target-enabled')
+    const brakeTargetLevel = document.getElementById('brake-target-level')
+    const brakeTargetValue = document.getElementById('brake-target-value')
+    const brakeTargetWidgetHint = document.getElementById('brake-target-widget-hint')
+    const brakeTargetLevelHint = document.getElementById('brake-target-level-hint')
+    const brakePeakRow = document.getElementById('brake-peak-row')
+    const brakePeakEnabled = document.getElementById('brake-peak-enabled')
+    const brakePeakHint = document.getElementById('brake-peak-hint')
+    const brakeMarks = globalScope.BrakeMarks
+    let brakeMarkPreferences = brakeMarks ? brakeMarks.read() : null
     const layoutModeInputs = [...document.querySelectorAll('[data-layout-mode]')]
     let editingTarget = null
     let hudDisplayCount = 0
@@ -418,7 +450,9 @@
       })
     }
 
+    // Every widget change reaches here (single switches, ALL, the initial render and the pre-7.28 migration).
     function renderAllToggle() {
+      syncBrakeDependencies()
       const allBtn = document.getElementById('hud-all-widgets')
       if (!allBtn) return
       updateOverlayToggle(allBtn, allWidgetsOn(visibility, overlayVisibility))
@@ -487,15 +521,19 @@
       })()
     }
 
-    // BRAKE TARGET: the brake bar's target line and peak marker. BrakeMarks owns the stored
-    // preferences. Without it the card is hidden rather than showing controls that do nothing.
-    const brakeTargetCard = document.getElementById('brake-target-card')
-    const brakeTargetEnabled = document.getElementById('brake-target-enabled')
-    const brakeTargetLevel = document.getElementById('brake-target-level')
-    const brakeTargetValue = document.getElementById('brake-target-value')
-    const brakePeakEnabled = document.getElementById('brake-peak-enabled')
-    const brakeMarks = globalScope.BrakeMarks
-    let brakeMarkPreferences = brakeMarks ? brakeMarks.read() : null
+    // A disabled control keeps its stored value; the hint says which widget to turn on.
+    function syncBrakeDependencies() {
+      if (!brakeTargetEnabled) return
+      const state = brakeMarkDependencies(visibility, brakeMarkPreferences || {})
+      brakeTargetEnabled.disabled = state.targetSwitchDisabled
+      brakeTargetLevel.disabled = state.targetLevelDisabled
+      brakePeakEnabled.disabled = state.peakDisabled
+      brakeTargetRow.classList.toggle('is-disabled', state.targetSwitchDisabled)
+      brakePeakRow.classList.toggle('is-disabled', state.peakDisabled)
+      brakeTargetWidgetHint.hidden = !state.targetSwitchHint
+      brakeTargetLevelHint.hidden = !state.targetLevelHint
+      brakePeakHint.hidden = !state.peakDisabled
+    }
 
     function renderBrakeTargetLevel(percent) {
       const minimum = Number(brakeTargetLevel.min)
@@ -511,6 +549,7 @@
       updateOverlayToggle(brakeTargetEnabled, preferences.targetEnabled)
       updateOverlayToggle(brakePeakEnabled, preferences.peakEnabled)
       renderBrakeTargetLevel(preferences.targetPercent)
+      syncBrakeDependencies()
     }
 
     async function updateBrakeMarks(changes, message) {
@@ -616,6 +655,7 @@
     create,
     normalizeLayoutMode,
     allWidgetsOn,
-    anyWidgetOn
+    anyWidgetOn,
+    brakeMarkDependencies
   }
 }))

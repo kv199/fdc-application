@@ -3248,20 +3248,12 @@ h1 {
   min-width: 0;
 }
 
-.layout-arrangement__copy h3,
 .layout-section__title {
   margin: 0;
   color: var(--text);
   font-size: var(--type-panel-title);
   font-weight: 600;
   letter-spacing: 0;
-}
-
-.layout-arrangement__copy p {
-  margin: var(--space-1) 0 0;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.35;
 }
 
 .layout-section__header {
@@ -3926,15 +3918,60 @@ h1 {
   background: var(--panel);
 }
 
-.shift-light-brightness-card--redline .shift-light-brightness-card__heading span {
+/* SHIFT CUE: one card holding the REDLINE row, the FDC SHIFT LIGHT switch and its nested BRIGHTNESS. */
+#shift-light-panel .shift-cue-card__heading {
+  margin-bottom: 14px;
+}
+
+#shift-light-panel .shift-cue-card__heading h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--type-panel-title);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.shift-cue-row + .shift-cue-row {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-subtle);
+}
+
+.shift-cue-row__name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.shift-cue-row__name strong {
+  color: var(--text);
+  font-size: var(--type-body);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* Small square colour keys: the red redline and the purple FDC cue. */
+.shift-cue-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 0;
+}
+
+.shift-cue-dot--redline {
+  background: var(--alert);
+}
+
+.shift-cue-dot--fdc {
+  background: var(--best);
+}
+
+.shift-cue-row--redline .shift-light-brightness-card__heading output {
   color: var(--danger-text);
 }
 
-.shift-light-brightness-card--redline .shift-light-brightness-card__heading output {
-  color: var(--danger-text);
-}
-
-.shift-light-brightness-card--redline .brightness-control input {
+.shift-cue-row--redline .brightness-control input {
   background: linear-gradient(
     90deg,
     var(--alert) 0 var(--brightness-fill),
@@ -3942,16 +3979,43 @@ h1 {
   );
 }
 
-.shift-light-brightness-card--redline .brightness-control input:focus-visible {
+.shift-cue-row--redline .brightness-control input:focus-visible {
   outline-color: color-mix(in srgb, var(--alert) 82%, transparent);
 }
 
-/* FDC SHIFT LIGHT is a plain row in the page flow, not a card. */
-.shift-light-cue-toggle {
-  margin-bottom: 20px;
-  padding: 4px 0;
-  border: 0;
-  background: transparent;
+.shift-cue-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+/* BRIGHTNESS hangs under the switch as a child row, marked by a left rule. */
+.shift-cue-sub {
+  margin-top: 14px;
+  padding: 2px 0 2px 18px;
+  border-left: 2px solid var(--line-subtle);
+}
+
+/* While the switch is off the sub-row keeps its controls but reads as inactive. */
+.shift-cue-sub.is-inactive .shift-cue-row__name strong,
+.shift-cue-sub.is-inactive .shift-light-brightness-card__heading output {
+  color: var(--text-faint);
+}
+
+.shift-cue-sub.is-inactive .brightness-control input {
+  cursor: not-allowed;
+}
+
+.shift-cue-hint {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.shift-cue-hint[hidden] {
+  display: none;
 }
 
 .shift-light-brightness-card__heading {
@@ -4077,7 +4141,7 @@ h1 {
   opacity: 0.68;
 }
 
-.hud-display-card .shift-light-brightness-card__heading {
+.hud-display-card .hud-row__copy {
   margin-bottom: 12px;
 }
 
@@ -4106,10 +4170,63 @@ h1 {
   line-height: 1.3;
 }
 
-/* BRAKE TARGET: each setting is a row with its name, readout and switch; the target slider sits under its row. */
-/* WIDGETS above has no bottom margin, so the card keeps the 18px gap of the other HUD cards itself. */
-.brake-target-card {
-  margin-top: 18px;
+/* HUD tab groups: DISPLAY, LAYOUT and WIDGETS are one card each. Rows inside a card are divided by a subtle line. */
+.hud-group {
+  margin: 0 0 18px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.hud-group__head {
+  padding: 16px 18px 12px;
+}
+
+.hud-group > .hud-row,
+.hud-group > .display-setting-row {
+  padding: 15px 18px;
+  border-top: 1px solid var(--line-subtle);
+}
+
+.hud-row__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.hud-row__title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--type-body);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* The LAYOUT plate sits inside its card, as the Driver Analysis recorder sits in its panel. */
+.hud-group > .action-panel {
+  margin: 0 18px 18px;
+  border: 1px solid var(--line-strong);
+}
+
+/* BRAKE TARGET is a child of the Throttle & Brake row: indented under it, with a left line. */
+.widget-options {
+  margin: 0 var(--space-4) 8px 28px;
+  padding: 0 0 4px 14px;
+  border-left: 1px solid var(--line-strong);
+}
+
+/* The row after the options keeps the divider that a widget row gets from the row before it. */
+.widget-options + .widget-row {
+  border-top: 1px solid var(--line-subtle);
+}
+
+.widget-options__title {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: var(--type-label);
+  font-weight: 400;
+  letter-spacing: 0.14em;
 }
 
 .brake-target-row {
@@ -4146,6 +4263,35 @@ h1 {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+/* A dependent brake row keeps its stored value while disabled, names its label faint, and says what to turn on. */
+.brake-target-row.is-disabled .brake-target-row__name {
+  color: var(--text-faint);
+}
+
+.brake-target-hint {
+  margin: 0 0 8px;
+  color: var(--notice);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.brake-target-card .brightness-control input:disabled {
+  cursor: not-allowed;
+  background: linear-gradient(
+    90deg,
+    var(--text-faint) 0 var(--brightness-fill),
+    var(--meter-track) var(--brightness-fill) 100%
+  );
+}
+
+.brake-target-card .brightness-control input:disabled::-webkit-slider-thumb {
+  background: var(--text-faint);
+}
+
+.brake-target-card .brightness-control input:disabled::-moz-range-thumb {
+  background: var(--text-faint);
 }
 
 @media (max-width: 620px) {

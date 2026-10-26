@@ -26,30 +26,55 @@ test('Garage typography follows the design book: readout car name, no weight abo
   }
 })
 
-test('Shift Light exposes separate redline and FDC cue controls in the Shift Light tab', () => {
+test('Shift Light groups the redline and FDC cue controls under one SHIFT CUE card', () => {
   const shiftLightPanelIndex = settingsHtml.indexOf('id="shift-light-panel"')
+  const cardIndex = settingsHtml.indexOf('id="shift-cue-card"')
+  const helpPanelIndex = settingsHtml.indexOf('id="shift-light-help-panel"')
+  const redlineRowIndex = settingsHtml.indexOf('class="shift-cue-row shift-cue-row--redline"')
+  const fdcRowIndex = settingsHtml.indexOf('class="shift-cue-row shift-cue-row--fdc"')
   const redlineIndex = settingsHtml.indexOf('id="redline-brightness"')
   const redlineResetIndex = settingsHtml.indexOf('id="redline-brightness-reset"')
   const cueToggleIndex = settingsHtml.indexOf('id="fdc-shift-light-enabled"')
+  const brightnessGroupIndex = settingsHtml.indexOf('id="shift-light-brightness-group"')
   const brightnessIndex = settingsHtml.indexOf('id="shift-light-brightness"')
+  const brightnessResetIndex = settingsHtml.indexOf('id="shift-light-brightness-reset"')
+  const hintIndex = settingsHtml.indexOf('id="shift-light-brightness-hint"')
   const settingsPanelIndex = settingsHtml.indexOf('id="settings-panel"')
 
   assert.ok(shiftLightPanelIndex >= 0)
-  assert.ok(redlineIndex > shiftLightPanelIndex)
-  assert.ok(redlineResetIndex > shiftLightPanelIndex)
-  assert.ok(cueToggleIndex > redlineResetIndex)
-  assert.ok(brightnessIndex > shiftLightPanelIndex)
-  assert.ok(brightnessIndex > cueToggleIndex)
-  assert.ok(brightnessIndex < settingsPanelIndex)
-  assert.match(settingsHtml, /<h3 id="redline-brightness-title">REDLINE BRIGHTNESS<\/h3>/)
-  assert.match(settingsHtml, /id="redline-brightness-value"[^>]*>80%<\/output>/)
-  assert.match(settingsHtml, /id="redline-brightness" type="range" min="0" max="100" step="5" value="80"/)
-  assert.match(settingsHtml, /id="redline-brightness-reset"[^>]*type="button"[^>]*disabled>RESET<\/button>/)
+  // One SHIFT CUE card holds both rows; the old separate cards and the old FDC brightness title are gone.
+  assert.equal(settingsHtml.match(/<h3 id="shift-cue-title">SHIFT CUE<\/h3>/g)?.length, 1)
+  assert.equal(settingsHtml.match(/id="shift-cue-card"/g)?.length, 1)
+  assert.match(settingsHtml, /<section id="shift-cue-card" class="shift-light-brightness-card shift-cue-card" data-display-preference aria-labelledby="shift-cue-title">/)
+  assert.match(settingsHtml, /<p class="hud-display-card__description">Flashes on the Gear block and the Shift Bar\.<\/p>/)
+  assert.doesNotMatch(settingsHtml, /shift-light-brightness-card--redline|shift-light-cue-toggle|FDC SHIFT LIGHT BRIGHTNESS/)
+  // Order inside the Shift Light tab: the card, the redline row, the FDC switch row with its brightness child, then the help panel.
+  assert.ok(cardIndex > shiftLightPanelIndex)
+  assert.ok(redlineRowIndex > cardIndex)
+  assert.ok(redlineIndex > redlineRowIndex && redlineIndex < fdcRowIndex)
+  assert.ok(redlineResetIndex > redlineRowIndex && redlineResetIndex < fdcRowIndex)
+  assert.ok(fdcRowIndex > redlineResetIndex)
+  assert.ok(cueToggleIndex > fdcRowIndex)
+  assert.ok(brightnessGroupIndex > cueToggleIndex)
+  assert.ok(brightnessIndex > brightnessGroupIndex)
+  assert.ok(brightnessResetIndex > brightnessGroupIndex)
+  assert.ok(hintIndex > brightnessIndex)
+  assert.ok(helpPanelIndex > hintIndex)
+  assert.ok(hintIndex < settingsPanelIndex)
+  assert.match(settingsHtml, /<span class="shift-cue-dot shift-cue-dot--redline" aria-hidden="true"><\/span>\s*<strong id="redline-brightness-title">REDLINE<\/strong>/)
+  assert.match(settingsHtml, /id="redline-brightness-value" for="redline-brightness" aria-live="polite">80%<\/output>/)
+  assert.match(settingsHtml, /id="redline-brightness" type="range" min="0" max="100" step="5" value="80" aria-labelledby="redline-brightness-title"/)
+  assert.match(settingsHtml, /id="redline-brightness-reset" class="settings-button hud-opacity-reset" type="button" disabled>RESET<\/button>/)
+  assert.match(settingsHtml, /<span class="shift-cue-dot shift-cue-dot--fdc" aria-hidden="true"><\/span>\s*<strong>FDC SHIFT LIGHT<\/strong>/)
   assert.match(settingsHtml, /id="fdc-shift-light-enabled" class="visibility-toggle" type="button"[^>]*aria-pressed="true"/)
+  // BRIGHTNESS is nested under the switch and is labelled by its own title.
+  assert.match(settingsHtml, /<div id="shift-light-brightness-group" class="shift-cue-sub">/)
+  assert.match(settingsHtml, /<strong id="shift-light-brightness-title">BRIGHTNESS<\/strong>/)
+  assert.match(settingsHtml, /id="shift-light-brightness-value" for="shift-light-brightness" aria-live="polite">80%<\/output>/)
+  assert.match(settingsHtml, /<button id="shift-light-brightness-reset" class="settings-button hud-opacity-reset" type="button" disabled>RESET<\/button>/)
+  assert.match(settingsHtml, /id="shift-light-brightness" type="range" min="0" max="100" step="5" value="80" aria-labelledby="shift-light-brightness-title" aria-describedby="shift-light-brightness-hint"/)
+  assert.match(settingsHtml, /<p id="shift-light-brightness-hint" class="shift-cue-hint" hidden>Turn on FDC SHIFT LIGHT to change its brightness\.<\/p>/)
   assert.doesNotMatch(settingsHtml, /class="brightness-scale"/)
-  assert.match(settingsHtml, /<h3 id="shift-light-brightness-title">FDC SHIFT LIGHT BRIGHTNESS<\/h3>/)
-  assert.match(settingsHtml, /class="shift-light-brightness-card"/)
-  assert.match(settingsHtml, /id="shift-light-brightness" type="range" min="0" max="100" step="5" value="80"/)
   assert.match(settingsHtml, /<span class="calibration-label">LEARNED CEILING<\/span>/)
   assert.match(settingsHtml, /id="shift-light-usable-ceiling"/)
   assert.match(settingsHtml, /<dt>LEARNING<\/dt><dd>FDC is still learning this gear and shifts near the limiter\./)
@@ -58,6 +83,29 @@ test('Shift Light exposes separate redline and FDC cue controls in the Shift Lig
   assert.match(settingsHtml, /checked by your clean full-throttle upshifts\./)
   // The redline and FDC cue values are sent in the set_display_preferences payload,
   // which configuration-shell.test.js pins.
+})
+
+test('FDC SHIFT LIGHT brightness and its RESET stay visible but disabled while the cue is off', () => {
+  // Defaults and element wiring.
+  assert.match(settingsJs, /const DEFAULT_SHIFT_LIGHT_BRIGHTNESS = displayPreferencesApi\?\.DEFAULTS\?\.shiftLightBrightness \?\? 80/)
+  assert.match(settingsJs, /document\.getElementById\('shift-light-brightness-reset'\)/)
+  assert.match(settingsJs, /document\.getElementById\('shift-light-brightness-group'\)/)
+  assert.match(settingsJs, /document\.getElementById\('shift-light-brightness-hint'\)/)
+  // Rendering: disabled = pending or cue off; RESET also disabled at the default; hint shown only while off.
+  assert.match(settingsJs, /function renderShiftLightBrightness\(value, cueOn = displayPreferences\.fdcShiftLightEnabled !== false\)/)
+  assert.match(settingsJs, /shiftLightBrightness\.disabled = displayPreferencesPending \|\| !cueOn\n/)
+  assert.match(settingsJs, /shiftLightBrightnessReset\.disabled = displayPreferencesPending \|\| !cueOn \|\| isDefault\n/)
+  assert.match(settingsJs, /shiftLightBrightnessReset\.classList\.toggle\('is-dirty', !isDefault\)/)
+  assert.match(settingsJs, /shiftLightBrightnessGroup\.classList\.toggle\('is-inactive', !cueOn\)/)
+  assert.match(settingsJs, /shiftLightBrightnessHint\.hidden = cueOn/)
+  assert.match(settingsJs, /renderShiftLightBrightness\(preferences\.shiftLightBrightness, preferences\.fdcShiftLightEnabled !== false\)/)
+  // Pending state must not re-enable the slider or RESET while the switch is off.
+  assert.match(settingsJs, /const shiftLightCueOff = displayPreferences\.fdcShiftLightEnabled === false\n\s*shiftLightBrightness\.disabled = pending \|\| shiftLightCueOff\n/)
+  assert.match(settingsJs, /shiftLightBrightnessReset\.disabled = pending \|\| shiftLightCueOff \|\| displayPreferences\.shiftLightBrightness === DEFAULT_SHIFT_LIGHT_BRIGHTNESS/)
+  // RESET writes the default through the same preference path as the redline RESET.
+  assert.match(settingsJs, /shiftLightBrightnessReset\.addEventListener\('click', \(\) => \{\n\s*void updateDisplayPreferences\(\n\s*\{ shiftLightBrightness: DEFAULT_SHIFT_LIGHT_BRIGHTNESS \},\n\s*next => `SHIFT LIGHT BRIGHTNESS RESET TO \$\{next\.shiftLightBrightness\}%`/)
+  // The switch re-renders through updateDisplayPreferences, so the disabled state follows it.
+  assert.match(settingsJs, /fdcShiftLightEnabled\?\.addEventListener\('click', \(\) => \{\n\s*const enabled = displayPreferences\.fdcShiftLightEnabled === false\n\s*void updateDisplayPreferences\(/)
 })
 
 test('Shift Light calibration card uses the design book title, table, and reset placement', () => {

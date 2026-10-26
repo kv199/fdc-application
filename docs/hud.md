@@ -104,9 +104,9 @@ both:
 With **FDC Shift Light** off, only the red limiter flash appears. Both colors
 alternate every 440 ms between the full color and a dimmer tone, and the Gear
 block and the Shift Bar use the same timing, so they flash together. Red follows
-the Redline Brightness setting, and purple follows the FDC Shift Light
-Brightness setting. The Gear block's red text is unchanged. How targets are
-learned is described in [Shift Light](shift-light.md).
+the REDLINE brightness and purple follows the FDC SHIFT LIGHT brightness in the
+SHIFT CUE card on the Shift Light tab. The Gear block's red text is unchanged.
+How targets are learned is described in [Shift Light](shift-light.md).
 
 The **Shift Bar** widget shows the same signal as a row of 36 identical,
 right-leaning parallelogram segments, none rotated. The segments are evenly
@@ -121,9 +121,10 @@ flashes in step with the Gear block. The bar shows no text.
 
 ### Brake target
 
-The brake target is an optional reference line for braking, set in
-Configuration → **HUD** → **BRAKE TARGET**. Both of its switches are off by
-default:
+The brake target is an optional reference line for braking. Its options sit
+directly under the **Throttle & Brake** row in the **WIDGETS** card of
+Configuration → **HUD**, indented as part of that row under the heading
+**BRAKE TARGET**. Both of its switches are off by default:
 
 - **TARGET** (switch and slider): one target mark at the chosen level, from 5%
   to 100% in 5% steps, default 70%. It is a thin line across the brake bar of
@@ -133,6 +134,19 @@ default:
   brake level of the latest stop. It is a plain level: it is not compared with
   the target and is not colored as good or bad. It is shown only on the brake
   bar.
+
+The options stay visible and turn disabled, with a short hint, while the widget
+they need is off:
+
+- TARGET (switch and slider) is disabled when both Throttle & Brake and Input
+  Graph are off, with the hint "Turn on Throttle & Brake or Input Graph to see
+  the target.". The slider is also disabled while TARGET is off, with the hint
+  "Turn on TARGET to choose the level.";
+- PEAK MARKER is disabled while Throttle & Brake is off, with the hint "Turn on
+  Throttle & Brake to see the peak marker.".
+
+Disabling never changes the stored target, level, or peak setting; they come
+back when the widget is turned on.
 
 A stop is a period in which the brake pedal is at 5% or more. A dip below 5%
 shorter than 0.3 s belongs to the same stop. A stop counts once it has lasted
@@ -148,7 +162,8 @@ once and are saved locally, like HUD OPACITY.
 
 ## Visibility
 
-- With **Show HUD with telemetry** enabled (the default), the HUD, Delta, and
+- With **Show HUD with telemetry** enabled (the default; its switch is in the
+  DISPLAY card of Configuration → **HUD**), the HUD, Delta, and
   the Shift Bar are visible only while Forza reports live driving; Delta
   additionally needs an active Event reference. Forza keeps sending Data Out
   in the pause menu, garage, and other menus but reports that racing is not
@@ -167,33 +182,35 @@ once and are saved locally, like HUD OPACITY.
 
 ## Layout
 
-Configuration → **HUD** shows the layout controls as three separate blocks
-below HUD OPACITY, the same in both arrangements:
+Configuration → **HUD** has three cards, in this order, the same in both
+arrangements:
 
-1. **ARRANGEMENT**, a segmented choice of GROUPED (default) and FREEFORM; the
-   selected one keeps a lime fill. Grouped keeps the visible blocks side by
-   side in one panel and moves and resizes that panel as a whole. Freeform
-   places and sizes every block independently. Delta and the Shift Bar are
-   positioned independently in both arrangements and keep one saved position
-   for both; the HUD blocks keep a saved position for each arrangement.
-2. The layout editor, built like the Driver Analysis recorder: two rows,
-   each with a title and a sentence on the left and its controls on the
-   right. **EDIT THE LAYOUT** has **RESET LAYOUT** and **EDIT LAYOUT** (the
-   lime next step); while an edit runs it shows **EDITING** in yellow with
-   **CANCEL** and **SAVE**. **IN-GAME EDIT HOTKEY** shows the hotkey and
-   **CHANGE**, like GLOBAL RECORD HOTKEY.
-3. **WIDGETS**: one compact row per widget with its name and a switch (Tires,
-   Throttle & Brake, Steering, Gear / Speed / RPM, Engine / Boost, Input
-   Graph, Delta, Shift Bar), and **ALL** in the block header. Clicking anywhere
-   on a row toggles its widget. The Shift Bar row starts off. **ALL** is on only
-   while every widget is on, the Shift Bar included.
+- **DISPLAY**: HUD DISPLAY, HUD OPACITY, and **SHOW HUD WITH TELEMETRY**, each
+  described under [HUD display](#hud-display), [HUD opacity](#hud-opacity), and
+  [Visibility](#visibility).
+- **LAYOUT**: one raised plate with three rows, in this order:
+  1. **ARRANGEMENT**, a segmented choice of GROUPED (default) and FREEFORM; the
+     selected one keeps a lime fill. Grouped keeps the visible blocks side by
+     side in one panel and moves and resizes that panel as a whole. Freeform
+     places and sizes every block independently. Delta and the Shift Bar are
+     positioned independently in both arrangements and keep one saved position
+     for both; the HUD blocks keep a saved position for each arrangement.
+  2. **EDIT THE LAYOUT**: a title and a sentence on the left and its controls on
+     the right. It has **RESET LAYOUT** and **EDIT LAYOUT** (the lime next
+     step); while an edit runs it shows **EDITING** in yellow with **CANCEL**
+     and **SAVE**.
+  3. **IN-GAME EDIT HOTKEY**: the hotkey and **CHANGE**, like GLOBAL RECORD
+     HOTKEY.
+- **WIDGETS**: one compact row per widget with its name and a switch (Tires,
+  Throttle & Brake, Steering, Gear / Speed / RPM, Engine / Boost, Input Graph,
+  Delta, Shift Bar), and **ALL** in the card header. Clicking anywhere on a row
+  toggles its widget. The Shift Bar row starts off. **ALL** is on only while
+  every widget is on, the Shift Bar included. Under the Throttle & Brake row,
+  the **BRAKE TARGET** options are indented as part of that row; they are
+  described under [Brake target](#brake-target).
 
-Below WIDGETS, the **BRAKE TARGET** card has a **TARGET** row with a switch and
-a slider showing the target percentage, and a **PEAK MARKER** row with a switch.
-Both are described under [Brake target](#brake-target).
-
-Below 560 px of window width the arrangement choice moves under its
-description, and each editor row stacks its controls under its text.
+Below 680 px of window width, each row of the LAYOUT plate stacks its controls
+under its text, and the arrangement choice moves under its description.
 
 A layout edit covers every enabled target at once: in Grouped, the HUD panel,
 Delta, and the Shift Bar; in Freeform, each block whose switch is on, Delta, and
@@ -300,8 +317,9 @@ to 100%. The default is 80%, and **RESET** restores it.
 Configuration → **Settings** opens with a short intro that also notes all FDC
 data stays on this PC. Its rows span the content width, aligned with the
 navigation, grouped under **WINDOW & EXIT** (the first three below, of which
-**Theme** is hidden for now), **HUD BEHAVIOR** (the
-next two), and **UNITS** (the last two):
+**Theme** is hidden for now), **PERFORMANCE** (the next one), and **UNITS** (the
+last two). **Show HUD with telemetry** is in the DISPLAY card of the HUD tab,
+described under [Visibility](#visibility):
 
 - **Configuration always on top**, off by default;
 - **Confirm before quitting**, on by default: the Configuration X button asks
@@ -313,7 +331,6 @@ next two), and **UNITS** (the last two):
   Configuration window is always dark, including its title bar, whatever was
   saved. A previously saved `LIGHT` or `SYSTEM` choice is kept and applies again
   when selection is switched on;
-- **Show HUD with telemetry**, described above;
 - **HUD rendering**: `GPU`, the default, or `CPU`. With `CPU` the HUD and
   Configuration are drawn on the processor and composited by Windows, so the
   HUD keeps up with the game when Forza fully loads the graphics card, at the

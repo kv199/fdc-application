@@ -173,7 +173,9 @@ test('Settings exposes Configuration priority and speed unit preferences', () =>
   assert.match(settingsHtml, /id="configuration-always-on-top" class="visibility-toggle" type="button"[^>]*aria-pressed="false"/)
   assert.match(settingsHtml, /<strong>SHOW HUD WITH TELEMETRY<\/strong>/)
   assert.match(settingsHtml, /id="show-hud-with-telemetry" class="visibility-toggle" type="button"[^>]*aria-pressed="true"/)
-  assert.ok(settingsHtml.indexOf('id="show-hud-with-telemetry"') > settingsPanelIndex)
+  // SHOW HUD WITH TELEMETRY lives on the HUD tab's DISPLAY card, not in Settings.
+  assert.ok(settingsHtml.indexOf('id="show-hud-with-telemetry"') < settingsPanelIndex)
+  assert.ok(settingsHtml.indexOf('id="show-hud-with-telemetry"') > settingsHtml.indexOf('id="hud-panel"'))
   assert.match(settingsJs, /showHudWithTelemetry/)
   assert.match(settingsHtml, /calibration-label">CLASS<\/span>\s*<output id="shift-light-car-pi">/)
   assert.match(settingsJs, /FdcVehicle\.displayName\(/)
@@ -197,12 +199,12 @@ test('Settings groups its display rows under three headings in order', () => {
 
   assert.match(settingsHtml, /<div class="settings-board">/)
   assert.match(settingsHtml, /<h3 id="settings-window-title">WINDOW &amp; EXIT<\/h3>/)
-  assert.match(settingsHtml, /<h3 id="settings-hud-title">HUD BEHAVIOR<\/h3>/)
+  assert.match(settingsHtml, /<h3 id="settings-hud-title">PERFORMANCE<\/h3>/)
   assert.match(settingsHtml, /<h3 id="settings-units-title">UNITS<\/h3>/)
-  assert.ok(settingsHtml.indexOf('WINDOW &amp; EXIT') < settingsHtml.indexOf('HUD BEHAVIOR'))
-  assert.ok(settingsHtml.indexOf('HUD BEHAVIOR') < settingsHtml.indexOf('>UNITS<'))
+  assert.ok(settingsHtml.indexOf('WINDOW &amp; EXIT') < settingsHtml.indexOf('>PERFORMANCE<'))
+  assert.ok(settingsHtml.indexOf('>PERFORMANCE<') < settingsHtml.indexOf('>UNITS<'))
   assert.deepEqual(rowTitles(windowGroup), ['CONFIGURATION ALWAYS ON TOP', 'CONFIRM BEFORE QUITTING', 'THEME'])
-  assert.deepEqual(rowTitles(hudGroup), ['SHOW HUD WITH TELEMETRY', 'HUD RENDERING'])
+  assert.deepEqual(rowTitles(hudGroup), ['HUD RENDERING'])
   assert.deepEqual(rowTitles(unitsGroup), ['SPEED UNIT', 'DISTANCE UNIT'])
   assert.match(settingsStyles, /\.settings-board\s*\{[^}]*width:\s*100%;[^}]*margin:\s*0;/)
   assert.match(settingsStyles, /\.settings-group\s*\{[^}]*border:\s*1px solid var\(--line\)[^}]*background:\s*var\(--surface\)/)
@@ -253,7 +255,8 @@ test('Configuration keeps its default size and exposes standard Windows controls
 
 test('Settings chooses GPU or CPU HUD rendering for the next FDC start', () => {
   const panel = settingsHtml.slice(settingsHtml.indexOf('data-settings-panel="settings"'), settingsHtml.indexOf('<footer class="settings-footer"'))
-  assert.match(panel, /<strong>SHOW HUD WITH TELEMETRY<\/strong>[\s\S]*?<strong id="hud-rendering-title">HUD RENDERING<\/strong>[\s\S]*?<strong id="speed-unit-title">SPEED UNIT<\/strong>/)
+  assert.match(panel, /<strong id="hud-rendering-title">HUD RENDERING<\/strong>[\s\S]*?<strong id="speed-unit-title">SPEED UNIT<\/strong>/)
+  assert.doesNotMatch(panel, /SHOW HUD WITH TELEMETRY/)
   assert.match(panel, /<input type="radio" name="hud-rendering" value="gpu">\s*<span>GPU<\/span>/)
   assert.match(panel, /<input type="radio" name="hud-rendering" value="cpu">\s*<span>CPU<\/span>/)
   assert.match(panel, /<small id="hud-rendering-note">[^<]*Applies after FDC restarts\.<\/small>/)
