@@ -5,6 +5,8 @@ format and rules are described in [Releasing FDC](docs/releasing.md#changelog).
 
 ## Unreleased
 
+## 7.41.113 - 2026-10-26
+
 ### Fixed
 
 - **Shift Light**: wheelspin on full throttle is no longer mistaken for the
